@@ -10,16 +10,9 @@
 - 数据靠推送：流量、连接、日志走内核的 WebSocket，页面不可见就退订。轮询只用于有上限的一次性就绪检测。
 - ArkTS 主线程只做轻活：文件、网络、内核调用都走异步（Promise / NAPI async work）。
 
-## 进程与代码边界
+## 架构
 
-| 位置 | 职责 |
-|---|---|
-| `entry/src/main/ets/pages/`、`features/`、`client/` | UI 进程（EntryAbility），通过 `client/CoreClient` 控制内核 |
-| `entry/src/main/ets/vpn/` | VPN 进程（ClashVpnAbility），持有 TUN 和内核；VPN 开着时系统保活这个进程 |
-| `entry/src/main/cpp/` | NAPI 桥，start/stop 在工作线程执行 |
-| `core/` | Go 封装层，C API 在 `core/arkclash.h`，和 `lib.go` 一起改 |
-
-两个进程只走两条通道：mihomo external-controller（`127.0.0.1:19090` + secret），以及 `filesDir` 下的文件（见 `shared/Runtime.ets`）。ArkClash 接管的配置项（TUN、controller、进程查找、DNS 开关）统一在 `core/lib.go` 的 `applyOverrides` 里强制，订阅里写什么都会被覆盖。
+UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo controller 和 `filesDir` 文件通信。新增目录、跨进程改动、调整依赖方向前读 `docs/architecture.md`；做出新的架构取舍时在 `docs/adr/` 写一份决策记录。ArkClash 接管的配置项（TUN、controller、进程查找、DNS 开关）统一在 `core/lib.go` 的 `applyOverrides` 里强制，订阅里写什么都会被覆盖。
 
 ## 构建与真机验证
 
