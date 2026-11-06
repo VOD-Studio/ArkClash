@@ -5,6 +5,7 @@ import { vpnExtension, VpnExtensionAbility } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import core from 'libarkclash.so';
 import { CONTROLLER_ADDRESS, readRuntime, writeCoreError } from '../common/Runtime';
+import { installGeoData } from './GeoData';
 
 const DOMAIN = 0x0A11;
 const TAG = 'ClashVpnAbility';
@@ -76,6 +77,9 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     };
     const tunFd = await connection.create(config);
     hilog.info(DOMAIN, TAG, 'tun created, fd=%{public}d', tunFd);
+
+    const geoCopied = installGeoData(this.context, filesDir);
+    hilog.info(DOMAIN, TAG, 'geo data copied: %{public}d', geoCopied);
 
     const options: CoreOptions = {
       homeDir: filesDir,

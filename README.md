@@ -40,6 +40,7 @@ VPN 进程 (ClashVpnAbility, VpnExtensionAbility)
 
 ```sh
 scripts/build-core.sh   # 交叉编译 mihomo → entry/libs/arm64-v8a/libclash.so（自动准备打过补丁的 Go 工具链）
+scripts/fetch-geodata.sh  # 下载 Geo 数据到 rawfile/geo/，随 HAP 打包
 ```
 
 之后用 DevEco Studio 打开项目，在 File → Project Structure → Signing Configs 里用华为账号自动签名，连接真机运行。
@@ -53,13 +54,13 @@ hdc hilog | grep -E "ArkClashCore|ClashVpnAbility"
 ## 进度
 
 - [x] M1：mihomo 交叉编译、NAPI 桥接、VPN 扩展、订阅下载、连接/断开
-- [ ] M1 真机验证
+- [x] M1 真机验证（Pura 70 Ultra，API 26）
 - [ ] 配置热切换（不重建 TUN）
 - [ ] 代理组 / 节点选择 / 测速
 - [ ] 连接、日志、流量（推送式）
 - [ ] 多订阅管理与自动更新
 - [ ] IPv6、分应用代理
-- [ ] 内置 Geo 数据，避免首次启动下载
+- [x] 内置 Geo 数据，避免首次启动下载
 
 ## 许可证
 
