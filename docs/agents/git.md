@@ -6,8 +6,8 @@
 
 格式：`<type>/<scope>-<简述>`，全小写，用 `/` 分段、`-` 连词，简述用英文或拼音。
 
-- type 对齐 Conventional Commits：`feat` / `fix` / `chore` / `docs` / `refactor` / `style` / `test` / `perf`。
-- scope 是最内层的模块：`core`、`bridge`（NAPI）、`vpn`、`ui`、`toolchain`、`geodata`、`scripts`、`deps`、`readme`。改动跨模块、说不出一个时可以省略。
+- type 对齐 Conventional Commits：`feat` / `fix` / `chore` / `docs` / `refactor` / `style` / `test` / `perf` / `build`（构建脚本、Makefile）/ `ci`（GitHub Actions）。
+- scope 是最内层的模块：`core`、`bridge`（NAPI）、`vpn`、`ui`、`toolchain`、`geodata`、`scripts`、`deps`、`readme`、`release`。改动跨模块、说不出一个时可以省略。
 - 例：`fix/core-device-startup`、`feat/ui-proxy-groups`、`perf/vpn-cold-start`、`chore/deps-mihomo`。
 
 PRD 和 issue 拆分是 feature 分支的前几个提交，不单独开文档分支。只有跨 feature 的流程文档（比如这份规范）才考虑独立的 `docs/` 分支。
