@@ -1,0 +1,6 @@
+{
+  "name": "libarkclash.so",
+  "types": "./Index.d.ts",
+  "version": "0.1.0",
+  "description": "NAPI bridge to the mihomo core."
+}

@@ -1,0 +1,24 @@
+# hvigor / ohpm
+/oh_modules
+**/oh_modules
+/.hvigor
+**/build
+/local.properties
+/.idea
+.cxx
+**/.test
+/.appanalyzer
+/.preview
+**/.preview
+/.clangd
+/.clang-format
+/.clang-tidy
+
+# Built by scripts/build-core.sh
+/entry/libs/
+
+# Signing material stays local
+*.p12
+*.cer
+*.p7b
+*.csr

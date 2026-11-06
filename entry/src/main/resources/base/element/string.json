@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "ArkClash"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "ArkClash"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "ArkClash"
+    },
+    {
+      "name": "ClashVpnAbility_desc",
+      "value": "ArkClash VPN"
+    }
+  ]
+}
