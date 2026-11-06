@@ -35,11 +35,25 @@ cd "$ROOT/core"
 MIHOMO_VERSION="$("$GO" list -m -f '{{.Version}}' github.com/metacubex/mihomo)"
 mkdir -p "$OUT"
 
+# 需要打补丁的依赖：复制到 .toolchain 打补丁，再用临时 go.mod（-modfile）
+# replace 过去，core/go.mod 保持原样。
+# gvisor-fdbased.patch：SELinux 不允许对 TUN fd 做 fstat，见补丁里的注释。
+PATCHED_DIR="$ROOT/.toolchain/patched"
+rm -rf "$PATCHED_DIR"
+mkdir -p "$PATCHED_DIR"
+GVISOR_DIR="$("$GO" list -m -f '{{.Dir}}' github.com/metacubex/gvisor)"
+cp -R "$GVISOR_DIR" "$PATCHED_DIR/gvisor"
+chmod -R u+w "$PATCHED_DIR/gvisor"
+patch -s -p1 -d "$PATCHED_DIR/gvisor" < "$ROOT/scripts/gvisor-fdbased.patch"
+cp go.mod "$PATCHED_DIR/go.mod"
+cp go.sum "$PATCHED_DIR/go.sum"
+echo "replace github.com/metacubex/gvisor => $PATCHED_DIR/gvisor" >> "$PATCHED_DIR/go.mod"
+
 # HarmonyOS uses musl, so this is a GOOS=linux build linked by the OHOS clang.
 CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
   CC="$LLVM/aarch64-unknown-linux-ohos-clang" \
   CXX="$LLVM/aarch64-unknown-linux-ohos-clang++" \
-  "$GO" build -buildmode=c-shared -tags with_gvisor -trimpath \
+  "$GO" build -buildmode=c-shared -tags with_gvisor -trimpath -modfile "$PATCHED_DIR/go.mod" \
     -ldflags "-s -w -extldflags=-Wl,-soname,libclash.so -X github.com/metacubex/mihomo/constant.Version=$MIHOMO_VERSION" \
     -o "$OUT/libclash.so" .
 
