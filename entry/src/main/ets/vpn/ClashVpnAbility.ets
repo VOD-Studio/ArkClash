@@ -4,7 +4,7 @@ import { Want } from '@kit.AbilityKit';
 import { vpnExtension, VpnExtensionAbility } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import core from 'libarkclash.so';
-import { CONTROLLER_ADDRESS, readRuntime, writeCoreError } from '../common/Runtime';
+import { CONTROLLER_ADDRESS, readRuntime, writeCoreError } from '../shared/Runtime';
 import { installGeoData } from './GeoData';
 
 const DOMAIN = 0x0A11;

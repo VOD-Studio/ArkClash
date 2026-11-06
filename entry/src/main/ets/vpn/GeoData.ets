@@ -2,7 +2,7 @@
 // 有了这些文件，内核启动时不用再去 GitHub 现场下载。
 import { common } from '@kit.AbilityKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
-import { hasFile } from '../common/Runtime';
+import { hasFile } from '../shared/Runtime';
 
 // 文件名要和 mihomo 查找的一致（constant/path.go，不区分大小写）。
 const GEO_FILES: string[] = ['geoip.metadb', 'geosite.dat'];

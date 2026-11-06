@@ -1,6 +1,6 @@
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { http } from '@kit.NetworkKit';
-import { hasFile, profilePath, writeText } from './Runtime';
+import { hasFile, profilePath, writeText } from '../../shared/Runtime';
 
 // Subscriptions return Clash YAML only for clients they recognise.
 const USER_AGENT = 'clash.meta';
