@@ -12,18 +12,44 @@ if [[ ! -x "$LLVM/aarch64-unknown-linux-ohos-clang" ]]; then
   exit 1
 fi
 
+# Stock Go cannot produce a c-shared library that musl can dlopen (golang/go#54805).
+# Build with a private copy of the local Go toolchain carrying go-ohos.patch.
+GO_VERSION="$(go env GOVERSION)"
+TOOLCHAIN="$ROOT/.toolchain/$GO_VERSION-ohos"
+PATCH="$ROOT/scripts/go-ohos.patch"
+STAMP="$TOOLCHAIN/.arkclash-patch"
+if [[ ! -f "$STAMP" ]] || ! cmp -s "$PATCH" "$STAMP"; then
+  echo "preparing patched $GO_VERSION in $TOOLCHAIN"
+  rm -rf "$TOOLCHAIN" "$TOOLCHAIN.tmp"
+  mkdir -p "$ROOT/.toolchain"
+  cp -R "$(go env GOROOT)" "$TOOLCHAIN.tmp"
+  chmod -R u+w "$TOOLCHAIN.tmp"
+  patch -s -p1 -d "$TOOLCHAIN.tmp" < "$PATCH"
+  cp "$PATCH" "$TOOLCHAIN.tmp/.arkclash-patch"
+  mv "$TOOLCHAIN.tmp" "$TOOLCHAIN"
+fi
+GO="$TOOLCHAIN/bin/go"
+export GOROOT="$TOOLCHAIN" GOTOOLCHAIN=local
+
 cd "$ROOT/core"
-MIHOMO_VERSION="$(go list -m -f '{{.Version}}' github.com/metacubex/mihomo)"
+MIHOMO_VERSION="$("$GO" list -m -f '{{.Version}}' github.com/metacubex/mihomo)"
 mkdir -p "$OUT"
 
 # HarmonyOS uses musl, so this is a GOOS=linux build linked by the OHOS clang.
 CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
   CC="$LLVM/aarch64-unknown-linux-ohos-clang" \
   CXX="$LLVM/aarch64-unknown-linux-ohos-clang++" \
-  go build -buildmode=c-shared -tags with_gvisor -trimpath \
+  "$GO" build -buildmode=c-shared -tags with_gvisor -trimpath \
     -ldflags "-s -w -extldflags=-Wl,-soname,libclash.so -X github.com/metacubex/mihomo/constant.Version=$MIHOMO_VERSION" \
     -o "$OUT/libclash.so" .
 
 # The C++ bridge uses the hand-written arkclash.h instead.
 rm -f "$OUT/libclash.h"
+
+# musl rejects initial-exec TLS relocations in dlopen'ed libraries.
+# 允许 TLSDESC（general-dynamic），只拦 initial-exec 用的 TPREL。
+if "$LLVM/llvm-readelf" -r "$OUT/libclash.so" | grep -q "R_AARCH64_TLS_TPREL"; then
+  echo "libclash.so still has TLS relocations; is go-ohos.patch applied?" >&2
+  exit 1
+fi
 echo "built $OUT/libclash.so (mihomo $MIHOMO_VERSION)"

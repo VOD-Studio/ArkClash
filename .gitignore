@@ -22,3 +22,6 @@
 *.cer
 *.p7b
 *.csr
+
+# Patched Go toolchain (scripts/build-core.sh)
+/.toolchain/

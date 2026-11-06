@@ -39,7 +39,7 @@ VPN 进程 (ClashVpnAbility, VpnExtensionAbility)
 依赖：DevEco Studio（HarmonyOS SDK API 26）、Go 1.26+。设备需 API 22+（`protectProcessNet`）。
 
 ```sh
-scripts/build-core.sh   # 交叉编译 mihomo → entry/libs/arm64-v8a/libclash.so
+scripts/build-core.sh   # 交叉编译 mihomo → entry/libs/arm64-v8a/libclash.so（自动准备打过补丁的 Go 工具链）
 ```
 
 之后用 DevEco Studio 打开项目，在 File → Project Structure → Signing Configs 里用华为账号自动签名，连接真机运行。
