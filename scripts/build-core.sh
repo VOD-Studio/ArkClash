@@ -12,6 +12,12 @@ if [[ ! -x "$LLVM/aarch64-unknown-linux-ohos-clang" ]]; then
   exit 1
 fi
 
+# 补丁按 .go-version 里的 Go 版本制作，版本不同时补丁可能打不上。
+WANT_GO="$(cat "$ROOT/.go-version")"
+if [[ "$(go env GOVERSION)" != "go$WANT_GO" ]]; then
+  echo "警告：本机是 $(go env GOVERSION)，项目固定 go$WANT_GO（.go-version）" >&2
+fi
+
 # Stock Go cannot produce a c-shared library that musl can dlopen (golang/go#54805).
 # Build with a private copy of the local Go toolchain carrying go-ohos.patch.
 GO_VERSION="$(go env GOVERSION)"

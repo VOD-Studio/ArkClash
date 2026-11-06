@@ -36,20 +36,18 @@ VPN 进程 (ClashVpnAbility, VpnExtensionAbility)
 
 ## 构建
 
-依赖：DevEco Studio（HarmonyOS SDK API 26）、Go 1.26+。设备需 API 22+（`protectProcessNet`）。
+依赖：DevEco Studio（HarmonyOS SDK API 26）、Go（版本见 `.go-version`）。设备需 API 22+。
 
 ```sh
-scripts/build-core.sh   # 交叉编译 mihomo → entry/libs/arm64-v8a/libclash.so（自动准备打过补丁的 Go 工具链）
-scripts/fetch-geodata.sh  # 下载 Geo 数据到 rawfile/geo/，随 HAP 打包
+make geodata   # 首次：下载 Geo 数据，随 HAP 打包
+make core      # 交叉编译 mihomo 内核（自动准备打过补丁的 Go 工具链）
+make hap       # 打包 HAP 到 dist/（MODE=release 打发布版）
+make run       # 装到已连接的设备并启动
+make log       # 跟踪内核与 VPN 日志
+make lint      # 代码检查
 ```
 
-之后用 DevEco Studio 打开项目，在 File → Project Structure → Signing Configs 里用华为账号自动签名，连接真机运行。
-
-查看日志：
-
-```sh
-hdc hilog | grep -E "ArkClashCore|ClashVpnAbility"
-```
+签名：用 DevEco Studio 打开项目，在 File → Project Structure → Signing Configs 里用华为账号自动签名。签名配置只留在本机，不要提交。
 
 ## 进度
 
