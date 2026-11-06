@@ -89,7 +89,9 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       secret: runtime.secret,
       stack: runtime.stack
     };
-    await core.start(JSON.stringify(options));
+    // 先赋给带类型的变量再 await：codelinter 解析不到 .so 的类型声明，直接 await 会误报 await-thenable。
+    const started: Promise<void> = core.start(JSON.stringify(options));
+    await started;
     hilog.info(DOMAIN, TAG, 'core %{public}s started', core.version());
   }
 }
