@@ -69,7 +69,10 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
         isDefaultRoute: true
       }],
       dnsAddresses: [TUN_DNS],
-      mtu: TUN_MTU
+      mtu: TUN_MTU,
+      // protectProcessNet() 只对经过 libc 创建的 socket 生效，Go 直接发系统调用，
+      // 内核的出站连接会被绕回 VPN。按 UID 把本应用整个排除掉，在内核路由层面生效。
+      blockedApplications: [this.context.applicationInfo.name]
     };
     const tunFd = await connection.create(config);
     hilog.info(DOMAIN, TAG, 'tun created, fd=%{public}d', tunFd);
