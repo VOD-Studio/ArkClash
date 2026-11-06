@@ -1,0 +1,51 @@
+name: Core
+
+# 编译内核（libclash.so）并上传为 artifact，供 CI 和发版复用。
+# 用公开的 OpenHarmony NDK，不依赖任何 secret，dependabot 和 fork 的 PR 也能跑。
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 要构建的 git ref，留空为触发事件的 ref
+        type: string
+        default: ""
+      lint:
+        description: 同时跑 Go、shell、分层检查
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  # NDK 文件名随 OpenHarmony 发行版变化，升级时两个一起改，见 docs/ci.md。
+  OHOS_RELEASE: 7.0-Release
+  OHOS_NDK_MEMBER: ohos-sdk/linux/native-linux-x64-26.0.0.38-Beta.zip
+
+jobs:
+  core:
+    name: 内核
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .go-version
+          cache-dependency-path: core/go.sum
+      - uses: ./.github/actions/setup-ohos-ndk
+        with:
+          release: ${{ env.OHOS_RELEASE }}
+          member: ${{ env.OHOS_NDK_MEMBER }}
+      - run: make core
+      - if: inputs.lint
+        run: make lint CHECKS="go shell arch"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: libclash
+          path: entry/libs/arm64-v8a/libclash.so
+          retention-days: 7
+          if-no-files-found: error

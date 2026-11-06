@@ -1,0 +1,34 @@
+name: 问题反馈
+description: 连接失败、崩溃、耗电异常等问题
+title: "[scope] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请不要贴订阅链接、节点地址或 secret。日志里如果有这些内容，先打码再贴。
+  - type: input
+    id: device
+    attributes:
+      label: 设备型号与系统版本
+      placeholder: Pura 70 Ultra，HarmonyOS 6.x（API 26）
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ArkClash 版本
+      placeholder: 0.2.0
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤与现象
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: "`make log` 或 `hdc hilog | grep -E \"ArkClashCore|ClashVpnAbility\"` 的输出"
+      render: text

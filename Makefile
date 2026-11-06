@@ -1,6 +1,7 @@
 # ArkClash 构建入口：本地开发和 CI 都只调用这里的目标。
 .DEFAULT_GOAL := help
 MODE ?= debug
+CHECKS ?= all
 
 help: ## 列出所有目标
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
@@ -23,8 +24,8 @@ run: install ## 安装并启动
 log: ## 跟踪内核与 VPN 进程日志
 	scripts/device.sh log
 
-lint: ## gofmt、go vet、shellcheck、ArkTS 分层规则、codelinter
-	scripts/lint.sh
+lint: ## 代码检查（CHECKS=all|go|shell|arch|arkts，可多个）
+	scripts/lint.sh $(CHECKS)
 
 clean: ## 清理构建产物（保留 .toolchain/ 里的补丁工具链）
 	rm -rf entry/build entry/.cxx .hvigor dist entry/libs

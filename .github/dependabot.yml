@@ -1,0 +1,21 @@
+# 每月检查一次依赖；minor/patch 合并成一个 PR。
+# mihomo、gVisor 升级可能让补丁打不上或在真机上出问题，合并前按 docs/agents/platform-pitfalls.md 复查。
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /core
+    schedule:
+      interval: monthly
+    groups:
+      minor-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      minor-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
