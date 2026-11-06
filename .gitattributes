@@ -1,0 +1,16 @@
+# 文本统一 LF；二进制不做换行转换
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.so binary
+*.hap binary
+*.zip binary
+*.metadb binary
+*.dat binary
+
+# 生成文件在 GitHub 上默认折叠
+entry/oh-package-lock.json5 linguist-generated=true
+core/go.sum linguist-generated=true

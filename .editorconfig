@@ -1,0 +1,35 @@
+# 编辑器统一配置：ArkTS / JSON5 / YAML / Shell 用 2 空格，Go 和汇编用 tab
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.go]
+indent_style = tab
+indent_size = 4
+
+[{*.s,*.S}]
+indent_style = tab
+indent_size = 8
+
+[Makefile]
+indent_style = tab
+
+[{*.c,*.cc,*.cpp,*.h,*.hpp,CMakeLists.txt}]
+indent_size = 4
+
+# 补丁里的空白是内容的一部分，编辑器不能动
+[*.patch]
+trim_trailing_whitespace = false
+insert_final_newline = unset
+indent_style = unset
+indent_size = unset
+
+# Markdown 行尾两个空格是硬换行
+[*.md]
+trim_trailing_whitespace = false
