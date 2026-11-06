@@ -17,6 +17,8 @@
 - **内核**用公开的 OpenHarmony SDK 里的 Linux NDK，不需要华为账号，所以 dependabot 和外部 PR 也能跑。`fetch-ohos-ndk.sh` 边下载边解压，取到 NDK 就停，然后缓存。
 - **HAP**需要 HarmonyOS 的 Command Line Tools，只能登录华为开发者网站下载，而且不允许公开分发。所以放在一个**私有仓库**的 Release 里，CI 用 token 下载后缓存。
 
+缓存 key 包含版本号和下载脚本的哈希，改了下载或裁剪逻辑后会自动重建缓存。
+
 ## 变量与密钥
 
 在仓库的 Settings → Secrets and variables → Actions 里配置：

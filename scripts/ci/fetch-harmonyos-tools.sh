@@ -41,8 +41,9 @@ if [[ -z "$sdk_default" ]]; then
   exit 1
 fi
 home="$(dirname "$(dirname "$sdk_default")")"
-# 打包用不到模拟器、预览器和文档工具，删掉约 900MB，缓存更小。
-rm -rf "$home/emulator" "$home/arktsdoc" "$home"/sdk/default/*/previewer
+# 模拟器和文档工具不是 SDK 组件，打包用不到，删掉缩小缓存。
+# previewer 虽然也用不到，但 hvigor 会检查 SDK 组件是否齐全，不能删。
+rm -rf "$home/emulator" "$home/arktsdoc"
 # zip 不一定保留可执行权限。
 find "$home" -type f \( -path '*/bin/*' -o -name '*.sh' \) -exec chmod +x {} +
 echo "$home"

@@ -22,7 +22,8 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.dir.outputs.path }}
-        key: harmonyos-tools-${{ runner.os }}-${{ inputs.tag }}
+        # 带上下载脚本的哈希：脚本（比如裁剪逻辑）一改，缓存自动重建。
+        key: harmonyos-tools-${{ runner.os }}-${{ inputs.tag }}-${{ hashFiles('scripts/ci/fetch-harmonyos-tools.sh') }}
     # 下载加解压峰值约 10GB，先清掉官方镜像里用不到的 Android SDK、.NET、Haskell。
     - if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
