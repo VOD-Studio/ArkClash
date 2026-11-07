@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/VOD-Studio/ArkClash/compare/v0.1.2...v0.2.0) (2026-11-07)
+
+
+### 新增
+
+* **ui:** 换用新的应用图标 ([4f9bd78](https://github.com/VOD-Studio/ArkClash/commit/4f9bd78b09d57f4a28ecb6a51c1af475a2e8b7ca))
+
 ## [0.1.2](https://github.com/VOD-Studio/ArkClash/compare/v0.1.1...v0.1.2) (2026-11-07)
 
 
