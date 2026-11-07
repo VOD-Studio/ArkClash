@@ -28,6 +28,8 @@ case "$STEP" in
     notes="$(gh release view "$TAG" --json body --jq .body)"
     if ! grep -q '^### 校验' <<<"$notes"; then
       repo="${GITHUB_REPOSITORY:-VOD-Studio/ArkClash}"
+      # 反引号是 Markdown 的代码格式，要原样输出。
+      # shellcheck disable=SC2016
       printf '%s\n\n### 校验\n\n- 文件完整性：`sha256sum -c SHA256SUMS`\n- 来源证明（确认安装包由本仓库的 GitHub Actions 从这个 tag 构建）：`gh attestation verify ArkClash-%s-unsigned.hap -R %s`\n' \
         "$notes" "$VERSION" "$repo" > notes.md
       gh release edit "$TAG" --notes-file notes.md

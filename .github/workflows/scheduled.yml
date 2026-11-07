@@ -78,5 +78,5 @@ jobs:
             gh issue comment "$existing" -R "$REPO" --body "又失败了一次：$RUN_URL"
           else
             gh issue create -R "$REPO" --title "$title" --label bug --label needs-triage \
-              --body "每周维护任务失败：$RUN_URL。逐个看失败的任务：Geo 数据更新、依赖漏洞扫描、无缓存构建（内核、HAP）。修好后关闭这个 issue。"
+              --body "每周维护任务失败：${RUN_URL}。逐个看失败的任务：Geo 数据更新、依赖漏洞扫描、无缓存构建（内核、HAP）。修好后关闭这个 issue。"
           fi
