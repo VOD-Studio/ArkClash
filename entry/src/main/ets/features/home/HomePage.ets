@@ -71,6 +71,9 @@ export struct HomePage {
   @Param profileName: string = '';
   @Param profileUpdatedAt: number = 0;
   @Param profileUpdating: boolean = false;
+  @Param profileUpdatable: boolean = true; // 本地配置不能更新
+  // 当前配置摘要里的代理组名，未连接时代替内核的实时数据（#35）。
+  @Param summaryGroups: string[] = [];
   @Param usedBytes: number = 0;
   @Param totalBytes: number = 0;
   @Param expireAt: number = 0; // 秒级时间戳，0 = 未知
@@ -782,22 +785,24 @@ export struct HomePage {
           .fontWeight(FontWeight.Medium)
           .fontColor($r('sys.color.font_primary'))
           .layoutWeight(1)
-        Button({ type: ButtonType.Circle }) {
-          if (this.profileUpdating) {
-            LoadingProgress()
-              .width(18)
-              .height(18)
-          } else {
-            SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-              .fontSize(16)
-              .fontColor([$r('sys.color.font_secondary')])
+        if (this.profileUpdatable) {
+          Button({ type: ButtonType.Circle }) {
+            if (this.profileUpdating) {
+              LoadingProgress()
+                .width(18)
+                .height(18)
+            } else {
+              SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+                .fontSize(16)
+                .fontColor([$r('sys.color.font_secondary')])
+            }
           }
+          .width(28)
+          .height(28)
+          .backgroundColor($r('app.color.tile_background'))
+          .enabled(!this.profileUpdating)
+          .onClick(() => this.onUpdateProfile())
         }
-        .width(28)
-        .height(28)
-        .backgroundColor($r('app.color.tile_background'))
-        .enabled(!this.profileUpdating)
-        .onClick(() => this.onUpdateProfile())
         SymbolGlyph($r('sys.symbol.chevron_right'))
           .fontSize(16)
           .fontColor([$r('sys.color.font_tertiary')])
@@ -813,7 +818,8 @@ export struct HomePage {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
       Row() {
-        Text($r('app.string.updated_ago', this.relativeTime(this.profileUpdatedAt)))
+        Text(this.profileUpdatable ? $r('app.string.updated_ago', this.relativeTime(this.profileUpdatedAt)) :
+          $r('app.string.profile_source_local'))
           .fontSize(12)
           .fontColor($r('sys.color.font_tertiary'))
           .layoutWeight(1)
@@ -885,10 +891,10 @@ export struct HomePage {
       this.CardHeader($r('sys.symbol.square_stack_3d'), $r('app.string.card_group'), true)
       Row() {
         Row({ space: 4 }) {
-          Text(this.group !== undefined ? `${this.groupNames().length}` : '—')
+          Text(this.groupNames().length > 0 ? `${this.groupNames().length}` : '—')
             .fontSize(32)
             .fontWeight(FontWeight.Bold)
-            .fontColor(this.group !== undefined ? $r('sys.color.font_primary') : $r('sys.color.font_tertiary'))
+            .fontColor(this.groupNames().length > 0 ? $r('sys.color.font_primary') : $r('sys.color.font_tertiary'))
             .fontFeature('"tnum" on')
           Text($r('app.string.group_count_unit'))
             .fontSize(13)
@@ -902,12 +908,17 @@ export struct HomePage {
       .width('100%')
       .height(40)
       Row({ space: 8 }) {
-        Text(this.group !== undefined ? `${this.groupName()} → ${this.groupNode()}` : $r('app.string.after_connect'))
+        Text(this.groupLine())
           .fontSize(13)
-          .fontColor(this.group !== undefined ? $r('sys.color.font_secondary') : $r('sys.color.font_tertiary'))
+          .fontColor(this.groupNames().length > 0 ? $r('sys.color.font_secondary') : $r('sys.color.font_tertiary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
+        if (this.group === undefined && this.summaryGroups.length > 0) {
+          Text($r('app.string.node_after_connect'))
+            .fontSize(13)
+            .fontColor($r('sys.color.font_tertiary'))
+        }
         if (this.group !== undefined) {
           Text(this.groupDelay() > 0 ? `${this.groupDelay()} ms` : $r('app.string.delay_untested'))
             .fontSize(13)
@@ -1345,7 +1356,15 @@ export struct HomePage {
   }
 
   private groupNames(): string[] {
-    return this.group?.groups ?? [];
+    return this.group?.groups ?? this.summaryGroups;
+  }
+
+  // 连接后是主代理组和它选中的节点；未连接时只有摘要，节点要内核才知道。
+  private groupLine(): ResourceStr {
+    if (this.group !== undefined) {
+      return `${this.groupName()} → ${this.groupNode()}`;
+    }
+    return this.summaryGroups.length > 0 ? this.summaryGroups[0] : $r('app.string.after_connect');
   }
 
   private groupName(): string {

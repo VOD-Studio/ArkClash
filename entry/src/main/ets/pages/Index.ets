@@ -5,8 +5,9 @@ import { connection, Connection, ConnectionState } from '../client/Connection';
 import { traffic } from '../client/Traffic';
 import { ConnectionBar } from '../features/home/ConnectionBar';
 import { HomePage } from '../features/home/HomePage';
-import { ProfileStore } from '../features/profiles/Profiles';
+import { ProfileItem, ProfileStore } from '../features/profiles/Profiles';
 import { ProfilesPage } from '../features/profiles/ProfilesPage';
+import { SummaryGroup } from '../shared/profiles/Summary';
 import { ProxiesPage } from '../features/proxies/ProxiesPage';
 import { ToolPage } from '../features/tools/ToolPages';
 import { ToolRoute } from '../features/tools/ToolRoutes';
@@ -46,12 +47,30 @@ struct Index {
   aboutToAppear(): void {
     this.profiles.load(this.context);
     this.conn.restore(this.context);
+    this.syncProfiles();
     this.scrollers.forEach((scroller: Scroller, index: number) => this.tabs.bindScroller(index, scroller));
   }
 
   aboutToDisappear(): void {
     this.scrollers.forEach((scroller: Scroller) => this.tabs.unbindScroller(scroller));
     traffic.stop();
+  }
+
+  // 配置的更新由谁负责、要不要订阅 VPN 进程的推送，取决于连接状态和应用是否在前台（ADR-0009）。
+  // @Monitor 不在初始化时触发，aboutToAppear 里先按缓存的状态调一次。
+  @Monitor('conn.state', 'foreground')
+  syncProfiles(): void {
+    if (this.conn.state === ConnectionState.Connected) {
+      this.profiles.setConnected(true);
+    } else if (this.conn.state === ConnectionState.Disconnected) {
+      this.profiles.setConnected(false);
+    }
+    // 交接：正在连接、正在断开时界面不发起新的更新。
+    this.profiles.setForeground(this.foreground && !this.conn.busy);
+  }
+
+  private activeProfile(): ProfileItem | undefined {
+    return this.profiles.active();
   }
 
   // 流量推送只在有人看的时候订阅：首页可见，或者连接条展开着。
@@ -102,12 +121,15 @@ struct Index {
               onScrollDirection: (down: boolean) => this.onScrollDirection(down),
               topInset: this.topInset(),
               profileReady: this.profiles.ready,
-              profileName: this.profiles.name,
-              profileUpdatedAt: this.profiles.updatedAt,
-              profileUpdating: this.profiles.downloading,
-              usedBytes: (this.profiles.usage?.upload ?? 0) + (this.profiles.usage?.download ?? 0),
-              totalBytes: this.profiles.usage?.total ?? 0,
-              expireAt: this.profiles.usage?.expire ?? 0,
+              profileName: this.activeProfile()?.name ?? '',
+              profileUpdatedAt: this.activeProfile()?.state.updatedAt ?? 0,
+              profileUpdating: this.activeProfile()?.updating ?? false,
+              profileUpdatable: this.activeProfile()?.isSubscription ?? false,
+              usedBytes: (this.activeProfile()?.state.usage?.upload ?? 0) +
+                (this.activeProfile()?.state.usage?.download ?? 0),
+              totalBytes: this.activeProfile()?.state.usage?.total ?? 0,
+              expireAt: this.activeProfile()?.state.usage?.expire ?? 0,
+              summaryGroups: this.profiles.summary?.groups.map((g: SummaryGroup) => g.name) ?? [],
               visible: this.tab === Tab.Home && this.foreground,
               onAddProfile: () => {
                 this.profileSheetRequested = true;
@@ -115,7 +137,10 @@ struct Index {
               },
               onOpenProfiles: () => this.tabs.changeIndex(Tab.Profiles),
               onUpdateProfile: () => {
-                this.profiles.download(this.profiles.url);
+                const active = this.activeProfile();
+                if (active !== undefined) {
+                  this.profiles.update(active.id);
+                }
               },
               onOpenProxies: () => this.tabs.changeIndex(Tab.Proxies)
             })

@@ -29,6 +29,10 @@
       "value": "#335B8CFF"
     },
     {
+      "name": "brand_pulse",
+      "value": "#595B8CFF"
+    },
+    {
       "name": "on_brand",
       "value": "#FFFFFF"
     },
@@ -79,6 +83,10 @@
     {
       "name": "warning_soft",
       "value": "#33FFB020"
+    },
+    {
+      "name": "error_soft",
+      "value": "#33FF6B6B"
     },
     {
       "name": "success_soft",

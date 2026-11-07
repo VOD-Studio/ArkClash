@@ -411,6 +411,174 @@
     {
       "name": "services_recheck",
       "value": "重新检测"
+    },
+    {
+      "name": "action_import_file",
+      "value": "导入本地文件"
+    },
+    {
+      "name": "action_update_all",
+      "value": "全部更新"
+    },
+    {
+      "name": "action_add",
+      "value": "添加"
+    },
+    {
+      "name": "action_more",
+      "value": "更多"
+    },
+    {
+      "name": "action_edit",
+      "value": "编辑"
+    },
+    {
+      "name": "action_copy_link",
+      "value": "复制链接"
+    },
+    {
+      "name": "action_delete",
+      "value": "删除"
+    },
+    {
+      "name": "action_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "action_save",
+      "value": "保存"
+    },
+    {
+      "name": "action_replace_file",
+      "value": "替换文件"
+    },
+    {
+      "name": "profile_source_local",
+      "value": "本地"
+    },
+    {
+      "name": "profile_current",
+      "value": "当前"
+    },
+    {
+      "name": "profile_switching",
+      "value": "切换中"
+    },
+    {
+      "name": "profile_switch_failed",
+      "value": "切换失败：%s"
+    },
+    {
+      "name": "profile_update_failed",
+      "value": "%1$s 更新失败：%2$s"
+    },
+    {
+      "name": "profile_in_use",
+      "value": "使用中"
+    },
+    {
+      "name": "profile_in_use_hint",
+      "value": "正在使用，先切换到别的配置或断开连接"
+    },
+    {
+      "name": "profile_updated_toast",
+      "value": "已更新"
+    },
+    {
+      "name": "profiles_updated_all",
+      "value": "已全部更新"
+    },
+    {
+      "name": "add_subscription_title",
+      "value": "添加订阅"
+    },
+    {
+      "name": "edit_profile_title",
+      "value": "编辑配置"
+    },
+    {
+      "name": "delete_confirm_title",
+      "value": "删除「%s」？"
+    },
+    {
+      "name": "delete_confirm_message",
+      "value": "配置内容和更新记录会一起删除。"
+    },
+    {
+      "name": "field_name",
+      "value": "名称"
+    },
+    {
+      "name": "field_link",
+      "value": "链接"
+    },
+    {
+      "name": "field_auto_update",
+      "value": "自动更新"
+    },
+    {
+      "name": "field_interval",
+      "value": "更新间隔（小时）"
+    },
+    {
+      "name": "import_failed",
+      "value": "导入失败：%s"
+    },
+    {
+      "name": "usage_exhausted",
+      "value": "流量已用完"
+    },
+    {
+      "name": "node_after_connect",
+      "value": "连接后显示节点"
+    },
+    {
+      "name": "err_http",
+      "value": "服务器返回 %s"
+    },
+    {
+      "name": "err_not_clash",
+      "value": "不是 Clash 配置（没有 proxies 或 proxy-providers）"
+    },
+    {
+      "name": "err_invalid_yaml",
+      "value": "YAML 格式错误：%s"
+    },
+    {
+      "name": "err_rejected",
+      "value": "内核无法加载：%s"
+    },
+    {
+      "name": "err_network",
+      "value": "网络错误：%s"
+    },
+    {
+      "name": "err_io",
+      "value": "文件读写失败：%s"
+    },
+    {
+      "name": "err_not_found",
+      "value": "找不到这份配置"
+    },
+    {
+      "name": "err_busy",
+      "value": "正在更新"
+    },
+    {
+      "name": "err_name_taken",
+      "value": "已有同名的配置"
+    },
+    {
+      "name": "err_name_empty",
+      "value": "名称不能为空"
+    },
+    {
+      "name": "err_link_exists",
+      "value": "这个订阅已经添加过了"
+    },
+    {
+      "name": "err_interval",
+      "value": "间隔至少 1 小时"
     }
   ]
 }

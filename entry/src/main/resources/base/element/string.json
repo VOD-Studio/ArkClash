@@ -431,6 +431,174 @@
     {
       "name": "services_recheck",
       "value": "Recheck"
+    },
+    {
+      "name": "action_import_file",
+      "value": "Import local file"
+    },
+    {
+      "name": "action_update_all",
+      "value": "Update all"
+    },
+    {
+      "name": "action_add",
+      "value": "Add"
+    },
+    {
+      "name": "action_more",
+      "value": "More"
+    },
+    {
+      "name": "action_edit",
+      "value": "Edit"
+    },
+    {
+      "name": "action_copy_link",
+      "value": "Copy link"
+    },
+    {
+      "name": "action_delete",
+      "value": "Delete"
+    },
+    {
+      "name": "action_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "action_save",
+      "value": "Save"
+    },
+    {
+      "name": "action_replace_file",
+      "value": "Replace file"
+    },
+    {
+      "name": "profile_source_local",
+      "value": "Local"
+    },
+    {
+      "name": "profile_current",
+      "value": "Current"
+    },
+    {
+      "name": "profile_switching",
+      "value": "Switching"
+    },
+    {
+      "name": "profile_switch_failed",
+      "value": "Switch failed: %s"
+    },
+    {
+      "name": "profile_update_failed",
+      "value": "Update failed %1$s: %2$s"
+    },
+    {
+      "name": "profile_in_use",
+      "value": "In use"
+    },
+    {
+      "name": "profile_in_use_hint",
+      "value": "In use. Switch to another profile or disconnect first."
+    },
+    {
+      "name": "profile_updated_toast",
+      "value": "Updated"
+    },
+    {
+      "name": "profiles_updated_all",
+      "value": "Update finished"
+    },
+    {
+      "name": "add_subscription_title",
+      "value": "Add subscription"
+    },
+    {
+      "name": "edit_profile_title",
+      "value": "Edit profile"
+    },
+    {
+      "name": "delete_confirm_title",
+      "value": "Delete “%s”?"
+    },
+    {
+      "name": "delete_confirm_message",
+      "value": "Its content and update history are removed too."
+    },
+    {
+      "name": "field_name",
+      "value": "Name"
+    },
+    {
+      "name": "field_link",
+      "value": "Link"
+    },
+    {
+      "name": "field_auto_update",
+      "value": "Auto update"
+    },
+    {
+      "name": "field_interval",
+      "value": "Update interval (hours)"
+    },
+    {
+      "name": "import_failed",
+      "value": "Import failed: %s"
+    },
+    {
+      "name": "usage_exhausted",
+      "value": "Data used up"
+    },
+    {
+      "name": "node_after_connect",
+      "value": "Node shown after connecting"
+    },
+    {
+      "name": "err_http",
+      "value": "The server returned %s"
+    },
+    {
+      "name": "err_not_clash",
+      "value": "Not a Clash config (no proxies or proxy-providers)"
+    },
+    {
+      "name": "err_invalid_yaml",
+      "value": "Invalid YAML: %s"
+    },
+    {
+      "name": "err_rejected",
+      "value": "The core cannot load it: %s"
+    },
+    {
+      "name": "err_network",
+      "value": "Network error: %s"
+    },
+    {
+      "name": "err_io",
+      "value": "File error: %s"
+    },
+    {
+      "name": "err_not_found",
+      "value": "Profile not found"
+    },
+    {
+      "name": "err_busy",
+      "value": "Already updating"
+    },
+    {
+      "name": "err_name_taken",
+      "value": "Another profile already has this name"
+    },
+    {
+      "name": "err_name_empty",
+      "value": "Name cannot be empty"
+    },
+    {
+      "name": "err_link_exists",
+      "value": "This subscription has already been added"
+    },
+    {
+      "name": "err_interval",
+      "value": "The interval must be at least 1 hour"
     }
   ]
 }
