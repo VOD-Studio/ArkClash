@@ -1,6 +1,6 @@
 # 0009 ArkClash 自有命令挂在 controller 上
 
-- 状态：已采纳（2026-11-07），待实现
+- 状态：已采纳（2026-11-07）
 - 扩展：[0003 UI 通过 external-controller 和文件通道与内核通信](0003-ui-core-via-external-controller.md)
 
 ## 背景

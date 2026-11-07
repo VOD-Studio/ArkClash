@@ -14,5 +14,5 @@
 | [0006](0006-layered-ci.md) | 分层 CI，单一必需检查，发版只构建一次 | 已采纳 |
 | [0007](0007-min-harmonyos-7.md) | 最低支持 HarmonyOS 7（API 26），界面以 UI Design Kit 为准 | 已采纳 |
 | [0008](0008-bind-core-sockets-to-physical-network.md) | Go 出站逐 socket 绑定当前物理网络 | 已采纳 |
-| [0009](0009-arkclash-commands-on-controller.md) | ArkClash 自有命令挂在 controller 上 | 已采纳，待实现 |
-| [0010](0010-hot-switch-reload-in-vpn.md) | 热切换由 VPN 进程重载配置 | 已采纳，待实现 |
+| [0009](0009-arkclash-commands-on-controller.md) | ArkClash 自有命令挂在 controller 上 | 已采纳 |
+| [0010](0010-hot-switch-reload-in-vpn.md) | 热切换由 VPN 进程重载配置 | 已采纳 |

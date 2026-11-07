@@ -16,7 +16,7 @@
 
 ## 架构
 
-UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo controller 和 `filesDir` 文件通信。新增目录、跨进程改动、调整依赖方向前读 `docs/architecture.md`；做出新的架构取舍时在 `docs/adr/` 写一份决策记录。ArkClash 接管的配置项（TUN、controller、进程查找、DNS 开关）统一在 `core/lib.go` 的 `applyOverrides` 里强制，订阅里写什么都会被覆盖。
+UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo controller 和 `filesDir` 文件通信。新增目录、跨进程改动、调整依赖方向前读 `docs/architecture.md`；做出新的架构取舍时在 `docs/adr/` 写一份决策记录。ArkClash 接管的配置项（TUN、controller、进程查找、DNS 开关，以及用户在界面上选过的出站模式和局域网代理）统一在 `core/lib.go` 的 `applyOverrides` 里强制，订阅里写什么都会被覆盖，热切换后也保持。
 
 ## 构建与真机验证
 
