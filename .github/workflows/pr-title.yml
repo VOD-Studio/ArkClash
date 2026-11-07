@@ -1,0 +1,23 @@
+name: PR 标题
+
+# squash 合并时，PR 标题就是 main 上的提交信息，也是发版说明里的一条，所以要符合提交信息格式。
+# 单独一个 workflow：改标题只重跑这里。不计入「CI 通过」：用 merge commit 或 rebase 合并时标题不进发版说明。
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  title:
+    name: PR 标题
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: python3 scripts/ci/check-commits.py --message "$TITLE"

@@ -13,6 +13,7 @@
 | `release.yml` | 被 `release-please.yml` 调用，或手动补传 | 干净构建一次，生成校验和与来源证明，上传到 Release |
 | `scheduled.yml` | 每周一 10:00（北京时间），可手动 | 更新 Geo 数据、扫描依赖漏洞、不用缓存完整构建；失败时开 issue |
 | `codeql.yml` | 内核相关的 PR、`main`、每周 | CodeQL 扫描 Go 代码，结果在 Security → Code scanning |
+| `pr-title.yml` | PR 打开、改标题、推送 | PR 标题是否符合提交信息格式（squash 合并时它就是 main 上的提交信息）。不计入「CI 通过」 |
 
 ### ci.yml 的分层
 
