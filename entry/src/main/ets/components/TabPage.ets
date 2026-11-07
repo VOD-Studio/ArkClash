@@ -50,9 +50,13 @@ export struct TabPage {
       .align(Alignment.Top)
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
-      .onDidScroll((_x: number, y: number) => {
+      .onWillScroll((_x: number, y: number, _state: ScrollState, source: ScrollSource) => {
+        // 弹簧回弹不代表用户反向滚动，保留回弹前的底栏状态。
+        if (source === ScrollSource.EDGE_EFFECT) {
+          return;
+        }
         let down = this.down;
-        if (this.scroller.currentOffset().yOffset <= 0) {
+        if (this.scroller.currentOffset().yOffset <= 0 && y <= 0) {
           down = false;
         } else if (Math.abs(y) >= DIRECTION_THRESHOLD) {
           down = y > 0;

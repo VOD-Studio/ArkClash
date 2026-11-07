@@ -406,7 +406,7 @@
     },
     {
       "name": "services_sheet_hint",
-      "value": "长按拖动排序，打开的会显示在首页。"
+      "value": "Google 置顶，AI 紧随其后；长按可在同类内排序，开关控制首页显隐。"
     },
     {
       "name": "services_recheck",

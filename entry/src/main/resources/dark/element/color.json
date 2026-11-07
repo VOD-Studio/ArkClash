@@ -93,6 +93,10 @@
       "value": "#5B8CFF"
     },
     {
+      "name": "service_icon_background",
+      "value": "#FFFFFF"
+    },
+    {
       "name": "memory_ui",
       "value": "#2C4A8C"
     }

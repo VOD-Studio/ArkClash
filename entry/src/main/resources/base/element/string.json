@@ -426,7 +426,7 @@
     },
     {
       "name": "services_sheet_hint",
-      "value": "Long press to reorder. Switched-on services show on Home."
+      "value": "Google first, then AI. Long press to reorder within a category; switches control Home visibility."
     },
     {
       "name": "services_recheck",
