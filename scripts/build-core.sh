@@ -70,7 +70,10 @@ rm -f "$OUT/libclash.h"
 
 # musl rejects initial-exec TLS relocations in dlopen'ed libraries.
 # 允许 TLSDESC（general-dynamic），只拦 initial-exec 用的 TPREL。
-if "$LLVM/llvm-readelf" -r "$OUT/libclash.so" | grep -q "R_AARCH64_TLS_TPREL"; then
+# 先把输出完整读进变量再查：直接接管道时 grep -q 命中就退出，readelf 写不进去而失败，
+# pipefail 下整条管道算失败，if 反而放行。
+RELOCS="$("$LLVM/llvm-readelf" -r "$OUT/libclash.so")"
+if grep -q "R_AARCH64_TLS_TPREL" <<<"$RELOCS"; then
   echo "libclash.so still has TLS relocations; is go-ohos.patch applied?" >&2
   exit 1
 fi
