@@ -43,17 +43,18 @@ make hap
 
 ## 5. CI
 
-没有私有的 Command Line Tools 时，CI 也能跑内核编译和代码检查，只是 HAP 任务会跳过。要启用完整的 CI/CD，按 `docs/ci.md`「一次性准备」完成：
+没有私有的 Command Line Tools 时，CI 也能跑检查和内核编译，只是 HAP 任务会跳过。要启用完整的 CI/CD，按 `docs/ci.md`「一次性准备」完成：
 
 1. **【人工】** 下载 Command Line Tools 的 Linux (64-bit) 版，记下页面上的 SHA-256。
 2. agent 校验文件（`shasum -a 256`，和用户给的值对比），建私有仓库并上传（`docs/ci.md` 里的命令）。仓库名和是否新建，先问用户。
-3. **【人工】** 新建只读这个私有仓库的 fine-grained token，交给 agent 或者自己执行 `gh secret set HARMONYOS_TOOLS_TOKEN`。
+3. **【人工】** 新建只读这个私有仓库的 fine-grained token，交给 agent 或者自己执行 `gh secret set HARMONYOS_TOOLS_TOKEN`，再执行一次 `gh secret set HARMONYOS_TOOLS_TOKEN --app dependabot`。
 4. agent 设置 `HARMONYOS_TOOLS_REPO`、`HARMONYOS_TOOLS_TAG` 两个变量。
 5. 可选：用户同意后，agent 执行 `scripts/ci/export-signing-bundle.sh | gh secret set HARMONYOS_SIGNING_BUNDLE`。输出里有私钥，只能直接管道过去，不能打印或写进文件。
-6. 推送一个分支，用 `gh run watch` 看 CI 跑完。
-- **完成标准**：CI 的「内核」和「HAP」两个任务都是绿的，HAP 任务的 artifact 里有未签名的 HAP。
+6. Fork 的 Geo 数据锁文件指向上游仓库的镜像，可以直接用；想要自己的镜像，运行 `make geodata-update`。
+7. 推送一个分支、开 PR，用 `gh run watch` 看 CI 跑完。
+- **完成标准**：PR 上「CI 通过」是绿的，HAP 任务的 artifact 里有未签名的 HAP（配置了签名时还有签名包）。
 
-## 6. 发版（可选）
+## 6. 发版与仓库设置（可选）
 
-- 想让发版 PR 也触发 CI 时，**【人工】** 新建一个本仓库 Contents 和 Pull requests 读写的 fine-grained token，设成 `RELEASE_PLEASE_TOKEN`。
-- 流程见 `docs/ci.md`「发版」。
+- 发版流程见 `docs/ci.md`「发版」，不需要额外的 token。
+- 想要和上游一样的合并规则（只认「CI 通过」、只允许 merge commit 等），按 `docs/ci.md`「合并规则与仓库设置」在 Settings → Rules 里配置。
