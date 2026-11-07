@@ -27,6 +27,7 @@ flowchart LR
 - 两个进程之间只有两条通道（[ADR-0003](adr/0003-ui-core-via-external-controller.md)）：
   - **内核控制面**：mihomo 的 external-controller，所有运行时查询和操作（节点、连接、日志、流量）都走这里。
   - **文件通道**：`shared/Runtime.ets` 管理的几个文件，只用于启动前交接（配置路径、secret、协议栈）和启动失败回报。
+- UI 进程按 UID 排除在 VPN 之外（[ADR-0004](adr/0004-exclude-self-by-uid.md)），自己发的请求都是直连。需要看代理出口的功能（比如首页的出口 IP）把内核的 HTTP 代理端口（配置里的 `mixed-port` 或 `port`）当普通代理用，端口号从 controller 查。这不是控制通道；配置里没开代理端口时，这类功能显示为不可用。
 
 ## 连接流程
 
