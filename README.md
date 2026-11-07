@@ -69,9 +69,7 @@ make run       # 安装到连着的手机并启动
 
 ## 参与贡献
 
-欢迎提 issue 和 PR。提交代码前请先读 [AGENTS.md](AGENTS.md) 和 [docs/agents/git.md](docs/agents/git.md)：提交信息用中文 Conventional Commits，一个提交只做一件事，提交前跑 `make lint`。
-
-反馈问题时，请不要贴订阅链接、节点地址或 secret。
+欢迎提 issue 和 PR，先读[贡献指南](CONTRIBUTING.md)。安全漏洞请按[安全策略](SECURITY.md)私密报告。
 
 ## 致谢
 
