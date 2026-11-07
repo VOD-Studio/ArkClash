@@ -52,7 +52,7 @@ PRD 和 issue 拆分是 feature 分支的前几个提交，不单独开文档分
 ## Issue
 
 - 标题：`[scope] 描述`，例：`[vpn] 冷启动时 TUN 创建失败`。标题只写一件事。
-- 默认不加 label，只有明确匹配 GitHub 内置语义时才加（`bug`、`documentation`）。
+- 标签按 `docs/agents/triage-labels.md`：分诊过的 issue 带一个类别（`bug` / `enhancement`）和一个状态。
 - 内容里不放订阅链接、节点、secret（见 AGENTS.md「安全」）。
 
 ## PR
