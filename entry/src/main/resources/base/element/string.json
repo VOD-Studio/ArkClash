@@ -323,6 +323,82 @@
     {
       "name": "exit_local",
       "value": "This device"
+    },
+    {
+      "name": "card_lan_ip",
+      "value": "LAN IP"
+    },
+    {
+      "name": "lan_proxy",
+      "value": "LAN proxy"
+    },
+    {
+      "name": "lan_proxy_on",
+      "value": "Other devices can use %s"
+    },
+    {
+      "name": "lan_proxy_off",
+      "value": "Off"
+    },
+    {
+      "name": "lan_proxy_pending",
+      "value": "Applies after connecting"
+    },
+    {
+      "name": "copied",
+      "value": "Copied"
+    },
+    {
+      "name": "no_network",
+      "value": "No network"
+    },
+    {
+      "name": "card_services",
+      "value": "Service status"
+    },
+    {
+      "name": "services_all_ok",
+      "value": "All reachable"
+    },
+    {
+      "name": "services_some_down",
+      "value": "%d unreachable"
+    },
+    {
+      "name": "service_down",
+      "value": "Unreachable"
+    },
+    {
+      "name": "services_checking",
+      "value": "Checking…"
+    },
+    {
+      "name": "card_conn_stats",
+      "value": "Connections"
+    },
+    {
+      "name": "stat_active",
+      "value": "Active"
+    },
+    {
+      "name": "stat_proxied",
+      "value": "Proxied"
+    },
+    {
+      "name": "stat_direct",
+      "value": "Direct"
+    },
+    {
+      "name": "card_memory",
+      "value": "Memory"
+    },
+    {
+      "name": "mem_core",
+      "value": "Core"
+    },
+    {
+      "name": "mem_ui",
+      "value": "UI"
     }
   ]
 }

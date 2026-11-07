@@ -53,3 +53,28 @@ export struct LabeledValue {
     .alignItems(HorizontalAlign.Start)
   }
 }
+
+/** 图例：色点 + 名称 + 数值。 */
+@ComponentV2
+export struct LegendItem {
+  @Param color: ResourceColor = $r('sys.color.font_secondary');
+  @Param label: ResourceStr = '';
+  @Param value: ResourceStr = '';
+
+  build() {
+    Row({ space: 6 }) {
+      Circle()
+        .width(8)
+        .height(8)
+        .fill(this.color)
+      Text(this.label)
+        .fontSize(12)
+        .fontColor($r('sys.color.font_secondary'))
+      Text(this.value)
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_primary'))
+        .fontFeature('"tnum" on')
+    }
+  }
+}

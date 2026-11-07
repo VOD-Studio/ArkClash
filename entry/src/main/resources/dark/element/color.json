@@ -87,6 +87,14 @@
     {
       "name": "idle_soft",
       "value": "#1FFFFFFF"
+    },
+    {
+      "name": "memory_core",
+      "value": "#5B8CFF"
+    },
+    {
+      "name": "memory_ui",
+      "value": "#2C4A8C"
     }
   ]
 }

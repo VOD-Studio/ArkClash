@@ -1,16 +1,21 @@
 import { common } from '@kit.AbilityKit';
+import { pasteboard } from '@kit.BasicServicesKit';
+import { hidebug } from '@kit.PerformanceAnalysisKit';
 import { CapsuleSegmentButtonV2, SegmentButtonV2Items, uiMaterial } from '@kit.ArkUI';
 import { i18n } from '@kit.LocalizationKit';
 import { connection, Connection, ConnectionState } from '../../client/Connection';
-import { getMainGroup, getMode, GroupSummary, OutboundMode } from '../../client/Controller';
+import { getAllowLan, getMainGroup, getMode, getProxyPort, GroupSummary, OutboundMode } from '../../client/Controller';
 import { ExitIp, flagOf, lookupExitIp } from '../../client/ExitIp';
+import { checkServices, Service, ServiceResult, SERVICES } from '../../client/ServiceCheck';
+import { ConnectionStats, connectionStats, MemoryStats, memoryStats } from '../../client/Stats';
 import { HISTORY_SIZE, traffic, Traffic } from '../../client/Traffic';
 import { EmptyState } from '../../components/EmptyState';
-import { LabeledValue, Tag } from '../../components/Labels';
+import { LabeledValue, LegendItem, Tag } from '../../components/Labels';
 import { formatBytes, splitBytes } from '../../components/Format';
 import { SpeedChart } from '../../components/SpeedChart';
 import { TabPage } from '../../components/TabPage';
 import { CARD } from '../../components/Theme';
+import { lanAddress } from './LanAddress';
 
 const MODES: OutboundMode[] = ['rule', 'global', 'direct'];
 const MINUTE_MS = 60 * 1000;
@@ -22,6 +27,8 @@ const EXPIRY_WARN_DAYS = 3;
 // 延迟分档，和代理页一致。
 const DELAY_GOOD_MS = 300;
 const DELAY_SLOW_MS = 800;
+// 界面进程的内存不随推送更新，按这个间隔取一次。
+const UI_MEMORY_EVERY_S = 5;
 
 enum ExitIpState {
   Idle,
@@ -80,6 +87,14 @@ export struct HomePage {
   @Local revealIp: boolean = false;
   @Local group: GroupSummary | undefined = undefined;
   @Local modeIndex: number = 0;
+  @Local lanIp: string = '';
+  @Local proxyPort: number = 0;
+  @Local coreAllowLan: boolean = false; // 用户没设置过时，配置文件里的 allow-lan
+  @Local services: ServiceResult[] | undefined = undefined;
+  @Local checkingServices: boolean = false;
+  @Local connStats: ConnectionStats = connectionStats;
+  @Local memStats: MemoryStats = memoryStats;
+  @Local uiMemoryBytes: number = 0;
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
   private ticker: number = -1;
   private modeItems: SegmentButtonV2Items = new SegmentButtonV2Items([
@@ -95,6 +110,8 @@ export struct HomePage {
 
   aboutToDisappear(): void {
     this.stopTicker();
+    connectionStats.stop();
+    memoryStats.stop();
   }
 
   @Monitor('modeIndex')
@@ -110,11 +127,22 @@ export struct HomePage {
     if (this.visible) {
       // 未连接时也要走时，「更新于 N 分钟前」才会变。
       this.startTicker();
+      this.lanIp = lanAddress();
+      this.uiMemoryBytes = this.readUiMemory();
     } else {
       this.stopTicker();
     }
+    if (this.visible && this.conn.connected) {
+      connectionStats.start(this.context.filesDir);
+      memoryStats.start(this.context.filesDir);
+    } else {
+      connectionStats.stop();
+      memoryStats.stop();
+    }
     if (!this.conn.connected) {
       this.group = undefined;
+      this.services = undefined;
+      this.proxyPort = 0;
     }
     if (!this.visible || this.conn.busy) {
       return;
@@ -134,8 +162,12 @@ export struct HomePage {
         this.StatusCard()
         this.SpeedCard()
         this.ModeCard()
+        this.LanCard()
+        this.ServicesCard()
         this.ProfileCard()
         this.GroupCard()
+        this.ConnStatsCard()
+        this.MemoryCard()
       } else {
         Column() {
           EmptyState({
@@ -414,7 +446,194 @@ export struct HomePage {
     .attributeModifier(CARD)
   }
 
-  // ---- ④ 配置 ----
+  // ---- ④ 内网 IP ----
+
+  @Builder
+  LanCard() {
+    Column() {
+      Row({ space: 8 }) {
+        SymbolGlyph($r('sys.symbol.wifi'))
+          .fontSize(18)
+          .fontColor([$r('sys.color.font_secondary')])
+        Text($r('app.string.card_lan_ip'))
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+          .layoutWeight(1)
+        Button({ type: ButtonType.Circle }) {
+          SymbolGlyph($r('sys.symbol.rectangle_on_rectangle'))
+            .fontSize(16)
+            .fontColor([$r('sys.color.font_secondary')])
+        }
+        .width(28)
+        .height(28)
+        .backgroundColor($r('app.color.tile_background'))
+        .enabled(this.lanIp !== '')
+        .onClick(() => this.copyLanIp())
+      }
+      .width('100%')
+      .height(28)
+      .margin({ bottom: 12 })
+
+      Text(this.lanIp !== '' ? this.lanIp : $r('app.string.no_network'))
+        .fontSize(26)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.lanIp !== '' ? $r('sys.color.font_primary') : $r('sys.color.font_tertiary'))
+        .fontFeature('"tnum" on')
+        .maxLines(1)
+        .height(34)
+
+      Row({ space: 12 }) {
+        Stack() {
+          SymbolGlyph($r('sys.symbol.dot_radiowaves_left_and_right'))
+            .fontSize(18)
+            .fontColor([$r('sys.color.font_secondary')])
+        }
+        .width(36)
+        .height(36)
+        .borderRadius(18)
+        .backgroundColor($r('app.color.card_background'))
+        Column({ space: 2 }) {
+          Text($r('app.string.lan_proxy'))
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('sys.color.font_primary'))
+          Text(this.lanProxyHint())
+            .fontSize(12)
+            .fontColor($r('sys.color.font_secondary'))
+            .fontFeature('"tnum" on')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.lanProxyOn() })
+          .onChange((isOn: boolean) => {
+            if (isOn !== this.lanProxyOn()) {
+              this.conn.changeAllowLan(isOn);
+            }
+          })
+      }
+      .width('100%')
+      .padding(12)
+      .borderRadius(12)
+      .backgroundColor($r('app.color.tile_background'))
+      .margin({ top: 12 })
+    }
+    .alignItems(HorizontalAlign.Start)
+    .attributeModifier(CARD)
+  }
+
+  // ---- ⑤ 服务状态 ----
+
+  @Builder
+  ServicesCard() {
+    Column() {
+      Row({ space: 8 }) {
+        SymbolGlyph($r('sys.symbol.link'))
+          .fontSize(18)
+          .fontColor([$r('sys.color.font_secondary')])
+        Text($r('app.string.card_services'))
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+          .layoutWeight(1)
+        this.ServicesChip()
+        Button({ type: ButtonType.Circle }) {
+          if (this.checkingServices) {
+            LoadingProgress()
+              .width(18)
+              .height(18)
+          } else {
+            SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+              .fontSize(16)
+              .fontColor([$r('sys.color.font_secondary')])
+          }
+        }
+        .width(28)
+        .height(28)
+        .backgroundColor($r('app.color.tile_background'))
+        .enabled(this.conn.connected && !this.checkingServices)
+        .onClick(() => this.runServiceCheck())
+      }
+      .width('100%')
+      .height(28)
+      .margin({ bottom: 12 })
+
+      Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
+        ForEach(SERVICES, (service: Service) => {
+          this.ServiceTile(service)
+        }, (service: Service) => service.name)
+      }
+      .width('100%')
+    }
+    .alignItems(HorizontalAlign.Start)
+    .attributeModifier(CARD)
+  }
+
+  @Builder
+  ServicesChip() {
+    if (this.services !== undefined) {
+      if (this.downServices() === 0) {
+        Tag({
+          text: $r('app.string.services_all_ok'),
+          color: $r('app.color.status_connected'),
+          tint: $r('app.color.success_soft'),
+          dot: false
+        })
+      } else {
+        Tag({
+          text: $r('app.string.services_some_down', this.downServices()),
+          color: $r('app.color.warning'),
+          tint: $r('app.color.warning_soft'),
+          dot: false
+        })
+      }
+    }
+  }
+
+  @Builder
+  ServiceTile(service: Service) {
+    Row({ space: 10 }) {
+      Stack({ alignContent: Alignment.BottomEnd }) {
+        Text(service.short)
+          .fontSize(service.short.length > 1 ? 12 : 15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('sys.color.font_primary'))
+          .textAlign(TextAlign.Center)
+          .width(32)
+          .height(32)
+          .borderRadius(16)
+          .backgroundColor($r('app.color.card_background'))
+        Circle()
+          .width(10)
+          .height(10)
+          .fill(this.serviceDotColor(service.name))
+          .stroke($r('app.color.tile_background'))
+          .strokeWidth(2)
+      }
+      .width(32)
+      .height(32)
+      Column({ space: 2 }) {
+        Text(service.name)
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+        Text(this.serviceDelayText(service.name))
+          .fontSize(12)
+          .fontColor($r('sys.color.font_secondary'))
+          .fontFeature('"tnum" on')
+      }
+      .alignItems(HorizontalAlign.Start)
+    }
+    .width('48.5%')
+    .padding(10)
+    .borderRadius(12)
+    .backgroundColor($r('app.color.tile_background'))
+    .margin({ bottom: 8 })
+  }
+
+  // ---- ⑥ 配置 ----
 
   @Builder
   ProfileCard() {
@@ -522,7 +741,7 @@ export struct HomePage {
     .onClick(() => this.onOpenProfiles())
   }
 
-  // ---- ⑤ 代理组 ----
+  // ---- ⑦ 代理组 ----
   // 未连接时保留同样的两行，用占位显示，连上后原地填数据。
 
   @Builder
@@ -598,10 +817,93 @@ export struct HomePage {
       .border({ width: 2, color: $r('app.color.card_background') })
   }
 
+  // ---- ⑧ 连接统计 ----
+
+  @Builder
+  ConnStatsCard() {
+    Column() {
+      this.CardHeader($r('sys.symbol.list_bullet'), $r('app.string.card_conn_stats'), false)
+      Row() {
+        LabeledValue({ label: $r('app.string.stat_active'), value: this.statText(this.connStats.active) })
+          .layoutWeight(1)
+        LabeledValue({ label: $r('app.string.stat_proxied'), value: this.statText(this.connStats.proxied) })
+          .layoutWeight(1)
+        LabeledValue({ label: $r('app.string.stat_direct'), value: this.statText(this.connStats.direct) })
+          .layoutWeight(1)
+      }
+      .width('100%')
+    }
+    .alignItems(HorizontalAlign.Start)
+    .attributeModifier(CARD)
+  }
+
+  // ---- ⑨ 内存信息 ----
+
+  @Builder
+  MemoryCard() {
+    Column() {
+      this.CardHeader($r('sys.symbol.rectangle_stack'), $r('app.string.card_memory'), false)
+      Row({ space: 3 }) {
+        Text(splitBytes(this.totalMemory())[0])
+          .fontSize(26)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('sys.color.font_primary'))
+          .fontFeature('"tnum" on')
+        Text(splitBytes(this.totalMemory())[1])
+          .fontSize(13)
+          .fontColor($r('sys.color.font_secondary'))
+          .margin({ bottom: 4 })
+      }
+      .alignItems(VerticalAlign.Bottom)
+      // 两段比例条：内核在前，界面在后。
+      Row({ space: 2 }) {
+        Column()
+          .height('100%')
+          .layoutWeight(Math.max(1, this.coreMemory()))
+          .borderRadius(4)
+          .backgroundColor($r('app.color.memory_core'))
+        Column()
+          .height('100%')
+          .layoutWeight(Math.max(1, this.uiMemoryBytes))
+          .borderRadius(4)
+          .backgroundColor($r('app.color.memory_ui'))
+      }
+      .width('100%')
+      .height(8)
+      .margin({ top: 12 })
+      Row({ space: 16 }) {
+        LegendItem({
+          color: $r('app.color.memory_core'),
+          label: $r('app.string.mem_core'),
+          value: this.memStats.received ? formatBytes(this.memStats.coreBytes) : '—'
+        })
+        LegendItem({
+          color: $r('app.color.memory_ui'),
+          label: $r('app.string.mem_ui'),
+          value: formatBytes(this.uiMemoryBytes)
+        })
+      }
+      .margin({ top: 10 })
+    }
+    .alignItems(HorizontalAlign.Start)
+    .attributeModifier(CARD)
+  }
+
   // ---- 数据 ----
 
   private refreshCoreInfo(): void {
     const filesDir = this.context.filesDir;
+    getProxyPort(filesDir).then((port: number) => {
+      this.proxyPort = port;
+    }).catch(() => {});
+    if (this.conn.allowLan === undefined) {
+      getAllowLan(filesDir).then((allow: boolean) => {
+        this.coreAllowLan = allow;
+      }).catch(() => {});
+    }
+    if (this.services === undefined && !this.checkingServices) {
+      this.runServiceCheck();
+    }
     getMainGroup(filesDir).then((g: GroupSummary | undefined) => {
       this.group = g;
     }).catch(() => {});
@@ -631,13 +933,46 @@ export struct HomePage {
     });
   }
 
+  private runServiceCheck(): void {
+    this.checkingServices = true;
+    checkServices(this.context.filesDir).then((results: ServiceResult[]) => {
+      if (this.conn.connected) {
+        this.services = results;
+      }
+    }).finally(() => {
+      this.checkingServices = false;
+    });
+  }
+
+  private readUiMemory(): number {
+    try {
+      return Number(hidebug.getPss()) * 1024; // getPss 单位 KB
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  private copyLanIp(): void {
+    if (this.lanIp === '') {
+      return;
+    }
+    const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, this.lanIp);
+    pasteboard.getSystemPasteboard().setData(data).then(() => {
+      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.copied') });
+    }).catch(() => {});
+  }
+
   private startTicker(): void {
     if (this.ticker !== -1) {
       return;
     }
     this.now = Date.now();
+    let ticks = 0;
     this.ticker = setInterval(() => {
       this.now = Date.now();
+      if (++ticks % UI_MEMORY_EVERY_S === 0) {
+        this.uiMemoryBytes = this.readUiMemory();
+      }
     }, 1000);
   }
 
@@ -649,6 +984,60 @@ export struct HomePage {
   }
 
   // ---- 展示用的计算 ----
+
+  private lanProxyOn(): boolean {
+    return this.conn.allowLan ?? this.coreAllowLan;
+  }
+
+  private lanProxyHint(): ResourceStr {
+    if (!this.lanProxyOn()) {
+      return $r('app.string.lan_proxy_off');
+    }
+    if (!this.conn.connected) {
+      return $r('app.string.lan_proxy_pending');
+    }
+    const host = this.lanIp !== '' ? this.lanIp : '—';
+    return $r('app.string.lan_proxy_on', this.proxyPort > 0 ? `${host}:${this.proxyPort}` : host);
+  }
+
+  private serviceResult(name: string): ServiceResult | undefined {
+    return this.services?.find((r: ServiceResult) => r.name === name);
+  }
+
+  private serviceDelayText(name: string): ResourceStr {
+    if (this.checkingServices && this.services === undefined) {
+      return $r('app.string.services_checking');
+    }
+    const result = this.serviceResult(name);
+    if (result === undefined) {
+      return '—';
+    }
+    return result.delay >= 0 ? `${result.delay} ms` : $r('app.string.service_down');
+  }
+
+  private serviceDotColor(name: string): Resource {
+    const result = this.serviceResult(name);
+    if (result === undefined) {
+      return $r('app.color.status_idle');
+    }
+    return result.delay >= 0 ? $r('app.color.status_connected') : $r('app.color.status_error');
+  }
+
+  private downServices(): number {
+    return (this.services ?? []).filter((r: ServiceResult) => r.delay < 0).length;
+  }
+
+  private statText(n: number): string {
+    return this.conn.connected && this.connStats.received ? n.toLocaleString() : '—';
+  }
+
+  private coreMemory(): number {
+    return this.memStats.received ? this.memStats.coreBytes : 0;
+  }
+
+  private totalMemory(): number {
+    return this.coreMemory() + this.uiMemoryBytes;
+  }
 
   private hasFlag(): boolean {
     return this.exitIp !== undefined && flagOf(this.exitIp.countryCode) !== '';

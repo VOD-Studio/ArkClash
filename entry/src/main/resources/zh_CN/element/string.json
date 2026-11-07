@@ -303,6 +303,82 @@
     {
       "name": "exit_local",
       "value": "本机"
+    },
+    {
+      "name": "card_lan_ip",
+      "value": "内网 IP"
+    },
+    {
+      "name": "lan_proxy",
+      "value": "局域网代理"
+    },
+    {
+      "name": "lan_proxy_on",
+      "value": "其他设备可用 %s"
+    },
+    {
+      "name": "lan_proxy_off",
+      "value": "已关闭"
+    },
+    {
+      "name": "lan_proxy_pending",
+      "value": "连接后生效"
+    },
+    {
+      "name": "copied",
+      "value": "已复制"
+    },
+    {
+      "name": "no_network",
+      "value": "无网络"
+    },
+    {
+      "name": "card_services",
+      "value": "服务状态"
+    },
+    {
+      "name": "services_all_ok",
+      "value": "全部可用"
+    },
+    {
+      "name": "services_some_down",
+      "value": "%d 个不可用"
+    },
+    {
+      "name": "service_down",
+      "value": "不可用"
+    },
+    {
+      "name": "services_checking",
+      "value": "检测中…"
+    },
+    {
+      "name": "card_conn_stats",
+      "value": "连接统计"
+    },
+    {
+      "name": "stat_active",
+      "value": "实时连接"
+    },
+    {
+      "name": "stat_proxied",
+      "value": "走代理"
+    },
+    {
+      "name": "stat_direct",
+      "value": "直连"
+    },
+    {
+      "name": "card_memory",
+      "value": "内存信息"
+    },
+    {
+      "name": "mem_core",
+      "value": "内核"
+    },
+    {
+      "name": "mem_ui",
+      "value": "界面"
     }
   ]
 }
