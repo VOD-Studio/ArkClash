@@ -53,3 +53,17 @@ UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo
 ## 界面
 
 写或改 ArkUI 页面、组件前读 `docs/agents/ui.md`。
+
+## Agent skills
+
+### Issue tracker
+
+issue 和 spec 放在 GitHub Issues，用 `gh` 操作。见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+沿用标准的五个状态和 `bug`/`enhancement` 两个类别，另有 `needs-device`。见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+单一上下文：根目录 `GLOSSARY.md`（用到时再建）和 `docs/adr/`。见 `docs/agents/domain.md`。
