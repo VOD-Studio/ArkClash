@@ -133,7 +133,7 @@ export struct HomePage {
       // 未连接时也要走时，「更新于 N 分钟前」才会变。
       this.startTicker();
       this.lanIp = lanAddress();
-      this.uiMemoryBytes = this.readUiMemory();
+      this.refreshUiMemory();
     } else {
       this.stopTicker();
     }
@@ -1109,11 +1109,17 @@ export struct HomePage {
     return this.serviceLayout.slots.map((s: ServiceSlot) => s.id);
   }
 
-  private readUiMemory(): number {
+  private async refreshUiMemory(): Promise<void> {
     try {
-      return Number(hidebug.getPss()) * 1024; // getPss 单位 KB
+      // smaps 读取耗时，交给系统异步接口，不占用 ArkTS 主线程。
+      const info = await hidebug.getAppNativeMemInfoAsync();
+      if (this.visible) {
+        this.uiMemoryBytes = Number(info.pss) * 1024;
+      }
     } catch (e) {
-      return 0;
+      if (this.visible) {
+        this.uiMemoryBytes = 0;
+      }
     }
   }
 
@@ -1136,7 +1142,7 @@ export struct HomePage {
     this.ticker = setInterval(() => {
       this.now = Date.now();
       if (++ticks % UI_MEMORY_EVERY_S === 0) {
-        this.uiMemoryBytes = this.readUiMemory();
+        this.refreshUiMemory();
       }
     }, 1000);
   }
