@@ -29,6 +29,7 @@ UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo
 
 动到内核、NAPI 或 VPN 的改动，以真机跑通为完成标准：`make hap && make run`，连接后用浏览器打开一个被墙的站点，并在 `make log` 里看到这条连接命中了代理节点。
 
+- 点界面自己来：`hdc shell uitest dumpLayout` 找按钮坐标，`uitest uiInput click x y` 点击；打开网页用 `aa start -A ohos.want.action.viewData -U <网址>`。布局文件里有输入框中的订阅链接，只解析 Button 节点，设备上和本地的布局文件用完立即删除。
 - 崩溃日志只按文件名精确拉取 ArkClash 自己的（`/data/log/faultlog/faultlogger/cppcrash-com.vodstudio.arkclash-*`）。设备上其他应用的日志是用户隐私。
 - 符号化：去掉 `-s -w` 另编一份到临时目录，用 `llvm-symbolizer --obj` 解析崩溃地址。
 
