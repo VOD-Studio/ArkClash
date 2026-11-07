@@ -64,5 +64,13 @@ PRD 和 issue 拆分是 feature 分支的前几个提交，不单独开文档分
 
 ## 合并
 
-- 由人工审核后在网页上手动合并，不开 auto-merge。
-- 用 merge commit 保留分支的原子提交（`gh pr merge --merge --delete-branch`）。前提是分支上每个提交都已整理成最终形态，没有 WIP 或回退提交。
+由人工审核后在网页上手动合并，不开 auto-merge。三种方式都可以，按 PR 的内容选：
+
+| 方式 | 适合 | main 上留下什么 |
+|---|---|---|
+| Squash | 发版 PR、机器人 PR、只做一件事的 PR | 一个提交：标题就是 PR 标题，正文为空。它也是发版说明里的一条，所以 PR 标题要符合上面的提交信息格式 |
+| Merge commit | 分支上有几个值得分开保留的原子提交 | 分支上的每个提交，加一个合并提交 |
+| Rebase | 同上，但想要线性历史 | 分支上的每个提交 |
+
+- 用 merge commit 或 rebase 时，分支上每个提交都要整理成最终形态，没有 WIP 或回退提交。
+- Merge commit 的正文是 PR 标题，release-please 会把它再算一次。PR 标题是 `feat`/`fix`/`perf` 时，下一个发版 PR 里这条会重复，合并发版 PR 前在它的描述里删掉重复的那行。

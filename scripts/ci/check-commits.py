@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """检查提交信息是否符合 docs/agents/git.md 的中文 Conventional Commits 规则。
 
-PR 用 merge commit 合并，release-please 按分支上的每个提交生成版本号和 CHANGELOG，
-所以检查的是每个提交，而不是 PR 标题。
+用 merge commit 或 rebase 合并时，release-please 读分支上的每个提交；squash 合并时读 PR 标题。
+CI 两样都查：快速检查查每个提交，pr-title.yml 查 PR 标题。
 
 用法：
   check-commits.py <git 范围>          检查范围内的每个提交，如 origin/main..HEAD

@@ -57,4 +57,4 @@ make hap
 ## 6. 发版与仓库设置（可选）
 
 - 发版流程见 `docs/ci.md`「发版」，不需要额外的 token。
-- 想要和上游一样的合并规则（只认「CI 通过」、只允许 merge commit 等），按 `docs/ci.md`「合并规则与仓库设置」在 Settings → Rules 里配置。
+- 想要和上游一样的合并规则（只认「CI 通过」、评审意见处理完才能合并等），按 `docs/ci.md`「合并规则与仓库设置」在 Settings → Rules 里配置。
