@@ -50,6 +50,8 @@ UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo
 
 开分支、提交、改历史、开 PR 或 issue 前读 `docs/agents/git.md`。要点：新任务从 `main` 拉分支；中文 Conventional Commits；一个 commit 一个逻辑变更；只在本地提交，等用户要求再推送。
 
+开发计划和进度记在 GitHub Issues。README 面向访客，只写功能、安装和使用，这几样变了才更新它。
+
 ## 界面
 
 写或改 ArkUI 页面、组件前读 `docs/agents/ui.md`。
