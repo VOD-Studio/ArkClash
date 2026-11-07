@@ -30,7 +30,7 @@
 
 ## 安装
 
-需要 HarmonyOS 6.0.2（API 22）及以上的 ARM64 设备。
+需要 HarmonyOS 7（API 26）及以上的 ARM64 设备。
 
 HarmonyOS 只能安装签过名的应用，目前还没有面向普通用户的安装渠道。[Releases](https://github.com/VOD-Studio/ArkClash/releases) 里每个版本有两个安装包：
 

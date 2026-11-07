@@ -15,6 +15,422 @@
     {
       "name": "ClashVpnAbility_desc",
       "value": "ArkClash VPN"
+    },
+    {
+      "name": "app_title",
+      "value": "ArkClash"
+    },
+    {
+      "name": "tab_home",
+      "value": "Home"
+    },
+    {
+      "name": "tab_proxies",
+      "value": "Proxies"
+    },
+    {
+      "name": "tab_profiles",
+      "value": "Profiles"
+    },
+    {
+      "name": "tab_tools",
+      "value": "Tools"
+    },
+    {
+      "name": "status_disconnected",
+      "value": "Not connected"
+    },
+    {
+      "name": "status_connecting",
+      "value": "Connecting"
+    },
+    {
+      "name": "status_connected",
+      "value": "Connected"
+    },
+    {
+      "name": "status_disconnecting",
+      "value": "Disconnecting"
+    },
+    {
+      "name": "action_connect",
+      "value": "Connect"
+    },
+    {
+      "name": "action_disconnect",
+      "value": "Disconnect"
+    },
+    {
+      "name": "home_no_profile",
+      "value": "No profile yet"
+    },
+    {
+      "name": "home_no_profile_hint",
+      "value": "Add a subscription, then connect from here."
+    },
+    {
+      "name": "traffic_upload",
+      "value": "Upload"
+    },
+    {
+      "name": "traffic_download",
+      "value": "Download"
+    },
+    {
+      "name": "traffic_total",
+      "value": "Total %s"
+    },
+    {
+      "name": "usage_used",
+      "value": "%1$s of %2$s used"
+    },
+    {
+      "name": "usage_expire",
+      "value": "Expires %s"
+    },
+    {
+      "name": "profile_updated",
+      "value": "Updated %s"
+    },
+    {
+      "name": "profile_source_subscription",
+      "value": "Subscription"
+    },
+    {
+      "name": "action_add_subscription",
+      "value": "Add subscription"
+    },
+    {
+      "name": "action_update",
+      "value": "Update"
+    },
+    {
+      "name": "action_edit_link",
+      "value": "Edit"
+    },
+    {
+      "name": "subscription_sheet_title",
+      "value": "Subscription"
+    },
+    {
+      "name": "subscription_link",
+      "value": "Link"
+    },
+    {
+      "name": "action_save_download",
+      "value": "Import"
+    },
+    {
+      "name": "download_failed",
+      "value": "Download failed: %s"
+    },
+    {
+      "name": "proxies_empty",
+      "value": "Proxy groups are on the way"
+    },
+    {
+      "name": "proxies_empty_hint",
+      "value": "Choose nodes and run delay tests here."
+    },
+    {
+      "name": "tools_connections",
+      "value": "Connections"
+    },
+    {
+      "name": "tools_logs",
+      "value": "Logs"
+    },
+    {
+      "name": "tools_settings",
+      "value": "Settings"
+    },
+    {
+      "name": "tools_about",
+      "value": "About"
+    },
+    {
+      "name": "coming_soon",
+      "value": "Under construction"
+    },
+    {
+      "name": "coming_soon_hint",
+      "value": "This page arrives in a later build."
+    },
+    {
+      "name": "about_version",
+      "value": "Version"
+    },
+    {
+      "name": "about_core",
+      "value": "Core"
+    },
+    {
+      "name": "about_license",
+      "value": "License"
+    },
+    {
+      "name": "about_source",
+      "value": "Source code"
+    },
+    {
+      "name": "about_core_idle",
+      "value": "Available after connecting"
+    },
+    {
+      "name": "card_status",
+      "value": "Status"
+    },
+    {
+      "name": "card_speed",
+      "value": "Network speed"
+    },
+    {
+      "name": "card_mode",
+      "value": "Outbound mode"
+    },
+    {
+      "name": "card_profile",
+      "value": "Profile"
+    },
+    {
+      "name": "card_group",
+      "value": "Proxy groups"
+    },
+    {
+      "name": "mode_rule",
+      "value": "Rule"
+    },
+    {
+      "name": "mode_global",
+      "value": "Global"
+    },
+    {
+      "name": "mode_direct",
+      "value": "Direct"
+    },
+    {
+      "name": "uptime",
+      "value": "Up %s"
+    },
+    {
+      "name": "exit_ip",
+      "value": "Exit IP"
+    },
+    {
+      "name": "exit_ip_loading",
+      "value": "Looking up…"
+    },
+    {
+      "name": "exit_ip_unavailable",
+      "value": "Unavailable (no proxy port in profile)"
+    },
+    {
+      "name": "speed_session",
+      "value": "This session ↑ %1$s · ↓ %2$s"
+    },
+    {
+      "name": "days_left",
+      "value": "%d days left"
+    },
+    {
+      "name": "delay_untested",
+      "value": "Not tested"
+    },
+    {
+      "name": "after_connect",
+      "value": "Shown after connecting"
+    },
+    {
+      "name": "bar_tap_to_connect",
+      "value": "Tap the button to connect"
+    },
+    {
+      "name": "chip_running",
+      "value": "Running"
+    },
+    {
+      "name": "uptime_label",
+      "value": "Uptime"
+    },
+    {
+      "name": "connect_time_label",
+      "value": "Connect time"
+    },
+    {
+      "name": "region_label",
+      "value": "Region"
+    },
+    {
+      "name": "seconds_value",
+      "value": "%s s"
+    },
+    {
+      "name": "hint_connect",
+      "value": "Tap the button at the bottom right to connect."
+    },
+    {
+      "name": "last_connect_time",
+      "value": "Last connect took %s s"
+    },
+    {
+      "name": "exit_ip_warning",
+      "value": "No exit IP. The node may be down."
+    },
+    {
+      "name": "action_switch_node",
+      "value": "Switch node"
+    },
+    {
+      "name": "updated_ago",
+      "value": "Updated %s"
+    },
+    {
+      "name": "just_now",
+      "value": "just now"
+    },
+    {
+      "name": "minutes_ago",
+      "value": "%d min ago"
+    },
+    {
+      "name": "hours_ago",
+      "value": "%d h ago"
+    },
+    {
+      "name": "days_ago",
+      "value": "%d d ago"
+    },
+    {
+      "name": "used_label",
+      "value": "used"
+    },
+    {
+      "name": "usage_warn_low",
+      "value": "Only %s of data left"
+    },
+    {
+      "name": "usage_warn_expiring",
+      "value": "Expires in %d days"
+    },
+    {
+      "name": "usage_warn_expired",
+      "value": "Subscription expired"
+    },
+    {
+      "name": "group_count_unit",
+      "value": "groups"
+    },
+    {
+      "name": "exit_local",
+      "value": "This device"
+    },
+    {
+      "name": "card_lan_ip",
+      "value": "LAN IP"
+    },
+    {
+      "name": "lan_proxy",
+      "value": "LAN proxy"
+    },
+    {
+      "name": "lan_proxy_on",
+      "value": "Other devices can use %s"
+    },
+    {
+      "name": "lan_proxy_off",
+      "value": "Off"
+    },
+    {
+      "name": "lan_proxy_pending",
+      "value": "Applies after connecting"
+    },
+    {
+      "name": "copied",
+      "value": "Copied"
+    },
+    {
+      "name": "no_network",
+      "value": "No network"
+    },
+    {
+      "name": "card_services",
+      "value": "Service status"
+    },
+    {
+      "name": "services_all_ok",
+      "value": "All reachable"
+    },
+    {
+      "name": "services_some_down",
+      "value": "%d unreachable"
+    },
+    {
+      "name": "service_down",
+      "value": "Unreachable"
+    },
+    {
+      "name": "services_checking",
+      "value": "Checking…"
+    },
+    {
+      "name": "card_conn_stats",
+      "value": "Connections"
+    },
+    {
+      "name": "stat_active",
+      "value": "Active"
+    },
+    {
+      "name": "stat_proxied",
+      "value": "Proxied"
+    },
+    {
+      "name": "stat_direct",
+      "value": "Direct"
+    },
+    {
+      "name": "card_memory",
+      "value": "Memory"
+    },
+    {
+      "name": "mem_core",
+      "value": "Core"
+    },
+    {
+      "name": "mem_ui",
+      "value": "UI"
+    },
+    {
+      "name": "svc_wikipedia",
+      "value": "Wikipedia"
+    },
+    {
+      "name": "svc_bilibili",
+      "value": "Bilibili"
+    },
+    {
+      "name": "svc_baidu",
+      "value": "Baidu"
+    },
+    {
+      "name": "svc_netease",
+      "value": "NetEase Cloud Music"
+    },
+    {
+      "name": "cat_common",
+      "value": "Common"
+    },
+    {
+      "name": "cat_china",
+      "value": "China"
+    },
+    {
+      "name": "services_sheet_hint",
+      "value": "Long press to reorder. Switched-on services show on Home."
+    },
+    {
+      "name": "services_recheck",
+      "value": "Recheck"
     }
   ]
 }

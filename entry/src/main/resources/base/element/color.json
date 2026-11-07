@@ -3,6 +3,98 @@
     {
       "name": "start_window_background",
       "value": "#FFFFFF"
+    },
+    {
+      "name": "page_background",
+      "value": "#F2F4F8"
+    },
+    {
+      "name": "page_glow_idle",
+      "value": "#DCE3F0"
+    },
+    {
+      "name": "page_glow_connected",
+      "value": "#C9D9FF"
+    },
+    {
+      "name": "card_background",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "brand",
+      "value": "#2E6BFF"
+    },
+    {
+      "name": "brand_soft",
+      "value": "#1A2E6BFF"
+    },
+    {
+      "name": "on_brand",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "status_idle",
+      "value": "#A3A8B3"
+    },
+    {
+      "name": "status_connected",
+      "value": "#18A058"
+    },
+    {
+      "name": "status_error",
+      "value": "#E5484D"
+    },
+    {
+      "name": "upload",
+      "value": "#E8701F"
+    },
+    {
+      "name": "upload_soft",
+      "value": "#1FE8701F"
+    },
+    {
+      "name": "download",
+      "value": "#2E6BFF"
+    },
+    {
+      "name": "download_soft",
+      "value": "#1A2E6BFF"
+    },
+    {
+      "name": "track",
+      "value": "#14000000"
+    },
+    {
+      "name": "divider",
+      "value": "#14000000"
+    },
+    {
+      "name": "tile_background",
+      "value": "#F3F5F9"
+    },
+    {
+      "name": "warning",
+      "value": "#C76A00"
+    },
+    {
+      "name": "warning_soft",
+      "value": "#1FE59900"
+    },
+    {
+      "name": "success_soft",
+      "value": "#1A18A058"
+    },
+    {
+      "name": "idle_soft",
+      "value": "#14000000"
+    },
+    {
+      "name": "memory_core",
+      "value": "#2E6BFF"
+    },
+    {
+      "name": "memory_ui",
+      "value": "#8FB0FF"
     }
   ]
 }

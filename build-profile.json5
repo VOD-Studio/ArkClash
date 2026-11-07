@@ -6,8 +6,8 @@
         "name": "default",
         "signingConfig": "default",
         "targetSdkVersion": "26.0.0",
-        // VpnConnection.protectProcessNet() needs API 22.
-        "compatibleSdkVersion": "6.0.2(22)",
+        // 最低 HarmonyOS 7：界面依赖 API 26 的沉浸光感和 UI Design Kit（ADR-0007）。
+        "compatibleSdkVersion": "26.0.0",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
           "strictMode": {
