@@ -47,7 +47,7 @@
 
 仓库是公开的，`main` 用 ruleset「main 保护」：
 
-- 只能通过 PR 合并，只允许 merge commit（保留分支上的每个提交，release-please 按它们生成 CHANGELOG）。
+- 只能通过 PR 合并，merge commit、squash、rebase 都可以，怎么选见 `docs/agents/git.md`「合并」。squash 合并的提交只用 PR 标题、正文为空，发版说明里不会重复。
 - 评审意见全部处理（resolve）后才能合并。
 - 必须通过「CI 通过」。
 - 禁止强推和删除。仓库管理员可以在合并 PR 时绕过，用于紧急情况。
