@@ -84,7 +84,7 @@ export struct TabPage {
       },
       content: {
         title: { mainTitle: this.title },
-        menu: { value: this.menus }
+        menu: { value: this.menus.slice(), maxCount: 3 }
       }
     })
     // 内容铺进状态栏，从状态栏和标题栏下面滚过；标题栏自己让开状态栏（avoidLayoutSafeArea）。
