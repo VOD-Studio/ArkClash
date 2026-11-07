@@ -16,7 +16,7 @@ set +o pipefail
 curl -fsSL "$URL" | tar -xzf - -C "$TMP" --occurrence=1 "$MEMBER"
 set -o pipefail
 if [[ ! -f "$TMP/$MEMBER" ]]; then
-  echo "SDK 包里没有 $MEMBER，检查 OpenHarmony 发行版里的 NDK 文件名" >&2
+  echo "SDK 包里没有 ${MEMBER}，检查 OpenHarmony 发行版里的 NDK 文件名" >&2
   exit 1
 fi
 
@@ -24,7 +24,7 @@ mkdir -p "$OUT"
 unzip -q "$TMP/$MEMBER" -d "$OUT"
 CLANG="$OUT/native/llvm/bin/aarch64-unknown-linux-ohos-clang"
 if [[ ! -x "$CLANG" ]]; then
-  echo "解压后找不到 $CLANG，NDK 目录结构可能变了：" >&2
+  echo "解压后找不到 ${CLANG}，NDK 目录结构可能变了：" >&2
   ls "$OUT" >&2
   exit 1
 fi

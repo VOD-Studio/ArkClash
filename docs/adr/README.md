@@ -11,3 +11,4 @@
 | [0003](0003-ui-core-via-external-controller.md) | UI 通过 external-controller 和文件通道与内核通信 | 已采纳 |
 | [0004](0004-exclude-self-by-uid.md) | 按 UID 把本应用排除在 VPN 之外 | 已采纳 |
 | [0005](0005-gvisor-default-stack.md) | TUN 默认使用 gVisor 协议栈 | 已采纳，待真机数据复核 |
+| [0006](0006-layered-ci.md) | 分层 CI，单一必需检查，发版只构建一次 | 已采纳 |

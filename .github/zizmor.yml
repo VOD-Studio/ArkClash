@@ -1,0 +1,6 @@
+# zizmor（workflow 安全审计）的配置，由 make lint CHECKS=actions 读取。
+rules:
+  # 它建议本仓库的 action 改写成 "$/..."，但 actionlint 1.7.12 不认这种写法，
+  # GitHub 文档里本地引用仍然是 "./..."。等两边一致了再打开。
+  self-repository:
+    disable: true

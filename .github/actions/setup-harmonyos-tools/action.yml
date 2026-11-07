@@ -10,6 +10,9 @@ inputs:
   token:
     description: 能读这个私有仓库的 token
     required: true
+  fresh:
+    description: 不读写缓存，重新下载并校验（每周的无缓存构建和发版用）
+    default: "false"
 runs:
   using: composite
   steps:
@@ -19,6 +22,7 @@ runs:
         TAG: ${{ inputs.tag }}
       run: echo "path=$RUNNER_TOOL_CACHE/harmonyos-tools/$TAG" >> "$GITHUB_OUTPUT"
     - id: cache
+      if: inputs.fresh != 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.dir.outputs.path }}
@@ -41,4 +45,5 @@ runs:
     - shell: bash
       env:
         OUT: ${{ steps.dir.outputs.path }}
-      run: echo "HARMONYOS_TOOLS_HOME=$(cat "$OUT/.tools-home")" >> "$GITHUB_ENV"
+      # 写入的是 runner 工具缓存里的路径，不来自 PR 内容等外部输入。
+      run: echo "HARMONYOS_TOOLS_HOME=$(cat "$OUT/.tools-home")" >> "$GITHUB_ENV" # zizmor: ignore[github-env]

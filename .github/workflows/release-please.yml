@@ -8,8 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: release-please
@@ -19,17 +18,37 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      pr_branch: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).headBranchName }}
     steps:
       - id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
-          # GITHUB_TOKEN 创建的 PR 不会触发 CI；配置了 RELEASE_PLEASE_TOKEN 时用它，发版 PR 才能跑检查。
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          token: ${{ github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # 用 GITHUB_TOKEN 创建或更新的 PR 不会触发 pull_request 事件，但可以手动触发 CI：
+  # 「CI 通过」检查会挂在发版 PR 的最新提交上，满足 main 的合并规则，不需要个人 token。
+  release-pr-ci:
+    name: 发版 PR 的 CI
+    needs: release-please
+    if: needs.release-please.outputs.pr_branch != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ needs.release-please.outputs.pr_branch }}
+        run: gh workflow run ci.yml -R "$REPO" --ref "$BRANCH"
 
   release:
     needs: release-please
@@ -39,4 +58,8 @@ jobs:
       tag: ${{ needs.release-please.outputs.tag_name }}
     permissions:
       contents: write
-    secrets: inherit
+      id-token: write
+      attestations: write
+    secrets:
+      HARMONYOS_TOOLS_TOKEN: ${{ secrets.HARMONYOS_TOOLS_TOKEN }}
+      HARMONYOS_SIGNING_BUNDLE: ${{ secrets.HARMONYOS_SIGNING_BUNDLE }}

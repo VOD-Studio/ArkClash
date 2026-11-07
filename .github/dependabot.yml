@@ -1,21 +1,35 @@
-# 每月检查一次依赖；minor/patch 合并成一个 PR。
-# mihomo、gVisor 升级可能让补丁打不上或在真机上出问题，合并前按 docs/agents/platform-pitfalls.md 复查。
+# 依赖更新。每月一次，minor/patch 合并成一个 PR；新版本发布满 7 天才升级，
+# 避开刚发布就被发现有问题或被投毒的版本。
 version: 2
 updates:
   - package-ecosystem: gomod
     directory: /core
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       minor-patch:
         applies-to: version-updates
         update-types: ["minor", "patch"]
+    commit-message:
+      prefix: build
+      include: scope
+    # 内核依赖（尤其 mihomo、gVisor）升级后补丁可能打不上，或在真机上出问题：
+    # 合并前按 docs/agents/platform-pitfalls.md 复查，并在真机上验证。
+    labels: [needs-device]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       minor-patch:
         applies-to: version-updates
         update-types: ["minor", "patch"]
+    commit-message:
+      prefix: ci
+      include: scope
+    labels: []

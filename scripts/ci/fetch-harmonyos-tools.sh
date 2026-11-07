@@ -27,7 +27,7 @@ fi
 expected="$(awk '{print $1}' "$TMP/SHA256")"
 actual="$(sha256sum "$TMP/tools.zip" | awk '{print $1}')"
 if [[ "$expected" != "$actual" ]]; then
-  echo "Command Line Tools 校验失败：期望 $expected，实际 $actual" >&2
+  echo "Command Line Tools 校验失败：期望 ${expected}，实际 $actual" >&2
   exit 1
 fi
 
