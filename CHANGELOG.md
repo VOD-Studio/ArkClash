@@ -6,6 +6,7 @@
 
 * **core:** 逐 socket 绑定当前物理网络，修复 Go 出站回到 TUN 导致连接递归和内存暴涨。
 * **ui:** 保留服务品牌图标原色并补齐 ChatGPT，将 AI 集中排列在 Google 后，保留已有显隐设置。
+* **ui:** 区分主动滚动与弹簧回弹，避免快速滑动后底部栏误恢复。
 
 ## [0.2.0](https://github.com/VOD-Studio/ArkClash/compare/v0.1.2...v0.2.0) (2026-11-07)
 
