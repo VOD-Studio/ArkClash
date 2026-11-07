@@ -1,0 +1,82 @@
+name: 每周维护
+
+# 代码没有改动时也会变的东西，每周检查一次：上游 Geo 数据、新公布的依赖漏洞、
+# 下载地址和工具链（不用缓存完整构建一遍）。任何一项失败都会开 issue，不会悄悄失败。
+on:
+  schedule:
+    - cron: "0 2 * * 1" # 每周一 10:00（北京时间）
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  geodata:
+    name: 更新 Geo 数据
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # 上传镜像、推送机器人分支
+      pull-requests: write
+      actions: write # 触发机器人 PR 的 CI
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # 要推送机器人分支，所以保留凭据；这个任务不上传 artifact。
+          persist-credentials: true # zizmor: ignore[artipacked]
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scripts/update-geodata.sh
+          released="$(sed -nE 's/^# 上游：[^，]+，Release ([0-9-]+).*/\1/p' geodata.lock)"
+          scripts/ci/open-bot-pr.sh bot/geodata "chore(geodata): 更新内置 Geo 数据到 ${released}" \
+            "由每周维护任务自动生成：把 meta-rules-dat 最新的 Geo 数据镜像到 geodata 预发布，并更新 geodata.lock。CI 通过后即可合并，下一个版本的安装包会带上新数据。" \
+            geodata.lock
+
+  vuln:
+    name: 依赖漏洞
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-core-toolchain
+      - run: make lint CHECKS=vuln
+
+  core:
+    uses: ./.github/workflows/core.yml
+    with:
+      fresh: true
+
+  hap:
+    needs: core
+    uses: ./.github/workflows/hap.yml
+    with:
+      fresh: true
+    secrets:
+      HARMONYOS_TOOLS_TOKEN: ${{ secrets.HARMONYOS_TOOLS_TOKEN }}
+      HARMONYOS_SIGNING_BUNDLE: ${{ secrets.HARMONYOS_SIGNING_BUNDLE }}
+
+  report:
+    name: 失败时开 issue
+    needs: [geodata, vuln, core, hap]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="[ci] 每周维护失败"
+          existing="$(gh issue list -R "$REPO" --state open --search "in:title \"$title\"" --json number --jq '.[0].number')"
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" -R "$REPO" --body "又失败了一次：$RUN_URL"
+          else
+            gh issue create -R "$REPO" --title "$title" --label bug --label needs-triage \
+              --body "每周维护任务失败：$RUN_URL。逐个看失败的任务：Geo 数据更新、依赖漏洞扫描、无缓存构建（内核、HAP）。修好后关闭这个 issue。"
+          fi
