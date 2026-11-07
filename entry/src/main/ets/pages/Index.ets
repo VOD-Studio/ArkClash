@@ -1,110 +1,222 @@
-// Milestone 1 page: just enough UI to prove the core works on a device.
 import { common } from '@kit.AbilityKit';
-import { preferences } from '@kit.ArkData';
-import { probeCore, startCore, stopCore } from '../client/CoreClient';
-import { downloadProfile, hasProfile } from '../features/profiles/Profiles';
+import { AppStorageV2, SymbolGlyphModifier } from '@kit.ArkUI';
+import { HdsBarStyle, HdsTabs, HdsTabsBarChangeMode, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
+import { connection, Connection, ConnectionState } from '../client/Connection';
+import { traffic } from '../client/Traffic';
+import { ConnectionBar } from '../features/home/ConnectionBar';
+import { HomePage } from '../features/home/HomePage';
+import { ProfileStore } from '../features/profiles/Profiles';
+import { ProfilesPage } from '../features/profiles/ProfilesPage';
+import { ProxiesPage } from '../features/proxies/ProxiesPage';
+import { ToolPage } from '../features/tools/ToolPages';
+import { ToolRoute } from '../features/tools/ToolRoutes';
+import { ToolsPage } from '../features/tools/ToolsPage';
+import { WindowInsets } from './WindowInsets';
 
-const PREF_URL = 'subscriptionUrl';
+enum Tab {
+  Home,
+  Proxies,
+  Profiles,
+  Tools
+}
+
+function tabBar(icon: Resource, selectedIcon: Resource, label: Resource): BottomTabBarStyle {
+  return new BottomTabBarStyle({
+    normal: new SymbolGlyphModifier(icon),
+    selected: new SymbolGlyphModifier(selectedIcon)
+  }, label);
+}
 
 @Entry
-@Component
+@ComponentV2
 struct Index {
-  @State subscriptionUrl: string = '';
-  @State profileReady: boolean = false;
-  @State connected: boolean = false;
-  @State busy: boolean = false;
-  @State coreVersion: string = '';
-  @State message: string = '';
+  @Local stack: NavPathStack = new NavPathStack();
+  @Local tab: number = Tab.Home;
+  @Local foreground: boolean = true;
+  @Local profiles: ProfileStore = new ProfileStore();
+  @Local profileSheetRequested: boolean = false;
+  @Local conn: Connection = connection;
+  @Local insets: WindowInsets = AppStorageV2.connect(WindowInsets, () => new WindowInsets())!;
+  @Local miniBarExpanded: boolean = false;
+  private tabs: HdsTabsController = new HdsTabsController();
+  // 每个页签一个 Scroller，绑定给 HdsTabs：页面滚动时页签栏收起、连接条展开。
+  private scrollers: Scroller[] = [new Scroller(), new Scroller(), new Scroller(), new Scroller()];
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
-  private prefs?: preferences.Preferences;
 
   aboutToAppear(): void {
-    this.prefs = preferences.getPreferencesSync(this.context, { name: 'settings' });
-    this.subscriptionUrl = this.prefs.getSync(PREF_URL, '') as string;
-    this.profileReady = hasProfile(this.context.filesDir);
-    // Render first; the core state arrives in the background.
-    probeCore(this.context).then((version: string | undefined) => {
-      if (version !== undefined) {
-        this.connected = true;
-        this.coreVersion = version;
-      }
-    });
+    this.profiles.load(this.context);
+    this.conn.restore(this.context);
+    this.scrollers.forEach((scroller: Scroller, index: number) => this.tabs.bindScroller(index, scroller));
   }
 
-  async download(): Promise<void> {
-    this.busy = true;
-    this.message = '';
-    try {
-      const size = await downloadProfile(this.context.filesDir, this.subscriptionUrl.trim());
-      this.prefs?.putSync(PREF_URL, this.subscriptionUrl.trim());
-      this.prefs?.flush();
-      this.profileReady = true;
-      this.message = `订阅已更新（${(size / 1024).toFixed(1)} KB）`;
-    } catch (e) {
-      this.message = `下载失败：${(e as Error).message}`;
-    } finally {
-      this.busy = false;
+  aboutToDisappear(): void {
+    this.scrollers.forEach((scroller: Scroller) => this.tabs.unbindScroller(scroller));
+    traffic.stop();
+  }
+
+  // 流量推送只在有人看的时候订阅：首页可见，或者连接条展开着。
+  @Monitor('tab', 'foreground', 'miniBarExpanded', 'conn.state')
+  syncTraffic(): void {
+    const watching = this.foreground && (this.tab === Tab.Home || this.miniBarExpanded);
+    if (watching && this.conn.connected) {
+      traffic.start(this.context.filesDir);
+    } else {
+      traffic.stop();
     }
   }
 
-  async toggle(): Promise<void> {
-    this.busy = true;
-    this.message = '';
-    try {
-      if (this.connected) {
-        await stopCore(this.context);
-        this.connected = false;
-      } else {
-        this.coreVersion = await startCore(this.context);
-        this.connected = true;
-      }
-    } catch (e) {
-      this.message = (e as Error).message;
-    } finally {
-      this.busy = false;
-    }
+  onPageShow(): void {
+    this.foreground = true;
+  }
+
+  onPageHide(): void {
+    this.foreground = false;
+  }
+
+  private topInset(): number {
+    return this.getUIContext().px2vp(this.insets.top);
+  }
+
+  @Builder
+  Routes(name: string) {
+    ToolPage({ route: name })
   }
 
   build() {
-    Column({ space: 16 }) {
-      Text('ArkClash')
-        .fontSize(32)
-        .fontWeight(FontWeight.Bold)
+    // 窗口是沉浸式布局（EntryAbility）：背景和 Tabs 铺满整个窗口，悬浮栏的 barBottomMargin（默认 28vp）
+    // 从屏幕底边算起；各页签用 TabPage 让开状态栏，内容从标题栏下面滚过去。
+    Stack() {
+      this.Backdrop()
+      Navigation(this.stack) {
+        HdsTabs({ barPosition: BarPosition.End, controller: this.tabs }) {
+          TabContent() {
+            HomePage({
+              scroller: this.scrollers[Tab.Home],
+              topInset: this.topInset(),
+              profileReady: this.profiles.ready,
+              profileName: this.profiles.name,
+              profileUpdatedAt: this.profiles.updatedAt,
+              profileUpdating: this.profiles.downloading,
+              usedBytes: (this.profiles.usage?.upload ?? 0) + (this.profiles.usage?.download ?? 0),
+              totalBytes: this.profiles.usage?.total ?? 0,
+              expireAt: this.profiles.usage?.expire ?? 0,
+              visible: this.tab === Tab.Home && this.foreground,
+              onAddProfile: () => {
+                this.profileSheetRequested = true;
+                this.tabs.changeIndex(Tab.Profiles);
+              },
+              onOpenProfiles: () => this.tabs.changeIndex(Tab.Profiles),
+              onUpdateProfile: () => {
+                this.profiles.download(this.profiles.url);
+              },
+              onOpenProxies: () => this.tabs.changeIndex(Tab.Proxies)
+            })
+          }
+          .tabBar(tabBar($r('sys.symbol.house'), $r('sys.symbol.house_fill'), $r('app.string.tab_home')))
 
-      TextInput({ placeholder: '订阅链接', text: this.subscriptionUrl })
-        .onChange((value: string) => {
-          this.subscriptionUrl = value;
+          TabContent() {
+            ProxiesPage({ scroller: this.scrollers[Tab.Proxies], topInset: this.topInset() })
+          }
+          .tabBar(tabBar($r('sys.symbol.paperplane'), $r('sys.symbol.paperplane_fill'), $r('app.string.tab_proxies')))
+
+          TabContent() {
+            ProfilesPage({
+              scroller: this.scrollers[Tab.Profiles],
+              store: this.profiles,
+              topInset: this.topInset(),
+              sheetRequested: this.profileSheetRequested,
+              onSheetHandled: () => {
+                this.profileSheetRequested = false;
+              }
+            })
+          }
+          .tabBar(tabBar($r('sys.symbol.doc_text'), $r('sys.symbol.doc_text_fill'), $r('app.string.tab_profiles')))
+
+          TabContent() {
+            ToolsPage({
+              scroller: this.scrollers[Tab.Tools],
+              topInset: this.topInset(),
+              onOpen: (route: ToolRoute) => {
+                this.stack.pushPath({ name: route });
+              }
+            })
+          }
+          .tabBar(tabBar($r('sys.symbol.square_grid_2x2'), $r('sys.symbol.square_grid_2x2'),
+            $r('app.string.tab_tools')))
+        }
+        .scrollable(false)
+        // 有 BottomTabBarStyle 页签时切换动画默认是 0（没有动画），按其他样式的默认值给 300ms。
+        .animationDuration(300)
+        // 悬浮样式只在 barOverlap(true)、barPosition 为 End、横向页签时生效。
+        .barOverlap(true)
+        .vertical(false)
+        .barFloatingStyle({
+          // HdsTabs 默认贴底（0vp），官方示例和原生 Tabs 都是离屏幕底边 28vp，刚好在手势条上方。
+          barBottomMargin: 28,
+          adaptToHandedness: true,
+          systemMaterialEffect: {
+            materialType: hdsMaterial.MaterialType.IMMERSIVE,
+            materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+          },
+          miniBar: {
+            miniBarBuilder: () => this.MiniBar(),
+            onBarStyleChange: (miniBarStyle: HdsBarStyle, _tabBarStyle: HdsBarStyle, _miniBarWidth: number,
+              _tabBarWidth: number, _mode: HdsTabsBarChangeMode) => {
+              this.miniBarExpanded = miniBarStyle === HdsBarStyle.EXPAND;
+            }
+          }
         })
-
-      Button(this.profileReady ? '更新订阅' : '下载订阅')
-        .width('100%')
-        .enabled(!this.busy && this.subscriptionUrl.trim().length > 0)
-        .onClick(() => {
-          this.download();
+        .onChange((index: number) => {
+          this.tab = index;
         })
-
-      Button(this.connected ? '断开' : '连接')
-        .width('100%')
-        .height(56)
-        .enabled(!this.busy && (this.connected || this.profileReady))
-        .backgroundColor(this.connected ? '#E5484D' : '#0A59F7')
-        .onClick(() => {
-          this.toggle();
-        })
-
-      if (this.connected) {
-        Text(`已连接 · mihomo ${this.coreVersion}`)
-          .fontColor('#30A46C')
+        // 不避让键盘：输入法弹出时页签栏留在键盘后面，不被顶到屏幕中间。
+        .expandSafeArea([SafeAreaType.KEYBOARD])
       }
-
-      if (this.message.length > 0) {
-        Text(this.message)
-          .fontSize(14)
-          .fontColor('#8B8D98')
-      }
+      .expandSafeArea([SafeAreaType.KEYBOARD])
+      // Navigation 默认让开状态栏和手势条；这里让内容铺满窗口，避让交给各页的标题栏和悬浮栏。
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor(Color.Transparent)
+      .mode(NavigationMode.Stack)
+      .hideTitleBar(true)
+      .hideToolBar(true)
+      .navDestination(this.Routes)
     }
-    .padding(24)
     .width('100%')
     .height('100%')
+    .expandSafeArea([SafeAreaType.KEYBOARD])
+  }
+
+  @Builder
+  MiniBar() {
+    ConnectionBar({
+      expanded: this.miniBarExpanded,
+      onOpen: () => this.tabs.changeIndex(Tab.Proxies)
+    })
+  }
+
+  // 页面底色加一层顶部光晕；连接后光晕换成品牌色，用透明度交叉淡入。
+  @Builder
+  Backdrop() {
+    Stack() {
+      Column()
+        .width('100%')
+        .height('100%')
+        .linearGradient({
+          angle: 180,
+          colors: [[$r('app.color.page_glow_idle'), 0], [$r('app.color.page_background'), 0.5]]
+        })
+      Column()
+        .width('100%')
+        .height('100%')
+        .linearGradient({
+          angle: 180,
+          colors: [[$r('app.color.page_glow_connected'), 0], [$r('app.color.page_background'), 0.5]]
+        })
+        .opacity(this.conn.state === ConnectionState.Connected ? 1 : 0)
+        .animation({ duration: 400, curve: Curve.EaseInOut })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor($r('app.color.page_background'))
   }
 }
