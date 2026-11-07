@@ -73,6 +73,13 @@ struct Index {
     this.foreground = false;
   }
 
+  // 往下看内容时展开连接条、收起页签栏，往回滚时恢复。滚动不会自动触发，要应用自己调控制器。
+  private onScrollDirection(down: boolean): void {
+    if (down !== this.miniBarExpanded) {
+      this.tabs.applyMiniBarStyle(down ? HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE);
+    }
+  }
+
   private topInset(): number {
     return this.getUIContext().px2vp(this.insets.top);
   }
@@ -92,6 +99,7 @@ struct Index {
           TabContent() {
             HomePage({
               scroller: this.scrollers[Tab.Home],
+              onScrollDirection: (down: boolean) => this.onScrollDirection(down),
               topInset: this.topInset(),
               profileReady: this.profiles.ready,
               profileName: this.profiles.name,
@@ -115,13 +123,18 @@ struct Index {
           .tabBar(tabBar($r('sys.symbol.house'), $r('sys.symbol.house_fill'), $r('app.string.tab_home')))
 
           TabContent() {
-            ProxiesPage({ scroller: this.scrollers[Tab.Proxies], topInset: this.topInset() })
+            ProxiesPage({
+              scroller: this.scrollers[Tab.Proxies],
+              topInset: this.topInset(),
+              onScrollDirection: (down: boolean) => this.onScrollDirection(down)
+            })
           }
           .tabBar(tabBar($r('sys.symbol.paperplane'), $r('sys.symbol.paperplane_fill'), $r('app.string.tab_proxies')))
 
           TabContent() {
             ProfilesPage({
               scroller: this.scrollers[Tab.Profiles],
+              onScrollDirection: (down: boolean) => this.onScrollDirection(down),
               store: this.profiles,
               topInset: this.topInset(),
               sheetRequested: this.profileSheetRequested,
@@ -135,6 +148,7 @@ struct Index {
           TabContent() {
             ToolsPage({
               scroller: this.scrollers[Tab.Tools],
+              onScrollDirection: (down: boolean) => this.onScrollDirection(down),
               topInset: this.topInset(),
               onOpen: (route: ToolRoute) => {
                 this.stack.pushPath({ name: route });
@@ -168,6 +182,8 @@ struct Index {
         })
         .onChange((index: number) => {
           this.tab = index;
+          // 换页签时恢复页签栏，新页面从它当前的滚动位置开始。
+          this.onScrollDirection(false);
         })
         // 不避让键盘：输入法弹出时页签栏留在键盘后面，不被顶到屏幕中间。
         .expandSafeArea([SafeAreaType.KEYBOARD])

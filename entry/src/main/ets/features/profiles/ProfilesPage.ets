@@ -10,6 +10,7 @@ import { ProfileStore } from './Profiles';
 export struct ProfilesPage {
   @Param @Require store: ProfileStore;
   @Param @Require scroller: Scroller;
+  @Event onScrollDirection: (down: boolean) => void = () => {};
   @Param topInset: number = 0;
   // 首页的「添加订阅」会把它置为 true，打开链接输入面板。
   @Param sheetRequested: boolean = false;
@@ -55,7 +56,13 @@ export struct ProfilesPage {
 
   build() {
     Column() {
-      TabPage({ title: $r('app.string.tab_profiles'), topInset: this.topInset, scroller: this.scroller, menus: this.menus() }) {
+      TabPage({
+        title: $r('app.string.tab_profiles'),
+        topInset: this.topInset,
+        scroller: this.scroller,
+        menus: this.menus(),
+        onScrollDirection: (down: boolean) => this.onScrollDirection(down)
+      }) {
         if (this.store.ready) {
           this.ProfileCard()
         } else {

@@ -6,11 +6,17 @@ import { ToolRoute } from './ToolRoutes';
 @ComponentV2
 export struct ToolsPage {
   @Param @Require scroller: Scroller;
+  @Event onScrollDirection: (down: boolean) => void = () => {};
   @Param topInset: number = 0;
   @Event onOpen: (route: ToolRoute) => void = () => {};
 
   build() {
-    TabPage({ title: $r('app.string.tab_tools'), topInset: this.topInset, scroller: this.scroller }) {
+    TabPage({
+      title: $r('app.string.tab_tools'),
+      topInset: this.topInset,
+      scroller: this.scroller,
+      onScrollDirection: (down: boolean) => this.onScrollDirection(down)
+    }) {
       this.Group([
         new Entry(ToolRoute.Connections, $r('sys.symbol.list_bullet'), $r('app.string.tools_connections')),
         new Entry(ToolRoute.Logs, $r('sys.symbol.doc_plaintext'), $r('app.string.tools_logs'))

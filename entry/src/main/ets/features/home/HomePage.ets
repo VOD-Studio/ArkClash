@@ -63,6 +63,7 @@ function maskIp(ip: string): string {
 @ComponentV2
 export struct HomePage {
   @Param @Require scroller: Scroller;
+  @Event onScrollDirection: (down: boolean) => void = () => {};
   @Param topInset: number = 0;
   // 当前配置的摘要由页面层从配置功能里取来，首页不直接依赖它。
   @Param profileReady: boolean = false;
@@ -157,7 +158,12 @@ export struct HomePage {
   }
 
   build() {
-    TabPage({ title: $r('app.string.tab_home'), topInset: this.topInset, scroller: this.scroller }) {
+    TabPage({
+      title: $r('app.string.tab_home'),
+      topInset: this.topInset,
+      scroller: this.scroller,
+      onScrollDirection: (down: boolean) => this.onScrollDirection(down)
+    }) {
       if (this.profileReady) {
         this.StatusCard()
         this.SpeedCard()

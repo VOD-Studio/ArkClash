@@ -6,10 +6,16 @@ import { CARD } from '../../components/Theme';
 @ComponentV2
 export struct ProxiesPage {
   @Param @Require scroller: Scroller;
+  @Event onScrollDirection: (down: boolean) => void = () => {};
   @Param topInset: number = 0;
 
   build() {
-    TabPage({ title: $r('app.string.tab_proxies'), topInset: this.topInset, scroller: this.scroller }) {
+    TabPage({
+      title: $r('app.string.tab_proxies'),
+      topInset: this.topInset,
+      scroller: this.scroller,
+      onScrollDirection: (down: boolean) => this.onScrollDirection(down)
+    }) {
       Column() {
         EmptyState({
           icon: $r('sys.symbol.paperplane'),
