@@ -1,0 +1,14 @@
+--- a/pkg/tcpip/link/fdbased/endpoint.go
++++ b/pkg/tcpip/link/fdbased/endpoint.go
+@@ -474,6 +474,11 @@
+ func IsSocketFD(fd int) (bool, error) {
+ 	var stat unix.Stat_t
+ 	if err := unix.Fstat(fd, &stat); err != nil {
++		// ArkClash（OHOS）：SELinux 不允许应用对系统 VPN 给的 TUN fd 做 fstat。
++		// 这里只是区分 socket 和 TUN 设备，被拒绝时按 TUN（非 socket）处理。
++		if err == unix.EACCES {
++			return false, nil
++		}
+ 		return false, fmt.Errorf("unix.Fstat(%v,...) failed: %v", fd, err)
+ 	}
+ 	return (stat.Mode & unix.S_IFSOCK) == unix.S_IFSOCK, nil

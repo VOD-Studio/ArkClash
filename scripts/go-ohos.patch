@@ -1,0 +1,213 @@
+diff -ruN a/src/runtime/asm_arm64.s b/src/runtime/asm_arm64.s
+--- a/src/runtime/asm_arm64.s	2026-11-06 23:14:45
++++ b/src/runtime/asm_arm64.s	2026-11-06 23:14:45
+@@ -38,8 +38,17 @@
+ 	// Initialize g as null in case of using g later e.g. sigaction in cgo_sigaction.go
+ 	MOVD	ZR, g
+ 
++#ifdef GOOS_linux
++	// ArkClash (OHOS): musl calls DT_INIT_ARRAY functions without
++	// (argc, argv, envp), so R0/R1 are junk. Start with an empty vector;
++	// sysargs then reads /proc/self/auxv.
++	MOVD	ZR, _rt0_arm64_lib_argc<>(SB)
++	MOVD	$_rt0_arm64_lib_emptyargv<>(SB), R1
++	MOVD	R1, _rt0_arm64_lib_argv<>(SB)
++#else
+ 	MOVD	R0, _rt0_arm64_lib_argc<>(SB)
+ 	MOVD	R1, _rt0_arm64_lib_argv<>(SB)
++#endif
+ 
+ 	// Synchronous initialization.
+ 	MOVD	$runtime·libpreinit(SB), R4
+@@ -79,6 +88,12 @@
+ GLOBL _rt0_arm64_lib_argc<>(SB),NOPTR, $8
+ DATA _rt0_arm64_lib_argv<>(SB)/8, $0
+ GLOBL _rt0_arm64_lib_argv<>(SB),NOPTR, $8
++// argv terminator, envp terminator, AT_NULL auxv entry.
++DATA _rt0_arm64_lib_emptyargv<>+0(SB)/8, $0
++DATA _rt0_arm64_lib_emptyargv<>+8(SB)/8, $0
++DATA _rt0_arm64_lib_emptyargv<>+16(SB)/8, $0
++DATA _rt0_arm64_lib_emptyargv<>+24(SB)/8, $0
++GLOBL _rt0_arm64_lib_emptyargv<>(SB),NOPTR, $32
+ 
+ #ifdef GOARM64_LSE
+ DATA no_lse_msg<>+0x00(SB)/64, $"This program can only run on ARM64 processors with LSE support.\n"
+diff -ruN a/src/runtime/cgo/gcc_tls_linux_arm64.S b/src/runtime/cgo/gcc_tls_linux_arm64.S
+--- a/src/runtime/cgo/gcc_tls_linux_arm64.S	1970-01-01 08:00:00
++++ b/src/runtime/cgo/gcc_tls_linux_arm64.S	2026-11-06 23:14:45
+@@ -0,0 +1,52 @@
++// ArkClash（OHOS）补丁：用 TLSDESC（general-dynamic 模型）保存当前 g。
++// musl 支持在 dlopen 加载的库里使用这种模型，系统线程和 Go 自己创建的
++// 线程都能拿到各自的副本，初始值为 0（即“这个线程上没有 g”）。
++//
++// 调用约定（只供 runtime·load_g / runtime·save_g 使用）：
++//   x_cgo_load_g：返回值放在 x0。
++//   x_cgo_save_g：保存 x28（g 寄存器）的值。
++// 两者除 x0 和 x30 外不改任何寄存器；TLSDESC 解析函数本身也遵守这一点。
++
++	.section .tbss,"awT",%nobits
++	.p2align 3
++	.type arkclash_tls_g, %object
++	.size arkclash_tls_g, 8
++arkclash_tls_g:
++	.zero 8
++
++	.text
++	.p2align 2
++	.globl x_cgo_load_g
++	.hidden x_cgo_load_g
++	.type x_cgo_load_g, %function
++x_cgo_load_g:
++	stp x1, x30, [sp, #-16]!
++	adrp x0, :tlsdesc:arkclash_tls_g
++	ldr x1, [x0, #:tlsdesc_lo12:arkclash_tls_g]
++	add x0, x0, #:tlsdesc_lo12:arkclash_tls_g
++	.tlsdesccall arkclash_tls_g
++	blr x1
++	mrs x1, tpidr_el0
++	ldr x0, [x1, x0]
++	ldp x1, x30, [sp], #16
++	ret
++	.size x_cgo_load_g, .-x_cgo_load_g
++
++	.p2align 2
++	.globl x_cgo_save_g
++	.hidden x_cgo_save_g
++	.type x_cgo_save_g, %function
++x_cgo_save_g:
++	stp x1, x30, [sp, #-16]!
++	adrp x0, :tlsdesc:arkclash_tls_g
++	ldr x1, [x0, #:tlsdesc_lo12:arkclash_tls_g]
++	add x0, x0, #:tlsdesc_lo12:arkclash_tls_g
++	.tlsdesccall arkclash_tls_g
++	blr x1
++	mrs x1, tpidr_el0
++	str x28, [x1, x0]
++	ldp x1, x30, [sp], #16
++	ret
++	.size x_cgo_save_g, .-x_cgo_save_g
++
++	.section .note.GNU-stack,"",%progbits
+diff -ruN a/src/runtime/cgo/tls_linux_arm64.go b/src/runtime/cgo/tls_linux_arm64.go
+--- a/src/runtime/cgo/tls_linux_arm64.go	1970-01-01 08:00:00
++++ b/src/runtime/cgo/tls_linux_arm64.go	2026-11-06 23:14:45
+@@ -0,0 +1,17 @@
++// ArkClash（OHOS）补丁：把 gcc_tls_linux_arm64.S 里的辅助函数交给 runtime。
++
++package cgo
++
++import _ "unsafe" // for go:linkname
++
++//go:cgo_import_static x_cgo_load_g
++//go:linkname x_cgo_load_g x_cgo_load_g
++//go:linkname _cgo_load_g _cgo_load_g
++var x_cgo_load_g byte
++var _cgo_load_g = &x_cgo_load_g
++
++//go:cgo_import_static x_cgo_save_g
++//go:linkname x_cgo_save_g x_cgo_save_g
++//go:linkname _cgo_save_g _cgo_save_g
++var x_cgo_save_g byte
++var _cgo_save_g = &x_cgo_save_g
+diff -ruN a/src/runtime/cgo_tls_linux_arm64.go b/src/runtime/cgo_tls_linux_arm64.go
+--- a/src/runtime/cgo_tls_linux_arm64.go	1970-01-01 08:00:00
++++ b/src/runtime/cgo_tls_linux_arm64.go	2026-11-06 23:14:45
+@@ -0,0 +1,14 @@
++// ArkClash（OHOS）补丁：load_g/save_g 使用的辅助函数指针，
++// 由 runtime/cgo 初始化（与 _cgo_init 的做法相同）。
++
++package runtime
++
++import "unsafe"
++
++//go:linkname _cgo_load_g _cgo_load_g
++//go:linkname _cgo_save_g _cgo_save_g
++
++var (
++	_cgo_load_g unsafe.Pointer
++	_cgo_save_g unsafe.Pointer
++)
+diff -ruN a/src/runtime/tls_arm64.h b/src/runtime/tls_arm64.h
+--- a/src/runtime/tls_arm64.h	2026-11-06 23:14:45
++++ b/src/runtime/tls_arm64.h	2026-11-06 23:14:45
+@@ -8,6 +8,11 @@
+ #endif
+ #ifdef GOOS_linux
+ #define TLS_linux
++// ArkClash（OHOS）：musl 不允许 dlopen 加载的库使用 initial-exec TLS，
++// 也没有可以借用的空闲 TCB 槽位。g 改由 runtime/cgo 里的辅助函数
++// 通过 TLSDESC 读写（见 gcc_tls_linux_arm64.S），tls_g 只保留为普通变量。
++#define TLSG_IS_VARIABLE
++#define TLS_cgo_helper
+ #endif
+ #ifdef TLS_linux
+ #define MRS_TPIDR_R0 WORD $0xd53bd040 // MRS TPIDR_EL0, R0
+diff -ruN a/src/runtime/tls_arm64.s b/src/runtime/tls_arm64.s
+--- a/src/runtime/tls_arm64.s	2026-11-06 23:14:45
++++ b/src/runtime/tls_arm64.s	2026-11-06 23:18:47
+@@ -8,7 +8,7 @@
+ #include "textflag.h"
+ #include "tls_arm64.h"
+ 
+-TEXT runtime·load_g(SB),NOSPLIT,$0
++TEXT runtime·load_g(SB),NOSPLIT|NOFRAME,$0
+ #ifndef GOOS_darwin
+ #ifndef GOOS_openbsd
+ #ifndef GOOS_windows
+@@ -18,6 +18,17 @@
+ #endif
+ #endif
+ 
++#ifdef TLS_cgo_helper
++	// 辅助函数只改 R0 和 LR，LR 暂存在 R27（本函数原本就会改 R27）。
++	MOVD	LR, R27
++	// 先取地址再读：共享库模式下直接读全局变量会借用 R27 中转，
++	// 而 R27 正存着 LR。
++	MOVD	$_cgo_load_g(SB), R0
++	MOVD	(R0), R0
++	BL	(R0)
++	MOVD	R0, g
++	MOVD	R27, LR
++#else
+ 	MRS_TPIDR_R0
+ #ifdef TLS_darwin
+ 	// Darwin sometimes returns unaligned pointers
+@@ -25,11 +36,12 @@
+ #endif
+ 	MOVD	runtime·tls_g(SB), R27
+ 	MOVD	(R0)(R27), g
++#endif
+ 
+ nocgo:
+ 	RET
+ 
+-TEXT runtime·save_g(SB),NOSPLIT,$0
++TEXT runtime·save_g(SB),NOSPLIT|NOFRAME,$0
+ #ifndef GOOS_darwin
+ #ifndef GOOS_openbsd
+ #ifndef GOOS_windows
+@@ -39,6 +51,16 @@
+ #endif
+ #endif
+ 
++#ifdef TLS_cgo_helper
++	// 辅助函数直接读 g 寄存器（R28），只改 R0 和 LR。
++	MOVD	LR, R27
++	// 先取地址再读：共享库模式下直接读全局变量会借用 R27 中转，
++	// 而 R27 正存着 LR。
++	MOVD	$_cgo_save_g(SB), R0
++	MOVD	(R0), R0
++	BL	(R0)
++	MOVD	R27, LR
++#else
+ 	MRS_TPIDR_R0
+ #ifdef TLS_darwin
+ 	// Darwin sometimes returns unaligned pointers
+@@ -46,6 +68,7 @@
+ #endif
+ 	MOVD	runtime·tls_g(SB), R27
+ 	MOVD	g, (R0)(R27)
++#endif
+ 
+ nocgo:
+ 	RET

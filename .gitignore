@@ -22,3 +22,9 @@
 *.cer
 *.p7b
 *.csr
+
+# Patched Go toolchain (scripts/build-core.sh)
+/.toolchain/
+
+# Geo 数据（scripts/fetch-geodata.sh 下载）
+/entry/src/main/resources/rawfile/geo/

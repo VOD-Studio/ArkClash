@@ -5,6 +5,7 @@ import { vpnExtension, VpnExtensionAbility } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import core from 'libarkclash.so';
 import { CONTROLLER_ADDRESS, readRuntime, writeCoreError } from '../common/Runtime';
+import { installGeoData } from './GeoData';
 
 const DOMAIN = 0x0A11;
 const TAG = 'ClashVpnAbility';
@@ -69,10 +70,16 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
         isDefaultRoute: true
       }],
       dnsAddresses: [TUN_DNS],
-      mtu: TUN_MTU
+      mtu: TUN_MTU,
+      // protectProcessNet() 只对经过 libc 创建的 socket 生效，Go 直接发系统调用，
+      // 内核的出站连接会被绕回 VPN。按 UID 把本应用整个排除掉，在内核路由层面生效。
+      blockedApplications: [this.context.applicationInfo.name]
     };
     const tunFd = await connection.create(config);
     hilog.info(DOMAIN, TAG, 'tun created, fd=%{public}d', tunFd);
+
+    const geoCopied = installGeoData(this.context, filesDir);
+    hilog.info(DOMAIN, TAG, 'geo data copied: %{public}d', geoCopied);
 
     const options: CoreOptions = {
       homeDir: filesDir,
