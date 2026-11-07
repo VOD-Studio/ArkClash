@@ -1,0 +1,308 @@
+{
+  "string": [
+    {
+      "name": "tab_home",
+      "value": "首页"
+    },
+    {
+      "name": "tab_proxies",
+      "value": "代理"
+    },
+    {
+      "name": "tab_profiles",
+      "value": "配置"
+    },
+    {
+      "name": "tab_tools",
+      "value": "工具"
+    },
+    {
+      "name": "status_disconnected",
+      "value": "未连接"
+    },
+    {
+      "name": "status_connecting",
+      "value": "正在连接"
+    },
+    {
+      "name": "status_connected",
+      "value": "已连接"
+    },
+    {
+      "name": "status_disconnecting",
+      "value": "正在断开"
+    },
+    {
+      "name": "action_connect",
+      "value": "连接"
+    },
+    {
+      "name": "action_disconnect",
+      "value": "断开"
+    },
+    {
+      "name": "home_no_profile",
+      "value": "还没有配置"
+    },
+    {
+      "name": "home_no_profile_hint",
+      "value": "添加一个订阅，就能在这里连接。"
+    },
+    {
+      "name": "traffic_upload",
+      "value": "上传"
+    },
+    {
+      "name": "traffic_download",
+      "value": "下载"
+    },
+    {
+      "name": "traffic_total",
+      "value": "累计 %s"
+    },
+    {
+      "name": "usage_used",
+      "value": "已用 %1$s / %2$s"
+    },
+    {
+      "name": "usage_expire",
+      "value": "%s 到期"
+    },
+    {
+      "name": "profile_updated",
+      "value": "%s 更新"
+    },
+    {
+      "name": "profile_source_subscription",
+      "value": "订阅"
+    },
+    {
+      "name": "action_add_subscription",
+      "value": "添加订阅"
+    },
+    {
+      "name": "action_update",
+      "value": "更新"
+    },
+    {
+      "name": "action_edit_link",
+      "value": "编辑"
+    },
+    {
+      "name": "subscription_sheet_title",
+      "value": "订阅"
+    },
+    {
+      "name": "subscription_link",
+      "value": "链接"
+    },
+    {
+      "name": "action_save_download",
+      "value": "导入"
+    },
+    {
+      "name": "download_failed",
+      "value": "下载失败：%s"
+    },
+    {
+      "name": "proxies_empty",
+      "value": "代理组页面开发中"
+    },
+    {
+      "name": "proxies_empty_hint",
+      "value": "以后在这里选择节点、做延迟测试。"
+    },
+    {
+      "name": "tools_connections",
+      "value": "连接"
+    },
+    {
+      "name": "tools_logs",
+      "value": "日志"
+    },
+    {
+      "name": "tools_settings",
+      "value": "设置"
+    },
+    {
+      "name": "tools_about",
+      "value": "关于"
+    },
+    {
+      "name": "coming_soon",
+      "value": "开发中"
+    },
+    {
+      "name": "coming_soon_hint",
+      "value": "这个页面会在之后的版本里提供。"
+    },
+    {
+      "name": "about_version",
+      "value": "版本"
+    },
+    {
+      "name": "about_core",
+      "value": "内核"
+    },
+    {
+      "name": "about_license",
+      "value": "许可证"
+    },
+    {
+      "name": "about_source",
+      "value": "源代码"
+    },
+    {
+      "name": "about_core_idle",
+      "value": "连接后显示"
+    },
+    {
+      "name": "card_status",
+      "value": "状态"
+    },
+    {
+      "name": "card_speed",
+      "value": "网络速度"
+    },
+    {
+      "name": "card_mode",
+      "value": "出站模式"
+    },
+    {
+      "name": "card_profile",
+      "value": "配置"
+    },
+    {
+      "name": "card_group",
+      "value": "代理组"
+    },
+    {
+      "name": "mode_rule",
+      "value": "规则"
+    },
+    {
+      "name": "mode_global",
+      "value": "全局"
+    },
+    {
+      "name": "mode_direct",
+      "value": "直连"
+    },
+    {
+      "name": "uptime",
+      "value": "已运行 %s"
+    },
+    {
+      "name": "exit_ip",
+      "value": "出口 IP"
+    },
+    {
+      "name": "exit_ip_loading",
+      "value": "查询中…"
+    },
+    {
+      "name": "exit_ip_unavailable",
+      "value": "查不到（配置里没有开代理端口）"
+    },
+    {
+      "name": "speed_session",
+      "value": "本次 ↑ %1$s · ↓ %2$s"
+    },
+    {
+      "name": "days_left",
+      "value": "剩余 %d 天"
+    },
+    {
+      "name": "delay_untested",
+      "value": "未测"
+    },
+    {
+      "name": "after_connect",
+      "value": "连接后显示"
+    },
+    {
+      "name": "bar_tap_to_connect",
+      "value": "点左边的按钮连接"
+    },
+    {
+      "name": "chip_running",
+      "value": "运行中"
+    },
+    {
+      "name": "uptime_label",
+      "value": "运行时长"
+    },
+    {
+      "name": "connect_time_label",
+      "value": "连接用时"
+    },
+    {
+      "name": "region_label",
+      "value": "地区"
+    },
+    {
+      "name": "seconds_value",
+      "value": "%s 秒"
+    },
+    {
+      "name": "hint_connect",
+      "value": "点右下角的按钮连接。"
+    },
+    {
+      "name": "last_connect_time",
+      "value": "上次连接用时 %s 秒"
+    },
+    {
+      "name": "exit_ip_warning",
+      "value": "查不到出口 IP，节点可能不可用"
+    },
+    {
+      "name": "action_switch_node",
+      "value": "换节点"
+    },
+    {
+      "name": "updated_ago",
+      "value": "更新于 %s"
+    },
+    {
+      "name": "just_now",
+      "value": "刚刚"
+    },
+    {
+      "name": "minutes_ago",
+      "value": "%d 分钟前"
+    },
+    {
+      "name": "hours_ago",
+      "value": "%d 小时前"
+    },
+    {
+      "name": "days_ago",
+      "value": "%d 天前"
+    },
+    {
+      "name": "used_label",
+      "value": "已用"
+    },
+    {
+      "name": "usage_warn_low",
+      "value": "流量只剩 %s"
+    },
+    {
+      "name": "usage_warn_expiring",
+      "value": "%d 天后到期"
+    },
+    {
+      "name": "usage_warn_expired",
+      "value": "订阅已到期"
+    },
+    {
+      "name": "group_count_unit",
+      "value": "个"
+    },
+    {
+      "name": "exit_local",
+      "value": "本机"
+    }
+  ]
+}
