@@ -27,7 +27,7 @@ run: install ## 安装并启动
 log: ## 跟踪内核与 VPN 进程日志
 	scripts/device.sh log
 
-lint: ## 代码检查（CHECKS=all|go|shell|arch|arkts，可多个）
+lint: ## 代码检查（CHECKS=all|go|shell|arch|arkts|actions|commits|vuln，可多个）
 	scripts/lint.sh $(CHECKS)
 
 clean: ## 清理构建产物（保留 .toolchain/ 里的补丁工具链）
