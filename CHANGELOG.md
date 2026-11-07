@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.2](https://github.com/VOD-Studio/ArkClash/compare/v0.1.1...v0.1.2) (2026-11-07)
+
+
+### 修复
+
+* **ci:** 导出签名包时不带入 macOS 的扩展属性文件 ([6cd46f3](https://github.com/VOD-Studio/ArkClash/commit/6cd46f379c6fc9cfc618f67f0e4f32e41b5188ea))
+* **ci:** 导出签名包时不带入 macOS 的扩展属性文件 ([dc4f2b4](https://github.com/VOD-Studio/ArkClash/commit/dc4f2b4204b38a90c9f51f3e40e378fdbd1dee20))
+* **scripts:** 修复变量后紧跟中文时被 bash 误读 ([2c25ece](https://github.com/VOD-Studio/ArkClash/commit/2c25ece0c0bdbac484d45223438c9a227f384f0a))
+
 ## [0.1.1](https://github.com/VOD-Studio/ArkClash/compare/v0.1.0...v0.1.1) (2026-11-07)
 
 
