@@ -61,7 +61,7 @@ sequenceDiagram
 | 订阅文件（`filesDir/profiles/`） | 应用沙箱 | UI | 内核 |
 | `runtime.json`（配置路径、secret、协议栈） | 应用沙箱 | UI，每次连接前 | VPN 进程 |
 | `core_error.txt` | 应用沙箱 | VPN 进程 | UI，读后删除 |
-| Geo 数据（`filesDir/*.metadb、*.dat`） | 应用沙箱 | VPN 进程，从 rawfile 复制 | 内核 |
+| Geo 数据（`filesDir/*.metadb、*.dat`）和版本标记 `geo.version` | 应用沙箱 | VPN 进程，安装包里的版本变了才从 rawfile 复制 | 内核 |
 | 用户设置（订阅链接等） | UI 的 preferences | UI | UI |
 | 运行时状态（节点选择、连接、流量） | 内核内存 | 内核 | UI，经 controller |
 

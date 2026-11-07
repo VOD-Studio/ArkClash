@@ -13,8 +13,8 @@ if [[ ! -f entry/libs/arm64-v8a/libclash.so ]]; then
   echo "缺少 libclash.so，先运行 make core" >&2
   exit 1
 fi
-if [[ ! -d entry/src/main/resources/rawfile/geo ]]; then
-  echo "警告：没有 Geo 数据，内核首次启动会去 GitHub 下载（make geodata 可内置）" >&2
+if [[ ! -f entry/src/main/resources/rawfile/geo/VERSION ]]; then
+  echo "警告：没有 Geo 数据或版本标记，内核首次启动会去 GitHub 下载（make geodata 可内置）" >&2
 fi
 
 OUTPUTS=entry/build/default/outputs/default
