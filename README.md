@@ -1,3 +1,5 @@
+<img src="docs/assets/icon.png" width="96" alt="ArkClash 图标">
+
 # ArkClash
 
 [![CI](https://github.com/VOD-Studio/ArkClash/actions/workflows/ci.yml/badge.svg)](https://github.com/VOD-Studio/ArkClash/actions/workflows/ci.yml)
