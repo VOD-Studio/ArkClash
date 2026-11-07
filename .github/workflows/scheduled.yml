@@ -60,7 +60,8 @@ jobs:
 
   report:
     name: 失败时开 issue
-    needs: [geodata, vuln, core, hap]
+    # 依赖漏洞暂不计入：存量漏洞在 #8 跟踪，修完后把 vuln 加回来，否则每周都会重复报。
+    needs: [geodata, core, hap]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5
