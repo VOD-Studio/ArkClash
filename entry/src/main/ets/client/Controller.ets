@@ -78,6 +78,16 @@ export async function setMode(filesDir: string, mode: OutboundMode): Promise<voi
   await call(filesDir, http.RequestMethod.PATCH, '/configs', JSON.stringify(body));
 }
 
+export async function getAllowLan(filesDir: string): Promise<boolean> {
+  return ((await configs(filesDir))['allow-lan'] as boolean | undefined) ?? false;
+}
+
+/** 局域网内其他设备能否连本机的代理端口。只改运行中的内核；重连后由 Connection 重新下发。 */
+export async function setAllowLan(filesDir: string, allow: boolean): Promise<void> {
+  const body: Record<string, boolean> = { 'allow-lan': allow };
+  await call(filesDir, http.RequestMethod.PATCH, '/configs', JSON.stringify(body));
+}
+
 /** 内核的 HTTP 代理端口，0 = 配置里没开。UI 进程不走 VPN，要经过代理时只能用这个端口。 */
 export async function getProxyPort(filesDir: string): Promise<number> {
   const c = await configs(filesDir);
