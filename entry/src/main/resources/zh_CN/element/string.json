@@ -379,6 +379,38 @@
     {
       "name": "mem_ui",
       "value": "界面"
+    },
+    {
+      "name": "svc_wikipedia",
+      "value": "维基百科"
+    },
+    {
+      "name": "svc_bilibili",
+      "value": "哔哩哔哩"
+    },
+    {
+      "name": "svc_baidu",
+      "value": "百度"
+    },
+    {
+      "name": "svc_netease",
+      "value": "网易云音乐"
+    },
+    {
+      "name": "cat_common",
+      "value": "常用"
+    },
+    {
+      "name": "cat_china",
+      "value": "国内"
+    },
+    {
+      "name": "services_sheet_hint",
+      "value": "长按拖动排序，打开的会显示在首页。"
+    },
+    {
+      "name": "services_recheck",
+      "value": "重新检测"
     }
   ]
 }

@@ -6,7 +6,7 @@ import { i18n } from '@kit.LocalizationKit';
 import { connection, Connection, ConnectionState } from '../../client/Connection';
 import { getAllowLan, getMainGroup, getMode, getProxyPort, GroupSummary, OutboundMode } from '../../client/Controller';
 import { ExitIp, flagOf, lookupExitIp } from '../../client/ExitIp';
-import { checkServices, Service, ServiceResult, SERVICES } from '../../client/ServiceCheck';
+import { checkServices, ServiceResult, ServiceTarget } from '../../client/ServiceCheck';
 import { ConnectionStats, connectionStats, MemoryStats, memoryStats } from '../../client/Stats';
 import { HISTORY_SIZE, traffic, Traffic } from '../../client/Traffic';
 import { EmptyState } from '../../components/EmptyState';
@@ -14,8 +14,9 @@ import { LabeledValue, LegendItem, Tag } from '../../components/Labels';
 import { formatBytes, splitBytes } from '../../components/Format';
 import { SpeedChart } from '../../components/SpeedChart';
 import { TabPage } from '../../components/TabPage';
-import { CARD } from '../../components/Theme';
+import { CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { lanAddress } from './LanAddress';
+import { ServiceCategory, serviceInfo, ServiceLayout, ServiceSlot } from './Services';
 
 const MODES: OutboundMode[] = ['rule', 'global', 'direct'];
 const MINUTE_MS = 60 * 1000;
@@ -91,8 +92,10 @@ export struct HomePage {
   @Local lanIp: string = '';
   @Local proxyPort: number = 0;
   @Local coreAllowLan: boolean = false; // 用户没设置过时，配置文件里的 allow-lan
-  @Local services: ServiceResult[] | undefined = undefined;
+  @Local serviceDelays: Record<string, number> | undefined = undefined; // id → ms，-1 = 不可达
   @Local checkingServices: boolean = false;
+  @Local serviceLayout: ServiceLayout = new ServiceLayout();
+  @Local servicesSheet: boolean = false;
   @Local connStats: ConnectionStats = connectionStats;
   @Local memStats: MemoryStats = memoryStats;
   @Local uiMemoryBytes: number = 0;
@@ -105,6 +108,7 @@ export struct HomePage {
   ]);
 
   aboutToAppear(): void {
+    this.serviceLayout.load(this.context);
     this.modeIndex = Math.max(0, MODES.indexOf(this.conn.mode as OutboundMode));
     this.sync();
   }
@@ -142,7 +146,7 @@ export struct HomePage {
     }
     if (!this.conn.connected) {
       this.group = undefined;
-      this.services = undefined;
+      this.serviceDelays = undefined;
       this.proxyPort = 0;
     }
     if (!this.visible || this.conn.busy) {
@@ -158,35 +162,48 @@ export struct HomePage {
   }
 
   build() {
-    TabPage({
-      title: $r('app.string.tab_home'),
-      topInset: this.topInset,
-      scroller: this.scroller,
-      onScrollDirection: (down: boolean) => this.onScrollDirection(down)
-    }) {
-      if (this.profileReady) {
-        this.StatusCard()
-        this.SpeedCard()
-        this.ModeCard()
-        this.LanCard()
-        this.ServicesCard()
-        this.ProfileCard()
-        this.GroupCard()
-        this.ConnStatsCard()
-        this.MemoryCard()
-      } else {
-        Column() {
-          EmptyState({
-            icon: $r('sys.symbol.doc_text'),
-            title: $r('app.string.home_no_profile'),
-            hint: $r('app.string.home_no_profile_hint'),
-            actionLabel: $r('app.string.action_add_subscription'),
-            onAction: () => this.onAddProfile()
-          })
+    Column() {
+      TabPage({
+        title: $r('app.string.tab_home'),
+        topInset: this.topInset,
+        scroller: this.scroller,
+        onScrollDirection: (down: boolean) => this.onScrollDirection(down)
+      }) {
+        if (this.profileReady) {
+          this.StatusCard()
+          this.SpeedCard()
+          this.ModeCard()
+          this.LanCard()
+          this.ServicesCard()
+          this.ProfileCard()
+          this.GroupCard()
+          this.ConnStatsCard()
+          this.MemoryCard()
+        } else {
+          Column() {
+            EmptyState({
+              icon: $r('sys.symbol.doc_text'),
+              title: $r('app.string.home_no_profile'),
+              hint: $r('app.string.home_no_profile_hint'),
+              actionLabel: $r('app.string.action_add_subscription'),
+              onAction: () => this.onAddProfile()
+            })
+          }
+          .attributeModifier(CARD)
         }
-        .attributeModifier(CARD)
       }
     }
+    .width('100%')
+    .height('100%')
+    .bindSheet(this.servicesSheet, this.ServicesSheet(), {
+      title: { title: $r('app.string.card_services') },
+      detents: [SheetSize.MEDIUM, SheetSize.LARGE],
+      systemMaterial: sheetMaterial(),
+      showClose: true,
+      onDisappear: () => {
+        this.servicesSheet = false;
+      }
+    })
   }
 
   // ---- 公共小部件 ----
@@ -560,26 +577,30 @@ export struct HomePage {
         .height(28)
         .backgroundColor($r('app.color.tile_background'))
         .enabled(this.conn.connected && !this.checkingServices)
-        .onClick(() => this.runServiceCheck())
+        .onClick(() => this.runServiceCheck(this.serviceLayout.visibleIds))
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(16)
+          .fontColor([$r('sys.color.font_tertiary')])
       }
       .width('100%')
       .height(28)
       .margin({ bottom: 12 })
 
       Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
-        ForEach(SERVICES, (service: Service) => {
-          this.ServiceTile(service)
-        }, (service: Service) => service.name)
+        ForEach(this.serviceLayout.visibleIds, (id: string) => {
+          this.ServiceTile(id)
+        }, (id: string) => id)
       }
       .width('100%')
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(CARD)
+    .onClick(() => this.openServicesSheet())
   }
 
   @Builder
   ServicesChip() {
-    if (this.services !== undefined) {
+    if (this.serviceDelays !== undefined) {
       if (this.downServices() === 0) {
         Tag({
           text: $r('app.string.services_all_ok'),
@@ -599,44 +620,160 @@ export struct HomePage {
   }
 
   @Builder
-  ServiceTile(service: Service) {
+  ServiceTile(id: string) {
     Row({ space: 10 }) {
       Stack({ alignContent: Alignment.BottomEnd }) {
-        Text(service.short)
-          .fontSize(service.short.length > 1 ? 12 : 15)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('sys.color.font_primary'))
-          .textAlign(TextAlign.Center)
-          .width(32)
-          .height(32)
-          .borderRadius(16)
-          .backgroundColor($r('app.color.card_background'))
+        this.ServiceIcon(id, 32)
         Circle()
           .width(10)
           .height(10)
-          .fill(this.serviceDotColor(service.name))
+          .fill(this.serviceDotColor(id))
           .stroke($r('app.color.tile_background'))
           .strokeWidth(2)
       }
       .width(32)
       .height(32)
       Column({ space: 2 }) {
-        Text(service.name)
+        Text(serviceInfo(id)?.name ?? id)
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('sys.color.font_primary'))
-        Text(this.serviceDelayText(service.name))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.serviceDelayText(id))
           .fontSize(12)
           .fontColor($r('sys.color.font_secondary'))
           .fontFeature('"tnum" on')
       }
       .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
     }
     .width('48.5%')
     .padding(10)
     .borderRadius(12)
     .backgroundColor($r('app.color.tile_background'))
     .margin({ bottom: 8 })
+  }
+
+  // 品牌图标放在白底圆里；没有图标的服务用文字头像。深色品牌色在深色模式下看不清，改用正文色。
+  @Builder
+  ServiceIcon(id: string, size: number) {
+    Stack() {
+      if (serviceInfo(id)?.icon !== undefined) {
+        Image(serviceInfo(id)?.icon)
+          .width(size * 0.55)
+          .height(size * 0.55)
+          .fillColor(this.brandColor(id))
+          .objectFit(ImageFit.Contain)
+      } else {
+        Text(serviceInfo(id)?.short ?? '')
+          .fontSize(size * 0.38)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.brandColor(id))
+      }
+    }
+    .width(size)
+    .height(size)
+    .borderRadius(size / 2)
+    .backgroundColor($r('app.color.card_background'))
+  }
+
+  // 抽屉：全部服务的检测结果；长按拖动排序，开关决定是否显示在首页。
+  @Builder
+  ServicesSheet() {
+    Column({ space: 12 }) {
+      Row({ space: 8 }) {
+        Text($r('app.string.services_sheet_hint'))
+          .fontSize(13)
+          .fontColor($r('sys.color.font_secondary'))
+          .layoutWeight(1)
+        Button({ type: ButtonType.Capsule }) {
+          Row({ space: 6 }) {
+            if (this.checkingServices) {
+              LoadingProgress()
+                .width(16)
+                .height(16)
+            } else {
+              SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+                .fontSize(14)
+                .fontColor([$r('sys.color.font_primary')])
+            }
+            Text($r('app.string.services_recheck'))
+              .fontSize(13)
+              .fontColor($r('sys.color.font_primary'))
+          }
+        }
+        .height(32)
+        .padding({ left: 12, right: 12 })
+        .backgroundColor($r('app.color.tile_background'))
+        .enabled(this.conn.connected && !this.checkingServices)
+        .onClick(() => this.runServiceCheck(this.allServiceIds()))
+      }
+      .width('100%')
+
+      List({ space: 8 }) {
+        ForEach(this.serviceLayout.slots, (slot: ServiceSlot) => {
+          ListItem() {
+            this.ServiceRow(slot)
+          }
+        }, (slot: ServiceSlot) => `${slot.id}:${slot.visible}`)
+          .onMove((from: number, to: number) => this.serviceLayout.move(from, to))
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .scrollBar(BarState.Off)
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 4, bottom: 16 })
+  }
+
+  @Builder
+  ServiceRow(slot: ServiceSlot) {
+    Row({ space: 12 }) {
+      SymbolGlyph($r('sys.symbol.list_bullet'))
+        .fontSize(16)
+        .fontColor([$r('sys.color.font_tertiary')])
+      Stack({ alignContent: Alignment.BottomEnd }) {
+        this.ServiceIcon(slot.id, 36)
+        Circle()
+          .width(10)
+          .height(10)
+          .fill(this.serviceDotColor(slot.id))
+          .stroke($r('app.color.tile_background'))
+          .strokeWidth(2)
+      }
+      .width(36)
+      .height(36)
+      Column({ space: 2 }) {
+        Text(serviceInfo(slot.id)?.name ?? slot.id)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+        Row() {
+          Text(this.categoryLabel(slot.id))
+            .fontSize(12)
+            .fontColor($r('sys.color.font_tertiary'))
+          if (this.serviceDelay(slot.id) !== undefined || this.checkingServices) {
+            Text(' · ')
+              .fontSize(12)
+              .fontColor($r('sys.color.font_tertiary'))
+            Text(this.serviceDelayText(slot.id))
+              .fontSize(12)
+              .fontColor($r('sys.color.font_secondary'))
+              .fontFeature('"tnum" on')
+          }
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      Toggle({ type: ToggleType.Switch, isOn: slot.visible })
+        .onChange((isOn: boolean) => this.serviceLayout.setVisible(slot.id, isOn))
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+    .borderRadius(12)
+    .backgroundColor($r('app.color.tile_background'))
   }
 
   // ---- ⑥ 配置 ----
@@ -907,8 +1044,8 @@ export struct HomePage {
         this.coreAllowLan = allow;
       }).catch(() => {});
     }
-    if (this.services === undefined && !this.checkingServices) {
-      this.runServiceCheck();
+    if (this.serviceDelays === undefined && !this.checkingServices) {
+      this.runServiceCheck(this.serviceLayout.visibleIds);
     }
     getMainGroup(filesDir).then((g: GroupSummary | undefined) => {
       this.group = g;
@@ -939,15 +1076,45 @@ export struct HomePage {
     });
   }
 
-  private runServiceCheck(): void {
-    this.checkingServices = true;
-    checkServices(this.context.filesDir).then((results: ServiceResult[]) => {
-      if (this.conn.connected) {
-        this.services = results;
+  private runServiceCheck(ids: string[]): void {
+    const targets: ServiceTarget[] = [];
+    for (const id of ids) {
+      const info = serviceInfo(id);
+      if (info !== undefined) {
+        targets.push({ id: id, url: info.url });
       }
+    }
+    this.checkingServices = true;
+    checkServices(this.context.filesDir, targets).then((results: ServiceResult[]) => {
+      if (!this.conn.connected) {
+        return;
+      }
+      const delays: Record<string, number> = {};
+      const previous = this.serviceDelays ?? {};
+      for (const key of Object.keys(previous)) {
+        delays[key] = previous[key];
+      }
+      for (const r of results) {
+        delays[r.id] = r.delay;
+      }
+      this.serviceDelays = delays;
     }).finally(() => {
       this.checkingServices = false;
     });
+  }
+
+  private openServicesSheet(): void {
+    this.servicesSheet = true;
+    // 抽屉里列出全部服务，没测过的补测一次。
+    const delays = this.serviceDelays ?? {};
+    const untested = this.allServiceIds().filter((id: string) => delays[id] === undefined);
+    if (this.conn.connected && untested.length > 0 && !this.checkingServices) {
+      this.runServiceCheck(untested);
+    }
+  }
+
+  private allServiceIds(): string[] {
+    return this.serviceLayout.slots.map((s: ServiceSlot) => s.id);
   }
 
   private readUiMemory(): number {
@@ -1006,31 +1173,47 @@ export struct HomePage {
     return $r('app.string.lan_proxy_on', this.proxyPort > 0 ? `${host}:${this.proxyPort}` : host);
   }
 
-  private serviceResult(name: string): ServiceResult | undefined {
-    return this.services?.find((r: ServiceResult) => r.name === name);
+  private serviceDelay(id: string): number | undefined {
+    return this.serviceDelays === undefined ? undefined : this.serviceDelays[id];
   }
 
-  private serviceDelayText(name: string): ResourceStr {
-    if (this.checkingServices && this.services === undefined) {
-      return $r('app.string.services_checking');
+  private serviceDelayText(id: string): ResourceStr {
+    const delay = this.serviceDelay(id);
+    if (delay === undefined) {
+      return this.checkingServices ? $r('app.string.services_checking') : '—';
     }
-    const result = this.serviceResult(name);
-    if (result === undefined) {
-      return '—';
-    }
-    return result.delay >= 0 ? `${result.delay} ms` : $r('app.string.service_down');
+    return delay >= 0 ? `${delay} ms` : $r('app.string.service_down');
   }
 
-  private serviceDotColor(name: string): Resource {
-    const result = this.serviceResult(name);
-    if (result === undefined) {
+  private categoryLabel(id: string): ResourceStr {
+    switch (serviceInfo(id)?.category) {
+      case ServiceCategory.Ai:
+        return 'AI';
+      case ServiceCategory.China:
+        return $r('app.string.cat_china');
+      default:
+        return $r('app.string.cat_common');
+    }
+  }
+
+  private serviceDotColor(id: string): Resource {
+    const delay = this.serviceDelay(id);
+    if (delay === undefined) {
       return $r('app.color.status_idle');
     }
-    return result.delay >= 0 ? $r('app.color.status_connected') : $r('app.color.status_error');
+    return delay >= 0 ? $r('app.color.status_connected') : $r('app.color.status_error');
   }
 
   private downServices(): number {
-    return (this.services ?? []).filter((r: ServiceResult) => r.delay < 0).length;
+    return this.serviceLayout.visibleIds.filter((id: string) => (this.serviceDelay(id) ?? 0) < 0).length;
+  }
+
+  private brandColor(id: string): ResourceColor {
+    const hex = serviceInfo(id)?.color ?? '#000000';
+    const v = parseInt(hex.substring(1), 16);
+    // 相对亮度太低（黑色、深灰的品牌色）就跟随正文色，深浅色模式都看得清。
+    const luminance = (0.299 * ((v >> 16) & 0xff) + 0.587 * ((v >> 8) & 0xff) + 0.114 * (v & 0xff)) / 255;
+    return luminance < 0.2 ? $r('sys.color.font_primary') : hex;
   }
 
   private statText(n: number): string {

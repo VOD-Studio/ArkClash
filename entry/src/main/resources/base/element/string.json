@@ -399,6 +399,38 @@
     {
       "name": "mem_ui",
       "value": "UI"
+    },
+    {
+      "name": "svc_wikipedia",
+      "value": "Wikipedia"
+    },
+    {
+      "name": "svc_bilibili",
+      "value": "Bilibili"
+    },
+    {
+      "name": "svc_baidu",
+      "value": "Baidu"
+    },
+    {
+      "name": "svc_netease",
+      "value": "NetEase Cloud Music"
+    },
+    {
+      "name": "cat_common",
+      "value": "Common"
+    },
+    {
+      "name": "cat_china",
+      "value": "China"
+    },
+    {
+      "name": "services_sheet_hint",
+      "value": "Long press to reorder. Switched-on services show on Home."
+    },
+    {
+      "name": "services_recheck",
+      "value": "Recheck"
     }
   ]
 }
