@@ -33,8 +33,8 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  # 用 GITHUB_TOKEN 创建或更新的 PR 不会触发 pull_request 事件，但可以手动触发 CI：
-  # 「CI 通过」检查会挂在发版 PR 的最新提交上，满足 main 的合并规则，不需要个人 token。
+  # 用 GITHUB_TOKEN 推送的提交只会生成一个「需要批准」的 pull_request 运行，不会自己跑。
+  # 这里改为手动触发 CI：「CI 通过」挂在发版 PR 的最新提交上，满足 main 的合并规则，不需要个人 token。
   release-pr-ci:
     name: 发版 PR 的 CI
     needs: release-please
@@ -42,13 +42,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       actions: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           BRANCH: ${{ needs.release-please.outputs.pr_branch }}
-        run: gh workflow run ci.yml -R "$REPO" --ref "$BRANCH"
+        run: scripts/ci/dispatch-bot-ci.sh "$REPO" "$BRANCH"
 
   release:
     needs: release-please

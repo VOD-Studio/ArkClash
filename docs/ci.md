@@ -40,9 +40,9 @@
 
 ### 机器人 PR
 
-发版 PR 和 Geo 数据 PR 用 `GITHUB_TOKEN` 创建，GitHub 不会为它们触发 `pull_request`。所以由创建它们的 workflow 再用 `workflow_dispatch` 手动触发 `ci.yml`，「CI 通过」照样挂在 PR 的最新提交上，满足合并规则，不需要个人 token。
+发版 PR 和 Geo 数据 PR 用 `GITHUB_TOKEN` 创建。GitHub 只会为它们生成一个停在「需要批准」的 `pull_request` 运行，不会自己跑。所以由创建它们的 workflow 用 `workflow_dispatch` 手动触发 `ci.yml`（`scripts/ci/dispatch-bot-ci.sh`），「CI 通过」照样挂在 PR 的最新提交上，满足合并规则，不需要个人 token。那个等待批准的运行和它重复，脚本会顺手删掉。
 
-如果机器人 PR 上看不到「CI 通过」，在 Actions 里对它的分支手动运行一次 CI。
+如果机器人 PR 上看不到「CI 通过」，在 Actions 里对它的分支手动运行一次 CI。看到「需要批准」的运行不用点，直接删掉即可。
 
 ## 合并规则与仓库设置
 
