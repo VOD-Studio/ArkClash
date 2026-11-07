@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import { OutboundMode, setAllowLan, setMode } from './Controller';
-import { probeCore, startCore, stopCore } from './CoreClient';
+import { probeCore, startCore, stopCore, updateRuntimeOptions } from './CoreClient';
 
 // 只用来让首帧和上次的状态一致，真实状态以 probeCore 为准。
 const PREF_CONNECTED = 'lastConnected';
@@ -73,17 +73,12 @@ export class Connection {
     this.state = ConnectionState.Connecting;
     const begin = Date.now();
     try {
-      this.coreVersion = await startCore(context);
+      // 模式和局域网代理随启动参数交给内核，由 applyOverrides 强制，热切换后也保持（ADR-0010）。
+      this.coreVersion = await startCore(context, this.userMode(), this.allowLan);
       this.connectedAt = Date.now();
       this.connectDuration = this.connectedAt - begin;
       this.prefs?.putSync(PREF_CONNECT_DURATION, this.connectDuration);
       this.settle(ConnectionState.Connected);
-      if (this.mode !== '') {
-        await setMode(this.filesDir, this.mode);
-      }
-      if (this.allowLan !== undefined) {
-        await setAllowLan(this.filesDir, this.allowLan);
-      }
     } catch (e) {
       this.error = (e as Error).message;
       if (this.state === ConnectionState.Connecting) {
@@ -107,6 +102,21 @@ export class Connection {
     }
   }
 
+  /** 命令连不上 controller 时调用：重新探测一次，确认已断开就更新状态（ADR-0009）。返回是否仍在连接。 */
+  async recheck(context: common.UIAbilityContext): Promise<boolean> {
+    if (this.busy) {
+      return this.connected;
+    }
+    const version = await probeCore(context);
+    this.settle(version !== undefined ? ConnectionState.Connected : ConnectionState.Disconnected);
+    return version !== undefined;
+  }
+
+  // mode 可能是首页从内核读来显示用的配置值，下发给内核的只能是用户自己选过的。
+  private userMode(): string {
+    return (this.prefs?.getSync(PREF_MODE, '') as string | undefined) ?? '';
+  }
+
   /** 记住用户选的模式；连接中立即下发给内核。 */
   async changeMode(mode: OutboundMode): Promise<void> {
     const previous = this.mode;
@@ -115,6 +125,7 @@ export class Connection {
     this.prefs?.flush();
     if (this.connected) {
       try {
+        updateRuntimeOptions(this.filesDir, mode, this.allowLan);
         await setMode(this.filesDir, mode);
       } catch (e) {
         this.mode = previous;
@@ -131,6 +142,7 @@ export class Connection {
     this.prefs?.flush();
     if (this.connected) {
       try {
+        updateRuntimeOptions(this.filesDir, this.userMode(), allow);
         await setAllowLan(this.filesDir, allow);
       } catch (e) {
         this.allowLan = previous;

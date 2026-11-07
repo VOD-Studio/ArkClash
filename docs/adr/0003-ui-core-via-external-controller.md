@@ -1,6 +1,6 @@
 # 0003 UI 通过 external-controller 和文件通道与内核通信
 
-- 状态：已采纳（2026-11-06）
+- 状态：已采纳（2026-11-06），由 [0009](0009-arkclash-commands-on-controller.md) 扩展
 
 ## 背景
 
@@ -15,4 +15,4 @@
 
 - 节点、连接、日志、流量等功能都可以直接复用 mihomo 的 API 和数据格式，不需要自己写 IPC。
 - 本机其他应用能连到这个端口，但没有 secret 无法调用；secret 只存在应用沙箱里。
-- ArkClash 自己的命令（比如按 `applyOverrides` 重新加载配置）没法通过 mihomo API 下发，到时候需要新增通道（见 architecture.md「后续演进的约束」）。
+- ArkClash 自己的命令（比如按 `applyOverrides` 重新加载配置）没法通过 mihomo API 下发。后来改为挂在 controller 的 `/arkclash/` 路由上，见 [0009](0009-arkclash-commands-on-controller.md)。

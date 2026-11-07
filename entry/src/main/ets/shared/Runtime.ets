@@ -2,34 +2,16 @@
 // dir. The extension may also be started by the system without our Want
 // parameters, so everything it needs lives on disk.
 import { fileIo as fs } from '@kit.CoreFileKit';
+import { hasFile, readTextSync, writeText } from './Files';
 
 export const CONTROLLER_ADDRESS = '127.0.0.1:19090';
 
+/** 界面写，VPN 进程在启动时读。要用哪份配置不在这里，VPN 进程从配置列表里读（ADR-0010）。 */
 export interface RuntimeConfig {
-  configPath: string;
   secret: string;
   stack: string;
-}
-
-export function profilePath(filesDir: string): string {
-  return `${filesDir}/profiles/default.yaml`;
-}
-
-export function hasFile(path: string): boolean {
-  try {
-    return fs.accessSync(path);
-  } catch (e) {
-    return false;
-  }
-}
-
-export function writeText(path: string, text: string): void {
-  const file = fs.openSync(path, fs.OpenMode.CREATE | fs.OpenMode.WRITE_ONLY | fs.OpenMode.TRUNC);
-  try {
-    fs.writeSync(file.fd, text);
-  } finally {
-    fs.closeSync(file);
-  }
+  mode: string; // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
+  allowLan?: boolean; // 没有 = 用配置里的值
 }
 
 function runtimePath(filesDir: string): string {
@@ -45,10 +27,16 @@ export function writeRuntime(filesDir: string, config: RuntimeConfig): void {
 }
 
 export function readRuntime(filesDir: string): RuntimeConfig | undefined {
-  if (!hasFile(runtimePath(filesDir))) {
+  const text = readTextSync(runtimePath(filesDir));
+  if (text === undefined) {
     return undefined;
   }
-  return JSON.parse(fs.readTextSync(runtimePath(filesDir))) as RuntimeConfig;
+  const config = JSON.parse(text) as RuntimeConfig;
+  // 0.3.0 写的 runtime.json 没有 mode。
+  if (typeof config.mode !== 'string') {
+    config.mode = '';
+  }
+  return config;
 }
 
 /** Written by ClashVpnAbility when the core fails to start, read by the UI. */
@@ -61,7 +49,7 @@ export function takeCoreError(filesDir: string): string | undefined {
   if (!hasFile(path)) {
     return undefined;
   }
-  const message = fs.readTextSync(path);
+  const message = readTextSync(path) ?? '';
   fs.unlinkSync(path);
   return message;
 }

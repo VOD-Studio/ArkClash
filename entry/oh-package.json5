@@ -6,6 +6,9 @@
   "author": "VOD-Studio",
   "license": "GPL-3.0",
   "dependencies": {
-    "libarkclash.so": "file:./src/main/cpp/types/libarkclash"
-  }
+    "libarkclash.so": "file:./src/main/cpp/types/libarkclash",
+    "yaml": "2.8.0"
+  },
+  "devDependencies": {},
+  "dynamicDependencies": {}
 }

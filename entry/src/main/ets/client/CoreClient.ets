@@ -3,7 +3,7 @@
 import { common, Want } from '@kit.AbilityKit';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { http, vpnExtension } from '@kit.NetworkKit';
-import { CONTROLLER_ADDRESS, profilePath, readRuntime, takeCoreError, writeRuntime } from '../shared/Runtime';
+import { CONTROLLER_ADDRESS, readRuntime, RuntimeConfig, takeCoreError, writeRuntime } from '../shared/Runtime';
 
 // Generous until Geo data is bundled: the first start may download it.
 const READY_TIMEOUT_MS = 30000;
@@ -61,12 +61,16 @@ export function probeCore(context: common.UIAbilityContext): Promise<string | un
   return fetchVersion(runtime.secret, 1000);
 }
 
-/** Starts the VPN and resolves with the core version once the controller answers. */
-export async function startCore(context: common.UIAbilityContext): Promise<string> {
+/**
+ * 启动 VPN，controller 能应答后返回内核版本。用哪份配置由 VPN 进程从配置列表读；mode 为空串、
+ * allowLan 为 undefined 时用配置里的值。
+ */
+export async function startCore(context: common.UIAbilityContext, mode: string,
+  allowLan: boolean | undefined): Promise<string> {
   const filesDir = context.filesDir;
   takeCoreError(filesDir);
   const secret = randomSecret();
-  writeRuntime(filesDir, { configPath: profilePath(filesDir), secret: secret, stack: 'gvisor' });
+  writeRuntime(filesDir, { secret: secret, stack: 'gvisor', mode: mode, allowLan: allowLan });
 
   // Shows the system authorization dialog the first time.
   await vpnExtension.startVpnExtensionAbility(vpnWant(context));
@@ -84,6 +88,16 @@ export async function startCore(context: common.UIAbilityContext): Promise<strin
     await sleep(READY_POLL_MS);
   }
   throw new Error('core did not become ready in time, see hilog tag ArkClashCore');
+}
+
+/** 连接中改了模式或局域网代理时调用，VPN 进程被系统重新拉起时也能用上（secret 不变）。 */
+export function updateRuntimeOptions(filesDir: string, mode: string, allowLan: boolean | undefined): void {
+  const runtime = readRuntime(filesDir);
+  if (runtime === undefined) {
+    return;
+  }
+  const next: RuntimeConfig = { secret: runtime.secret, stack: runtime.stack, mode: mode, allowLan: allowLan };
+  writeRuntime(filesDir, next);
 }
 
 export async function stopCore(context: common.UIAbilityContext): Promise<void> {

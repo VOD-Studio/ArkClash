@@ -12,6 +12,19 @@ interface ModeBody {
   mode: string;
 }
 
+interface ErrorBody {
+  message?: string;
+}
+
+interface StatusBody {
+  profile: string;
+}
+
+interface ReloadBody {
+  profile: string;
+  path: string;
+}
+
 interface DelayHistory {
   delay: number;
 }
@@ -35,7 +48,9 @@ export interface GroupSummary {
   groups: string[]; // 按配置顺序
 }
 
-async function call(filesDir: string, method: http.RequestMethod, path: string, body?: string): Promise<string> {
+/** 非 2xx 时抛出 Error，message 优先用响应里的 message（ArkClash 自有接口的错误格式）。 */
+export async function call(filesDir: string, method: http.RequestMethod, path: string, body?: string,
+  timeoutMs: number = TIMEOUT_MS): Promise<string> {
   const runtime = readRuntime(filesDir);
   if (runtime === undefined) {
     throw new Error('core is not running');
@@ -51,11 +66,17 @@ async function call(filesDir: string, method: http.RequestMethod, path: string, 
       header: header,
       extraData: body,
       connectTimeout: TIMEOUT_MS,
-      readTimeout: TIMEOUT_MS,
+      readTimeout: timeoutMs,
       expectDataType: http.HttpDataType.STRING
     });
     if (response.responseCode < 200 || response.responseCode >= 300) {
-      throw new Error(`controller ${path}: HTTP ${response.responseCode}`);
+      let message: string | undefined;
+      try {
+        message = (JSON.parse(response.result as string) as ErrorBody).message;
+      } catch (e) {
+        message = undefined;
+      }
+      throw new Error(message ?? `controller ${path}: HTTP ${response.responseCode}`);
     }
     return response.result as string;
   } finally {
@@ -72,20 +93,38 @@ export async function getMode(filesDir: string): Promise<OutboundMode> {
   return ((await configs(filesDir))['mode'] as string).toLowerCase() as OutboundMode;
 }
 
-/** 只改运行中的内核；重连后由 Connection 重新下发用户选的模式。 */
+/** 立即改运行中的内核，热切换后也保持（ADR-0010）。下次连接用的值由 Connection 写进 runtime.json。 */
 export async function setMode(filesDir: string, mode: OutboundMode): Promise<void> {
   const body: ModeBody = { mode: mode };
-  await call(filesDir, http.RequestMethod.PATCH, '/configs', JSON.stringify(body));
+  await call(filesDir, http.RequestMethod.PATCH, '/arkclash/configs', JSON.stringify(body));
 }
 
 export async function getAllowLan(filesDir: string): Promise<boolean> {
   return ((await configs(filesDir))['allow-lan'] as boolean | undefined) ?? false;
 }
 
-/** 局域网内其他设备能否连本机的代理端口。只改运行中的内核；重连后由 Connection 重新下发。 */
+/** 局域网内其他设备能否连本机的代理端口。和 setMode 一样，热切换后保持。 */
 export async function setAllowLan(filesDir: string, allow: boolean): Promise<void> {
   const body: Record<string, boolean> = { 'allow-lan': allow };
-  await call(filesDir, http.RequestMethod.PATCH, '/configs', JSON.stringify(body));
+  await call(filesDir, http.RequestMethod.PATCH, '/arkclash/configs', JSON.stringify(body));
+}
+
+/** 正在运行的配置编号（ADR-0010）。 */
+export async function getRunningProfile(filesDir: string): Promise<string> {
+  return (JSON.parse(await call(filesDir, http.RequestMethod.GET, '/arkclash/status')) as StatusBody).profile;
+}
+
+/** 在后台预先下载 path 里的 rule-provider（core/prefetch.go）。 */
+export async function prefetchProfile(filesDir: string, path: string): Promise<void> {
+  const body: Record<string, string> = { 'path': path };
+  await call(filesDir, http.RequestMethod.POST, '/arkclash/prefetch', JSON.stringify(body), 120000);
+}
+
+/** 热切换到 path（配置目录下的文件）；内核解析失败时抛出它的错误信息，原配置不变。 */
+export async function reloadProfile(filesDir: string, profile: string, path: string): Promise<void> {
+  const body: ReloadBody = { profile: profile, path: path };
+  // 新配置里有没下载过的 proxy-provider 时，内核要等它下载完。
+  await call(filesDir, http.RequestMethod.POST, '/arkclash/reload', JSON.stringify(body), 60000);
 }
 
 /** 内核的 HTTP 代理端口，0 = 配置里没开。UI 进程不走 VPN，要经过代理时只能用这个端口。 */
