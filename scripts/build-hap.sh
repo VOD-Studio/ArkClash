@@ -25,6 +25,8 @@ rm -rf "$OUTPUTS"
 
 VERSION="$(sed -nE 's/.*"versionName": *"([^"]+)".*/\1/p' AppScope/app.json5)"
 mkdir -p dist
+# 同版本同模式的旧包也删掉：这次没签名时，留下的旧签名包会被 device.sh 当成这次的装上去。
+rm -f dist/ArkClash-"$VERSION"-"$MODE"-*.hap
 cp "$OUTPUTS/entry-default-unsigned.hap" "dist/ArkClash-$VERSION-$MODE-unsigned.hap"
 if [[ -f "$OUTPUTS/entry-default-signed.hap" ]]; then
   cp "$OUTPUTS/entry-default-signed.hap" "dist/ArkClash-$VERSION-$MODE-signed.hap"

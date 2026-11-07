@@ -15,8 +15,8 @@ geodata: ## 下载 Geo 数据到 rawfile/geo/，随 HAP 打包
 hap: ## 打包 HAP 到 dist/（MODE=debug|release）
 	scripts/build-hap.sh $(MODE)
 
-install: ## 把 dist/ 里最新的签名包装到已连接的设备
-	scripts/device.sh install
+install: ## 把当前版本的签名包装到已连接的设备（MODE=debug|release）
+	scripts/device.sh install $(MODE)
 
 run: install ## 安装并启动
 	scripts/device.sh start
