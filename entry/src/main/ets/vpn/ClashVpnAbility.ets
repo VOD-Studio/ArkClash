@@ -78,7 +78,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     const tunFd = await connection.create(config);
     hilog.info(DOMAIN, TAG, 'tun created, fd=%{public}d', tunFd);
 
-    const geoCopied = installGeoData(this.context, filesDir);
+    const geoCopied = await installGeoData(this.context, filesDir);
     hilog.info(DOMAIN, TAG, 'geo data copied: %{public}d', geoCopied);
 
     const options: CoreOptions = {
