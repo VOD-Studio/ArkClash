@@ -110,7 +110,7 @@ entry/ ── hvigor（CMake 编 NAPI 桥 + ArkTS）──► HAP
 
 ## 后续演进的约束
 
-- **热切换配置**：mihomo 的 `PUT /configs` 会用配置文件里的 controller 和 TUN 设置覆盖我们的，不能直接用。需要由 VPN 进程用同一套 `applyOverrides` 重新加载。UI 到 VPN 进程目前没有命令通道，做这个功能时要先定通道方案，并写一份 ADR。
+- **ArkClash 自有命令和热切换**：方案已定，还没实现。命令挂在 controller 的 `/arkclash/` 路由上，订阅类命令转给 VPN 进程的 ArkTS，订阅更新逻辑由两个进程共用（[ADR-0009](adr/0009-arkclash-commands-on-controller.md)）；热切换由 VPN 进程用同一套 `applyOverrides` 重载，跳过 controller 重建（[ADR-0010](adr/0010-hot-switch-reload-in-vpn.md)）。实现时同步更新本文的运行时结构图、状态归属表、分层表和内核层文件表。
 - **分应用代理**：`VpnConfig` 的 `trustedApplications` 和 `blockedApplications` 互斥。"只代理这些应用"用 trusted 列表，本应用不在列表里，自然被排除；"绕过这些应用"用 blocked 列表，列表里必须始终带上本应用（[ADR-0004](adr/0004-exclude-self-by-uid.md)）。
 - **流量与连接**：用 controller 的 WebSocket（`/traffic`、`/connections`、`/logs`）推送，规则见 `docs/agents/ui.md`「性能」。
 - **IPv6**：要同时给 `VpnConfig` 加 IPv6 地址和路由，给 `tun.go` 加 `Inet6Address`，两边一起改。
