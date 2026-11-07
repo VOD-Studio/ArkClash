@@ -12,6 +12,34 @@
 
 * **ui:** 使用系统异步接口采集界面进程内存，避免在 ArkTS 主线程同步读取 smaps。
 
+## [0.3.0](https://github.com/VOD-Studio/ArkClash/compare/v0.2.0...v0.3.0) (2026-11-07)
+
+
+### 新增
+
+* **ui:** 按 UI Design Kit 重做导航和首页 ([2c5dfa9](https://github.com/VOD-Studio/ArkClash/commit/2c5dfa9044ca52cd7ddedca37612f50bbaa947df))
+* **ui:** 新增沉浸光感页面骨架和通用组件 ([cbbc086](https://github.com/VOD-Studio/ArkClash/commit/cbbc086ef4ef4630900f45857247e3cec34c401a))
+* **ui:** 新增界面访问内核的连接状态、流量推送和查询 ([5419676](https://github.com/VOD-Studio/ArkClash/commit/541967683cd3bb298920e9f5eb221d979c985caa))
+* **ui:** 新增连接统计、内存、服务检测和局域网代理的数据接口 ([62c89e7](https://github.com/VOD-Studio/ArkClash/commit/62c89e7ea52454fb7365def274acfa6eba9a0551))
+* **ui:** 服务状态支持更多服务、品牌图标、排序和显隐 ([7f7b943](https://github.com/VOD-Studio/ArkClash/commit/7f7b943989641ae39ba23499655719f3bf707009))
+* **ui:** 重做首页与导航 ([c9dead4](https://github.com/VOD-Studio/ArkClash/commit/c9dead4e370bf4b670fca9bf1055927b97eb0db4))
+* **ui:** 首页新增内网 IP、服务状态、连接统计和内存四张卡 ([ed809c5](https://github.com/VOD-Studio/ArkClash/commit/ed809c596a8257a3279f86c7d211a58dedd26d01))
+
+
+### 修复
+
+* **core:** 修复出站回环导致的内存暴涨 ([11f12fe](https://github.com/VOD-Studio/ArkClash/commit/11f12fe49b673e5390119ca38eadf0e4ede0e04a))
+* **core:** 绑定出站物理网络以阻止 VPN 回环和内存暴涨 ([57adf32](https://github.com/VOD-Studio/ArkClash/commit/57adf32891037f6c45904e4433e8611a5a478db7))
+* **ui:** 修正服务品牌图标与 AI 排序 ([8c21649](https://github.com/VOD-Studio/ArkClash/commit/8c2164935e8075ebf83b298f3cb28babb8332356))
+* **ui:** 修正服务展示与底栏滚动交互 ([ef321c2](https://github.com/VOD-Studio/ArkClash/commit/ef321c23d77028a3dc5f3445676aebd1a6f53079))
+* **ui:** 忽略回弹引起的底栏方向变化 ([8bc8b18](https://github.com/VOD-Studio/ArkClash/commit/8bc8b18c3d800464307dc934a68551ab908a45d8))
+* **ui:** 页面往下滚时收起页签栏、展开连接条 ([1fc9b04](https://github.com/VOD-Studio/ArkClash/commit/1fc9b04deede010d9528c520b3049a5e6849ac8f))
+
+
+### 性能
+
+* **ui:** 异步采集界面进程内存 ([7d3a71a](https://github.com/VOD-Studio/ArkClash/commit/7d3a71a87a1f17d8d8e08584f65832dfcbc91577))
+
 ## [0.2.0](https://github.com/VOD-Studio/ArkClash/compare/v0.1.2...v0.2.0) (2026-11-07)
 
 
