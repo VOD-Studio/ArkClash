@@ -53,7 +53,7 @@ export class ConnectionStats {
   }
 }
 
-/** 内核（Go 运行时）当前占用的内存，字节。 */
+/** 内核所在 VPN 进程的 RSS，字节；不等同于 Go 堆大小。 */
 @ObservedV2
 export class MemoryStats {
   @Trace coreBytes: number = 0;

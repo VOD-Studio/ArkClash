@@ -15,10 +15,11 @@
 
 ## 2. 内核自己的流量绕回 VPN
 
-- **现象**：内核的 DNS 查询超时、下载 Geo 数据失败，看上去像没网。
-- **原因**：`VpnConnection.protectProcessNet()` 只对经过 libc 创建的 socket 生效，Go 直接发系统调用，绕过了 libc。
-- **做法**：`VpnConfig.blockedApplications` 填本应用的包名，按 UID 在内核路由层面整个排除。副作用是 App 自己的流量（比如下载订阅）走直连。
-- **复查**：改 VpnConfig 后，确认内核日志里没有 DNS 超时，直连和代理都能连上。
+- **现象**：DNS 查询超时、连接不断增加，VPN 进程内存迅速超过 1 GiB。一次真机快照里有 20,284 条指向默认 DoT 上游 853 端口的 TUN 连接、40,695 个 goroutine；GC 仍在运行。
+- **原因**：`VpnConnection.protectProcessNet()` 和 `blockedApplications` 不足以保护 Go 直接通过系统调用创建的 socket。内核的 DIRECT 出站再次进入 TUN，gVisor 接受握手后又建立一条 DIRECT 出站，形成递归。
+- **做法**：`core/socket.go` 在初始化时设置 mihomo 的 `dialer.DefaultSocketHook`，在 TCP connect / UDP send 前，通过 `OH_NetConn_GetDefaultNet` 和 `OH_NetConn_BindSocket` 把 socket 绑定当前默认物理网络。查询或绑定失败就返回错误，不放行未保护的 socket。每次获取当前网络，不缓存会在 Wi-Fi/蜂窝切换后失效的 netId。
+- **界面进程**：继续保留 `protectProcessNet()` 和本应用的 `blockedApplications`，供 ArkTS/libc 流量直连；它们不能替代 Go 的逐 socket 保护。决定见 [ADR-0008](../adr/0008-bind-core-sockets-to-physical-network.md)。
+- **复查**：同一进程持续连接并通过浏览器访问代理站点；观察 RSS、活动连接和 TUN/853 连接是否持续增长，不能只以一次网页能打开为准。受控实验中仅开启 socket 绑定，goroutine 在约 15 秒内从 40,695 降到 73，未使用定时 GC 或内存上限。
 
 ## 3. TUN 启动失败：fstat 被拒
 
@@ -31,7 +32,7 @@
 
 - **现象**：UDP 直连报 `route ip+net: netlinkrib: permission denied`。
 - **原因**：任何需要列网卡的功能都要用 netlink。这里是 mihomo 的回环检测在检查 UDP 目标是不是本机 IP。
-- **做法**：`core/loopback.go` 通过 `go:linkname` 关闭回环检测（Clash Meta for Android 也是关掉的）。因为第 2 条已经把本应用排除在 VPN 外，不会形成回环。
+- **做法**：`core/loopback.go` 通过 `go:linkname` 关闭回环检测（Clash Meta for Android 也是关掉的）。出站绕过 VPN 依赖第 2 条的逐 socket 物理网络绑定，不能只依赖应用排除名单。
 - **影响**：`auto-route`、`auto-detect-interface`、按网卡绑定出站这类依赖网卡列表的功能都用不了，`core/tun.go` 里保持关闭。
 - **预期内的警告**：`[TUN] get tun name failed for fd`（ioctl 被拒），无害。
 

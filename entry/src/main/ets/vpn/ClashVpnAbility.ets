@@ -54,7 +54,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
 
     const connection = vpnExtension.createVpnConnection(this.context);
     this.connection = connection;
-    // The core's outbound sockets live in this process; keep them off the VPN.
+    // ArkTS/libc 的出站用进程保护；Go 的 socket 在 core/socket.go 单独绑定物理网络。
     await connection.protectProcessNet();
 
     const config: vpnExtension.VpnConfig = {
@@ -71,8 +71,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       }],
       dnsAddresses: [TUN_DNS],
       mtu: TUN_MTU,
-      // protectProcessNet() 只对经过 libc 创建的 socket 生效，Go 直接发系统调用，
-      // 内核的出站连接会被绕回 VPN。按 UID 把本应用整个排除掉，在内核路由层面生效。
+      // 界面进程保持直连；查询代理出口等功能显式使用内核的 HTTP 代理端口。
       blockedApplications: [this.context.applicationInfo.name]
     };
     const tunFd = await connection.create(config);
