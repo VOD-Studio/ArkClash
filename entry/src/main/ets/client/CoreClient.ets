@@ -3,7 +3,7 @@
 import { common, Want } from '@kit.AbilityKit';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { http, vpnExtension } from '@kit.NetworkKit';
-import { CONTROLLER_ADDRESS, profilePath, readRuntime, takeCoreError, writeRuntime } from './Runtime';
+import { CONTROLLER_ADDRESS, profilePath, readRuntime, takeCoreError, writeRuntime } from '../shared/Runtime';
 
 // Generous until Geo data is bundled: the first start may download it.
 const READY_TIMEOUT_MS = 30000;

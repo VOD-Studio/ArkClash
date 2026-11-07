@@ -1,0 +1,18 @@
+name: 功能建议
+description: 新功能或改进
+title: "[scope] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决什么问题
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议的做法
+  - type: textarea
+    id: impact
+    attributes:
+      label: 对冷启动、耗电、连接速度、稳定性可能的影响

@@ -2,6 +2,10 @@
 
 原生 HarmonyOS NEXT 代理客户端：ArkTS/ArkUI 界面，mihomo 内核（Go，交叉编译成 `libclash.so`）。交互参考 FlClash，许可证 GPL-3.0。
 
+## 第一次接手
+
+刚 fork 本仓库、或在一台新电脑上第一次搭环境时，按 `docs/agents/fork-setup.md` 一步步完成。改 `.github/`、CI 配置或发版流程前读 `docs/ci.md`。
+
 ## 产品底线
 
 项目存在的理由是比同类客户端快、省电、稳。四个指标在同一台真机上和同类客户端对比：冷启动到可操作 < 500ms、开着代理待机 8 小时的耗电、新连接建立延迟、24 小时内核不重启。改动会影响这些指标时，交付里附上测量方法和数字。
@@ -10,30 +14,22 @@
 - 数据靠推送：流量、连接、日志走内核的 WebSocket，页面不可见就退订。轮询只用于有上限的一次性就绪检测。
 - ArkTS 主线程只做轻活：文件、网络、内核调用都走异步（Promise / NAPI async work）。
 
-## 进程与代码边界
+## 架构
 
-| 位置 | 职责 |
-|---|---|
-| `entry/src/main/ets/pages/`、`common/` | UI 进程（EntryAbility），通过 `CoreClient` 控制内核 |
-| `entry/src/main/ets/vpn/` | VPN 进程（ClashVpnAbility），持有 TUN 和内核；VPN 开着时系统保活这个进程 |
-| `entry/src/main/cpp/` | NAPI 桥，start/stop 在工作线程执行 |
-| `core/` | Go 封装层，C API 在 `core/arkclash.h`，和 `lib.go` 一起改 |
+UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo controller 和 `filesDir` 文件通信。新增目录、跨进程改动、调整依赖方向前读 `docs/architecture.md`；做出新的架构取舍时在 `docs/adr/` 写一份决策记录。ArkClash 接管的配置项（TUN、controller、进程查找、DNS 开关）统一在 `core/lib.go` 的 `applyOverrides` 里强制，订阅里写什么都会被覆盖。
 
-两个进程只走两条通道：mihomo external-controller（`127.0.0.1:19090` + secret），以及 `filesDir` 下的文件（见 `common/Runtime.ets`）。ArkClash 接管的配置项（TUN、controller、进程查找、DNS 开关）统一在 `core/lib.go` 的 `applyOverrides` 里强制，订阅里写什么都会被覆盖。
+## 构建与真机验证
 
-## 构建
+所有构建、检查、装机都通过根目录的 `Makefile`，`make help` 列出全部目标，CI 也只调用这些目标。脚本在 `scripts/`，工具路径由 `scripts/env.sh` 统一定位（本地用 DevEco Studio，CI 用 Command Line Tools）。
 
-- 内核只用 `scripts/build-core.sh` 构建。它会准备打过补丁的 Go 工具链和依赖（放在 `.toolchain/`），交叉编译，并检查产物里没有 initial-exec TLS 重定位。
-- Geo 数据用 `scripts/fetch-geodata.sh` 下载到 `rawfile/geo/`，随 HAP 打包。
-- HAP：`hvigorw assembleHap --mode module -p product=default -p buildMode=debug`，`DEVECO_SDK_HOME` 指向 DevEco Studio 的 `Contents/sdk`。
+- 内核只用 `make core` 构建：它准备打过补丁的 Go 工具链和依赖（`.toolchain/`），交叉编译，并检查产物里没有 initial-exec TLS 重定位。Go 版本固定在 `.go-version`。
+- 首次构建先 `make geodata`，把 Geo 数据内置进 HAP。
+- 提交前跑 `make lint`，包括 ArkTS 分层规则检查（`scripts/check-arch.py`）。
 - `build-profile.json5` 的 SDK 版本号：API 26 起写 `"26.0.0"`，更早的写 `"6.0.2(22)"` 这种带括号的格式。
 
-## 真机验证
+动到内核、NAPI 或 VPN 的改动，以真机跑通为完成标准：`make hap && make run`，连接后用浏览器打开一个被墙的站点，并在 `make log` 里看到这条连接命中了代理节点。
 
-动到内核、NAPI 或 VPN 的改动，以真机跑通为完成标准：装机、连接、用浏览器打开一个被墙的站点，并在内核日志里看到这条连接命中了代理节点。
-
-- 装机：`hdc install -r entry/build/default/outputs/default/entry-default-signed.hap`，启动：`hdc shell aa start -a EntryAbility -b com.vodstudio.arkclash`。
-- 日志：`hdc hilog | grep -E "ArkClashCore|ClashVpnAbility"`，应用的 hilog domain 是 `0x0A11`。
+- 点界面自己来：`hdc shell uitest dumpLayout` 找按钮坐标，`uitest uiInput click x y` 点击；打开网页用 `aa start -A ohos.want.action.viewData -U <网址>`。布局文件里有输入框中的订阅链接，只解析 Button 节点，设备上和本地的布局文件用完立即删除。
 - 崩溃日志只按文件名精确拉取 ArkClash 自己的（`/data/log/faultlog/faultlogger/cppcrash-com.vodstudio.arkclash-*`）。设备上其他应用的日志是用户隐私。
 - 符号化：去掉 `-s -w` 另编一份到临时目录，用 `llvm-symbolizer --obj` 解析崩溃地址。
 

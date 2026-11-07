@@ -4,7 +4,7 @@ import { Want } from '@kit.AbilityKit';
 import { vpnExtension, VpnExtensionAbility } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import core from 'libarkclash.so';
-import { CONTROLLER_ADDRESS, readRuntime, writeCoreError } from '../common/Runtime';
+import { CONTROLLER_ADDRESS, readRuntime, writeCoreError } from '../shared/Runtime';
 import { installGeoData } from './GeoData';
 
 const DOMAIN = 0x0A11;
@@ -78,7 +78,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     const tunFd = await connection.create(config);
     hilog.info(DOMAIN, TAG, 'tun created, fd=%{public}d', tunFd);
 
-    const geoCopied = installGeoData(this.context, filesDir);
+    const geoCopied = await installGeoData(this.context, filesDir);
     hilog.info(DOMAIN, TAG, 'geo data copied: %{public}d', geoCopied);
 
     const options: CoreOptions = {
@@ -89,7 +89,9 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       secret: runtime.secret,
       stack: runtime.stack
     };
-    await core.start(JSON.stringify(options));
+    // 先赋给带类型的变量再 await：codelinter 解析不到 .so 的类型声明，直接 await 会误报 await-thenable。
+    const started: Promise<void> = core.start(JSON.stringify(options));
+    await started;
     hilog.info(DOMAIN, TAG, 'core %{public}s started', core.version());
   }
 }

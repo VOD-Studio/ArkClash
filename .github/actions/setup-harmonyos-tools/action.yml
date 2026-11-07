@@ -1,0 +1,44 @@
+name: 准备 HarmonyOS Command Line Tools
+description: 从私有仓库的 Release 下载 Command Line Tools（打 HAP、codelinter 用），按版本缓存，并设置 HARMONYOS_TOOLS_HOME
+inputs:
+  repo:
+    description: 存放 Command Line Tools 的私有仓库（owner/name）
+    required: true
+  tag:
+    description: 该仓库里对应版本的 Release tag
+    required: true
+  token:
+    description: 能读这个私有仓库的 token
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: dir
+      shell: bash
+      env:
+        TAG: ${{ inputs.tag }}
+      run: echo "path=$RUNNER_TOOL_CACHE/harmonyos-tools/$TAG" >> "$GITHUB_OUTPUT"
+    - id: cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.dir.outputs.path }}
+        # 带上下载脚本的哈希：脚本（比如裁剪逻辑）一改，缓存自动重建。
+        key: harmonyos-tools-${{ runner.os }}-${{ inputs.tag }}-${{ hashFiles('scripts/ci/fetch-harmonyos-tools.sh') }}
+    # 下载加解压峰值约 10GB，先清掉官方镜像里用不到的 Android SDK、.NET、Haskell。
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc && df -h "$RUNNER_TOOL_CACHE"
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ inputs.repo }}
+        TAG: ${{ inputs.tag }}
+        OUT: ${{ steps.dir.outputs.path }}
+      run: |
+        home="$(scripts/ci/fetch-harmonyos-tools.sh "$REPO" "$TAG" "$OUT" | tail -1)"
+        echo "$home" > "$OUT/.tools-home"
+    - shell: bash
+      env:
+        OUT: ${{ steps.dir.outputs.path }}
+      run: echo "HARMONYOS_TOOLS_HOME=$(cat "$OUT/.tools-home")" >> "$GITHUB_ENV"

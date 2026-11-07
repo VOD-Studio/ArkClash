@@ -2,8 +2,9 @@
   "app": {
     "bundleName": "com.vodstudio.arkclash",
     "vendor": "VOD-Studio",
-    "versionCode": 1000000,
-    "versionName": "0.1.0",
+    // 构建时由 hvigorfile.ts 按 versionName 重算，这里的值不生效。
+    "versionCode": 1000,
+    "versionName": "0.1.0", // x-release-please-version
     "icon": "$media:layered_image",
     "label": "$string:app_name"
   }

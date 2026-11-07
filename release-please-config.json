@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "simple",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "bump-minor-pre-major": true,
+  "bootstrap-sha": "c5025cd614e34d7511c4c1b2e108b3933113397a",
+  "packages": {
+    ".": {
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "AppScope/app.json5"
+        }
+      ],
+      "changelog-sections": [
+        { "type": "feat", "section": "新增" },
+        { "type": "fix", "section": "修复" },
+        { "type": "perf", "section": "性能" },
+        { "type": "refactor", "section": "重构" },
+        { "type": "docs", "section": "文档", "hidden": true },
+        { "type": "build", "section": "构建", "hidden": true },
+        { "type": "ci", "section": "CI", "hidden": true },
+        { "type": "test", "section": "内部维护", "hidden": true },
+        { "type": "style", "section": "内部维护", "hidden": true },
+        { "type": "chore", "section": "内部维护", "hidden": true }
+      ]
+    }
+  }
+}

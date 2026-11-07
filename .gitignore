@@ -28,3 +28,10 @@
 
 # Geo 数据（scripts/fetch-geodata.sh 下载）
 /entry/src/main/resources/rawfile/geo/
+
+# 系统与编辑器
+.DS_Store
+/.vscode/
+
+# 发版产物（make release）
+/dist/

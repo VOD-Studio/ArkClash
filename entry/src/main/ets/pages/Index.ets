@@ -1,8 +1,8 @@
 // Milestone 1 page: just enough UI to prove the core works on a device.
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
-import { probeCore, startCore, stopCore } from '../common/CoreClient';
-import { downloadProfile, hasProfile } from '../common/Profiles';
+import { probeCore, startCore, stopCore } from '../client/CoreClient';
+import { downloadProfile, hasProfile } from '../features/profiles/Profiles';
 
 const PREF_URL = 'subscriptionUrl';
 

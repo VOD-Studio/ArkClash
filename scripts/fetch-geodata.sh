@@ -16,4 +16,6 @@ for name in geoip.metadb geosite.dat; do
     -o "$OUT/$name.tmp" "$BASE/$name"
   mv "$OUT/$name.tmp" "$OUT/$name"
 done
+# 版本标记：GeoData.ets 拿它和设备上已复制的比对，内容变了才重新复制。
+(cd "$OUT" && shasum -a 256 geoip.metadb geosite.dat) > "$OUT/VERSION"
 ls -lh "$OUT"

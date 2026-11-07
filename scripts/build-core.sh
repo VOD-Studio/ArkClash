@@ -12,6 +12,12 @@ if [[ ! -x "$LLVM/aarch64-unknown-linux-ohos-clang" ]]; then
   exit 1
 fi
 
+# 补丁按 .go-version 里的 Go 版本制作，版本不同时补丁可能打不上。
+WANT_GO="$(cat "$ROOT/.go-version")"
+if [[ "$(go env GOVERSION)" != "go$WANT_GO" ]]; then
+  echo "警告：本机是 $(go env GOVERSION)，项目固定 go$WANT_GO（.go-version）" >&2
+fi
+
 # Stock Go cannot produce a c-shared library that musl can dlopen (golang/go#54805).
 # Build with a private copy of the local Go toolchain carrying go-ohos.patch.
 GO_VERSION="$(go env GOVERSION)"
@@ -41,6 +47,8 @@ mkdir -p "$OUT"
 PATCHED_DIR="$ROOT/.toolchain/patched"
 rm -rf "$PATCHED_DIR"
 mkdir -p "$PATCHED_DIR"
+# go list -m 只在模块已下载时才返回目录，全新环境（CI）要先下载。
+"$GO" mod download github.com/metacubex/gvisor
 GVISOR_DIR="$("$GO" list -m -f '{{.Dir}}' github.com/metacubex/gvisor)"
 cp -R "$GVISOR_DIR" "$PATCHED_DIR/gvisor"
 chmod -R u+w "$PATCHED_DIR/gvisor"
@@ -62,7 +70,10 @@ rm -f "$OUT/libclash.h"
 
 # musl rejects initial-exec TLS relocations in dlopen'ed libraries.
 # 允许 TLSDESC（general-dynamic），只拦 initial-exec 用的 TPREL。
-if "$LLVM/llvm-readelf" -r "$OUT/libclash.so" | grep -q "R_AARCH64_TLS_TPREL"; then
+# 先把输出完整读进变量再查：直接接管道时 grep -q 命中就退出，readelf 写不进去而失败，
+# pipefail 下整条管道算失败，if 反而放行。
+RELOCS="$("$LLVM/llvm-readelf" -r "$OUT/libclash.so")"
+if grep -q "R_AARCH64_TLS_TPREL" <<<"$RELOCS"; then
   echo "libclash.so still has TLS relocations; is go-ohos.patch applied?" >&2
   exit 1
 fi
