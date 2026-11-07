@@ -95,11 +95,6 @@ jobs:
           restore-keys: hap-sizes-main-
       - name: 检查 HAP
         run: |
-          # 补传早于这个检查的旧 tag 时，tag 里还没有这个脚本。
-          if [[ ! -f scripts/ci/check-hap.py ]]; then
-            echo "这个版本早于 HAP 检查，跳过" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
           shopt -s nullglob
           haps=(dist/*-"$MODE"-unsigned.hap)
           python3 scripts/ci/check-hap.py "${haps[0]}" --baseline .ci/hap-sizes.json --write .ci/hap-sizes.json >> "$GITHUB_STEP_SUMMARY"

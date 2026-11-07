@@ -144,7 +144,7 @@ gh run download -R VOD-Studio/ArkClash -n hap-debug $(gh run list -R VOD-Studio/
    - `ArkClash-<版本>-unsigned.hap`：给其他人用自己的华为账号签名后安装。
    - `ArkClash-<版本>-debug-signed.hap`：同一次构建、用维护者的调试证书签名，维护者设备直接安装。
    - `SHA256SUMS`，以及两个安装包的来源证明。发版说明末尾会自动补上校验方法。
-4. 某次上传失败时，在 Actions 里手动运行 Release，填入 tag 补传。补传用的是当前分支的发布脚本，安装包本身仍从 tag 构建。勾选 dry-run 可以只构建不上传。
+4. 某次上传失败时，在 Actions 里手动运行 Release 补传：「Use workflow from」选这个 tag 本身，再填同一个 tag。这样 workflow、脚本和代码都来自同一个提交；选错了会直接报错。勾选 dry-run 时可以在任意分支上运行，只构建不上传，用来测试发版流程。
 
 `versionCode` 在构建时由 `versionName` 算出（见 `hvigorfile.ts`），不用手动改。
 

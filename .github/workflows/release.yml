@@ -28,17 +28,39 @@ permissions:
   contents: read
 
 jobs:
+  # 补传时要在 tag 本身上运行（Actions 页面的「Use workflow from」选这个 tag），
+  # 这样 workflow、action、脚本和代码都来自同一个提交，不会因为后来改了 CI 而对不上。
+  # dry-run 可以在任意分支上运行，用来测试发版流程。
+  check:
+    name: 检查触发方式
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          REF: ${{ github.ref }}
+          TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          if [[ "$DRY_RUN" != "true" && "$REF" != "refs/tags/$TAG" ]]; then
+            echo "::error::补传 $TAG 时，「Use workflow from」要选 $TAG 本身（现在是 ${REF}）"
+            exit 1
+          fi
+
   core:
+    needs: check
+    # 被 release-please 调用时 check 会跳过，照常构建。
+    if: ${{ !cancelled() && needs.check.result != 'failure' }}
     uses: ./.github/workflows/core.yml
     with:
-      ref: ${{ inputs.tag }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || inputs.tag }}
       fresh: true
 
   hap:
     needs: core
     uses: ./.github/workflows/hap.yml
     with:
-      ref: ${{ inputs.tag }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || inputs.tag }}
       mode: release
       retention-days: 30
       fresh: true
@@ -60,7 +82,6 @@ jobs:
       TAG: ${{ inputs.tag }}
       DRY_RUN: ${{ inputs.dry-run || false }}
     steps:
-      # 发布脚本用当前分支的版本，补传旧 tag 时也能用上发布流程的修复；安装包本身来自 tag。
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
