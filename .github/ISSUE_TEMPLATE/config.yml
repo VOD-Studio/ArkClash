@@ -1,0 +1,6 @@
+# 只允许用模板提 issue，模板会自动打上分诊标签（见 docs/agents/triage-labels.md）。
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞
+    url: https://github.com/VOD-Studio/ArkClash/security/advisories/new
+    about: 私密报告，不要公开提 issue

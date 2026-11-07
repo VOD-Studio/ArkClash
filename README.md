@@ -1,65 +1,87 @@
 # ArkClash
 
-原生 HarmonyOS NEXT 代理客户端，内核为 [mihomo](https://github.com/MetaCubeX/mihomo)，交互参考 [FlClash](https://github.com/chen08209/FlClash)。
+[![CI](https://github.com/VOD-Studio/ArkClash/actions/workflows/ci.yml/badge.svg)](https://github.com/VOD-Studio/ArkClash/actions/workflows/ci.yml)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-## 目标
+原生 HarmonyOS NEXT 代理客户端。界面用 ArkTS/ArkUI 编写，内核是 [mihomo](https://github.com/MetaCubeX/mihomo)，交互参考 [FlClash](https://github.com/chen08209/FlClash)。
 
-| 问题 | 做法 |
+> **早期版本**：目前只支持一个订阅，以及连接和断开。代理组、节点选择、流量和日志等功能还在开发中。
+
+## 为什么做
+
+目标是比同类客户端打开更快、更省电、更稳定、连接更快。
+
+- 内核运行在系统的 VPN 扩展进程里，界面被系统回收也不影响代理。
+- 界面进程不加载内核，打开应用时不用等内核启动。
+- 内置 Geo 数据，第一次连接不用现场去 GitHub 下载。
+- 默认使用 fake-ip DNS，关闭手机上用不到的进程查找。
+
+衡量标准是在同一台手机上和同类客户端对比四项：冷启动到可操作的耗时、开着代理待机 8 小时的耗电、新连接的建立延迟、内核连续 24 小时不重启。测量方法和数据会随版本公布。
+
+## 当前状态
+
+- 下载一个 Clash / mihomo 格式的订阅。
+- 连接后，除 ArkClash 自己以外，所有应用的流量都按订阅里的规则分流。
+- 在 Pura 70 Ultra（API 26）上验证过，平板和二合一设备还没有测试。
+
+开发计划和进度见 [Issues](https://github.com/VOD-Studio/ArkClash/issues)。
+
+## 安装
+
+需要 HarmonyOS 6.0.2（API 22）及以上的 ARM64 设备。
+
+HarmonyOS 只能安装签过名的应用，目前还没有面向普通用户的安装渠道。[Releases](https://github.com/VOD-Studio/ArkClash/releases) 里每个版本有两个安装包：
+
+| 文件 | 适用于 |
 |---|---|
-| 打开慢 | UI 进程不加载内核，先渲染缓存状态，内核状态异步获取 |
-| 费电 | 不轮询；关闭手机上无意义的进程查找；按需订阅流量/连接 |
-| 不稳定 | 内核跑在 VpnExtensionAbility 进程，UI 被杀不影响代理；TUN 由我们自己持有，切换配置不重建 |
-| 连接慢 | DNS 默认 fake-ip；协议栈用真机数据选默认值 |
+| `ArkClash-<版本>-unsigned.hap` | 有华为开发者账号的用户：用自己的调试证书签名后安装，方法见下面的「从源码构建」 |
+| `ArkClash-<版本>-debug-signed.hap` | 维护者的设备：用维护者的调试证书签名，只能装在证书里登记过的设备上 |
 
-每个版本在同一台设备上与同类客户端对比：冷启动耗时、8 小时待机耗电、新连接延迟、24 小时内核不重启。
+下载后可以用同一个 Release 里的 `SHA256SUMS` 校验文件。
 
-## 架构
+## 使用
 
-```
-UI 进程 (EntryAbility, ArkUI)
-  │  HTTP 127.0.0.1:19090 + secret（mihomo external-controller）
-  ▼
-VPN 进程 (ClashVpnAbility, VpnExtensionAbility)
-  ├─ vpnExtension: protectProcessNet() + create() → TUN fd
-  └─ libarkclash.so (NAPI) → libclash.so (mihomo, Go c-shared)
-       └─ sing-tun gVisor 栈读写 TUN fd
-```
+1. 打开 ArkClash，粘贴订阅链接，点「下载订阅」。
+2. 点「连接」。第一次连接时系统会弹出 VPN 授权，选择允许。
+3. 显示「已连接」后即生效。更新订阅后，断开再连接一次。
 
-两进程通过应用 `filesDir` 下的 `runtime.json` 共享配置路径与 controller secret。
+## 从源码构建
 
-| 目录 | 内容 |
-|---|---|
-| `core/` | Go 封装层，导出 C API（`arkclash.h`） |
-| `entry/src/main/cpp/` | NAPI 桥接，start/stop 在工作线程执行 |
-| `entry/src/main/ets/vpn/` | VpnExtensionAbility，持有 TUN 与内核 |
-| `entry/src/main/ets/common/` | UI 侧控制、订阅下载、两进程共享状态 |
-
-## 构建
-
-依赖：DevEco Studio（HarmonyOS SDK API 26）、Go（版本见 `.go-version`）。设备需 API 22+。
+需要 DevEco Studio（带 HarmonyOS SDK API 26）、Go（版本见 `.go-version`）和 Python 3。
 
 ```sh
-make geodata   # 首次：下载 Geo 数据，随 HAP 打包
-make core      # 交叉编译 mihomo 内核（自动准备打过补丁的 Go 工具链）
-make hap       # 打包 HAP 到 dist/（MODE=release 打发布版）
-make run       # 装到已连接的设备并启动
-make log       # 跟踪内核与 VPN 日志
-make lint      # 代码检查
+make geodata   # 下载 Geo 数据，打包进 HAP
+make core      # 交叉编译 mihomo 内核
+make hap       # 打包 HAP 到 dist/
+make run       # 安装到连着的手机并启动
 ```
 
-签名：用 DevEco Studio 打开项目，在 File → Project Structure → Signing Configs 里用华为账号自动签名。签名配置只留在本机，不要提交。
+安装到手机前需要签名：用 DevEco Studio 打开项目，在 File → Project Structure → Signing Configs 里用华为账号自动签名。`make help` 列出全部命令。第一次搭环境时，按 [docs/agents/fork-setup.md](docs/agents/fork-setup.md) 逐步完成。
 
-## 进度
+## 文档
 
-- [x] M1：mihomo 交叉编译、NAPI 桥接、VPN 扩展、订阅下载、连接/断开
-- [x] M1 真机验证（Pura 70 Ultra，API 26）
-- [ ] 配置热切换（不重建 TUN）
-- [ ] 代理组 / 节点选择 / 测速
-- [ ] 连接、日志、流量（推送式）
-- [ ] 多订阅管理与自动更新
-- [ ] IPv6、分应用代理
-- [x] 内置 Geo 数据，避免首次启动下载
+| 文档 | 内容 |
+|---|---|
+| [架构](docs/architecture.md) | 进程划分、连接流程、目录分层 |
+| [决策记录](docs/adr/) | 关键技术取舍和理由 |
+| [CI/CD](docs/ci.md) | 流水线、密钥配置、发版流程 |
+| [AGENTS.md](AGENTS.md) | 开发规范，人和 AI agent 共用 |
+
+## 参与贡献
+
+欢迎提 issue 和 PR，先读[贡献指南](CONTRIBUTING.md)。安全漏洞请按[安全策略](SECURITY.md)私密报告。
+
+## 致谢
+
+- [mihomo](https://github.com/MetaCubeX/mihomo)：代理内核
+- [FlClash](https://github.com/chen08209/FlClash)：交互设计参考
+- [sing-tun](https://github.com/SagerNet/sing-tun) 和 [gVisor](https://github.com/google/gvisor)：TUN 协议栈
+- [meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)：内置的 Geo 数据
 
 ## 许可证
 
-GPL-3.0，与 mihomo、FlClash 一致。
+[GPL-3.0](LICENSE)
+
+## 免责声明
+
+本项目仅用于学习和研究网络技术。请遵守你所在地区的法律法规，使用本软件产生的后果由使用者自行承担。
