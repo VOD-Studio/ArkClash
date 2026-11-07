@@ -2,8 +2,7 @@
 # 把工作区里指定文件的改动提交到机器人分支，开（或更新）PR，再手动触发 CI。
 # 用法：open-bot-pr.sh <分支> <提交信息> <PR 正文> <文件...>，GH_TOKEN 需要 contents、pull-requests、actions 写权限。
 #
-# GITHUB_TOKEN 开的 PR 不会触发 pull_request 事件，但 workflow_dispatch 例外：
-# 手动触发后「CI 通过」检查挂在 PR 的最新提交上，满足 main 的合并规则，不需要个人 token。
+# CI 由 dispatch-bot-ci.sh 手动触发，原因见那个脚本。
 set -euo pipefail
 
 BRANCH="$1"
@@ -28,4 +27,4 @@ if [[ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].num
 else
   gh pr edit "$BRANCH" --title "$MESSAGE" --body "$BODY"
 fi
-gh workflow run ci.yml --ref "$BRANCH"
+scripts/ci/dispatch-bot-ci.sh "$(gh repo view --json nameWithOwner --jq .nameWithOwner)" "$BRANCH"
