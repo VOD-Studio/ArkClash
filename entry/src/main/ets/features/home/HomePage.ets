@@ -655,27 +655,19 @@ export struct HomePage {
     .margin({ bottom: 8 })
   }
 
-  // 品牌图标放在白底圆里；没有图标的服务用文字头像。深色品牌色在深色模式下看不清，改用正文色。
+  // 固定白底隔离深色主题，保留产品标志的原始配色，不用统一染色重画品牌。
   @Builder
   ServiceIcon(id: string, size: number) {
     Stack() {
-      if (serviceInfo(id)?.icon !== undefined) {
-        Image(serviceInfo(id)?.icon)
-          .width(size * 0.55)
-          .height(size * 0.55)
-          .fillColor(this.brandColor(id))
-          .objectFit(ImageFit.Contain)
-      } else {
-        Text(serviceInfo(id)?.short ?? '')
-          .fontSize(size * 0.38)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.brandColor(id))
-      }
+      Image(serviceInfo(id)?.icon)
+        .width(size * 0.55)
+        .height(size * 0.55)
+        .objectFit(ImageFit.Contain)
     }
     .width(size)
     .height(size)
     .borderRadius(size / 2)
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor($r('app.color.service_icon_background'))
   }
 
   // 抽屉：全部服务的检测结果；长按拖动排序，开关决定是否显示在首页。
@@ -1206,14 +1198,6 @@ export struct HomePage {
 
   private downServices(): number {
     return this.serviceLayout.visibleIds.filter((id: string) => (this.serviceDelay(id) ?? 0) < 0).length;
-  }
-
-  private brandColor(id: string): ResourceColor {
-    const hex = serviceInfo(id)?.color ?? '#000000';
-    const v = parseInt(hex.substring(1), 16);
-    // 相对亮度太低（黑色、深灰的品牌色）就跟随正文色，深浅色模式都看得清。
-    const luminance = (0.299 * ((v >> 16) & 0xff) + 0.587 * ((v >> 8) & 0xff) + 0.114 * (v & 0xff)) / 255;
-    return luminance < 0.2 ? $r('sys.color.font_primary') : hex;
   }
 
   private statText(n: number): string {
