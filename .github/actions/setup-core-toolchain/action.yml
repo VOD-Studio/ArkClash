@@ -1,0 +1,42 @@
+name: 准备内核工具链
+description: 安装 .go-version 指定的 Go，并从公开的 OpenHarmony SDK 取出 Linux 版 NDK（不需要华为账号），设置 OHOS_SDK。内核构建、漏洞扫描、CodeQL 共用
+inputs:
+  fresh:
+    description: 不读写缓存，全部重新下载（每周的无缓存构建和发版用）
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: .go-version
+        cache: ${{ inputs.fresh != 'true' }}
+        cache-dependency-path: core/go.sum
+    - id: ndk
+      shell: bash
+      # NDK 的文件名随 OpenHarmony 发行版变化，升级时两个一起改，见 docs/ci.md「升级工具链」。
+      run: |
+        {
+          echo "release=7.0-Release"
+          echo "member=ohos-sdk/linux/native-linux-x64-26.0.0.38-Beta.zip"
+          echo "path=$RUNNER_TOOL_CACHE/ohos-ndk/7.0-Release"
+        } >> "$GITHUB_OUTPUT"
+    - id: cache
+      if: inputs.fresh != 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.ndk.outputs.path }}
+        # 带上下载脚本的哈希：脚本一改，缓存自动重建。
+        key: ohos-ndk-${{ runner.os }}-${{ steps.ndk.outputs.member }}-${{ hashFiles('scripts/ci/fetch-ohos-ndk.sh') }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        RELEASE: ${{ steps.ndk.outputs.release }}
+        MEMBER: ${{ steps.ndk.outputs.member }}
+        OUT: ${{ steps.ndk.outputs.path }}
+      run: scripts/ci/fetch-ohos-ndk.sh "$RELEASE" "$MEMBER" "$OUT"
+    - shell: bash
+      env:
+        OUT: ${{ steps.ndk.outputs.path }}
+      # 写入的是 runner 工具缓存里的路径，不来自 PR 内容等外部输入。
+      run: echo "OHOS_SDK=$OUT" >> "$GITHUB_ENV" # zizmor: ignore[github-env]

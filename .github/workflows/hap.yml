@@ -1,0 +1,118 @@
+name: HAP
+
+# 打包 HAP 并检查内容和体积，供 CI、发版和每周任务复用。需要先跑 core.yml 产出 libclash。
+# 有签名材料时同一次构建同时产出未签名包和调试签名包，签名这条路每次都会走到，不会等到发版才第一次跑。
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 要构建的 git ref，留空为触发事件的 ref
+        type: string
+        default: ""
+      mode:
+        description: debug 或 release
+        type: string
+        default: debug
+      lint:
+        description: 同时跑 codelinter
+        type: boolean
+        default: false
+      retention-days:
+        type: number
+        default: 7
+      save-baseline:
+        description: 把这次的体积存为 main 的基线，供 PR 对比
+        type: boolean
+        default: false
+      fresh:
+        description: 不用缓存，见 core.yml
+        type: boolean
+        default: false
+    secrets:
+      HARMONYOS_TOOLS_TOKEN:
+        required: true
+      HARMONYOS_SIGNING_BUNDLE:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  hap:
+    name: HAP
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      MODE: ${{ inputs.mode }}
+    steps:
+      - name: 检查 token
+        env:
+          TOKEN: ${{ secrets.HARMONYOS_TOOLS_TOKEN }}
+        run: |
+          if [[ -z "$TOKEN" ]]; then
+            echo "::error::没有 HARMONYOS_TOOLS_TOKEN。dependabot 的 PR 读不到 Actions secrets，要在 Dependabot secrets 里另配一份，见 docs/ci.md"
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: libclash
+          path: entry/libs/arm64-v8a
+      - uses: ./.github/actions/setup-harmonyos-tools
+        with:
+          repo: ${{ vars.HARMONYOS_TOOLS_REPO }}
+          tag: ${{ vars.HARMONYOS_TOOLS_TAG }}
+          token: ${{ secrets.HARMONYOS_TOOLS_TOKEN }}
+          fresh: ${{ inputs.fresh }}
+      # Geo 数据按 geodata.lock 的哈希缓存，锁文件不变就不重新下载。
+      - if: ${{ !inputs.fresh }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: entry/src/main/resources/rawfile/geo
+          key: geodata-${{ hashFiles('geodata.lock') }}
+      - run: make geodata
+      - if: inputs.lint
+        run: make lint CHECKS=arkts
+      - name: 签名配置
+        env:
+          HARMONYOS_SIGNING_BUNDLE: ${{ secrets.HARMONYOS_SIGNING_BUNDLE }}
+        run: |
+          if [[ -n "$HARMONYOS_SIGNING_BUNDLE" ]]; then
+            scripts/ci/setup-signing.sh "$RUNNER_TEMP/signing"
+          else
+            echo "没有 HARMONYOS_SIGNING_BUNDLE，只产出未签名包"
+          fi
+      - run: make hap MODE="$MODE"
+      # 上一次 main 构建的体积，用来在摘要里显示增减。干净构建不读缓存。
+      - if: ${{ !inputs.fresh }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ci/hap-sizes.json
+          key: hap-sizes-main-${{ github.sha }}
+          restore-keys: hap-sizes-main-
+      - name: 检查 HAP
+        run: |
+          # 补传早于这个检查的旧 tag 时，tag 里还没有这个脚本。
+          if [[ ! -f scripts/ci/check-hap.py ]]; then
+            echo "这个版本早于 HAP 检查，跳过" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          shopt -s nullglob
+          haps=(dist/*-"$MODE"-unsigned.hap)
+          python3 scripts/ci/check-hap.py "${haps[0]}" --baseline .ci/hap-sizes.json --write .ci/hap-sizes.json >> "$GITHUB_STEP_SUMMARY"
+          signed=(dist/*-"$MODE"-signed.hap)
+          echo "签名包：${#signed[@]} 个" >> "$GITHUB_STEP_SUMMARY"
+      - if: inputs.save-baseline
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ci/hap-sizes.json
+          key: hap-sizes-main-${{ github.sha }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hap-${{ inputs.mode }}
+          path: dist/*.hap
+          retention-days: ${{ inputs.retention-days }}
+          if-no-files-found: error
