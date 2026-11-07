@@ -1,0 +1,46 @@
+name: CodeQL
+
+# Go 代码的安全扫描，结果在仓库的 Security → Code scanning。不计入「CI 通过」：
+# 它要完整编一遍内核，较慢，只在内核相关的 PR、main 和每周跑。workflow 的安全由 zizmor 负责。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - core/**
+      - scripts/build-core.sh
+      - scripts/*.patch
+      - .go-version
+      - .github/workflows/codeql.yml
+  schedule:
+    - cron: "0 3 * * 1" # 每周一 11:00（北京时间）
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  go:
+    name: 分析 Go
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-core-toolchain
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: go
+          # 内核要用补丁版 Go 和 OHOS NDK 交叉编译，只能手动构建。
+          build-mode: manual
+      - run: make core
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:go
