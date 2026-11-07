@@ -27,7 +27,7 @@ flowchart LR
 - 两个进程之间只有两条通道（[ADR-0003](adr/0003-ui-core-via-external-controller.md)）：
   - **内核控制面**：mihomo 的 external-controller，所有运行时查询和操作（节点、连接、日志、流量）都走这里。
   - **文件通道**：`shared/Runtime.ets` 管理的几个文件，只用于启动前交接（配置路径、secret、协议栈）和启动失败回报。
-- UI 进程按 UID 排除在 VPN 之外（[ADR-0004](adr/0004-exclude-self-by-uid.md)），自己发的请求都是直连。需要看代理出口的功能（比如首页的出口 IP）把内核的 HTTP 代理端口（配置里的 `mixed-port` 或 `port`）当普通代理用，端口号从 controller 查。这不是控制通道；配置里没开代理端口时，这类功能显示为不可用。
+- UI 进程通过 `protectProcessNet()` 和应用排除名单保持直连；Go 出站另由 `core/socket.go` 逐 socket 绑定当前默认物理网络，避免回到 TUN（[ADR-0008](adr/0008-bind-core-sockets-to-physical-network.md)）。需要看代理出口的功能（比如首页的出口 IP）把内核的 HTTP 代理端口（配置里的 `mixed-port` 或 `port`）当普通代理用，端口号从 controller 查。这不是控制通道；配置里没开代理端口时，这类功能显示为不可用。
 
 ## 连接流程
 
@@ -94,6 +94,7 @@ sequenceDiagram
 |---|---|
 | `core/lib.go` | 导出的 C API（`arkclash.h`）；`applyOverrides` 强制 ArkClash 接管的配置项 |
 | `core/tun.go` | 用系统给的 fd 启动 sing-tun（gVisor 栈），独立于配置的 TUN 设置 |
+| `core/socket.go` | 通过 Network Kit 原生 API 保护 Go 出站 socket，绑定失败则拒绝拨号 |
 | `core/hilog.go` | 内核日志转发到 hilog |
 | `core/loopback.go` | 关闭回环检测（原因见 platform-pitfalls 第 4 条） |
 

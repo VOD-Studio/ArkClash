@@ -1,5 +1,11 @@
 # Changelog
 
+## 未发布
+
+### 修复
+
+* **core:** 逐 socket 绑定当前物理网络，修复 Go 出站回到 TUN 导致连接递归和内存暴涨。
+
 ## [0.2.0](https://github.com/VOD-Studio/ArkClash/compare/v0.1.2...v0.2.0) (2026-11-07)
 
 
