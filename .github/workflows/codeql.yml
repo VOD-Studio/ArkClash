@@ -40,7 +40,10 @@ jobs:
           languages: go
           # 内核要用补丁版 Go 和 OHOS NDK 交叉编译，只能手动构建。
           build-mode: manual
+      # CodeQL 靠跟踪编译过程提取代码；Go 编译缓存命中时编译器不会运行，什么也提取不到。
       - run: make core
+        env:
+          GOFLAGS: -a
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: /language:go
