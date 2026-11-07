@@ -37,4 +37,16 @@ for key in ("storeFile", "certpath", "profile"):
 print("签名配置：" + config["name"] + "，证书文件：" + ", ".join(sorted(p.name for p in out.iterdir())), file=sys.stderr)
 PY
 
-tar -czf - -C "$TMP" . | base64 | tr -d '\n'
+# 用 Python 打包，不用系统 tar：macOS 的 tar 会给每个文件附带一个 ._ 开头的扩展属性文件，
+# Linux 解包后它们成了普通文件，material/fd 里多出 3 个，hvigor 判定签名材料非法。
+python3 - "$TMP" <<'PY'
+import base64
+import io
+import sys
+import tarfile
+
+buf = io.BytesIO()
+with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+    tar.add(sys.argv[1], arcname=".")
+sys.stdout.write(base64.b64encode(buf.getvalue()).decode())
+PY
