@@ -12,6 +12,20 @@
 
 * **ui:** 使用系统异步接口采集界面进程内存，避免在 ArkTS 主线程同步读取 smaps。
 
+## [0.4.0](https://github.com/VOD-Studio/ArkClash/compare/v0.3.0...v0.4.0) (2026-11-07)
+
+
+### 新增
+
+* **core:** 在 controller 上提供 ArkClash 命令和热切换 ([a51aa88](https://github.com/VOD-Studio/ArkClash/commit/a51aa88d5ecf6c93fda9939701f9192b30142845))
+* **profiles:** 多订阅配置管理 ([a914028](https://github.com/VOD-Studio/ArkClash/commit/a9140283e1e4cb27713b5ca337f4382b4d102106))
+* **profiles:** 多订阅配置管理 ([#48](https://github.com/VOD-Studio/ArkClash/issues/48)) ([f53a689](https://github.com/VOD-Studio/ArkClash/commit/f53a6892d65a758c881db354aa0bc464ea52b206))
+
+
+### 修复
+
+* **ui:** 修复标题栏菜单不显示 ([6df027a](https://github.com/VOD-Studio/ArkClash/commit/6df027a80567b35866006a0c725654a6c6a165b0))
+
 ## [0.3.0](https://github.com/VOD-Studio/ArkClash/compare/v0.2.0...v0.3.0) (2026-11-07)
 
 
