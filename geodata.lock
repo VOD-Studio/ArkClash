@@ -1,5 +1,5 @@
 # Geo 数据锁文件：由 scripts/update-geodata.sh 生成，每周由机器人开 PR 更新，不要手改。
-# 上游：MetaCubeX/meta-rules-dat，Release 2026-11-07 10:06
+# 上游：MetaCubeX/meta-rules-dat，Release 2026-11-09 09:47
 # <文件名> <sha256> <下载地址>
-geoip.metadb f1c738b02773b766afd7a67592d37d3b40ce6a900751660635e28db5f7b294bf https://github.com/VOD-Studio/ArkClash/releases/download/geodata/geoip-f1c738b02773.metadb
-geosite.dat ab2c9f7217c91632057a8bff7810a6eb02ce05a8be4342cf7319ec1970d29733 https://github.com/VOD-Studio/ArkClash/releases/download/geodata/geosite-ab2c9f7217c9.dat
+geoip.metadb f0508298d0295ce4ae0d6d185ba24605b6ec1ef9c42409dec3271e6525b5486e https://github.com/VOD-Studio/ArkClash/releases/download/geodata/geoip-f0508298d029.metadb
+geosite.dat 85073a00a3c3eb80ac76b97df2f97f7dab00cb36c8b5e7ed2354cbd016f8b088 https://github.com/VOD-Studio/ArkClash/releases/download/geodata/geosite-85073a00a3c3.dat
