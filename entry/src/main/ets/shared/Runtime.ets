@@ -12,6 +12,7 @@ export interface RuntimeConfig {
   stack: string;
   mode: string; // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
   allowLan?: boolean; // 没有 = 用配置里的值
+  standby?: boolean; // 实验：只加载内核不建隧道
 }
 
 function runtimePath(filesDir: string): string {

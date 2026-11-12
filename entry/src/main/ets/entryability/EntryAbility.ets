@@ -2,6 +2,7 @@ import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppStorageV2, window } from '@kit.ArkUI';
 import { WindowInsets } from '../pages/WindowInsets';
+import { runExperiment } from '../exp/Exp';
 
 const DOMAIN = 0x0A11;
 const TAG = 'EntryAbility';
@@ -14,6 +15,19 @@ function updateInsets(win: window.Window, insets: WindowInsets): void {
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, TAG, 'onCreate');
+    this.runExp(want);
+  }
+
+  onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    this.runExp(want);
+  }
+
+  // 实验：`aa start --ps exp <动作>` 触发一个实验动作。
+  private runExp(want: Want): void {
+    const name = want.parameters?.['exp'];
+    if (typeof name === 'string' && name !== '') {
+      runExperiment(this.context, name).catch(() => {});
+    }
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {

@@ -7,6 +7,7 @@ import core from 'libarkclash.so';
 import { hasFile } from '../shared/Files';
 import { ProfileRecord, readList, yamlPath } from '../shared/profiles/Store';
 import { UpdateEnv, UpdateScheduler } from '../shared/profiles/Updater';
+import { expLog, memoryText } from '../shared/ExpLog';
 import { CONTROLLER_ADDRESS, readRuntime, writeCoreError } from '../shared/Runtime';
 import { installGeoData } from './GeoData';
 import { KernelDownloader } from './KernelDownloader';
@@ -36,6 +37,12 @@ interface CoreOptions {
   profile: string;
   mode: string;
   allowLan?: boolean;
+  standby: boolean;
+}
+
+interface ExpReply {
+  ok: boolean;
+  detail: string;
 }
 
 export default class ClashVpnAbility extends VpnExtensionAbility {
@@ -44,9 +51,12 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
   private scheduler?: UpdateScheduler;
   private prefetchTimer: number = -1;
   private stopped: boolean = false;
+  private stack: string = 'gvisor';
 
   onCreate(want: Want): void {
     hilog.info(DOMAIN, TAG, 'onCreate');
+    // 实验：看首次启动时 want.parameters 能不能带过来（只打键名）。
+    expLog('vpn', `event=ext-onCreate param_keys=${Object.keys(want.parameters ?? {}).join(',')}`);
     this.start().catch((e: Error) => {
       hilog.error(DOMAIN, TAG, 'start failed: %{public}s', e.message);
       writeCoreError(this.context.filesDir, e.message);
@@ -56,6 +66,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
 
   onDestroy(): void {
     hilog.info(DOMAIN, TAG, 'onDestroy');
+    expLog('vpn', 'event=ext-onDestroy');
     this.stopped = true;
     clearTimeout(this.prefetchTimer);
     this.scheduler?.stop(true);
@@ -75,6 +86,59 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       throw new Error('no profile selected, add one in the app');
     }
 
+    const standby = runtime.standby === true;
+    this.stack = runtime.stack;
+    let tunFd = 0;
+    if (!standby) {
+      tunFd = await this.createTun();
+    }
+
+    const geoCopied = await installGeoData(this.context, filesDir);
+    hilog.info(DOMAIN, TAG, 'geo data copied: %{public}d', geoCopied);
+    expLog('vpn', `event=geo-ready copied=${geoCopied}`);
+
+    const options: CoreOptions = {
+      homeDir: filesDir,
+      configPath: yamlPath(filesDir, profile),
+      tunFd: tunFd,
+      controller: CONTROLLER_ADDRESS,
+      secret: runtime.secret,
+      stack: runtime.stack,
+      profile: profile,
+      mode: runtime.mode,
+      allowLan: runtime.allowLan,
+      standby: standby
+    };
+    // 先赋给带类型的变量再 await：codelinter 解析不到 .so 的类型声明，直接 await 会误报 await-thenable。
+    const started: Promise<void> = core.start(JSON.stringify(options));
+    await started;
+    hilog.info(DOMAIN, TAG, 'core %{public}s started', core.version());
+    expLog('vpn', `event=core-started standby=${standby} ${memoryText()}`);
+
+    const env: UpdateEnv = {
+      filesDir: filesDir,
+      downloader: new KernelDownloader(),
+      running: () => core.runningProfile(),
+      reload: (path: string, id: string): Promise<void> => {
+        const reloaded: Promise<void> = core.reload(path, id);
+        return reloaded;
+      },
+      prefetch: (path: string) => {
+        this.prefetch(path).catch(() => {});
+      }
+    };
+    const scheduler = new UpdateScheduler(env, emitUpdated);
+    this.scheduler = scheduler;
+    serveProfileCommands(scheduler, env, (name: string): Promise<Object> | undefined => this.expCommand(name));
+    scheduler.start();
+    this.prefetchTimer = setTimeout(() => {
+      this.prefetchOthers(filesDir).catch(() => {});
+    }, PREFETCH_DELAY_MS);
+  }
+
+  // 建 VPN 拿隧道 fd。冷连接在内核启动前调，待机后的接入在收到 exp-attach 时调。
+  private async createTun(): Promise<number> {
+    const t0 = Date.now();
     const connection = vpnExtension.createVpnConnection(this.context);
     this.connection = connection;
     // ArkTS/libc 的出站用进程保护；Go 的 socket 在 core/socket.go 单独绑定物理网络。
@@ -99,45 +163,32 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     };
     const tunFd = await connection.create(config);
     hilog.info(DOMAIN, TAG, 'tun created, fd=%{public}d', tunFd);
+    expLog('vpn', `event=tun-created ms=${Date.now() - t0}`);
+    return tunFd;
+  }
 
-    const geoCopied = await installGeoData(this.context, filesDir);
-    hilog.info(DOMAIN, TAG, 'geo data copied: %{public}d', geoCopied);
+  private expCommand(name: string): Promise<Object> | undefined {
+    if (name === 'exp-attach') {
+      return this.expAttach();
+    }
+    if (name === 'exp-pss') {
+      const reply: ExpReply = { ok: true, detail: memoryText() };
+      return Promise.resolve<Object>(reply);
+    }
+    return undefined;
+  }
 
-    const options: CoreOptions = {
-      homeDir: filesDir,
-      configPath: yamlPath(filesDir, profile),
-      tunFd: tunFd,
-      controller: CONTROLLER_ADDRESS,
-      secret: runtime.secret,
-      stack: runtime.stack,
-      profile: profile,
-      mode: runtime.mode,
-      allowLan: runtime.allowLan
-    };
-    // 先赋给带类型的变量再 await：codelinter 解析不到 .so 的类型声明，直接 await 会误报 await-thenable。
-    const started: Promise<void> = core.start(JSON.stringify(options));
-    await started;
-    hilog.info(DOMAIN, TAG, 'core %{public}s started', core.version());
-
-    const env: UpdateEnv = {
-      filesDir: filesDir,
-      downloader: new KernelDownloader(),
-      running: () => core.runningProfile(),
-      reload: (path: string, id: string): Promise<void> => {
-        const reloaded: Promise<void> = core.reload(path, id);
-        return reloaded;
-      },
-      prefetch: (path: string) => {
-        this.prefetch(path).catch(() => {});
-      }
-    };
-    const scheduler = new UpdateScheduler(env, emitUpdated);
-    this.scheduler = scheduler;
-    serveProfileCommands(scheduler, env);
-    scheduler.start();
-    this.prefetchTimer = setTimeout(() => {
-      this.prefetchOthers(filesDir).catch(() => {});
-    }, PREFETCH_DELAY_MS);
+  private async expAttach(): Promise<Object> {
+    const t0 = Date.now();
+    expLog('vpn', 'event=attach-begin');
+    const tunFd = await this.createTun();
+    const t1 = Date.now();
+    const attached: Promise<void> = core.attachTun(tunFd, this.stack);
+    await attached;
+    const detail = `tun_ms=${t1 - t0} attach_ms=${Date.now() - t1} total_ms=${Date.now() - t0}`;
+    expLog('vpn', `event=attach-done ${detail}`);
+    const reply: ExpReply = { ok: true, detail: detail };
+    return reply;
   }
 
   private async prefetch(path: string): Promise<void> {

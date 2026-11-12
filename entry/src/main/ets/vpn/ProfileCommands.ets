@@ -37,7 +37,15 @@ function send(id: number, status: number, body: Object): void {
   core.reply(id, status, JSON.stringify(body));
 }
 
-async function handle(scheduler: UpdateScheduler, env: UpdateEnv, name: string, body: string): Promise<Object> {
+/** 实验命令（exp- 开头）的处理函数，不认识的返回 undefined。 */
+export type ExpHandler = (name: string) => Promise<Object> | undefined;
+
+async function handle(scheduler: UpdateScheduler, env: UpdateEnv, name: string, body: string,
+  exp?: ExpHandler): Promise<Object> {
+  const expResult = exp?.(name);
+  if (expResult !== undefined) {
+    return await expResult;
+  }
   switch (name) {
     case 'update': {
       const command = JSON.parse(body) as UpdateCommand;
@@ -58,9 +66,9 @@ async function handle(scheduler: UpdateScheduler, env: UpdateEnv, name: string, 
 }
 
 /** 登记命令处理函数。每条命令都会回复，不管成功与否。 */
-export function serveProfileCommands(scheduler: UpdateScheduler, env: UpdateEnv): void {
+export function serveProfileCommands(scheduler: UpdateScheduler, env: UpdateEnv, exp?: ExpHandler): void {
   core.onCommand((id: number, name: string, body: string) => {
-    handle(scheduler, env, name, body).then((result: Object) => {
+    handle(scheduler, env, name, body, exp).then((result: Object) => {
       send(id, 200, result);
     }).catch((e: Error) => {
       hilog.error(DOMAIN, TAG, 'command %{public}s failed: %{public}s', name, errorString(e));

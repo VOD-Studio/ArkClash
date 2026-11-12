@@ -66,11 +66,11 @@ export function probeCore(context: common.UIAbilityContext): Promise<string | un
  * allowLan 为 undefined 时用配置里的值。
  */
 export async function startCore(context: common.UIAbilityContext, mode: string,
-  allowLan: boolean | undefined): Promise<string> {
+  allowLan: boolean | undefined, standby: boolean = false): Promise<string> {
   const filesDir = context.filesDir;
   takeCoreError(filesDir);
   const secret = randomSecret();
-  writeRuntime(filesDir, { secret: secret, stack: 'gvisor', mode: mode, allowLan: allowLan });
+  writeRuntime(filesDir, { secret: secret, stack: 'gvisor', mode: mode, allowLan: allowLan, standby: standby });
 
   // Shows the system authorization dialog the first time.
   await vpnExtension.startVpnExtensionAbility(vpnWant(context));
