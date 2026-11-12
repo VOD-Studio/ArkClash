@@ -58,6 +58,8 @@ jobs:
 
   hap:
     needs: core
+    # check 的跳过会沿依赖链传播，HAP 和发布都要覆盖隐式 success()。
+    if: ${{ !cancelled() && needs.core.result == 'success' }}
     uses: ./.github/workflows/hap.yml
     with:
       ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || inputs.tag }}
@@ -71,6 +73,7 @@ jobs:
   publish:
     name: 发布
     needs: hap
+    if: ${{ !cancelled() && needs.hap.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # 只有这个任务能写 Release；构建任务都是只读的。
