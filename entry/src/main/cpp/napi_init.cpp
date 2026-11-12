@@ -7,7 +7,7 @@
 
 namespace {
 
-enum class CoreCall { Start, Stop, Reload, Fetch, Prefetch };
+enum class CoreCall { Start, Stop, Reload, Fetch, Prefetch, AttachTun };
 
 struct CoreWork {
     napi_async_work work = nullptr;
@@ -17,6 +17,7 @@ struct CoreWork {
     std::string arg1;
     std::string error;
     std::string result; // fetch、prefetch 的结果 JSON
+    int fd = 0;         // 实验：attachTun 的隧道 fd
 };
 
 // 返回值是 libclash.so 分配的字符串，复制后立即释放。
@@ -48,6 +49,9 @@ void Execute(napi_env, void *data)
             break;
         case CoreCall::Prefetch:
             w->result = TakeString(ArkClashPrefetch(w->arg0.data()));
+            break;
+        case CoreCall::AttachTun:
+            w->error = TakeString(ArkClashAttachTun(w->fd, w->arg0.data()));
             break;
     }
 }
@@ -151,6 +155,25 @@ napi_value Fetch(napi_env env, napi_callback_info info)
     w->call = CoreCall::Fetch;
     w->arg0 = args[0];
     return Queue(env, w, "ArkClashFetch");
+}
+
+// 实验：attachTun(fd: number, stack: string)
+napi_value AttachTun(napi_env env, napi_callback_info info)
+{
+    size_t argc = 2;
+    napi_value args[2] = {nullptr, nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    int32_t fd = 0;
+    std::string stack;
+    if (argc < 2 || napi_get_value_int32(env, args[0], &fd) != napi_ok || !GetString(env, args[1], stack)) {
+        napi_throw_type_error(env, nullptr, "attachTun(fd: number, stack: string)");
+        return nullptr;
+    }
+    auto *w = new CoreWork();
+    w->call = CoreCall::AttachTun;
+    w->fd = fd;
+    w->arg0 = stack;
+    return Queue(env, w, "ArkClashAttachTun");
 }
 
 napi_value RunningProfile(napi_env env, napi_callback_info)
@@ -276,6 +299,7 @@ napi_value Init(napi_env env, napi_value exports)
         {"reload", nullptr, Reload, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"fetch", nullptr, Fetch, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"prefetch", nullptr, Prefetch, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"attachTun", nullptr, AttachTun, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"runningProfile", nullptr, RunningProfile, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"version", nullptr, Version, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"onCommand", nullptr, OnCommandJs, nullptr, nullptr, nullptr, napi_default, nullptr},

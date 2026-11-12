@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/metacubex/mihomo/component/process"
@@ -42,6 +43,8 @@ type startOptions struct {
 	Profile  string `json:"profile"`  // 正在运行的配置的编号
 	Mode     string `json:"mode"`     // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
 	AllowLan *bool  `json:"allowLan"` // nil = 用配置里的值
+	// 实验：只加载配置不接隧道，之后用 ArkClashAttachTun 接入。
+	Standby bool `json:"standby"`
 }
 
 var (
@@ -60,23 +63,31 @@ func start(opts startOptions) error {
 	if running {
 		return errors.New("core is already running")
 	}
-	if opts.TunFd <= 0 {
+	if opts.TunFd <= 0 && !opts.Standby {
 		return errors.New("invalid tun fd")
 	}
 
 	constant.SetHomeDir(opts.HomeDir)
 	constant.SetConfig(opts.ConfigPath)
 
+	t0 := time.Now()
 	cfg, err := parseConfig(opts.ConfigPath, opts)
 	if err != nil {
 		return err
 	}
+	t1 := time.Now()
 	hub.ApplyConfig(cfg)
+	t2 := time.Now()
 
-	if err := startTun(opts.TunFd, opts.Stack); err != nil {
-		executor.Shutdown()
-		return err
+	if !opts.Standby {
+		if err := startTun(opts.TunFd, opts.Stack); err != nil {
+			executor.Shutdown()
+			return err
+		}
 	}
+	expLog("event=core-start standby=%t parse_ms=%d apply_ms=%d tun_ms=%d", opts.Standby,
+		t1.Sub(t0).Milliseconds(), t2.Sub(t1).Milliseconds(), time.Since(t2).Milliseconds())
+	startExpSocket(opts.HomeDir)
 
 	running = true
 	current = opts
@@ -213,6 +224,7 @@ func stop() {
 	if !running {
 		return
 	}
+	stopExpSocket()
 	stopTun()
 	executor.Shutdown()
 	running = false

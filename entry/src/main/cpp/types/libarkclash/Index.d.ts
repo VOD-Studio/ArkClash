@@ -1,6 +1,8 @@
 /** Starts the core; rejects with the core's error message. Options: see core/lib.go startOptions. */
 export const start: (optionsJson: string) => Promise<void>;
 export const stop: () => Promise<void>;
+/** 实验：给待机中的内核（start 时 standby 为 true）接上隧道。 */
+export const attachTun: (fd: number, stack: string) => Promise<void>;
 /** 热切换到 path（必须在 filesDir/profiles/ 下）；解析失败时 reject，内核保持原样。 */
 export const reload: (path: string, profile: string) => Promise<void>;
 /** 经内核下载，请求和结果 JSON 见 core/api.go 的 fetchRequest、fetchResult。 */

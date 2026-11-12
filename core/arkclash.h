@@ -10,6 +10,8 @@ extern "C" {
 // error message to release with ArkClashFree.
 char *ArkClashStart(char *optionsJSON);
 void ArkClashStop(void);
+// 实验：给待机中的内核接上隧道。成功返回 NULL，否则返回错误信息，用 ArkClashFree 释放。
+char *ArkClashAttachTun(int fd, char *stack);
 // 热切换到 path 指向的配置（必须在 filesDir/profiles/ 下），profile 是它的编号。
 // 成功返回 NULL，否则返回错误信息，用 ArkClashFree 释放。
 char *ArkClashReload(char *path, char *profile);
