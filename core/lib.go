@@ -81,6 +81,10 @@ func start(opts startOptions) error {
 	running = true
 	current = opts
 	runningID.Store(&opts.Profile)
+	beginRuntime()
+	resetProxyIdentities()
+	watchRuntimeRoutes(cfg)
+	publishRuntime()
 	log.Infoln("[ArkClash] core started")
 	return nil
 }
@@ -95,32 +99,50 @@ func parseConfig(path string, opts startOptions) (*config.Config, error) {
 		return nil, err
 	}
 	applyOverrides(rawCfg, opts)
-	return config.ParseRawConfig(rawCfg)
+	cfg, err := config.ParseRawConfig(rawCfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := restoreSelections(cfg, opts); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 // reload 是热切换：解析 path，成功后换用新配置，profile 记为正在运行的配置。
 // 只调 executor.ApplyConfig，不走 hub.ApplyConfig：后者的 applyRoute 每次都会关掉 controller
 // 再重开，掐断发起热切换的请求和界面的 WebSocket（ADR-0010）。controller 的地址和 secret
 // 由 applyOverrides 固定，不需要重建。改 start 的解析和应用流程时，这里要一起看。
-func reload(path, profile string) error {
+func reload(path, profile, expectedProfile string) error {
 	mu.Lock()
 	defer mu.Unlock()
 
 	if !running {
 		return errors.New("core is not running")
 	}
+	if expectedProfile != "" && current.Profile != expectedProfile {
+		return errors.New("profile_changed")
+	}
 	if err := checkProfilePath(path); err != nil {
 		return err
 	}
-	cfg, err := parseConfig(path, current)
+	next := current
+	next.Profile = profile
+	next.ConfigPath = path
+	cfg, err := parseConfig(path, next)
 	if err != nil {
 		return err
 	}
+	cancelDelayTests()
 	constant.SetConfig(path)
 	executor.ApplyConfig(cfg, true)
 	current.ConfigPath = path
 	current.Profile = profile
 	runningID.Store(&profile)
+	runtimeConfigRevision++
+	resetProxyIdentities()
+	watchRuntimeRoutes(cfg)
+	publishRuntime()
 	log.Infoln("[ArkClash] reloaded profile %s", profile)
 	emit(reloadedEvent{Type: "reloaded", Profile: profile})
 	return nil
@@ -170,6 +192,7 @@ func setRuntimeOptions(mode *string, allowLan *bool) error {
 		v := *allowLan
 		current.AllowLan = &v
 	}
+	publishRuntime()
 	return nil
 }
 
@@ -178,6 +201,9 @@ func applyOverrides(rawCfg *config.RawConfig, opts startOptions) {
 	// The TUN is created by VpnExtensionAbility and handed over as an fd, so the
 	// profile must not try to create its own.
 	rawCfg.Tun.Enable = false
+
+	// 节点选择只从每配置文件恢复，避免 mihomo 全局同名组缓存覆盖它。
+	rawCfg.Profile.StoreSelected = false
 
 	// The UI process drives the core over this controller only.
 	rawCfg.ExternalController = opts.Controller
@@ -213,11 +239,15 @@ func stop() {
 	if !running {
 		return
 	}
+	resetProxyIdentities()
+	stopRuntimeRoutes()
+	cancelDelayTests()
 	stopTun()
 	executor.Shutdown()
 	running = false
 	current = startOptions{}
 	runningID.Store(nil)
+	publishRuntime()
 }
 
 func errorString(err error) *C.char {
@@ -248,8 +278,8 @@ func ArkClashStop() {
 // 否则返回错误信息，调用方用 ArkClashFree 释放。
 //
 //export ArkClashReload
-func ArkClashReload(path, profile *C.char) *C.char {
-	return errorString(reload(C.GoString(path), C.GoString(profile)))
+func ArkClashReload(path, profile, expectedProfile *C.char) *C.char {
+	return errorString(reload(C.GoString(path), C.GoString(profile), C.GoString(expectedProfile)))
 }
 
 // ArkClashRunningProfile 返回正在运行的配置编号，没在运行时是空串。用 ArkClashFree 释放。

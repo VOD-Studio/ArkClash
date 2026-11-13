@@ -30,7 +30,6 @@ import (
 	"time"
 	"unsafe"
 
-	mihomoHttp "github.com/metacubex/mihomo/component/http"
 	"github.com/metacubex/mihomo/hub/route"
 
 	"github.com/metacubex/chi"
@@ -38,8 +37,7 @@ import (
 	"github.com/metacubex/http"
 )
 
-// 订阅类命令转给 VPN 进程的 ArkTS 后最多等这么久：下载（连接 15s + 读取 30s）、
-// 先走内核再直连各一次，再加上解析和热切换。
+// 订阅类命令允许下载、内容校验和热切换完成；下载本身受20秒总超时约束。
 const commandTimeout = 150 * time.Second
 
 // 经内核下载的订阅最大字节数，超过就算失败，防止异常响应占满内存。
@@ -52,6 +50,11 @@ func init() {
 	route.Register(func(r chi.Router) {
 		r.Route("/arkclash", func(r chi.Router) {
 			r.Get("/status", getStatus)
+			r.Get("/proxies", getProxySnapshot)
+			r.Get("/selections", getSelections)
+			r.Post("/selection", postSelection)
+			r.Get("/delay", getDelay)
+			r.Get("/probe", getProbe)
 			r.Patch("/configs", patchRuntimeOptions)
 			r.Post("/reload", postReload)
 			r.Post("/prefetch", postPrefetch)
@@ -70,13 +73,13 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, err error) {
 	render.JSON(w, r, apiError{Message: err.Error()})
 }
 
-type statusResponse struct {
-	Profile string `json:"profile"`
-}
-
 func getStatus(w http.ResponseWriter, r *http.Request) {
-	profile, _ := runningProfile()
-	render.JSON(w, r, statusResponse{Profile: profile})
+	status := runtimeSnapshot.Load()
+	if status == nil {
+		writeError(w, r, http.StatusServiceUnavailable, errors.New("core_initializing"))
+		return
+	}
+	render.JSON(w, r, status)
 }
 
 type runtimeOptionsBody struct {
@@ -98,8 +101,9 @@ func patchRuntimeOptions(w http.ResponseWriter, r *http.Request) {
 }
 
 type reloadBody struct {
-	Profile string `json:"profile"`
-	Path    string `json:"path"`
+	Profile         string `json:"profile"`
+	Path            string `json:"path"`
+	ExpectedProfile string `json:"expectedProfile,omitempty"`
 }
 
 func postReload(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +112,7 @@ func postReload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	if err := reload(body.Path, body.Profile); err != nil {
+	if err := reload(body.Path, body.Profile, body.ExpectedProfile); err != nil {
 		writeError(w, r, http.StatusBadRequest, err)
 		return
 	}
@@ -373,8 +377,7 @@ type fetchResult struct {
 	Error  string            `json:"error,omitempty"`
 }
 
-// fetch 按规则经内核发出请求（mihomo 下载 provider 的同一条路径），内核连不上时
-// component/http 自己会退回直连。响应体直接写文件，不经过 NAPI 传大字符串。
+// 在线下载只经当前规则拨号；失败不降级直连，响应体不通过 NAPI 传大字符串。
 func fetch(req fetchRequest) fetchResult {
 	if _, ok := runningProfile(); !ok {
 		return fetchResult{Error: "core is not running"}
@@ -382,14 +385,28 @@ func fetch(req fetchRequest) fetchResult {
 	if err := checkProfilePath(req.Path); err != nil {
 		return fetchResult{Error: err.Error()}
 	}
+	if req.TimeoutMs <= 0 || req.TimeoutMs > 20000 {
+		req.TimeoutMs = 20000
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(req.TimeoutMs)*time.Millisecond)
 	defer cancel()
+	ctx, finishRuleRequest := ruleRequestContext(ctx)
+	defer finishRuleRequest()
 
-	header := map[string][]string{}
-	for k, v := range req.Header {
-		header[k] = []string{v}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, req.URL, nil)
+	if err != nil {
+		return fetchResult{Error: "invalid_url"}
 	}
-	resp, err := mihomoHttp.HttpRequest(ctx, req.URL, http.MethodGet, header, nil)
+	for key, item := range req.Header {
+		request.Header.Set(key, item)
+	}
+	transport, err := newRuleTransport()
+	if err != nil {
+		return fetchResult{Error: "tls"}
+	}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport}
+	resp, err := client.Do(request)
 	if err != nil {
 		// url.Error 会带上完整链接，订阅链接不能出现在错误信息里（AGENTS.md「安全」）。
 		var urlErr *url.Error
