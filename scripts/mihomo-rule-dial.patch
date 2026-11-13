@@ -1,0 +1,778 @@
+--- /dev/null
++++ b/tunnel/dial.go
+@@ -0,0 +1,56 @@
++package tunnel
++
++import (
++	"context"
++	"errors"
++
++	"github.com/metacubex/mihomo/component/resolver"
++	C "github.com/metacubex/mihomo/constant"
++	"github.com/metacubex/mihomo/tunnel/statistic"
++)
++
++// DialContext 为内置 HTTP 消费者复用规则解析；取消覆盖规则 DNS、重试与实际出站拨号。
++func DialContext(ctx context.Context, metadata *C.Metadata) (C.Conn, error) {
++	ctx, finish := resolver.WithRequestContext(ctx)
++	defer finish()
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	if metadata.Type != C.INNER || metadata.NetWork != C.TCP || !metadata.Valid() || !isHandle(metadata.Type) {
++		return nil, errors.New("invalid inner TCP metadata")
++	}
++	fixMetadata(metadata)
++	if err := preHandleMetadata(metadata); err != nil {
++		return nil, err
++	}
++	proxy, rule, err := resolveMetadataContext(ctx, metadata)
++	if err != nil {
++		return nil, err
++	}
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	dialMetadata := metadata
++	if len(metadata.Host) > 0 {
++		if node, ok := resolver.DefaultHosts.Search(metadata.Host, false); ok {
++			if dstIP, _ := node.RandIP(); !resolver.IsFakeIP(dstIP) {
++				dialMetadata.DstIP = dstIP
++				dialMetadata.DNSMode = C.DNSHosts
++				dialMetadata = dialMetadata.Pure()
++			}
++		}
++	}
++	ctx, cancel := context.WithTimeout(ctx, C.DefaultTCPTimeout)
++	defer cancel()
++	conn, err := retry(ctx, func(ctx context.Context) (C.Conn, error) {
++		return proxy.DialContext(ctx, dialMetadata)
++	}, nil)
++	if err != nil {
++		return nil, err
++	}
++	if err := ctx.Err(); err != nil {
++		_ = conn.Close()
++		return nil, err
++	}
++	return statistic.NewTCPTracker(conn, statistic.DefaultManager, metadata, rule, 0, 0, true), nil
++}
+--- a/tunnel/tunnel.go
++++ b/tunnel/tunnel.go
+@@ -315,6 +315,10 @@
+ }
+ 
+ func resolveMetadata(metadata *C.Metadata) (proxy C.Proxy, rule C.Rule, err error) {
++	return resolveMetadataContext(context.Background(), metadata)
++}
++
++func resolveMetadataContext(ctx context.Context, metadata *C.Metadata) (proxy C.Proxy, rule C.Rule, err error) {
+ 	if metadata.SpecialProxy != "" {
+ 		var exist bool
+ 		proxy, exist = proxies[metadata.SpecialProxy]
+@@ -336,7 +340,7 @@
+ 	helper := C.RuleMatchHelper{
+ 		ResolveIP: func() {
+ 			if !resolved && metadata.Host != "" && !metadata.Resolved() {
+-				ctx, cancel := context.WithTimeout(context.Background(), resolver.DefaultDNSTimeout)
++				ctx, cancel := context.WithTimeout(ctx, resolver.DefaultDNSTimeout)
+ 				defer cancel()
+ 				ip, err := resolver.ResolveIP(ctx, metadata.Host)
+ 				if err != nil {
+--- /dev/null
++++ b/adapter/health.go
+@@ -0,0 +1,13 @@
++package adapter
++
++import (
++	"github.com/metacubex/mihomo/common/utils"
++	C "github.com/metacubex/mihomo/constant"
++)
++
++var healthCheckCallback = utils.NewCallback[C.Proxy]()
++
++// HealthCheckCallback 在健康状态和历史写入完成后通知；回调不得阻塞或进入组锁。
++func HealthCheckCallback() *utils.Callback[C.Proxy] {
++	return healthCheckCallback
++}
+--- a/adapter/adapter.go
++++ b/adapter/adapter.go
+@@ -196,6 +196,7 @@
+ 		if state.history.Len() > defaultHistoriesNum {
+ 			state.history.Pop()
+ 		}
++		healthCheckCallback.EmitSync(p)
+ 
+ 	}()
+ 
+--- a/adapter/provider/provider.go
++++ b/adapter/provider/provider.go
+@@ -8,6 +8,7 @@
+ 	"strings"
+ 	"sync"
+ 	"time"
++	"weak"
+ 
+ 	"github.com/metacubex/mihomo/adapter"
+ 	"github.com/metacubex/mihomo/common/convert"
+@@ -181,6 +182,13 @@
+ 	return pp.Fetcher.Close()
+ }
+ 
++var proxyUpdateCallback = utils.NewCallback[P.ProxyProvider]()
++
++// ProxyUpdateCallback 在 provider 新节点提交且已释放 provider 锁后通知。
++func ProxyUpdateCallback() *utils.Callback[P.ProxyProvider] {
++	return proxyUpdateCallback
++}
++
+ func NewProxySetProvider(name string, interval time.Duration, payload []map[string]any, parser resource.Parser[[]C.Proxy], vehicle P.Vehicle, hc *HealthCheck) (*ProxySetProvider, error) {
+ 	pd := &proxySetProvider{
+ 		baseProvider: baseProvider{
+@@ -205,7 +213,14 @@
+ 		hc.setProxies(proxies)
+ 	}
+ 
+-	fetcher := resource.NewFetcher[[]C.Proxy](name, interval, vehicle, nil, parser, pd.setProxies)
++	wrapper := &ProxySetProvider{pd}
++	weakWrapper := weak.Make(wrapper)
++	fetcher := resource.NewFetcher[[]C.Proxy](name, interval, vehicle, nil, parser, func(proxies []C.Proxy) {
++		pd.setProxies(proxies)
++		if current := weakWrapper.Value(); current != nil {
++			proxyUpdateCallback.EmitSync(current)
++		}
++	})
+ 	pd.Fetcher = fetcher
+ 	if httpVehicle, ok := vehicle.(*resource.HTTPVehicle); ok {
+ 		httpVehicle.SetInRead(func(resp *http.Response) {
+@@ -216,7 +231,6 @@
+ 		})
+ 	}
+ 
+-	wrapper := &ProxySetProvider{pd}
+ 	runtime.SetFinalizer(wrapper, (*ProxySetProvider).Close)
+ 	return wrapper, nil
+ }
+--- a/adapter/outboundgroup/groupbase.go
++++ b/adapter/outboundgroup/groupbase.go
+@@ -34,6 +34,7 @@
+ 	testTimeout       int
+ 	maxFailedTimes    int
+ 	emptyFallback     C.Proxy
++	routeProxy        C.Proxy
+ 
+ 	// for GetProxies
+ 	getProxiesMutex  sync.Mutex
+--- /dev/null
++++ b/adapter/outboundgroup/route.go
+@@ -0,0 +1,20 @@
++package outboundgroup
++
++import (
++	"github.com/metacubex/mihomo/common/utils"
++	C "github.com/metacubex/mihomo/constant"
++)
++
++var routeChangeCallback = utils.NewCallback[C.ProxyAdapter]()
++
++// RouteChangeCallback 在实际选择提交前同步标记；回调不得阻塞、重入组或取得核心锁。
++func RouteChangeCallback() *utils.Callback[C.ProxyAdapter] {
++	return routeChangeCallback
++}
++
++// observeRoute 只在自动组的 stateMutex 内记录，并在解锁前完成同步标记。
++func (gb *GroupBase) observeRoute(proxy C.Proxy) bool {
++	previous := gb.routeProxy
++	gb.routeProxy = proxy
++	return previous != nil && previous != proxy
++}
+--- a/adapter/outboundgroup/urltest.go
++++ b/adapter/outboundgroup/urltest.go
+@@ -4,6 +4,7 @@
+ 	"context"
+ 	"encoding/json"
+ 	"errors"
++	"sync"
+ 	"time"
+ 
+ 	"github.com/metacubex/mihomo/common/callback"
+@@ -27,6 +28,7 @@
+ 	disableUDP     bool
+ 	fastNode       C.Proxy
+ 	fastSingle     *singledo.Single[C.Proxy]
++	stateMutex     sync.Mutex
+ }
+ 
+ func (u *URLTest) Now() string {
+@@ -49,8 +51,24 @@
+ }
+ 
+ func (u *URLTest) ForceSet(name string) {
++	u.stateMutex.Lock()
+ 	u.selected = name
+ 	u.fastSingle.Reset()
++	u.stateMutex.Unlock()
++}
++
++// Refresh 保留真实缓存到期与上游容差；返回尚未应用本批健康变化的等待时间。
++func (u *URLTest) Refresh(since time.Time) time.Duration {
++	u.stateMutex.Lock()
++	defer u.stateMutex.Unlock()
++	if wait := u.fastSingle.Remaining(since); wait > 0 {
++		return wait
++	}
++	proxy := u.fastLocked(false)
++	if u.observeRoute(proxy) {
++		routeChangeCallback.EmitSync(u)
++	}
++	return 0
+ }
+ 
+ // DialContext implements C.ProxyAdapter
+@@ -101,6 +119,17 @@
+ }
+ 
+ func (u *URLTest) fast(touch bool) C.Proxy {
++	u.stateMutex.Lock()
++	proxy := u.fastLocked(touch)
++	changed := u.observeRoute(proxy)
++	if changed {
++		routeChangeCallback.EmitSync(u)
++	}
++	u.stateMutex.Unlock()
++	return proxy
++}
++
++func (u *URLTest) fastLocked(touch bool) C.Proxy {
+ 	elm, _, shared := u.fastSingle.Do(func() (C.Proxy, error) {
+ 		proxies := u.GetProxies(touch)
+ 		if u.selected != "" {
+@@ -167,13 +196,16 @@
+ 	for _, proxy := range u.GetProxies(false) {
+ 		all = append(all, proxy.Name())
+ 	}
++	u.stateMutex.Lock()
++	fixed := u.selected
++	u.stateMutex.Unlock()
+ 	return json.Marshal(map[string]any{
+ 		"type":           u.Type().String(),
+ 		"now":            u.Now(),
+ 		"all":            all,
+ 		"testUrl":        u.testUrl,
+ 		"expectedStatus": u.expectedStatus,
+-		"fixed":          u.selected,
++		"fixed":          fixed,
+ 		"hidden":         u.Hidden(),
+ 		"icon":           u.Icon(),
+ 		"emptyFallback":  u.EmptyFallback().Name(),
+--- a/adapter/outboundgroup/fallback.go
++++ b/adapter/outboundgroup/fallback.go
+@@ -4,6 +4,7 @@
+ 	"context"
+ 	"encoding/json"
+ 	"errors"
++	"sync"
+ 	"time"
+ 
+ 	"github.com/metacubex/mihomo/common/callback"
+@@ -21,6 +22,7 @@
+ 	testUrl        string
+ 	selected       string
+ 	expectedStatus string
++	stateMutex     sync.Mutex
+ }
+ 
+ func (f *Fallback) Now() string {
+@@ -83,13 +85,16 @@
+ 	for _, proxy := range f.GetProxies(false) {
+ 		all = append(all, proxy.Name())
+ 	}
++	f.stateMutex.Lock()
++	fixed := f.selected
++	f.stateMutex.Unlock()
+ 	return json.Marshal(map[string]any{
+ 		"type":           f.Type().String(),
+ 		"now":            f.Now(),
+ 		"all":            all,
+ 		"testUrl":        f.testUrl,
+ 		"expectedStatus": f.expectedStatus,
+-		"fixed":          f.selected,
++		"fixed":          fixed,
+ 		"hidden":         f.Hidden(),
+ 		"icon":           f.Icon(),
+ 		"emptyFallback":  f.EmptyFallback().Name(),
+@@ -102,7 +107,24 @@
+ 	return proxy
+ }
+ 
++// Refresh 由已完成的健康检查或 provider 更新驱动。
++func (f *Fallback) Refresh(since time.Time) time.Duration {
++	f.findAliveProxy(false)
++	return 0
++}
++
+ func (f *Fallback) findAliveProxy(touch bool) C.Proxy {
++	f.stateMutex.Lock()
++	proxy := f.findAliveProxyLocked(touch)
++	changed := f.observeRoute(proxy)
++	if changed {
++		routeChangeCallback.EmitSync(f)
++	}
++	f.stateMutex.Unlock()
++	return proxy
++}
++
++func (f *Fallback) findAliveProxyLocked(touch bool) C.Proxy {
+ 	proxies := f.GetProxies(touch)
+ 	for _, proxy := range proxies {
+ 		if len(f.selected) == 0 {
+@@ -136,7 +158,7 @@
+ 		return errors.New("proxy not exist")
+ 	}
+ 
+-	f.selected = name
++	f.ForceSet(name)
+ 	if !p.AliveForTestUrl(f.testUrl) {
+ 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(5000))
+ 		defer cancel()
+@@ -148,7 +170,9 @@
+ }
+ 
+ func (f *Fallback) ForceSet(name string) {
++	f.stateMutex.Lock()
+ 	f.selected = name
++	f.stateMutex.Unlock()
+ }
+ 
+ func (f *Fallback) Providers() []P.ProxyProvider {
+--- /dev/null
++++ b/component/resolver/request.go
+@@ -0,0 +1,123 @@
++package resolver
++
++import (
++	"context"
++	"net"
++	"sync"
++)
++
++type requestContextKey struct{}
++
++type requestContextState struct {
++	ctx context.Context
++	cancel context.CancelFunc
++	mu sync.Mutex
++	closed bool
++	tasks sync.WaitGroup
++}
++
++// WithRequestContext 只给内置请求使用；释放时先取消，再等待它派生的 DNS 工作结束。
++func WithRequestContext(ctx context.Context) (context.Context, func()) {
++	ctx, cancel := context.WithCancel(ctx)
++	state := &requestContextState{cancel: cancel}
++	ctx = context.WithValue(ctx, requestContextKey{}, state)
++	state.ctx = ctx
++	state.tasks.Add(1)
++	return ctx, func() {
++		state.mu.Lock()
++		state.closed = true
++		cancel()
++		state.mu.Unlock()
++		state.tasks.Done()
++		state.tasks.Wait()
++	}
++}
++
++// RequestContext 恢复被 HTTP Transport 剥离的取消，仅影响请求拥有的 DNS 拨号。
++func RequestContext(ctx context.Context) context.Context {
++	if state, ok := ctx.Value(requestContextKey{}).(*requestContextState); ok {
++		return state.ctx
++	}
++	return nil
++}
++
++// RequestTask 在派生工作开始前登记，普通共享 DNS 不需要等待。
++func RequestTask(ctx context.Context) func() {
++	state, ok := ctx.Value(requestContextKey{}).(*requestContextState)
++	if !ok {
++		return func() {}
++	}
++	state.mu.Lock()
++	defer state.mu.Unlock()
++	if state.closed {
++		return func() {}
++	}
++	state.tasks.Add(1)
++	return state.tasks.Done
++}
++
++// BindRequestContext 衔接 HTTP/QUIC 保留的值，并保留当前子操作自己的取消和超时。
++func BindRequestContext(ctx context.Context) (context.Context, func()) {
++	request := RequestContext(ctx)
++	if request == nil {
++		return ctx, func() {}
++	}
++	ctx, cancel := context.WithCancel(ctx)
++	stop := context.AfterFunc(request, cancel)
++	if request.Err() != nil {
++		cancel()
++	}
++	return ctx, func() { stop(); cancel() }
++}
++
++type requestConn struct {
++	net.Conn
++	once sync.Once
++	finish func()
++	err error
++}
++
++func (conn *requestConn) Close() error {
++	conn.once.Do(func() {
++		conn.err = conn.Conn.Close()
++		conn.finish()
++	})
++	return conn.err
++}
++
++// OwnRequestConn 让请求结束关闭它新建的 DNS 连接，包括 HTTP Transport 后续的 TLS 握手。
++func OwnRequestConn(ctx context.Context, conn net.Conn) net.Conn {
++	request := RequestContext(ctx)
++	if request == nil {
++		return conn
++	}
++	owned := &requestConn{Conn: conn, finish: RequestTask(ctx)}
++	context.AfterFunc(request, func() { _ = owned.Close() })
++	return owned
++}
++
++type requestPacketConn struct {
++	net.PacketConn
++	once sync.Once
++	finish func()
++	err error
++}
++
++func (conn *requestPacketConn) Close() error {
++	conn.once.Do(func() {
++		conn.err = conn.PacketConn.Close()
++		conn.finish()
++	})
++	return conn.err
++}
++
++// OwnRequestPacketConn 让请求新建的 DoQ/HTTP3 UDP 出站服从同一个资源生命周期。
++func OwnRequestPacketConn(ctx context.Context, conn net.PacketConn) net.PacketConn {
++	request := RequestContext(ctx)
++	if request == nil {
++		return conn
++	}
++	owned := &requestPacketConn{PacketConn: conn, finish: RequestTask(ctx)}
++	context.AfterFunc(request, func() { _ = owned.Close() })
++	return owned
++}
+--- a/dns/resolver.go
++++ b/dns/resolver.go
+@@ -52,7 +52,9 @@
+ 
+ func (r *Resolver) LookupIPPrimaryIPv4(ctx context.Context, host string) (ips []netip.Addr, err error) {
+ 	ch := make(chan []netip.Addr, 1)
++	finish := resolver.RequestTask(ctx)
+ 	go func() {
++		defer finish()
+ 		defer close(ch)
+ 		ip, err := r.lookupIP(ctx, host, D.TypeAAAA)
+ 		if err != nil {
+@@ -76,7 +78,9 @@
+ 
+ func (r *Resolver) LookupIP(ctx context.Context, host string) (ips []netip.Addr, err error) {
+ 	ch := make(chan []netip.Addr, 1)
++	finish := resolver.RequestTask(ctx)
+ 	go func() {
++		defer finish()
+ 		defer close(ch)
+ 		ip, err := r.lookupIP(ctx, host, D.TypeAAAA)
+ 		if err != nil {
+@@ -155,7 +159,7 @@
+ 	}
+ 	continueFetch := false
+ 	defer func() {
+-		if continueFetch || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
++		if resolver.RequestContext(ctx) == nil && (continueFetch || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) {
+ 			go func() {
+ 				ctx, cancel := context.WithTimeout(context.Background(), resolver.DefaultDNSTimeout)
+ 				defer cancel()
+@@ -189,7 +193,11 @@
+ 	retryNum := 0
+ 	retryMax := 3
+ 	fn := func() (result *D.Msg, err error) {
+-		ctx, cancel := context.WithTimeout(context.Background(), resolver.DefaultDNSTimeout) // reset timeout in singleflight
++		queryContext := context.Background()
++		if resolver.RequestContext(ctx) != nil {
++			queryContext = ctx
++		}
++		ctx, cancel := context.WithTimeout(queryContext, resolver.DefaultDNSTimeout)
+ 		defer cancel()
+ 		cache := false
+ 
+@@ -217,6 +225,14 @@
+ 			return
+ 		}
+ 		result, cache, err = batchExchange(ctx, r.main, m)
++		return
++	}
++
++	if resolver.RequestContext(ctx) != nil {
++		msg, err = fn()
++		if err != nil {
++			msg = nil
++		}
+ 		return
+ 	}
+ 
+@@ -375,7 +391,9 @@
+ 
+ func (r *Resolver) asyncExchange(ctx context.Context, client []dnsClient, msg *D.Msg) <-chan *result {
+ 	ch := make(chan *result, 1)
++	finish := resolver.RequestTask(ctx)
+ 	go func() {
++		defer finish()
+ 		res, _, err := batchExchange(ctx, client, msg)
+ 		ch <- &result{Msg: res, Error: err}
+ 	}()
+--- a/dns/client.go
++++ b/dns/client.go
+@@ -48,7 +48,9 @@
+ 		err error
+ 	}
+ 	ch := make(chan result, 1)
++	finish := resolver.RequestTask(ctx)
+ 	go func() {
++		defer finish()
+ 		dClient := &D.Client{
+ 			UDPSize: 4096,
+ 			Timeout: 5 * time.Second,
+--- a/dns/dot.go
++++ b/dns/dot.go
+@@ -9,6 +9,7 @@
+ 	"sync"
+ 	"time"
+ 
++	N "github.com/metacubex/mihomo/common/net"
+ 	"github.com/metacubex/mihomo/common/deque"
+ 	"github.com/metacubex/mihomo/component/ca"
+ 	C "github.com/metacubex/mihomo/constant"
+@@ -39,6 +40,19 @@
+ }
+ 
+ func (t *dnsOverTLS) ExchangeContext(ctx context.Context, m *D.Msg) (*D.Msg, error) {
++	if resolver.RequestContext(ctx) != nil {
++		conn, err := t.dialContext(ctx)
++		if err != nil {
++			return nil, err
++		}
++		defer conn.Close()
++		var exchangeErr error
++		finish := N.SetupContextForConn(ctx, conn)
++		defer finish(&exchangeErr)
++		client := &D.Client{UDPSize: 4096, Timeout: 5 * time.Second}
++		msg, _, exchangeErr := client.ExchangeWithConn(m, &D.Conn{Conn: conn, UDPSize: client.UDPSize})
++		return msg, exchangeErr
++	}
+ 	// miekg/dns ExchangeContext doesn't respond to context cancel.
+ 	// this is a workaround
+ 	type result struct {
+--- a/tunnel/dns_dialer.go
++++ b/tunnel/dns_dialer.go
+@@ -27,7 +27,19 @@
+ 	return &DNSDialer{r: r, proxyAdapter: proxyAdapter, proxyName: proxyName}
+ }
+ 
+-func (d *DNSDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
++func (d *DNSDialer) DialContext(ctx context.Context, network, addr string) (conn net.Conn, dialErr error) {
++	ctx, releaseContext := resolver.BindRequestContext(ctx)
++	defer releaseContext()
++	finish := resolver.RequestTask(ctx)
++	defer finish()
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	defer func() {
++		if dialErr == nil {
++			conn = resolver.OwnRequestConn(ctx, conn)
++		}
++	}()
+ 	r := d.r
+ 	proxyName := d.proxyName
+ 	proxyAdapter := d.proxyAdapter
+@@ -63,7 +75,7 @@
+ 				}
+ 				metadata.DstIP = dstIP
+ 			}
+-			proxyAdapter, rule, err = resolveMetadata(metadata)
++			proxyAdapter, rule, err = resolveMetadataContext(ctx, metadata)
+ 			if err != nil {
+ 				return nil, err
+ 			}
+@@ -128,7 +140,19 @@
+ 
+ }
+ 
+-func (d *DNSDialer) ListenPacket(ctx context.Context, network, addr string) (net.PacketConn, error) {
++func (d *DNSDialer) ListenPacket(ctx context.Context, network, addr string) (conn net.PacketConn, dialErr error) {
++	ctx, releaseContext := resolver.BindRequestContext(ctx)
++	defer releaseContext()
++	finish := resolver.RequestTask(ctx)
++	defer finish()
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	defer func() {
++		if dialErr == nil {
++			conn = resolver.OwnRequestPacketConn(ctx, conn)
++		}
++	}()
+ 	r := d.r
+ 	proxyAdapter := d.proxyAdapter
+ 	proxyName := d.proxyName
+@@ -153,7 +177,7 @@
+ 	var rule C.Rule
+ 	if proxyAdapter == nil {
+ 		if proxyName == DnsRespectRules {
+-			proxyAdapter, rule, err = resolveMetadata(metadata)
++			proxyAdapter, rule, err = resolveMetadataContext(ctx, metadata)
+ 			if err != nil {
+ 				return nil, err
+ 			}
+--- a/dns/dhcp.go
++++ b/dns/dhcp.go
+@@ -10,6 +10,7 @@
+ 
+ 	"github.com/metacubex/mihomo/component/dhcp"
+ 	"github.com/metacubex/mihomo/component/iface"
++	"github.com/metacubex/mihomo/component/resolver"
+ 	D "github.com/miekg/dns"
+ )
+ 
+@@ -69,9 +70,15 @@
+ 		done := make(chan struct{})
+ 
+ 		d.done = done
++		queryContext := context.Background()
++		if resolver.RequestContext(ctx) != nil {
++			queryContext = ctx
++		}
++		finish := resolver.RequestTask(ctx)
+ 
+ 		go func() {
+-			ctx, cancel := context.WithTimeout(context.Background(), DHCPTimeout)
++			defer finish()
++			ctx, cancel := context.WithTimeout(queryContext, DHCPTimeout)
+ 			defer cancel()
+ 
+ 			var res []dnsClient
+--- a/common/utils/callback.go
++++ b/common/utils/callback.go
+@@ -34,6 +34,15 @@
+ 	}
+ }
+ 
++// EmitSync 只用于有界标记与入队，回调不得在执行期间注册或注销自身。
++func (c *Callback[T]) EmitSync(item T) {
++	c.mutex.RLock()
++	defer c.mutex.RUnlock()
++	for element := c.list.Front(); element != nil; element = element.Next() {
++		element.Value(item)
++	}
++}
++
+ type callbackCloser[T any] struct {
+ 	element  *list.Element[func(T)]
+ 	callback *Callback[T]
+--- a/common/singledo/singledo.go
++++ b/common/singledo/singledo.go
+@@ -56,6 +56,20 @@
+ 	return callM.val, callM.err, false
+ }
+ 
++// Remaining 只等待变化发生前的缓存；变化后的计算已经包含该批状态。
++func (s *Single[T]) Remaining(since time.Time) time.Duration {
++	s.mux.Lock()
++	defer s.mux.Unlock()
++	if s.result == nil || !s.result.Time.Before(since) {
++		return 0
++	}
++	remaining := time.Until(s.result.Time.Add(s.wait))
++	if remaining < 0 {
++		return 0
++	}
++	return remaining
++}
++
+ func (s *Single[T]) Reset() {
+ 	s.mux.Lock()
+ 	s.call = nil
+--- a/dns/doh.go
++++ b/dns/doh.go
+@@ -109,4 +109,20 @@
+ func (doh *dnsOverHTTPS) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
++	if resolver.RequestContext(ctx) != nil {
++		// 请求拥有的底层连接不得进入普通 DNS 的 H2/H3 共享池。
++		private := &dnsOverHTTPS{
++			url: doh.url, addr: doh.addr, dialer: doh.dialer,
++			httpVersions: doh.httpVersions,
++			skipCertVerify: doh.skipCertVerify, nameCertVerify: doh.nameCertVerify,
++			quicConfig: doh.getQUICConfig().Clone(),
++		}
++		private.quicConfig.TokenStore = newQUICTokenStore()
++		defer private.Close()
++		return private.exchangeContext(ctx, m)
++	}
++	return doh.exchangeContext(ctx, m)
++}
++
++func (doh *dnsOverHTTPS) exchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
+ 	// Quote from https://www.rfc-editor.org/rfc/rfc8484.html:
+ 	// In order to maximize HTTP cache friendliness, DoH clients using media
+ 	// formats that include the ID field from the DNS message header, such
+@@ -614,8 +630,16 @@
+ 	// Run probeQUIC and probeTLS in parallel and see which one is faster.
+ 	chQuic := make(chan error, 1)
+ 	chTLS := make(chan error, 1)
+-	go doh.probeQUIC(ctx, addr, probeTLSCfg, chQuic)
+-	go doh.probeTLS(ctx, probeTLSCfg, chTLS)
++	finishQUIC := resolver.RequestTask(ctx)
++	finishTLS := resolver.RequestTask(ctx)
++	go func() {
++		defer finishQUIC()
++		doh.probeQUIC(ctx, addr, probeTLSCfg, chQuic)
++	}()
++	go func() {
++		defer finishTLS()
++		doh.probeTLS(ctx, probeTLSCfg, chTLS)
++	}()
+ 
+ 	select {
+ 	case quicErr := <-chQuic:
+--- a/dns/doq.go
++++ b/dns/doq.go
+@@ -94,4 +94,19 @@
+ func (doq *dnsOverQUIC) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
++	if resolver.RequestContext(ctx) != nil {
++		// 独立的 QUIC 连接、TokenStore 和错误重置均限于本请求。
++		private := &dnsOverQUIC{
++			addr: doq.addr, dialer: doq.dialer,
++			skipCertVerify: doq.skipCertVerify, nameCertVerify: doq.nameCertVerify,
++			quicConfig: doq.getQUICConfig().Clone(),
++		}
++		private.quicConfig.TokenStore = newQUICTokenStore()
++		defer private.Close()
++		return private.exchangeContext(ctx, m)
++	}
++	return doq.exchangeContext(ctx, m)
++}
++
++func (doq *dnsOverQUIC) exchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
+ 	// When sending queries over a QUIC connection, the DNS Message ID MUST be
+ 	// set to zero.
+ 	m = m.Copy()
