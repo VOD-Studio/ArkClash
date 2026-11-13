@@ -26,13 +26,46 @@ export struct TabPage {
   @Param menus: HdsNavigationMenuItemOptions[] = [];
   @Param topInset: number = 0; // 状态栏高度，vp
   @Param @Require scroller: Scroller;
+  @Param listMode: boolean = false;
   @BuilderParam content: () => void = emptyContent;
   // 滚动方向变化时回调：true = 往下看内容（页签栏该收起），false = 往回滚或回到顶部。
   @Event onScrollDirection: (down: boolean) => void = () => {};
   private down: boolean = false;
 
+  private scrollDirection(offset: number, source: ScrollSource): void {
+    if (source === ScrollSource.EDGE_EFFECT) {
+      return;
+    }
+    let down = this.down;
+    if (this.scroller.currentOffset().yOffset <= 0 && offset <= 0) {
+      down = false;
+    } else if (Math.abs(offset) >= DIRECTION_THRESHOLD) {
+      down = offset > 0;
+    }
+    if (down !== this.down) {
+      this.down = down;
+      this.onScrollDirection(down);
+    }
+  }
+
   build() {
     HdsNavigation() {
+      if (this.listMode) {
+        List({ scroller: this.scroller, space: SECTION_GAP }) {
+          this.content()
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+        .contentStartOffset(this.topInset + TITLE_BAR_HEIGHT + 8)
+        .contentEndOffset(FLOATING_BAR_INSET)
+        .cachedCount(2)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .onWillScroll((offset: number, _state: ScrollState, source: ScrollSource): void => {
+          this.scrollDirection(offset, source);
+        })
+      } else {
       Scroll(this.scroller) {
         Column({ space: SECTION_GAP }) {
           this.content()
@@ -51,21 +84,9 @@ export struct TabPage {
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
       .onWillScroll((_x: number, y: number, _state: ScrollState, source: ScrollSource) => {
-        // 弹簧回弹不代表用户反向滚动，保留回弹前的底栏状态。
-        if (source === ScrollSource.EDGE_EFFECT) {
-          return;
-        }
-        let down = this.down;
-        if (this.scroller.currentOffset().yOffset <= 0 && y <= 0) {
-          down = false;
-        } else if (Math.abs(y) >= DIRECTION_THRESHOLD) {
-          down = y > 0;
-        }
-        if (down !== this.down) {
-          this.down = down;
-          this.onScrollDirection(down);
-        }
+        this.scrollDirection(y, source);
       })
+      }
     }
     .titleBar({
       // 窗口是沉浸式布局，标题栏要自己让开状态栏。

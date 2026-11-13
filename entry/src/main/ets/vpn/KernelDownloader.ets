@@ -1,7 +1,7 @@
 import core from 'libarkclash.so';
-import { CONNECT_TIMEOUT_MS, DirectDownloader, DownloadInfo, Downloader, infoFromHeaders, READ_TIMEOUT_MS,
-  USER_AGENT } from '../shared/profiles/Download';
-import { errorCode, errorString, ProfileError } from '../shared/profiles/Errors';
+import { DOWNLOAD_TIMEOUT_MS, DownloadInfo, DownloadRequestIdentity, Downloader, infoFromHeaders,
+  prepareDownloadAddress } from '../shared/profiles/Download';
+import { errorString, ProfileError } from '../shared/profiles/Errors';
 
 // 和 core/api.go 的 fetchRequest、fetchResult 一致。
 interface FetchRequest {
@@ -17,41 +17,35 @@ interface FetchResult {
   error?: string;
 }
 
-/**
- * 连接中的订阅下载：先经内核按规则发出，不依赖配置有没有开代理端口；失败再直连一次，
- * 订阅到期、节点全挂时只有直连拿得到续费后的订阅（ADR-0009）。
- */
+// 在线订阅按当前规则经内核下载；失败保留原配置，不改变用户选择的出口策略。
 export class KernelDownloader implements Downloader {
-  private direct: DirectDownloader = new DirectDownloader();
 
-  async download(url: string, path: string): Promise<DownloadInfo> {
-    let kernelError: ProfileError;
+  async download(url: string, path: string, identity?: DownloadRequestIdentity): Promise<DownloadInfo> {
+    if (identity?.canceled()) {
+      throw new ProfileError('canceled');
+    }
+    const address = await prepareDownloadAddress(url);
+    const request: FetchRequest = {
+      url: address.address,
+      header: address.headers,
+      path: path,
+      timeoutMs: DOWNLOAD_TIMEOUT_MS
+    };
     try {
-      const request: FetchRequest = {
-        url: url,
-        header: { 'User-Agent': USER_AGENT },
-        path: path,
-        timeoutMs: CONNECT_TIMEOUT_MS + READ_TIMEOUT_MS
-      };
-      // 先赋给带类型的变量再 await：codelinter 解析不到 .so 的类型声明，直接 await 会误报 await-thenable。
       const pending: Promise<string> = core.fetch(JSON.stringify(request));
       const result = JSON.parse(await pending) as FetchResult;
-      if (result.error === undefined && result.status === 200) {
-        return infoFromHeaders(result.header ?? {});
+      if (identity?.canceled()) {
+        throw new ProfileError('canceled');
       }
-      kernelError = result.error !== undefined ? new ProfileError('network', result.error) :
-        new ProfileError('http', `${result.status}`);
-    } catch (e) {
-      kernelError = new ProfileError('network', (e as Error).message);
-    }
-    try {
-      return await this.direct.download(url, path);
-    } catch (e) {
-      // 两条路都失败时，服务器给过状态码的那条更能说明问题。
-      if (errorCode(errorString(kernelError)) === 'http') {
-        throw kernelError;
+      if (result.error !== undefined) {
+        throw new ProfileError(errorString(new Error(result.error)));
       }
-      throw e as Error;
+      if (result.status !== 200) {
+        throw new ProfileError('http', `${result.status}`);
+      }
+      return infoFromHeaders(result.header ?? {});
+    } catch (error) {
+      throw new ProfileError(errorString(error as Error));
     }
   }
 }

@@ -7,12 +7,22 @@ export interface SummaryGroup {
   type: string; // 配置里的写法：select、url-test、fallback、load-balance、relay
   members: string[]; // proxies 字段里直接写的成员，按配置顺序
   dynamic: boolean;
+  url?: string;
+  hidden?: boolean;
+  icon?: string;
 }
 
 /** 未连接时界面显示代理组用的摘要（#35）。 */
 export interface ProfileSummary {
   groups: SummaryGroup[];
   proxies: number; // 配置里直接写的节点数，不含 proxy-providers
+  nodes?: SummaryProxy[];
+  revision?: string;
+}
+
+export interface SummaryProxy {
+  name: string;
+  type: string;
 }
 
 export interface AnalyzeResult {
@@ -46,8 +56,7 @@ export function analyzeText(text: string): AnalyzeResult {
   try {
     doc = parse(text) as Object | undefined | null;
   } catch (e) {
-    const message = ((e as Error).message ?? '').split('\n')[0];
-    return { error: `invalid_yaml:${message}`, summary: '' };
+    return { error: 'invalid_yaml', summary: '' };
   }
   if (!isRecord(doc)) {
     return { error: 'not_clash', summary: '' };
@@ -83,13 +92,29 @@ export function analyzeText(text: string): AnalyzeResult {
         name: name,
         type: typeof type === 'string' ? type : '',
         members: stringList(g['proxies']),
-        dynamic: dynamic
+        dynamic: dynamic,
+        url: typeof g['url'] === 'string' ? g['url'] as string : undefined,
+        hidden: typeof g['hidden'] === 'boolean' ? g['hidden'] as boolean : undefined,
+        icon: typeof g['icon'] === 'string' ? g['icon'] as string : undefined
       });
+    }
+  }
+  const nodes: SummaryProxy[] = [];
+  if (Array.isArray(proxies)) {
+    for (const entry of proxies as Object[]) {
+      if (!isRecord(entry)) {
+        continue;
+      }
+      const proxy = entry as Record<string, Object>;
+      if (typeof proxy['name'] === 'string' && typeof proxy['type'] === 'string') {
+        nodes.push({ name: proxy['name'] as string, type: proxy['type'] as string });
+      }
     }
   }
   const summary: ProfileSummary = {
     groups: groups,
-    proxies: Array.isArray(proxies) ? (proxies as Object[]).length : 0
+    proxies: nodes.length,
+    nodes: nodes
   };
   return { error: '', summary: JSON.stringify(summary) };
 }

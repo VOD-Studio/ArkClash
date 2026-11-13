@@ -1,255 +1,248 @@
-// 订阅更新：未连接时在界面进程里跑，连接中在 VPN 进程里跑，两边只在注入的 UpdateEnv 上不同
-// （ADR-0009）。同一时刻只有一个进程更新，交接方式见 ADR-0009「写入方交接」。
-import { moveFile, removeFile } from '../Files';
-import { DownloadInfo, Downloader } from './Download';
+import { DownloadInfo, hostOf } from './Download';
 import { errorCode, errorString, ProfileError } from './Errors';
 import {
-  candidatePath,
-  ProfileList,
-  profileOfSubscription,
-  readList,
-  readState,
-  findSubscription,
-  SubscriptionRecord,
-  SubscriptionState,
-  writeState,
-  yamlPath
+  candidatePath, checkProfileCommit, DEFAULT_INTERVAL_HOURS, DEFAULT_INTERVAL_MINUTES, findProfile, findSubscription, intervalMinutes,
+  newId, ProfileList, ProfileRecord, profileOfSubscription, readListAsync, readStateAsync,
+  removeProfileFile, sameSource, SubscriptionRecord, SubscriptionState, withProfileStorage, withProfileTask, writeState
 } from './Store';
-import { analyze, writeSummary } from './Summary';
+import { commitCandidate, ProfileCandidateChange, UpdateEnv } from './Commit';
+export { commitCandidate, ProfileCandidateChange, UpdateEnv } from './Commit';
 
-const HOUR_MS = 3600 * 1000;
-// 失败后按 30 分钟、1 小时、2 小时……翻倍重试，最长不超过更新间隔（#35）。
-const RETRY_BASE_MS = 30 * 60 * 1000;
-// setTimeout 的上限约 24.8 天，更远的到期时间到点后重新算。
-const MAX_TIMER_MS = 0x7fffffff;
-
-export interface UpdateEnv {
-  filesDir: string;
-  downloader: Downloader;
-  /** 正在运行的配置编号；界面进程未连接时为空串。 */
-  running: () => string;
-  /** 让内核解析并切换到 path，解析失败时 reject。未连接时没有。 */
-  reload?: (path: string, profile: string) => Promise<void>;
-  /** 在后台预先下载 path 里的 rule-provider，第一次切换到它时不用等（core/prefetch.go）。未连接时没有。 */
-  prefetch?: (path: string) => void;
-}
+const MINUTE_MS = 60000;
+const CHECK_INTERVAL_MS = 20 * MINUTE_MS;
 
 export interface UpdateOutcome {
   subscription: string;
   ok: boolean;
-  error?: string; // Errors.ets 的格式
+  error?: string;
   state: SubscriptionState;
 }
 
-/**
- * 把 candidate 提交为 profile 的内容：内容检查，正在运行的先让内核解析并切换（ADR-0010），
- * 再改名替换 YAML、写摘要。失败时抛出 ProfileError，原来的文件不动；candidate 总会被删掉。
- * shouldCommit 返回 false 时放弃（进程正在停止）。
- */
-export async function commitCandidate(env: UpdateEnv, profile: string, candidate: string,
-  shouldCommit?: () => boolean): Promise<void> {
+export async function downloadProfile(env: UpdateEnv, profile: string, source: string,
+  shouldCommit?: () => boolean, change?: ProfileCandidateChange): Promise<DownloadInfo> {
+  const candidate = candidatePath(env.filesDir, profile);
+  const eligible = (): boolean => env.eligible?.() !== false && shouldCommit?.() !== false;
   try {
-    const result = await analyze(candidate);
-    if (result.error !== '') {
-      throw new Error(result.error);
-    }
-    if (shouldCommit !== undefined && !shouldCommit()) {
-      throw new ProfileError('busy');
-    }
-    if (env.reload !== undefined && env.running() === profile) {
-      try {
-        await env.reload(candidate, profile);
-      } catch (e) {
-        throw new ProfileError('rejected', (e as Error).message);
+    checkProfileCommit(eligible);
+    const info = await env.downloader.download(source, candidate,
+      { canceled: (): boolean => !eligible() });
+    if (change !== undefined) {
+      change.state = successState(info);
+      if (change.create !== undefined && !change.create.nameEdited && info.name !== undefined) {
+        change.create.name = info.name;
       }
     }
-    await moveFile(candidate, yamlPath(env.filesDir, profile));
-    await writeSummary(env.filesDir, profile, result.summary);
-    if (env.prefetch !== undefined && env.running() !== profile) {
-      env.prefetch(yamlPath(env.filesDir, profile));
-    }
+    await commitCandidate(env, profile, candidate, eligible, change);
+    return info;
   } finally {
-    await removeFile(candidate);
+    await removeProfileFile(candidate);
   }
-}
-
-/** 下载 url 作为 profile 的新内容，流程同 commitCandidate。 */
-export async function downloadProfile(env: UpdateEnv, profile: string, url: string,
-  shouldCommit?: () => boolean): Promise<DownloadInfo> {
-  const candidate = candidatePath(env.filesDir, profile);
-  let info: DownloadInfo;
-  try {
-    info = await env.downloader.download(url, candidate);
-  } catch (e) {
-    await removeFile(candidate);
-    throw e as Error;
-  }
-  await commitCandidate(env, profile, candidate, shouldCommit);
-  return info;
 }
 
 function successState(info: DownloadInfo): SubscriptionState {
-  return { updatedAt: Date.now(), usage: info.usage, name: info.name, failures: 0 };
+  return { updatedAt: Date.now(), usage: info.usage ?? { upload: 0, download: 0, total: 0, expire: 0 },
+    name: info.name, failures: 0 };
 }
 
-/** 新加的订阅第一次下载：成功才写状态文件，失败什么都不留（#35「第一次下载成功才加入列表」）。 */
+function sourceTaskKey(source: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index++) { hash = Math.imul(hash ^ source.charCodeAt(index), 16777619); }
+  return `source-${source.length}-${hash >>> 0}`;
+}
+
 export async function downloadNewSubscription(env: UpdateEnv, profile: string, subscription: string,
-  url: string): Promise<UpdateOutcome> {
+  source: string, label: string = '', shouldCommit?: () => boolean): Promise<UpdateOutcome> {
+  const eligible = (): boolean => env.eligible?.() !== false && shouldCommit?.() !== false;
   try {
-    const info = await downloadProfile(env, profile, url);
-    const state = successState(info);
-    await writeState(env.filesDir, subscription, state);
-    return { subscription: subscription, ok: true, state: state };
+    return await withProfileTask<UpdateOutcome>(env.filesDir, sourceTaskKey(source), async (): Promise<UpdateOutcome> =>
+      await withProfileTask<UpdateOutcome>(env.filesDir, profile, async (): Promise<UpdateOutcome> => {
+      checkProfileCommit(eligible);
+      const savedList = await readListAsync(env.filesDir);
+      const saved = findProfile(savedList, profile);
+      if (saved !== undefined) {
+        if (saved.subscription !== subscription) { throw new ProfileError('conflict'); }
+        return { subscription: subscription, ok: true, state: await readStateAsync(env.filesDir, subscription) };
+      }
+      if (savedList.subscriptions.some((item: SubscriptionRecord): boolean => item.url === source)) {
+        throw new ProfileError('link_exists');
+      }
+      const sub: SubscriptionRecord = { id: subscription, url: source, autoUpdate: true,
+        intervalHours: DEFAULT_INTERVAL_HOURS, intervalMinutes: DEFAULT_INTERVAL_MINUTES, revision: newId('s') };
+      const record: ProfileRecord = { id: profile, name: label.trim() || hostOf(source) || profile,
+        nameEdited: label.trim() !== '', subscription: subscription, type: 'url' };
+      const change: ProfileCandidateChange = { create: record, subscription: sub };
+      await downloadProfile(env, profile, source, eligible, change);
+      return { subscription: subscription, ok: true, state: change.state ?? { updatedAt: 0, failures: 0 } };
+      }));
   } catch (e) {
-    return { subscription: subscription, ok: false, error: errorString(e as Error), state: { updatedAt: 0, failures: 0 } };
+    return { subscription: subscription, ok: false, error: errorString(e as Object),
+      state: { updatedAt: 0, failures: 0 } };
   }
 }
 
-/**
- * 更新列表里的一个订阅并写状态文件。url 用于修改链接：用新链接下载，失败时不记失败，
- * 原来的链接和内容都保留；成功后由界面保存新链接（#35）。
- */
-export async function updateSubscription(env: UpdateEnv, list: ProfileList, subscription: string, url?: string,
-  shouldCommit?: () => boolean): Promise<UpdateOutcome> {
-  const previous = readState(env.filesDir, subscription);
+export async function updateSubscription(env: UpdateEnv, list: ProfileList, subscription: string,
+  source?: string, shouldCommit?: () => boolean): Promise<UpdateOutcome> {
+  const eligible = (): boolean => env.eligible?.() !== false && shouldCommit?.() !== false;
+  const previous = await readStateAsync(env.filesDir, subscription);
   const sub = findSubscription(list, subscription);
   const profile = profileOfSubscription(list, subscription);
   if (sub === undefined || profile === undefined) {
     return { subscription: subscription, ok: false, error: 'not_found', state: previous };
   }
+  if (source !== undefined && source !== sub.url) {
+    return { subscription: subscription, ok: false, error: 'conflict', state: previous };
+  }
+  const expected = JSON.parse(JSON.stringify(sub)) as SubscriptionRecord;
+  const change: ProfileCandidateChange = { expectedSubscription: expected,
+    expectedContentRevision: profile.contentRevision ?? '' };
   try {
-    const info = await downloadProfile(env, profile.id, url ?? sub.url, shouldCommit);
-    const state = successState(info);
-    await writeState(env.filesDir, subscription, state);
-    return { subscription: subscription, ok: true, state: state };
+    return await withProfileTask<UpdateOutcome>(env.filesDir, profile.id, async (): Promise<UpdateOutcome> => {
+      await downloadProfile(env, profile.id, sub.url, eligible, change);
+      return { subscription: subscription, ok: true, state: change.state ?? previous };
+    });
   } catch (e) {
-    const error = errorString(e as Error);
-    if (url !== undefined || errorCode(error) === 'busy') {
-      return { subscription: subscription, ok: false, error: error, state: previous };
+    const failure = errorString(e as Object);
+    if (!eligible() || ['busy', 'canceled', 'conflict', 'not_found'].includes(errorCode(failure))) {
+      return { subscription: subscription, ok: false, error: failure, state: previous };
     }
-    const state: SubscriptionState = {
-      updatedAt: previous.updatedAt,
-      usage: previous.usage,
-      name: previous.name,
-      error: error,
-      failedAt: Date.now(),
-      failures: previous.failures + 1
-    };
-    await writeState(env.filesDir, subscription, state);
-    return { subscription: subscription, ok: false, error: error, state: state };
+    return await withProfileStorage<UpdateOutcome>(env.filesDir, async (): Promise<UpdateOutcome> => {
+      checkProfileCommit(eligible);
+      const latest = await readListAsync(env.filesDir);
+      const actual = findSubscription(latest, subscription);
+      if (actual === undefined || !sameSource(actual, expected)) {
+        return { subscription: subscription, ok: false, error: 'conflict', state: previous };
+      }
+      const saved = await readStateAsync(env.filesDir, subscription);
+      const state = saved;
+      state.error = failure;
+      state.failedAt = Date.now();
+      state.failures++;
+      await writeState(env.filesDir, subscription, state, eligible);
+      return { subscription: subscription, ok: false, error: failure, state: state };
+    });
   }
 }
 
-/** 下次自动更新的时间（毫秒时间戳）；0 = 不自动更新。 */
 export function nextDue(sub: SubscriptionRecord, state: SubscriptionState): number {
   if (!sub.autoUpdate) {
     return 0;
   }
-  const interval = Math.max(1, sub.intervalHours) * HOUR_MS;
-  if (state.failures > 0 && state.failedAt !== undefined) {
-    return state.failedAt + Math.min(RETRY_BASE_MS * Math.pow(2, state.failures - 1), interval);
-  }
-  return state.updatedAt + interval;
+  return state.updatedAt === 0 ? 1 : state.updatedAt + intervalMinutes(sub) * MINUTE_MS;
 }
 
-/** 按到期时间调度自动更新（不是固定间隔扫描），手动更新也经过这里，同一个订阅不会同时更新两次。 */
 export class UpdateScheduler {
   private env: UpdateEnv;
   private onUpdated: (outcome: UpdateOutcome) => void;
   private timer: number = -1;
   private stopped: boolean = true;
-  private aborted: boolean = false;
-  private runningDue: boolean = false;
-  private inFlight: Map<string, Promise<UpdateOutcome>> = new Map();
+  private generation: number = 0;
+  private checking: boolean = false;
+  private inFlight: Map<string, Promise<UpdateOutcome>> = new Map<string, Promise<UpdateOutcome>>();
+  private inFlightSources: Map<string, string> = new Map<string, string>();
+  private inFlightGenerations: Map<string, number> = new Map<string, number>();
 
   constructor(env: UpdateEnv, onUpdated: (outcome: UpdateOutcome) => void) {
     this.env = env;
     this.onUpdated = onUpdated;
   }
 
-  /** 开始自动更新；已经到期的（包括启动前就到期的）马上更新。 */
   start(): void {
+    if (!this.stopped || this.env.eligible?.() === false) {
+      return;
+    }
     this.stopped = false;
-    this.aborted = false;
-    this.reschedule();
+    this.runDue().catch((): void => {});
   }
 
-  /** 不再发起自动更新。abort 为 true 时进行中的更新也不再提交（VPN 进程停止时）。 */
   stop(abort: boolean): void {
     this.stopped = true;
-    this.aborted = abort;
-    this.clearTimer();
+    if (abort) {
+      this.generation++;
+    }
+    clearTimeout(this.timer);
+    this.timer = -1;
   }
 
-  /** 列表变了（增删订阅、改间隔或开关）之后调用。 */
+  operationGeneration(): number { return this.generation; }
+  acceptsGeneration(generation: number): boolean { return generation === this.generation; }
+
   reschedule(): void {
-    this.clearTimer();
-    if (this.stopped) {
+    if (this.stopped || this.checking) {
       return;
     }
-    const list = readList(this.env.filesDir);
-    let earliest = 0;
-    for (const sub of list.subscriptions) {
-      const due = nextDue(sub, readState(this.env.filesDir, sub.id));
-      if (due > 0 && (earliest === 0 || due < earliest)) {
-        earliest = due;
-      }
-    }
-    if (earliest === 0) {
-      return;
-    }
-    const delay = Math.min(MAX_TIMER_MS, Math.max(0, earliest - Date.now()));
-    this.timer = setTimeout(() => {
+    clearTimeout(this.timer);
+    this.timer = setTimeout((): void => {
       this.timer = -1;
-      this.runDue();
-    }, delay);
+      this.runDue().catch((): void => {});
+    }, CHECK_INTERVAL_MS);
   }
 
-  /** 手动更新；url 用于修改链接（见 updateSubscription）。 */
-  update(subscription: string, url?: string): Promise<UpdateOutcome> {
-    const key = url === undefined ? subscription : '';
-    const existing = key !== '' ? this.inFlight.get(key) : undefined;
+  async update(subscription: string, source?: string): Promise<UpdateOutcome> {
+    checkProfileCommit(this.env.eligible);
+    const generation = this.generation;
+    const list = await readListAsync(this.env.filesDir);
+    if (generation !== this.generation) { throw new ProfileError('canceled'); }
+    checkProfileCommit(this.env.eligible);
+    const sub = findSubscription(list, subscription);
+    const identity = `${sub?.url ?? ''}:${sub?.revision ?? ''}`;
+    const existing = this.inFlight.get(subscription);
     if (existing !== undefined) {
-      return existing;
+      if (this.inFlightSources.get(subscription) === identity && this.inFlightGenerations.get(subscription) === generation) {
+        return await existing;
+      }
+      await existing.catch((): void => {});
+      return await this.update(subscription, source);
     }
-    const task = updateSubscription(this.env, readList(this.env.filesDir), subscription, url,
-      () => !this.aborted).then((outcome: UpdateOutcome) => {
-      this.onUpdated(outcome);
-      return outcome;
-    });
-    if (key !== '') {
-      this.inFlight.set(key, task);
-      task.finally(() => this.inFlight.delete(key));
-    }
-    return task;
+    const task = this.runUpdate(subscription, generation, source);
+    this.inFlight.set(subscription, task);
+    this.inFlightSources.set(subscription, identity);
+    this.inFlightGenerations.set(subscription, generation);
+    const finished = (): void => {
+      this.inFlight.delete(subscription);
+      this.inFlightSources.delete(subscription);
+      this.inFlightGenerations.delete(subscription);
+    };
+    task.then(finished, finished);
+    return await task;
   }
 
-  private clearTimer(): void {
-    if (this.timer !== -1) {
-      clearTimeout(this.timer);
-      this.timer = -1;
+  private async runUpdate(subscription: string, generation: number, source?: string): Promise<UpdateOutcome> {
+    const list = await readListAsync(this.env.filesDir);
+    if (generation !== this.generation) { throw new ProfileError('canceled'); }
+    checkProfileCommit(this.env.eligible);
+    const outcome = await updateSubscription(this.env, list, subscription, source,
+      (): boolean => generation === this.generation && this.env.eligible?.() !== false);
+    if (generation === this.generation && this.env.eligible?.() !== false) {
+      this.onUpdated(outcome);
     }
+    return outcome;
   }
 
   private async runDue(): Promise<void> {
-    if (this.runningDue || this.stopped) {
+    if (this.checking || this.stopped || this.env.eligible?.() === false) {
       return;
     }
-    this.runningDue = true;
+    this.checking = true;
+    const generation = this.generation;
     try {
-      const list = readList(this.env.filesDir);
+      const list = await readListAsync(this.env.filesDir);
       for (const sub of list.subscriptions) {
-        if (this.stopped) {
+        if (this.stopped || generation !== this.generation || this.env.eligible?.() === false) {
           break;
         }
-        const due = nextDue(sub, readState(this.env.filesDir, sub.id));
-        if (due > 0 && due <= Date.now()) {
-          await this.update(sub.id);
+        try {
+          const due = nextDue(sub, await readStateAsync(this.env.filesDir, sub.id));
+          if (this.stopped || generation !== this.generation || this.env.eligible?.() === false) { break; }
+          if (due > 0 && due <= Date.now()) { await this.update(sub.id); }
+        } catch (e) {
+          // 坏单项保留原文件，不能阻断其余订阅；页面读取时会显示损坏错误。
         }
       }
     } finally {
-      this.runningDue = false;
-      this.reschedule();
+      this.checking = false;
+      if (generation !== this.generation && !this.stopped && this.env.eligible?.() !== false) {
+        this.runDue().catch((): void => {});
+      } else { this.reschedule(); }
     }
   }
 }
