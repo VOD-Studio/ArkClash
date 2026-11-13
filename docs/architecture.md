@@ -2,6 +2,8 @@
 
 产品目标和性能底线见 AGENTS.md「产品底线」，平台限制见 `docs/agents/platform-pitfalls.md`，关键决策的理由见 `docs/adr/`。
 
+本文描述当前代码。第一阶段目标架构见 [ADR 索引](adr/README.md) 中 0012–0017 及其 GitHub 规格入口：预热宿主、Unix 命令通道、配置管线、显式设置生效路径、事件钩子和文件事务均待实施，不能将它们当作已有 API。与现状不同的部分在对应实现工单通过后再更新下表。
+
 ## 运行时结构
 
 ```mermaid
@@ -23,8 +25,8 @@ flowchart LR
   ability -- "create(VpnConfig) → TUN fd" --> sys
 ```
 
-- **UI 进程**只做界面和控制，不加载内核。界面可以随时被系统回收，代理不受影响。
-- **VPN 进程**由系统在 VPN 开启期间保活，持有 TUN fd 和内核，是代理的唯一运行位置。
+- **UI 进程**只做界面和控制，不加载内核。2026-11-12 真机验证表明：启动方 UI 进程被杀时系统会终止 VPN 扩展，进程隔离不能保证代理继续；前后台切换不等于进程死亡。详见 [ADR-0012](adr/0012-core-host-standby-and-forwarding.md)。
+- **VPN 进程**由系统托管，持有 TUN fd 和内核，是代理的唯一运行位置；系统可因启动方死亡、撤权或服务回收而终止它，不能将托管等同永久保活。
 - 两个进程之间只有两条通道（[ADR-0003](adr/0003-ui-core-via-external-controller.md)）：
   - **内核控制面**：mihomo 的 external-controller，所有运行时查询和操作（节点、连接、日志、流量）都走这里。ArkClash 自己的命令挂在同一个 controller 的 `/arkclash/` 下（`core/api.go`，[ADR-0009](adr/0009-arkclash-commands-on-controller.md)）：热切换、模式和局域网代理、运行状态由 Go 处理；订阅类命令（添加、更新、列表变更）由 Go 经 NAPI 线程安全函数转给 VPN 进程的 ArkTS（`vpn/ProfileCommands.ets`）。VPN 进程自己发起的变化经 `/arkclash/events` 推给界面。mihomo 给独立进程用的 `PUT`/`PATCH /configs`、`/restart`、`/upgrade` 由 embed 模式关掉。
   - **文件通道**：`shared/Runtime.ets` 管理的几个文件，用于启动前交接（secret、协议栈、出站模式、局域网代理）和启动失败回报；`shared/profiles/Store.ets` 管理的配置目录，存订阅和配置（格式和写入方见文件头）。

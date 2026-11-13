@@ -1,6 +1,6 @@
 # 0009 ArkClash 自有命令挂在 controller 上
 
-- 状态：已采纳（2026-11-07）
+- 状态：现行实现（2026-11-07）；内部通道计划由 [0013](0013-core-channel-unix-socket-rpc.md)、写入交接计划由 [0017](0017-revisioned-file-store.md) 替代，尚未切换。
 - 扩展：[0003 UI 通过 external-controller 和文件通道与内核通信](0003-ui-core-via-external-controller.md)
 
 ## 背景

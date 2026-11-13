@@ -1,6 +1,6 @@
 # 0003 UI 通过 external-controller 和文件通道与内核通信
 
-- 状态：已采纳（2026-11-06），由 [0009](0009-arkclash-commands-on-controller.md) 扩展
+- 状态：现行实现（2026-11-06），由 [0009](0009-arkclash-commands-on-controller.md) 扩展；计划由 [0013](0013-core-channel-unix-socket-rpc.md) 替代，尚未切换。
 
 ## 背景
 

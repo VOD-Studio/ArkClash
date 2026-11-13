@@ -40,3 +40,9 @@
 
 - `VpnConfig.mtu` 的范围是 576–1500。TUN 地址在 `ClashVpnAbility.ets` 和 `core/tun.go` 两处，要一起改。
 - 内核重启后，其他 App 还缓存着上一轮的 fake-ip，会出现 `fake DNS record ... missing`，等它们的 DNS 缓存过期就好了。要根治，得打开 fake-ip 持久化（还没做）。
+
+## 6. 目标架构的额外复查项（尚未实现）
+
+[ADR-0016](../adr/0016-mihomo-hook-patch.md) 计划通过构建期补丁提供完整的新连接、DNS和路由变化事件。补丁落地后，每次升级 mihomo 都要复验：短连接不漏、DNS缓存/upstream/initiator字段准确、嵌套查询不重复计数、自动组选中变化能使探测缓存失效、无订阅时不采集展示历史、回调不持锁阻塞转发。不能只验证补丁能套上。
+
+[ADR-0012](../adr/0012-core-host-standby-and-forwarding.md) 记录了 UI 进程死亡会终止 VPN 扩展的实机结果。无 TUN 时没有图标不代表不占 VPN 服务名额；待机共存、反复拆建 TUN、自停和仅代理后台运行都需按实现票验证，不能引用实验作为已通过的保证。
