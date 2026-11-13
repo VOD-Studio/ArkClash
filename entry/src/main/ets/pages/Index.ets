@@ -3,6 +3,7 @@ import { AppStorageV2, SymbolGlyphModifier } from '@kit.ArkUI';
 import { HdsBarStyle, HdsTabs, HdsTabsBarChangeMode, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
 import { connection, Connection, ConnectionState } from '../client/Connection';
 import { traffic } from '../client/Traffic';
+import { sheetMaterial } from '../components/Theme';
 import { ConnectionBar } from '../features/home/ConnectionBar';
 import { HomePage } from '../features/home/HomePage';
 import { ProfileItem, ProfileStore } from '../features/profiles/Profiles';
@@ -37,12 +38,14 @@ struct Index {
   @Local profiles: ProfileStore = new ProfileStore();
   @Local profileSheetRequested: boolean = false;
   @Local profileDetailRequested: string = '';
+  @Local proxyPicker: boolean = false;
   @Local homeEditing: boolean = false;
   @Local closeEditSignal: number = 0;
   @Local conn: Connection = connection;
   @Local insets: WindowInsets = AppStorageV2.connect(WindowInsets, () => new WindowInsets())!;
   @Local miniBarExpanded: boolean = false;
   private tabs: HdsTabsController = new HdsTabsController();
+  private pickerScroller: ListScroller = new ListScroller();
   // 每个页签一个 Scroller，绑定给 HdsTabs：页面滚动时页签栏收起、连接条展开。
   private scrollers: Scroller[] = [new Scroller(), new ListScroller(), new ListScroller(), new Scroller()];
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -98,6 +101,10 @@ struct Index {
   }
 
   onBackPress(): boolean {
+    if (this.proxyPicker) {
+      this.proxyPicker = false;
+      return true;
+    }
     if (this.tab === Tab.Home && this.homeEditing) {
       ++this.closeEditSignal;
       return true;
@@ -165,7 +172,7 @@ struct Index {
                   this.profiles.update(active.id);
                 }
               },
-              onOpenProxies: () => this.tabs.changeIndex(Tab.Proxies)
+              onOpenProxies: () => { this.proxyPicker = true; }
             })
           }
           .tabBar(tabBar($r('sys.symbol.house'), $r('sys.symbol.house_fill'), $r('app.string.tab_home')))
@@ -174,6 +181,13 @@ struct Index {
             ProxiesPage({
               scroller: this.scrollers[Tab.Proxies],
               topInset: this.topInset(),
+              visible: this.foreground && this.tab === Tab.Proxies,
+              profileId: this.activeProfile()?.id ?? '',
+              profileReady: this.profiles.ready,
+              summary: this.profiles.summary,
+              online: this.conn.hostState === 'running',
+              offlineWritable: this.conn.offlineWritable,
+              onOpenProfiles: () => this.tabs.changeIndex(Tab.Profiles),
               onScrollDirection: (down: boolean) => this.onScrollDirection(down)
             })
           }
@@ -253,6 +267,13 @@ struct Index {
     .width('100%')
     .height('100%')
     .expandSafeArea([SafeAreaType.KEYBOARD])
+    .bindSheet(this.proxyPicker, this.ProxyPicker(), {
+      title: { title: $r('app.string.tab_proxies') },
+      detents: [SheetSize.LARGE],
+      systemMaterial: sheetMaterial(),
+      showClose: true,
+      onDisappear: () => { this.proxyPicker = false; }
+    })
   }
 
   @Builder
@@ -263,6 +284,23 @@ struct Index {
     })
   }
 
+  @Builder
+  ProxyPicker() {
+    ProxiesPage({
+      scroller: this.pickerScroller,
+      visible: this.foreground && this.proxyPicker,
+      profileId: this.activeProfile()?.id ?? '',
+      profileReady: this.profiles.ready,
+      summary: this.profiles.summary,
+      online: this.conn.hostState === 'running',
+      offlineWritable: this.conn.offlineWritable,
+      pickerMode: true,
+      onOpenProfiles: () => {
+        this.proxyPicker = false;
+        this.tabs.changeIndex(Tab.Profiles);
+      }
+    })
+  }
 
   // 页面底色加一层顶部光晕；连接后光晕换成品牌色，用透明度交叉淡入。
   @Builder

@@ -1105,6 +1105,258 @@
       "value": "%d proxies · %d proxy groups"
     },
     {
+      "name": "proxy_actual",
+      "value": "Actual outbound"
+    },
+    {
+      "name": "proxy_selected",
+      "value": "Current selection"
+    },
+    {
+      "name": "proxy_card_density",
+      "value": "Node cards"
+    },
+    {
+      "name": "proxy_choose_node",
+      "value": "Select node"
+    },
+    {
+      "name": "proxy_cleanup_failed",
+      "value": "The node changed, but connection cleanup failed. Existing connections may still use the previous node."
+    },
+    {
+      "name": "proxy_clear_search",
+      "value": "Clear search"
+    },
+    {
+      "name": "proxy_collapse_group",
+      "value": "Collapse group"
+    },
+    {
+      "name": "proxy_delay_ms",
+      "value": "%d ms"
+    },
+    {
+      "name": "proxy_density_compact",
+      "value": "Compact"
+    },
+    {
+      "name": "proxy_density_loose",
+      "value": "Comfortable"
+    },
+    {
+      "name": "proxy_density_standard",
+      "value": "Standard"
+    },
+    {
+      "name": "proxy_direct_empty",
+      "value": "Direct mode is active. Change outbound mode on the dashboard."
+    },
+    {
+      "name": "proxy_dismiss",
+      "value": "Dismiss"
+    },
+    {
+      "name": "proxy_dynamic_offline",
+      "value": "Connect to load this group’s dynamic members."
+    },
+    {
+      "name": "proxy_expand_group",
+      "value": "Expand group"
+    },
+    {
+      "name": "proxy_group_empty",
+      "value": "No nodes in this group"
+    },
+    {
+      "name": "proxy_group_empty_hint",
+      "value": "Refresh the profile to load its nodes."
+    },
+    {
+      "name": "proxy_group_icons",
+      "value": "Group icons"
+    },
+    {
+      "name": "proxy_group_unselectable",
+      "value": "Nodes cannot be selected in this group."
+    },
+    {
+      "name": "proxy_hide_timeout",
+      "value": "Hide timed out and failed nodes"
+    },
+    {
+      "name": "proxy_icon_filled",
+      "value": "Filled"
+    },
+    {
+      "name": "proxy_icon_hidden",
+      "value": "Hidden"
+    },
+    {
+      "name": "proxy_icon_only",
+      "value": "Icon only"
+    },
+    {
+      "name": "proxy_jump_group",
+      "value": "Jump to group"
+    },
+    {
+      "name": "proxy_layout_density",
+      "value": "Grid layout"
+    },
+    {
+      "name": "proxy_leaf_unresolved",
+      "value": "The outbound node could not be resolved. Connect and refresh, or check the group."
+    },
+    {
+      "name": "proxy_load_failed",
+      "value": "Could not load proxy groups"
+    },
+    {
+      "name": "proxy_load_failed_hint",
+      "value": "Check the connection or profile and retry."
+    },
+    {
+      "name": "proxy_loading",
+      "value": "Loading proxy groups"
+    },
+    {
+      "name": "proxy_locate_filtered",
+      "value": "The current selection is filtered out. Clear the search to locate it."
+    },
+    {
+      "name": "proxy_locate_selected",
+      "value": "Locate selection"
+    },
+    {
+      "name": "proxy_not_ready",
+      "value": "The profile or core is not ready. Retry shortly."
+    },
+    {
+      "name": "proxy_offline_saved",
+      "value": "Offline: selections are saved to this profile. Connect to test latency."
+    },
+    {
+      "name": "proxy_open_profiles",
+      "value": "Manage profiles"
+    },
+    {
+      "name": "proxy_pinned",
+      "value": "Pinned preference"
+    },
+    {
+      "name": "proxy_pinned_name",
+      "value": "Pinned: %s"
+    },
+    {
+      "name": "proxy_preferences_failed",
+      "value": "View settings could not be saved or loaded. Your draft is retained."
+    },
+    {
+      "name": "proxy_refresh",
+      "value": "Refresh groups"
+    },
+    {
+      "name": "proxy_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "proxy_search",
+      "value": "Search node names or types"
+    },
+    {
+      "name": "proxy_search_empty",
+      "value": "No matching nodes"
+    },
+    {
+      "name": "proxy_search_empty_hint",
+      "value": "Search by name and type; all words must match."
+    },
+    {
+      "name": "proxy_selection_failed",
+      "value": "The selection could not be saved. Reloading its actual state."
+    },
+    {
+      "name": "proxy_selection_inconsistent",
+      "value": "The running selection and saved state differ. Refresh and retry."
+    },
+    {
+      "name": "proxy_selection_pending",
+      "value": "Saving selection"
+    },
+    {
+      "name": "proxy_sort",
+      "value": "Sort"
+    },
+    {
+      "name": "proxy_sort_delay",
+      "value": "Latency"
+    },
+    {
+      "name": "proxy_sort_name",
+      "value": "Name"
+    },
+    {
+      "name": "proxy_sort_none",
+      "value": "Original order"
+    },
+    {
+      "name": "proxy_stale",
+      "value": "Refresh failed. Showing the last successful snapshot."
+    },
+    {
+      "name": "proxy_style",
+      "value": "Display options"
+    },
+    {
+      "name": "proxy_test_capacity",
+      "value": "The test queue is full. Wait for current tests and retry."
+    },
+    {
+      "name": "proxy_test_current_group",
+      "value": "Test current group"
+    },
+    {
+      "name": "proxy_test_failed",
+      "value": "Failed"
+    },
+    {
+      "name": "proxy_test_no_conclusion",
+      "value": "Some tests returned no usable result. Retry them."
+    },
+    {
+      "name": "proxy_test_node",
+      "value": "Test node latency"
+    },
+    {
+      "name": "proxy_test_offline",
+      "value": "Connect to test node latency."
+    },
+    {
+      "name": "proxy_test_queued",
+      "value": "Queued"
+    },
+    {
+      "name": "proxy_test_running",
+      "value": "Testing"
+    },
+    {
+      "name": "proxy_test_timeout",
+      "value": "Timeout"
+    },
+    {
+      "name": "proxy_type_unknown",
+      "value": "Unknown type"
+    },
+    {
+      "name": "proxy_view_list",
+      "value": "List"
+    },
+    {
+      "name": "proxy_view_tab",
+      "value": "Tabs"
+    },
+    {
       "name": "dash_probe_busy",
       "value": "Probe capacity is busy. No result was obtained; retry."
     },
@@ -1129,8 +1381,24 @@
       "value": "The tunnel or listeners remain active. Retry stopping."
     },
     {
+      "name": "proxy_node_not_addressable",
+      "value": "This duplicate name cannot be selected individually"
+    },
+    {
+      "name": "proxy_host_unknown",
+      "value": "Core state is unconfirmed. Node selection is unavailable."
+    },
+    {
       "name": "profile_err_host_unknown",
       "value": "Proxy status is unconfirmed. Retry before saving changes."
+    },
+    {
+      "name": "proxy_clear_pin",
+      "value": "Clear preference"
+    },
+    {
+      "name": "proxy_actual_retired",
+      "value": "The active outbound was removed from its provider; waiting for the core cache to refresh."
     }
   ]
 }

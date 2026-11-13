@@ -23,12 +23,12 @@ flowchart LR
   ability -- "create(VpnConfig) → TUN fd" --> sys
 ```
 
-- **UI 进程**只做界面和控制，不加载内核。界面可以随时被系统回收，代理不受影响。
-- **VPN 进程**由系统在 VPN 开启期间保活，持有 TUN fd 和内核，是代理的唯一运行位置。
+- **UI 进程**只做界面和控制，不加载内核。界面恢复时重新查询运行事实，不能用上次的连接缓存断言 VPN 仍存活。
+- **VPN 进程**持有 TUN fd 和内核，是代理的唯一运行位置。系统销毁扩展后不承诺继续转发，UI 被杀与真正内存回收的区别见 #58 的设备证据。
 - 两个进程之间只有两条通道（[ADR-0003](adr/0003-ui-core-via-external-controller.md)）：
-  - **内核控制面**：mihomo 的 external-controller，所有运行时查询和操作（节点、连接、日志、流量）都走这里。ArkClash 自己的命令挂在同一个 controller 的 `/arkclash/` 下（`core/api.go`，[ADR-0009](adr/0009-arkclash-commands-on-controller.md)）：热切换、模式和局域网代理、运行状态由 Go 处理；订阅类命令（添加、更新、列表变更）由 Go 经 NAPI 线程安全函数转给 VPN 进程的 ArkTS（`vpn/ProfileCommands.ets`）。VPN 进程自己发起的变化经 `/arkclash/events` 推给界面。mihomo 给独立进程用的 `PUT`/`PATCH /configs`、`/restart`、`/upgrade` 由 embed 模式关掉。
-  - **文件通道**：`shared/Runtime.ets` 管理的几个文件，用于启动前交接（secret、协议栈、出站模式、局域网代理）和启动失败回报；`shared/profiles/Store.ets` 管理的配置目录，存订阅和配置（格式和写入方见文件头）。
-- UI 进程通过 `protectProcessNet()` 和应用排除名单保持直连；Go 出站另由 `core/socket.go` 逐 socket 绑定当前默认物理网络，避免回到 TUN（[ADR-0008](adr/0008-bind-core-sockets-to-physical-network.md)）。需要看代理出口的功能（比如首页的出口 IP）把内核的 HTTP 代理端口（配置里的 `mixed-port` 或 `port`）当普通代理用，端口号从 controller 查。这不是控制通道；配置里没开代理端口时，这类功能显示为不可用。
+  - **内核控制面**：mihomo external-controller 承载运行查询、节点选择、测速、规则探测、流量与事件。ArkClash 路由在 `/arkclash/` 下：Go 处理运行快照、选择事务和热切换，订阅命令经 NAPI 转给 VPN 进程的 ArkTS（[ADR-0009](adr/0009-arkclash-commands-on-controller.md)）。独立进程专用的 `PUT`/`PATCH /configs`、`/restart`、`/upgrade` 保持关闭。
+  - **文件通道**：`shared/Runtime.ets` 交接启动设置、错误和停止回执；`shared/profiles/Store.ets` 保存配置列表、内容、摘要及每配置节点选择。跨进程短提交持有存储锁，下载使用独立资源任务锁，不占住提交锁等待网络。
+- UI 进程通过 `protectProcessNet()` 和应用排除名单保持直连；Go 出站由 `core/socket.go` 逐 socket 绑定物理网络（[ADR-0008](adr/0008-bind-core-sockets-to-physical-network.md)）。在线出口与服务检查走 `GET /arkclash/probe`，由内核按当前规则拨号，不要求订阅开放 HTTP 代理端口；停止时用 SDK 直连。探测受 5 秒、4 个执行槽和 64 KiB 响应体上限约束，旧 boot/revision 结果作废。
 
 ## 连接流程
 
@@ -38,23 +38,25 @@ sequenceDiagram
   participant Sys as 系统 VPN 服务
   participant Ext as ClashVpnAbility
   participant Core as 内核
-  UI->>UI: 写 runtime.json（新 secret、模式、局域网代理）
+  UI->>UI: 等待配置短提交，再写 runtime.json
   UI->>Sys: startVpnExtensionAbility
   Sys-->>UI: 首次弹授权框
   Sys->>Ext: onCreate
+  Ext->>Ext: installGeoData（按需复制）
   Ext->>Sys: createVpnConnection / protectProcessNet
   Ext->>Sys: create(VpnConfig，排除本应用 UID)
   Sys-->>Ext: TUN fd
-  Ext->>Ext: installGeoData（按需复制）
   Ext->>Core: start(JSON：配置、fd、controller、secret)
-  Core->>Core: 解析配置、applyOverrides、启动 TUN
-  loop 直到就绪或超时
-    UI->>Core: GET /version
+  Core->>Core: 解析配置、恢复节点选择、applyOverrides、启动 TUN
+  loop 有界等待真实转发就绪
+    UI->>Core: GET /arkclash/status（running + tunAttached）
   end
   Note over Ext,UI: 启动失败时 Ext 写 core_error.txt，UI 读到后报错
 ```
 
-断开：UI 调 `stopVpnExtensionAbility`，系统回调 `onDestroy`，依次停内核、销毁 VPN 连接。
+断开：UI 调 `stopVpnExtensionAbility`，扩展清理等待启动代次结束，再分别停止内核、销毁 VPN 连接；其中一项失败仍尝试另一项。扩展在创建资源前写入独立实例标识，两项都成功才写 `runtime-stopped.json`；UI 同时核对当前 secret 和实例，防止系统复用 secret 重新拉起时接受旧清理回执。controller 失联本身不算停止成功，清理失败保留重试入口。
+
+节点选择携带 `expectedBootId` 和配置的 `expectedRevision`。`configRevision` 只在完整配置启动或热切换提交后前进；同一配置内连续选节点不会互相使请求过期。旧配置请求在 Go 事务内拒绝，持久化失败恢复原转发目标，幂等重放返回原操作结果。
 
 ## 状态归属
 
@@ -64,6 +66,9 @@ sequenceDiagram
 | 配置内容、摘要、订阅状态（`profiles/` 下其余文件） | 应用沙箱 | 来自订阅的：未连接时 UI，连接中 VPN 进程；本地配置：UI | UI、VPN 进程、内核 |
 | `runtime.json`（secret、协议栈、出站模式、局域网代理） | 应用沙箱 | UI，每次连接前和连接中改设置时 | VPN 进程 |
 | `core_error.txt` | 应用沙箱 | VPN 进程 | UI，读后删除 |
+| `runtime-instance.json`（当前扩展实例标识） | 应用沙箱 | VPN 进程，创建资源前 | UI、VPN 进程 |
+| `runtime-stopped.json`（当前扩展实例清理完成回执） | 应用沙箱 | VPN 进程，内核与 VPN 连接均释放后 | UI，核对 secret 与实例 |
+| `profiles/<id>.selected.json`（每配置节点选择） | 应用沙箱 | 离线 UI；在线 Go 选择事务 | UI、内核启动及热切换 |
 | Geo 数据（`filesDir/*.metadb、*.dat`）和版本标记 `geo.version` | 应用沙箱 | VPN 进程，安装包里的版本变了才从 rawfile 复制 | 内核 |
 | 用户设置（出站模式、局域网代理等） | UI 的 preferences | UI | UI |
 | 运行时状态（节点选择、连接、流量、正在运行的配置） | 内核内存 | 内核 | UI，经 controller |
@@ -96,6 +101,10 @@ sequenceDiagram
 |---|---|
 | `core/lib.go` | 导出的 C API（`arkclash.h`）；`applyOverrides` 强制 ArkClash 接管的配置项；热切换 `reload` |
 | `core/api.go` | controller 上的 `/arkclash/` 路由、转给 ArkTS 的命令、事件推送、经内核下载 |
+| `core/runtime.go` | 原子运行快照、boot/revision 与事件 |
+| `core/selection.go` | 幂等选择、原子保存、持久化失败补偿、转发前恢复 |
+| `core/delay.go` | 8 执行槽测速、请求取消与配置代次隔离 |
+| `core/probe.go` | 按当前规则执行出口/服务探测，共用内核证书信任 |
 | `core/prefetch.go` | 在后台预先下载配置里的 rule-provider，第一次热切换不用等 |
 | `core/tun.go` | 用系统给的 fd 启动 sing-tun（gVisor 栈），独立于配置的 TUN 设置 |
 | `core/socket.go` | 通过 Network Kit 原生 API 保护 Go 出站 socket，绑定失败则拒绝拨号 |

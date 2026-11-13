@@ -5,15 +5,15 @@
 [![CI](https://github.com/VOD-Studio/ArkClash/actions/workflows/ci.yml/badge.svg)](https://github.com/VOD-Studio/ArkClash/actions/workflows/ci.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-原生 HarmonyOS NEXT 代理客户端。界面用 ArkTS/ArkUI 编写，内核是 [mihomo](https://github.com/MetaCubeX/mihomo)，交互参考 [FlClash](https://github.com/chen08209/FlClash)。
+原生 HarmonyOS NEXT 代理客户端。界面用 ArkTS/ArkUI 编写，内核是 [mihomo](https://github.com/MetaCubeX/mihomo)，手机端交互以 [FlClash v0.9.3](https://github.com/chen08209/FlClash/tree/be84736605527034689c95bf27828ff27d912c5e) 为对齐基准。
 
-> **早期版本**：目前只支持一个订阅，以及连接和断开。代理组、节点选择、流量和日志等功能还在开发中。
+> **早期版本**：已接入仪表盘、代理和多配置管理。本分支新增业务尚待统一真机验收；连接、日志等完整手机功能仍在开发。
 
 ## 为什么做
 
 目标是比同类客户端打开更快、更省电、更稳定、连接更快。
 
-- 内核运行在系统的 VPN 扩展进程里，界面被系统回收也不影响代理。
+- 内核运行在系统 VPN 扩展进程，界面经 controller 和沙箱文件控制。扩展被销毁后不承诺继续代理。
 - 界面进程不加载内核，打开应用时不用等内核启动。
 - 内置 Geo 数据，第一次连接不用现场去 GitHub 下载。
 - 默认使用 fake-ip DNS，关闭手机上用不到的进程查找。
@@ -22,9 +22,10 @@
 
 ## 当前状态
 
-- 下载一个 Clash / mihomo 格式的订阅。
-- 连接后，除 ArkClash 自己以外，所有应用的流量都按订阅里的规则分流。
-- 在 Pura 70 Ultra（API 26）上验证过，平板和二合一设备还没有测试。
+- 仪表盘：连接与停止、出站模式、实时速率与连接统计、出口 IP 和服务连通性检查。
+- 代理：分组与节点浏览、按配置保存选择、测速、搜索排序及列表/标签视图。
+- 配置：订阅与本地文件导入、切换、更新、重命名、复制、删除和内容编辑。
+- 基础 VPN 连接曾在 Pura 70 Ultra（API 26）验证；本次三页改动及性能指标尚未实机验证。
 
 开发计划和进度见 [Issues](https://github.com/VOD-Studio/ArkClash/issues)。
 
@@ -32,7 +33,7 @@
 
 需要 HarmonyOS 7（API 26）及以上的 ARM64 设备。
 
-HarmonyOS 只能安装签过名的应用，目前还没有面向普通用户的安装渠道。[Releases](https://github.com/VOD-Studio/ArkClash/releases) 里每个版本有两个安装包：
+HarmonyOS 只能安装签过名的应用，目前还没有面向普通用户的安装渠道。安装包分为两种，发布附件见 [Releases](https://github.com/VOD-Studio/ArkClash/releases)：
 
 | 文件 | 适用于 |
 |---|---|
@@ -43,9 +44,10 @@ HarmonyOS 只能安装签过名的应用，目前还没有面向普通用户的�
 
 ## 使用
 
-1. 打开 ArkClash，粘贴订阅链接，点「下载订阅」。
-2. 点「连接」。第一次连接时系统会弹出 VPN 授权，选择允许。
-3. 显示「已连接」后即生效。更新订阅后，断开再连接一次。
+1. 在「配置」添加订阅，或导入本地 Clash / mihomo YAML 文件，选中要使用的配置。
+2. 回到仪表盘点「连接」。首次连接需在系统授权框中允许 VPN；启动过程中可以取消。
+3. 在「代理」选择分组内的节点，或发起节点/分组测速；断开后仍可保存选择供下次连接使用。
+4. 在「配置」更新订阅。连接中会尝试热切换，失败时保留原来正在运行的配置并显示错误。
 
 ## 从源码构建
 

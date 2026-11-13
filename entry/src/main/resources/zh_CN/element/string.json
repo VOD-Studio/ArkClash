@@ -1085,6 +1085,258 @@
       "value": "%d 个节点 · %d 个代理组"
     },
     {
+      "name": "proxy_actual",
+      "value": "实际出站"
+    },
+    {
+      "name": "proxy_selected",
+      "value": "当前选择"
+    },
+    {
+      "name": "proxy_card_density",
+      "value": "节点卡片"
+    },
+    {
+      "name": "proxy_choose_node",
+      "value": "选择节点"
+    },
+    {
+      "name": "proxy_cleanup_failed",
+      "value": "节点已切换，但连接清理失败，已有连接可能仍使用原节点。"
+    },
+    {
+      "name": "proxy_clear_search",
+      "value": "清除搜索"
+    },
+    {
+      "name": "proxy_collapse_group",
+      "value": "收起代理组"
+    },
+    {
+      "name": "proxy_delay_ms",
+      "value": "%d 毫秒"
+    },
+    {
+      "name": "proxy_density_compact",
+      "value": "紧凑"
+    },
+    {
+      "name": "proxy_density_loose",
+      "value": "宽松"
+    },
+    {
+      "name": "proxy_density_standard",
+      "value": "标准"
+    },
+    {
+      "name": "proxy_direct_empty",
+      "value": "当前为直连模式，可在仪表盘切换出站模式。"
+    },
+    {
+      "name": "proxy_dismiss",
+      "value": "关闭提示"
+    },
+    {
+      "name": "proxy_dynamic_offline",
+      "value": "此组包含动态成员，连接后可读取完整列表。"
+    },
+    {
+      "name": "proxy_expand_group",
+      "value": "展开代理组"
+    },
+    {
+      "name": "proxy_group_empty",
+      "value": "此代理组暂无节点"
+    },
+    {
+      "name": "proxy_group_empty_hint",
+      "value": "更新配置后可重新读取节点。"
+    },
+    {
+      "name": "proxy_group_icons",
+      "value": "代理组图标"
+    },
+    {
+      "name": "proxy_group_unselectable",
+      "value": "当前代理组无法选中节点。"
+    },
+    {
+      "name": "proxy_hide_timeout",
+      "value": "隐藏超时与失败节点"
+    },
+    {
+      "name": "proxy_icon_filled",
+      "value": "填充图标"
+    },
+    {
+      "name": "proxy_icon_hidden",
+      "value": "隐藏图标"
+    },
+    {
+      "name": "proxy_icon_only",
+      "value": "纯图标"
+    },
+    {
+      "name": "proxy_jump_group",
+      "value": "跳转代理组"
+    },
+    {
+      "name": "proxy_layout_density",
+      "value": "网格布局"
+    },
+    {
+      "name": "proxy_leaf_unresolved",
+      "value": "无法解析实际节点，请连接后刷新或检查代理组。"
+    },
+    {
+      "name": "proxy_load_failed",
+      "value": "读取代理组失败"
+    },
+    {
+      "name": "proxy_load_failed_hint",
+      "value": "请检查连接或配置后重试。"
+    },
+    {
+      "name": "proxy_loading",
+      "value": "正在读取代理组"
+    },
+    {
+      "name": "proxy_locate_filtered",
+      "value": "当前选择被搜索条件过滤，请清除搜索后定位。"
+    },
+    {
+      "name": "proxy_locate_selected",
+      "value": "定位已选节点"
+    },
+    {
+      "name": "proxy_not_ready",
+      "value": "配置或内核尚未就绪，请稍后重试。"
+    },
+    {
+      "name": "proxy_offline_saved",
+      "value": "未连接：节点选择将保存到此配置，延迟测试需连接后执行。"
+    },
+    {
+      "name": "proxy_open_profiles",
+      "value": "管理配置"
+    },
+    {
+      "name": "proxy_pinned",
+      "value": "手动首选"
+    },
+    {
+      "name": "proxy_pinned_name",
+      "value": "首选：%s"
+    },
+    {
+      "name": "proxy_preferences_failed",
+      "value": "视图设置未能保存或读取，草稿已保留。"
+    },
+    {
+      "name": "proxy_refresh",
+      "value": "刷新代理组"
+    },
+    {
+      "name": "proxy_retry",
+      "value": "重试"
+    },
+    {
+      "name": "proxy_search",
+      "value": "搜索节点名称或类型"
+    },
+    {
+      "name": "proxy_search_empty",
+      "value": "没有匹配的节点"
+    },
+    {
+      "name": "proxy_search_empty_hint",
+      "value": "可使用名称和类型，多个词需同时匹配。"
+    },
+    {
+      "name": "proxy_selection_failed",
+      "value": "节点选择未能保存，正在重新读取实际状态。"
+    },
+    {
+      "name": "proxy_selection_inconsistent",
+      "value": "运行选择与保存状态不一致，请刷新后重试。"
+    },
+    {
+      "name": "proxy_selection_pending",
+      "value": "正在保存选择"
+    },
+    {
+      "name": "proxy_sort",
+      "value": "排序"
+    },
+    {
+      "name": "proxy_sort_delay",
+      "value": "按延迟"
+    },
+    {
+      "name": "proxy_sort_name",
+      "value": "按名称"
+    },
+    {
+      "name": "proxy_sort_none",
+      "value": "原始顺序"
+    },
+    {
+      "name": "proxy_stale",
+      "value": "代理组读取失败，正在显示上次读取的内容。"
+    },
+    {
+      "name": "proxy_style",
+      "value": "显示样式"
+    },
+    {
+      "name": "proxy_test_capacity",
+      "value": "测试队列已满，请等待当前测试完成后重试。"
+    },
+    {
+      "name": "proxy_test_current_group",
+      "value": "测试当前代理组"
+    },
+    {
+      "name": "proxy_test_failed",
+      "value": "失败"
+    },
+    {
+      "name": "proxy_test_no_conclusion",
+      "value": "部分测试未取得有效结果，请重试。"
+    },
+    {
+      "name": "proxy_test_node",
+      "value": "测试此节点延迟"
+    },
+    {
+      "name": "proxy_test_offline",
+      "value": "连接后可测试节点延迟。"
+    },
+    {
+      "name": "proxy_test_queued",
+      "value": "等待测试"
+    },
+    {
+      "name": "proxy_test_running",
+      "value": "正在测试"
+    },
+    {
+      "name": "proxy_test_timeout",
+      "value": "超时"
+    },
+    {
+      "name": "proxy_type_unknown",
+      "value": "未知类型"
+    },
+    {
+      "name": "proxy_view_list",
+      "value": "列表"
+    },
+    {
+      "name": "proxy_view_tab",
+      "value": "标签"
+    },
+    {
       "name": "dash_probe_busy",
       "value": "探测繁忙，尚未取得结果，请重试"
     },
@@ -1109,8 +1361,24 @@
       "value": "隧道或监听尚未释放，请重试停止"
     },
     {
+      "name": "proxy_node_not_addressable",
+      "value": "同名节点无法单独指定"
+    },
+    {
+      "name": "proxy_host_unknown",
+      "value": "核心状态未确认，节点选择暂不可用"
+    },
+    {
       "name": "profile_err_host_unknown",
       "value": "尚未确认代理状态，请重试后再保存"
+    },
+    {
+      "name": "proxy_clear_pin",
+      "value": "取消首选"
+    },
+    {
+      "name": "proxy_actual_retired",
+      "value": "实际出站已从提供方移除，等待内核缓存更新"
     }
   ]
 }
