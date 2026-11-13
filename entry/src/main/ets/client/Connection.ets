@@ -281,6 +281,7 @@ export class Connection {
     this.listenersOpen = false;
     this.tunAttached = false;
     this.error = '';
+    traffic.reset();
     this.invalidateRoute();
     this.syncEvents();
   }

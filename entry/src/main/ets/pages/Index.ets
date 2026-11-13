@@ -36,12 +36,15 @@ struct Index {
   @Local foreground: boolean = true;
   @Local profiles: ProfileStore = new ProfileStore();
   @Local profileSheetRequested: boolean = false;
+  @Local profileDetailRequested: string = '';
+  @Local homeEditing: boolean = false;
+  @Local closeEditSignal: number = 0;
   @Local conn: Connection = connection;
   @Local insets: WindowInsets = AppStorageV2.connect(WindowInsets, () => new WindowInsets())!;
   @Local miniBarExpanded: boolean = false;
   private tabs: HdsTabsController = new HdsTabsController();
   // 每个页签一个 Scroller，绑定给 HdsTabs：页面滚动时页签栏收起、连接条展开。
-  private scrollers: Scroller[] = [new Scroller(), new Scroller(), new Scroller(), new Scroller()];
+  private scrollers: Scroller[] = [new Scroller(), new ListScroller(), new ListScroller(), new Scroller()];
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
 
   aboutToAppear(): void {
@@ -53,18 +56,20 @@ struct Index {
 
   aboutToDisappear(): void {
     this.scrollers.forEach((scroller: Scroller) => this.tabs.unbindScroller(scroller));
-    traffic.stop();
+    traffic.stop('shell');
+    this.conn.observe(this.context, false);
+    this.profiles.setForeground(false);
   }
 
   // 配置的更新由谁负责、要不要订阅 VPN 进程的推送，取决于连接状态和应用是否在前台（ADR-0009）。
   // @Monitor 不在初始化时触发，aboutToAppear 里先按缓存的状态调一次。
-  @Monitor('conn.state', 'foreground')
+  @Monitor('conn.state', 'conn.hostState', 'foreground', 'profiles.loaded')
   syncProfiles(): void {
-    if (this.conn.state === ConnectionState.Connected) {
-      this.profiles.setConnected(true);
-    } else if (this.conn.state === ConnectionState.Disconnected) {
-      this.profiles.setConnected(false);
+    this.conn.observe(this.context, this.foreground);
+    if (!this.profiles.loaded) {
+      return;
     }
+    this.profiles.setConnected(this.conn.hostState === 'running', this.conn.offlineWritable);
     // 交接：正在连接、正在断开时界面不发起新的更新。
     this.profiles.setForeground(this.foreground && !this.conn.busy);
   }
@@ -76,11 +81,11 @@ struct Index {
   // 流量推送只在有人看的时候订阅：首页可见，或者连接条展开着。
   @Monitor('tab', 'foreground', 'miniBarExpanded', 'conn.state')
   syncTraffic(): void {
-    const watching = this.foreground && (this.tab === Tab.Home || this.miniBarExpanded);
+    const watching = this.foreground && this.miniBarExpanded;
     if (watching && this.conn.connected) {
-      traffic.start(this.context.filesDir);
+      traffic.start(this.context.filesDir, 'shell');
     } else {
-      traffic.stop();
+      traffic.stop('shell');
     }
   }
 
@@ -90,6 +95,14 @@ struct Index {
 
   onPageHide(): void {
     this.foreground = false;
+  }
+
+  onBackPress(): boolean {
+    if (this.tab === Tab.Home && this.homeEditing) {
+      ++this.closeEditSignal;
+      return true;
+    }
+    return false;
   }
 
   // 往下看内容时展开连接条、收起页签栏，往回滚时恢复。滚动不会自动触发，要应用自己调控制器。
@@ -121,6 +134,16 @@ struct Index {
               onScrollDirection: (down: boolean) => this.onScrollDirection(down),
               topInset: this.topInset(),
               profileReady: this.profiles.ready,
+              profileId: this.activeProfile()?.id ?? '',
+              profileProxyCount: this.profiles.summary?.proxies ?? -1,
+              profileSource: this.activeProfile()?.isSubscription === true ? 'url' : 'local',
+              routeRevision: this.conn.routeRevision,
+              closeEditSignal: this.closeEditSignal,
+              onEditingChanged: (editing: boolean) => { this.homeEditing = editing; },
+              onOpenProfile: () => {
+                this.profileDetailRequested = this.activeProfile()?.id ?? '';
+                this.tabs.changeIndex(Tab.Profiles);
+              },
               profileName: this.activeProfile()?.name ?? '',
               profileUpdatedAt: this.activeProfile()?.state.updatedAt ?? 0,
               profileUpdating: this.activeProfile()?.updating ?? false,
@@ -162,6 +185,8 @@ struct Index {
               onScrollDirection: (down: boolean) => this.onScrollDirection(down),
               store: this.profiles,
               topInset: this.topInset(),
+              detailRequested: this.profileDetailRequested,
+              onDetailHandled: () => { this.profileDetailRequested = ''; },
               sheetRequested: this.profileSheetRequested,
               onSheetHandled: () => {
                 this.profileSheetRequested = false;
@@ -207,6 +232,9 @@ struct Index {
         })
         .onChange((index: number) => {
           this.tab = index;
+          if (index !== Tab.Home && this.homeEditing) {
+            ++this.closeEditSignal;
+          }
           // 换页签时恢复页签栏，新页面从它当前的滚动位置开始。
           this.onScrollDirection(false);
         })
@@ -234,6 +262,7 @@ struct Index {
       onOpen: () => this.tabs.changeIndex(Tab.Proxies)
     })
   }
+
 
   // 页面底色加一层顶部光晕；连接后光晕换成品牌色，用透明度交叉淡入。
   @Builder

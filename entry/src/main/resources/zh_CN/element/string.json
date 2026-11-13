@@ -578,7 +578,539 @@
     },
     {
       "name": "err_interval",
-      "value": "间隔至少 1 小时"
+      "value": "间隔必须是正整数分钟"
+    },
+    {
+      "name": "dash_add_cards",
+      "value": "添加卡片"
+    },
+    {
+      "name": "dash_check",
+      "value": "检测"
+    },
+    {
+      "name": "dash_check_all",
+      "value": "全部检测"
+    },
+    {
+      "name": "dash_connections_live",
+      "value": "当前活动连接，页面隐藏时停止采集"
+    },
+    {
+      "name": "dash_connections_scope",
+      "value": "这里展示当前活动连接，不是会话累计或请求历史。未识别出站的连接只计入活动总数。页面隐藏期间不补采。"
+    },
+    {
+      "name": "dash_copy_address",
+      "value": "复制地址"
+    },
+    {
+      "name": "dash_copy_failed",
+      "value": "复制失败，请重试"
+    },
+    {
+      "name": "dash_copy_ip",
+      "value": "复制 IP"
+    },
+    {
+      "name": "dash_delay_timeout",
+      "value": "节点检测超时"
+    },
+    {
+      "name": "dash_done",
+      "value": "完成"
+    },
+    {
+      "name": "dash_drag_hint",
+      "value": "拖动此处排序，也可使用上移和下移按钮"
+    },
+    {
+      "name": "dash_edit_cards",
+      "value": "编辑卡片"
+    },
+    {
+      "name": "dash_edit_hint",
+      "value": "每次增删或排序都会立即保存；完成仅退出编辑。状态卡不可移除。"
+    },
+    {
+      "name": "dash_exit_details",
+      "value": "出口信息"
+    },
+    {
+      "name": "dash_exit_failed",
+      "value": "检测失败"
+    },
+    {
+      "name": "dash_groups_empty",
+      "value": "当前模式下没有代理组"
+    },
+    {
+      "name": "dash_groups_failed",
+      "value": "代理组读取失败，请重试"
+    },
+    {
+      "name": "dash_groups_loading",
+      "value": "读取中…"
+    },
+    {
+      "name": "dash_hide_ip",
+      "value": "隐藏出口 IP"
+    },
+    {
+      "name": "dash_lan_failed",
+      "value": "网络信息读取或应用失败，请重试"
+    },
+    {
+      "name": "dash_legacy_service",
+      "value": "保留的旧扩展"
+    },
+    {
+      "name": "dash_memory_scope",
+      "value": "界面进程的 PSS + SwapPss 包含按比例分摊的共享页及交换页；VPN 进程显示 RSS，包含 Go 内核。这两项测量口径不同，不能相加作为整应用内存。"
+    },
+    {
+      "name": "dash_memory_scope_short",
+      "value": "不同进程、不同口径，分别展示"
+    },
+    {
+      "name": "dash_memory_stale",
+      "value": "内存样本已过期或读取失败"
+    },
+    {
+      "name": "dash_mode_failed",
+      "value": "模式未能生效，仍显示最后确认的模式"
+    },
+    {
+      "name": "dash_mode_next_start",
+      "value": "将在下次启动时使用"
+    },
+    {
+      "name": "dash_mode_pending",
+      "value": "正在应用模式…"
+    },
+    {
+      "name": "dash_move_down",
+      "value": "下移"
+    },
+    {
+      "name": "dash_move_up",
+      "value": "上移"
+    },
+    {
+      "name": "dash_paused",
+      "value": "已暂停，运行意图仍保留"
+    },
+    {
+      "name": "dash_profile_counts",
+      "value": "%s 个组 · %s 个节点 · %s 条规则"
+    },
+    {
+      "name": "dash_profile_custom",
+      "value": "自定义配置"
+    },
+    {
+      "name": "dash_profile_details",
+      "value": "详情"
+    },
+    {
+      "name": "dash_profile_subscription",
+      "value": "订阅配置"
+    },
+    {
+      "name": "dash_profile_switch",
+      "value": "切换"
+    },
+    {
+      "name": "dash_profile_updated",
+      "value": "更新于 %s"
+    },
+    {
+      "name": "dash_profile_usage",
+      "value": "已用 %d%%"
+    },
+    {
+      "name": "dash_proxy_running",
+      "value": "本地代理运行中"
+    },
+    {
+      "name": "dash_quality_unassessed",
+      "value": "尚未评估出口类型或风险。第三方提供的出口信息仅供参考。"
+    },
+    {
+      "name": "dash_remove",
+      "value": "移除"
+    },
+    {
+      "name": "dash_retry",
+      "value": "重试"
+    },
+    {
+      "name": "dash_retry_exit",
+      "value": "重新检测出口 IP"
+    },
+    {
+      "name": "dash_retry_save",
+      "value": "重试保存草稿"
+    },
+    {
+      "name": "dash_routed_exit",
+      "value": "当前规则出口"
+    },
+    {
+      "name": "dash_runtime_error",
+      "value": "运行操作未能完成，可重试或前往配置检查"
+    },
+    {
+      "name": "dash_save_conflict",
+      "value": "设置已更新，已读取最新内容；本次草稿仍保留，可重试保存"
+    },
+    {
+      "name": "dash_save_failed",
+      "value": "仪表盘设置未能读取或保存，原有数据已保留"
+    },
+    {
+      "name": "dash_service_batch_failed",
+      "value": "本次检测未完成，请重试；已有结果保留原采样时间"
+    },
+    {
+      "name": "dash_service_details",
+      "value": "全部服务"
+    },
+    {
+      "name": "dash_service_failed",
+      "value": "连通检测失败"
+    },
+    {
+      "name": "dash_service_keep_one",
+      "value": "至少保留一个启用的服务"
+    },
+    {
+      "name": "dash_service_manage",
+      "value": "管理"
+    },
+    {
+      "name": "dash_service_reachable",
+      "value": "可连通 · %d ms"
+    },
+    {
+      "name": "dash_service_restricted",
+      "value": "访问受限 · HTTP %d"
+    },
+    {
+      "name": "dash_service_scope",
+      "value": "检测仅反映网络连通性，地区、账号和内容解锁状态另行判定。点击检测才会请求服务。"
+    },
+    {
+      "name": "dash_service_scope_short",
+      "value": "连通性检测 · 不代表服务解锁"
+    },
+    {
+      "name": "dash_service_timeout",
+      "value": "连通检测超时"
+    },
+    {
+      "name": "dash_service_unreachable",
+      "value": "服务响应异常 · HTTP %d"
+    },
+    {
+      "name": "dash_service_untested",
+      "value": "尚未检测连通性"
+    },
+    {
+      "name": "dash_stale_retry",
+      "value": "当前结果未更新，点击徽标重试"
+    },
+    {
+      "name": "dash_start_failed",
+      "value": "启动失败"
+    },
+    {
+      "name": "dash_stats_stale",
+      "value": "统计已过期，请以采样时间为准"
+    },
+    {
+      "name": "dash_traffic_stale",
+      "value": "流量暂未更新，曲线保留最后有效采样"
+    },
+    {
+      "name": "dash_traffic_window",
+      "value": "最近 30 秒 · 空白区为未采样时段"
+    },
+    {
+      "name": "dash_tun_running",
+      "value": "VPN 运行中"
+    },
+    {
+      "name": "dash_ui_pss_swap",
+      "value": "界面 PSS + SwapPss"
+    },
+    {
+      "name": "dash_ui_rss",
+      "value": "界面 RSS"
+    },
+    {
+      "name": "dash_unlock_available",
+      "value": "服务可用"
+    },
+    {
+      "name": "dash_unlock_blocked",
+      "value": "服务封禁"
+    },
+    {
+      "name": "dash_unlock_failed",
+      "value": "解锁检测失败"
+    },
+    {
+      "name": "dash_unlock_isp",
+      "value": "不允许当前 ISP"
+    },
+    {
+      "name": "dash_unlock_originals",
+      "value": "仅自制内容"
+    },
+    {
+      "name": "dash_unlock_region",
+      "value": "地区不支持"
+    },
+    {
+      "name": "dash_unlock_restricted",
+      "value": "服务访问受限"
+    },
+    {
+      "name": "dash_unlock_soon",
+      "value": "即将上线"
+    },
+    {
+      "name": "dash_unlock_timeout",
+      "value": "解锁检测超时"
+    },
+    {
+      "name": "dash_unlock_unavailable",
+      "value": "服务不可用"
+    },
+    {
+      "name": "dash_unlock_unknown",
+      "value": "解锁状态未判定"
+    },
+    {
+      "name": "dash_vpn",
+      "value": "VPN"
+    },
+    {
+      "name": "dash_vpn_attached",
+      "value": "已接入"
+    },
+    {
+      "name": "dash_vpn_capability",
+      "value": "当前版本使用系统 VPN 接管网络；本地代理模式切换尚不可用。"
+    },
+    {
+      "name": "dash_vpn_closed",
+      "value": "未开启"
+    },
+    {
+      "name": "dash_vpn_detached",
+      "value": "未接入"
+    },
+    {
+      "name": "dash_vpn_listeners",
+      "value": "内核监听"
+    },
+    {
+      "name": "dash_vpn_mode_proxy",
+      "value": "本地代理模式"
+    },
+    {
+      "name": "dash_vpn_mode_tun",
+      "value": "VPN 模式"
+    },
+    {
+      "name": "dash_vpn_open",
+      "value": "已开启"
+    },
+    {
+      "name": "dash_vpn_rss",
+      "value": "VPN 进程 RSS"
+    },
+    {
+      "name": "dash_vpn_tun",
+      "value": "系统隧道"
+    },
+    {
+      "name": "profile_load_error",
+      "value": "配置读取失败：%s"
+    },
+    {
+      "name": "profile_apply_error",
+      "value": "目标已保存，仍在运行之前的配置：%s"
+    },
+    {
+      "name": "profile_running",
+      "value": "运行中"
+    },
+    {
+      "name": "profile_batch_links",
+      "value": "批量链接"
+    },
+    {
+      "name": "profile_batch_hint",
+      "value": "每行一个订阅链接，可批量导入"
+    },
+    {
+      "name": "profile_batch_result",
+      "value": "成功 %d 项，跳过 %d 项，失败 %d 项"
+    },
+    {
+      "name": "profile_batch_line",
+      "value": "第 %d 行：%s"
+    },
+    {
+      "name": "profile_batch_progress",
+      "value": "%d / %d"
+    },
+    {
+      "name": "profile_sort",
+      "value": "配置排序"
+    },
+    {
+      "name": "profile_sort_hint",
+      "value": "长按拖动调整顺序，保存后生效"
+    },
+    {
+      "name": "profile_export",
+      "value": "导出源文件"
+    },
+    {
+      "name": "profile_edit_source",
+      "value": "编辑配置文件"
+    },
+    {
+      "name": "profile_upload_source",
+      "value": "选择配置文件"
+    },
+    {
+      "name": "profile_source_title",
+      "value": "配置文件"
+    },
+    {
+      "name": "profile_source_draft",
+      "value": "配置文件有未保存的修改"
+    },
+    {
+      "name": "profile_interval_minutes",
+      "value": "更新间隔（分钟）"
+    },
+    {
+      "name": "profile_optional_name",
+      "value": "名称（可选）"
+    },
+    {
+      "name": "profile_unsaved_title",
+      "value": "保存修改？"
+    },
+    {
+      "name": "profile_unsaved_message",
+      "value": "尚有未保存的修改。"
+    },
+    {
+      "name": "profile_discard",
+      "value": "放弃修改"
+    },
+    {
+      "name": "profile_keep_editing",
+      "value": "继续编辑"
+    },
+    {
+      "name": "profile_manual_auto_update",
+      "value": "配置文件已经修改，是否关闭自动更新？"
+    },
+    {
+      "name": "profile_disable_auto_update",
+      "value": "关闭自动更新"
+    },
+    {
+      "name": "profile_keep_auto_update",
+      "value": "保持开启"
+    },
+    {
+      "name": "profile_err_conflict",
+      "value": "配置已经变化，请重新打开或重试；草稿已保留。"
+    },
+    {
+      "name": "profile_err_corrupt",
+      "value": "保存的数据损坏，原文件已保留，未覆盖。"
+    },
+    {
+      "name": "profile_err_url",
+      "value": "请输入有效的 http、https 或 ftp 地址（最多 2048 字符）。"
+    },
+    {
+      "name": "profile_err_name_long",
+      "value": "名称最多 64 个字符。"
+    },
+    {
+      "name": "profile_err_canceled",
+      "value": "连接状态或配置已变化，请重试。"
+    },
+    {
+      "name": "profile_err_timeout",
+      "value": "下载在 20 秒内未完成。"
+    },
+    {
+      "name": "profile_err_dns",
+      "value": "无法解析服务器地址。"
+    },
+    {
+      "name": "profile_err_tls",
+      "value": "服务器证书或安全连接校验失败。"
+    },
+    {
+      "name": "profile_err_apply",
+      "value": "未能完成配置应用或停止转发，请检查实际连接状态后重试。"
+    },
+    {
+      "name": "profile_metadata_saved",
+      "value": "新地址及设置已保存，但下载失败；原内容和成功更新时间已保留。"
+    },
+    {
+      "name": "profile_err_unsupported_input",
+      "value": "暂不支持此导入方式，请使用订阅链接或 YAML 文件。"
+    },
+    {
+      "name": "profile_details_title",
+      "value": "配置详情"
+    },
+    {
+      "name": "profile_details_counts",
+      "value": "%d 个节点 · %d 个代理组"
+    },
+    {
+      "name": "dash_probe_busy",
+      "value": "探测繁忙，尚未取得结果，请重试"
+    },
+    {
+      "name": "dash_probe_changed",
+      "value": "路由已改变，旧结果已丢弃，请重新检测"
+    },
+    {
+      "name": "dash_probe_timeout",
+      "value": "路由探测超时，请重试"
+    },
+    {
+      "name": "dash_probe_failed",
+      "value": "内核探测未完成，请重试"
+    },
+    {
+      "name": "dash_stop_retry",
+      "value": "重试停止"
+    },
+    {
+      "name": "dash_cleanup_required",
+      "value": "隧道或监听尚未释放，请重试停止"
+    },
+    {
+      "name": "profile_err_host_unknown",
+      "value": "尚未确认代理状态，请重试后再保存"
     }
   ]
 }

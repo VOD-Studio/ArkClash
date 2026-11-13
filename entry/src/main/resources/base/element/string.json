@@ -598,7 +598,539 @@
     },
     {
       "name": "err_interval",
-      "value": "The interval must be at least 1 hour"
+      "value": "The interval must be a positive whole number of minutes"
+    },
+    {
+      "name": "dash_add_cards",
+      "value": "Add cards"
+    },
+    {
+      "name": "dash_check",
+      "value": "Check"
+    },
+    {
+      "name": "dash_check_all",
+      "value": "Check all"
+    },
+    {
+      "name": "dash_connections_live",
+      "value": "Active connections; collection pauses while hidden"
+    },
+    {
+      "name": "dash_connections_scope",
+      "value": "These are active connections, not session totals or request history. Connections with unknown outbound paths count only toward the active total. Hidden periods are not backfilled."
+    },
+    {
+      "name": "dash_copy_address",
+      "value": "Copy address"
+    },
+    {
+      "name": "dash_copy_failed",
+      "value": "Could not copy. Try again."
+    },
+    {
+      "name": "dash_copy_ip",
+      "value": "Copy IP"
+    },
+    {
+      "name": "dash_delay_timeout",
+      "value": "Node check timed out"
+    },
+    {
+      "name": "dash_done",
+      "value": "Done"
+    },
+    {
+      "name": "dash_drag_hint",
+      "value": "Drag to reorder, or use the Move up and Move down buttons"
+    },
+    {
+      "name": "dash_edit_cards",
+      "value": "Edit cards"
+    },
+    {
+      "name": "dash_edit_hint",
+      "value": "Adding, removing and reordering save immediately. Done exits editing. The status card cannot be removed."
+    },
+    {
+      "name": "dash_exit_details",
+      "value": "Exit information"
+    },
+    {
+      "name": "dash_exit_failed",
+      "value": "Check failed"
+    },
+    {
+      "name": "dash_groups_empty",
+      "value": "No proxy groups in the current mode"
+    },
+    {
+      "name": "dash_groups_failed",
+      "value": "Could not load proxy groups. Try again."
+    },
+    {
+      "name": "dash_groups_loading",
+      "value": "Loading…"
+    },
+    {
+      "name": "dash_hide_ip",
+      "value": "Hide exit IP"
+    },
+    {
+      "name": "dash_lan_failed",
+      "value": "Could not read or apply network settings. Try again."
+    },
+    {
+      "name": "dash_legacy_service",
+      "value": "Retained legacy extension"
+    },
+    {
+      "name": "dash_memory_scope",
+      "value": "UI PSS + SwapPss includes proportional shared pages and swapped pages. VPN RSS includes the Go core. These measurements use different definitions and cannot be added into an app total."
+    },
+    {
+      "name": "dash_memory_scope_short",
+      "value": "Separate processes and memory measurements"
+    },
+    {
+      "name": "dash_memory_stale",
+      "value": "Memory sample is stale or could not be read"
+    },
+    {
+      "name": "dash_mode_failed",
+      "value": "Mode change failed. The last confirmed mode is shown."
+    },
+    {
+      "name": "dash_mode_next_start",
+      "value": "Used on the next start"
+    },
+    {
+      "name": "dash_mode_pending",
+      "value": "Applying mode…"
+    },
+    {
+      "name": "dash_move_down",
+      "value": "Move down"
+    },
+    {
+      "name": "dash_move_up",
+      "value": "Move up"
+    },
+    {
+      "name": "dash_paused",
+      "value": "Paused; start intent is retained"
+    },
+    {
+      "name": "dash_profile_counts",
+      "value": "%s groups · %s proxies · %s rules"
+    },
+    {
+      "name": "dash_profile_custom",
+      "value": "Custom profile"
+    },
+    {
+      "name": "dash_profile_details",
+      "value": "Details"
+    },
+    {
+      "name": "dash_profile_subscription",
+      "value": "Subscription profile"
+    },
+    {
+      "name": "dash_profile_switch",
+      "value": "Switch"
+    },
+    {
+      "name": "dash_profile_updated",
+      "value": "Updated %s"
+    },
+    {
+      "name": "dash_profile_usage",
+      "value": "%d%% used"
+    },
+    {
+      "name": "dash_proxy_running",
+      "value": "Local proxy running"
+    },
+    {
+      "name": "dash_quality_unassessed",
+      "value": "Exit type and risk have not been assessed. Third-party exit information is for reference only."
+    },
+    {
+      "name": "dash_remove",
+      "value": "Remove"
+    },
+    {
+      "name": "dash_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "dash_retry_exit",
+      "value": "Check exit IP again"
+    },
+    {
+      "name": "dash_retry_save",
+      "value": "Retry saving draft"
+    },
+    {
+      "name": "dash_routed_exit",
+      "value": "Current routed exit"
+    },
+    {
+      "name": "dash_runtime_error",
+      "value": "The operation did not complete. Retry or check the profile."
+    },
+    {
+      "name": "dash_save_conflict",
+      "value": "Settings changed. The latest version is loaded and your draft is retained for retry."
+    },
+    {
+      "name": "dash_save_failed",
+      "value": "Could not load or save dashboard settings. Existing data is retained."
+    },
+    {
+      "name": "dash_service_batch_failed",
+      "value": "The check did not complete. Retry; existing results retain their original timestamps."
+    },
+    {
+      "name": "dash_service_details",
+      "value": "All services"
+    },
+    {
+      "name": "dash_service_failed",
+      "value": "Connectivity check failed"
+    },
+    {
+      "name": "dash_service_keep_one",
+      "value": "Keep at least one service enabled"
+    },
+    {
+      "name": "dash_service_manage",
+      "value": "Manage"
+    },
+    {
+      "name": "dash_service_reachable",
+      "value": "Reachable · %d ms"
+    },
+    {
+      "name": "dash_service_restricted",
+      "value": "Access restricted · HTTP %d"
+    },
+    {
+      "name": "dash_service_scope",
+      "value": "Checks report network connectivity. Region, account and content availability are separate. Requests start when you tap Check."
+    },
+    {
+      "name": "dash_service_scope_short",
+      "value": "Connectivity check · not an unlock result"
+    },
+    {
+      "name": "dash_service_timeout",
+      "value": "Connectivity check timed out"
+    },
+    {
+      "name": "dash_service_unreachable",
+      "value": "Unexpected response · HTTP %d"
+    },
+    {
+      "name": "dash_service_untested",
+      "value": "Connectivity not checked"
+    },
+    {
+      "name": "dash_stale_retry",
+      "value": "The result is not current. Tap the badge to retry."
+    },
+    {
+      "name": "dash_start_failed",
+      "value": "Start failed"
+    },
+    {
+      "name": "dash_stats_stale",
+      "value": "Statistics are stale. Check the sample time."
+    },
+    {
+      "name": "dash_traffic_stale",
+      "value": "Traffic is stale; the chart shows the last valid samples"
+    },
+    {
+      "name": "dash_traffic_window",
+      "value": "Last 30 seconds · blank sections were not sampled"
+    },
+    {
+      "name": "dash_tun_running",
+      "value": "VPN running"
+    },
+    {
+      "name": "dash_ui_pss_swap",
+      "value": "UI PSS + SwapPss"
+    },
+    {
+      "name": "dash_ui_rss",
+      "value": "UI RSS"
+    },
+    {
+      "name": "dash_unlock_available",
+      "value": "Service available"
+    },
+    {
+      "name": "dash_unlock_blocked",
+      "value": "Service blocked"
+    },
+    {
+      "name": "dash_unlock_failed",
+      "value": "Availability check failed"
+    },
+    {
+      "name": "dash_unlock_isp",
+      "value": "ISP not allowed"
+    },
+    {
+      "name": "dash_unlock_originals",
+      "value": "Original content only"
+    },
+    {
+      "name": "dash_unlock_region",
+      "value": "Region unsupported"
+    },
+    {
+      "name": "dash_unlock_restricted",
+      "value": "Service access restricted"
+    },
+    {
+      "name": "dash_unlock_soon",
+      "value": "Coming soon"
+    },
+    {
+      "name": "dash_unlock_timeout",
+      "value": "Availability check timed out"
+    },
+    {
+      "name": "dash_unlock_unavailable",
+      "value": "Service unavailable"
+    },
+    {
+      "name": "dash_unlock_unknown",
+      "value": "Content availability not assessed"
+    },
+    {
+      "name": "dash_vpn",
+      "value": "VPN"
+    },
+    {
+      "name": "dash_vpn_attached",
+      "value": "Attached"
+    },
+    {
+      "name": "dash_vpn_capability",
+      "value": "This version uses system VPN routing. Switching to local proxy mode is not available yet."
+    },
+    {
+      "name": "dash_vpn_closed",
+      "value": "Closed"
+    },
+    {
+      "name": "dash_vpn_detached",
+      "value": "Not attached"
+    },
+    {
+      "name": "dash_vpn_listeners",
+      "value": "Core listeners"
+    },
+    {
+      "name": "dash_vpn_mode_proxy",
+      "value": "Local proxy mode"
+    },
+    {
+      "name": "dash_vpn_mode_tun",
+      "value": "VPN mode"
+    },
+    {
+      "name": "dash_vpn_open",
+      "value": "Open"
+    },
+    {
+      "name": "dash_vpn_rss",
+      "value": "VPN process RSS"
+    },
+    {
+      "name": "dash_vpn_tun",
+      "value": "System tunnel"
+    },
+    {
+      "name": "profile_load_error",
+      "value": "Unable to read profiles: %s"
+    },
+    {
+      "name": "profile_apply_error",
+      "value": "Target saved; the previous profile is still running: %s"
+    },
+    {
+      "name": "profile_running",
+      "value": "Running"
+    },
+    {
+      "name": "profile_batch_links",
+      "value": "Multiple links"
+    },
+    {
+      "name": "profile_batch_hint",
+      "value": "Enter one subscription URL per line to import multiple profiles"
+    },
+    {
+      "name": "profile_batch_result",
+      "value": "%d succeeded, %d skipped, %d failed"
+    },
+    {
+      "name": "profile_batch_line",
+      "value": "Line %d: %s"
+    },
+    {
+      "name": "profile_batch_progress",
+      "value": "%d / %d"
+    },
+    {
+      "name": "profile_sort",
+      "value": "Sort profiles"
+    },
+    {
+      "name": "profile_sort_hint",
+      "value": "Touch and hold to reorder, then save"
+    },
+    {
+      "name": "profile_export",
+      "value": "Export source file"
+    },
+    {
+      "name": "profile_edit_source",
+      "value": "Edit source file"
+    },
+    {
+      "name": "profile_upload_source",
+      "value": "Choose source file"
+    },
+    {
+      "name": "profile_source_title",
+      "value": "Source file"
+    },
+    {
+      "name": "profile_source_draft",
+      "value": "Source file has unsaved changes"
+    },
+    {
+      "name": "profile_interval_minutes",
+      "value": "Update interval (minutes)"
+    },
+    {
+      "name": "profile_optional_name",
+      "value": "Name (optional)"
+    },
+    {
+      "name": "profile_unsaved_title",
+      "value": "Save changes?"
+    },
+    {
+      "name": "profile_unsaved_message",
+      "value": "You have unsaved changes."
+    },
+    {
+      "name": "profile_discard",
+      "value": "Discard"
+    },
+    {
+      "name": "profile_keep_editing",
+      "value": "Keep editing"
+    },
+    {
+      "name": "profile_manual_auto_update",
+      "value": "The source file was edited. Turn off automatic updates?"
+    },
+    {
+      "name": "profile_disable_auto_update",
+      "value": "Turn off automatic updates"
+    },
+    {
+      "name": "profile_keep_auto_update",
+      "value": "Keep enabled"
+    },
+    {
+      "name": "profile_err_conflict",
+      "value": "The profile changed. Reopen or retry; your draft is preserved."
+    },
+    {
+      "name": "profile_err_corrupt",
+      "value": "Saved data is invalid. The original file has been preserved."
+    },
+    {
+      "name": "profile_err_url",
+      "value": "Enter a valid http, https or ftp URL (up to 2048 characters)."
+    },
+    {
+      "name": "profile_err_name_long",
+      "value": "Names must be 64 characters or fewer."
+    },
+    {
+      "name": "profile_err_canceled",
+      "value": "The connection or profile changed. Please retry."
+    },
+    {
+      "name": "profile_err_timeout",
+      "value": "The download did not finish within 20 seconds."
+    },
+    {
+      "name": "profile_err_dns",
+      "value": "Unable to resolve the server address."
+    },
+    {
+      "name": "profile_err_tls",
+      "value": "Server certificate or secure connection validation failed."
+    },
+    {
+      "name": "profile_err_apply",
+      "value": "Unable to apply the profile or stop forwarding. Check the connection state and retry."
+    },
+    {
+      "name": "profile_metadata_saved",
+      "value": "The new URL and settings were saved, but the download failed. The previous content and successful update time are preserved."
+    },
+    {
+      "name": "profile_err_unsupported_input",
+      "value": "This import method is not available. Use a subscription URL or YAML file."
+    },
+    {
+      "name": "profile_details_title",
+      "value": "Profile details"
+    },
+    {
+      "name": "profile_details_counts",
+      "value": "%d proxies · %d proxy groups"
+    },
+    {
+      "name": "dash_probe_busy",
+      "value": "Probe capacity is busy. No result was obtained; retry."
+    },
+    {
+      "name": "dash_probe_changed",
+      "value": "The route changed. The old result was discarded; check again."
+    },
+    {
+      "name": "dash_probe_timeout",
+      "value": "The routed probe timed out. Try again."
+    },
+    {
+      "name": "dash_probe_failed",
+      "value": "The core probe did not complete. Try again."
+    },
+    {
+      "name": "dash_stop_retry",
+      "value": "Retry stop"
+    },
+    {
+      "name": "dash_cleanup_required",
+      "value": "The tunnel or listeners remain active. Retry stopping."
+    },
+    {
+      "name": "profile_err_host_unknown",
+      "value": "Proxy status is unconfirmed. Retry before saving changes."
     }
   ]
 }
