@@ -2,7 +2,7 @@
 // dir. The extension may also be started by the system without our Want
 // parameters, so everything it needs lives on disk.
 import { fileIo as fs } from '@kit.CoreFileKit';
-import { hasFile, readTextSync, writeText } from './Files';
+import { readText, writeText, writeTextAsync } from './Files';
 
 export const CONTROLLER_ADDRESS = '127.0.0.1:19090';
 
@@ -22,12 +22,66 @@ function errorPath(filesDir: string): string {
   return `${filesDir}/core_error.txt`;
 }
 
-export function writeRuntime(filesDir: string, config: RuntimeConfig): void {
-  writeText(runtimePath(filesDir), JSON.stringify(config));
+interface RuntimeStopReceipt {
+  secret: string;
+  instance: string;
 }
 
-export function readRuntime(filesDir: string): RuntimeConfig | undefined {
-  const text = readTextSync(runtimePath(filesDir));
+export function beginRuntimeInstance(filesDir: string, secret: string, instance: string): Promise<void> {
+  const active: RuntimeStopReceipt = { secret: secret, instance: instance };
+  return writeTextAsync(`${filesDir}/runtime-instance.json`, JSON.stringify(active));
+}
+
+export function writeRuntimeStopped(filesDir: string, secret: string, instance: string): Promise<void> {
+  const receipt: RuntimeStopReceipt = { secret: secret, instance: instance };
+  return writeTextAsync(`${filesDir}/runtime-stopped.json`, JSON.stringify(receipt));
+}
+
+export async function wasRuntimeStopped(filesDir: string, secret: string): Promise<boolean> {
+  if (secret === '') {
+    return false;
+  }
+  const texts = await Promise.all<string | undefined>([
+    readText(`${filesDir}/runtime-instance.json`), readText(`${filesDir}/runtime-stopped.json`)
+  ]);
+  if (texts[0] === undefined || texts[1] === undefined) {
+    return false;
+  }
+  try {
+    const active = JSON.parse(texts[0]) as RuntimeStopReceipt;
+    const receipt = JSON.parse(texts[1]) as RuntimeStopReceipt;
+    return active.secret === secret && receipt.secret === secret &&
+      typeof active.instance === 'string' && active.instance !== '' && receipt.instance === active.instance;
+  } catch (error) {
+    return false;
+  }
+}
+
+/** 没有当前实例的清理回执时，不能因 controller 失联就转为离线写入。 */
+export async function runtimeMayBeActive(filesDir: string): Promise<boolean> {
+  const path = `${filesDir}/runtime-instance.json`;
+  const text = await readText(path);
+  if (text === undefined) {
+    return fs.access(path);
+  }
+  try {
+    const active = JSON.parse(text) as RuntimeStopReceipt;
+    if (typeof active.secret !== 'string' || active.secret === '' ||
+      typeof active.instance !== 'string' || active.instance === '') {
+      return true;
+    }
+    return !await wasRuntimeStopped(filesDir, active.secret);
+  } catch (_error) {
+    return true;
+  }
+}
+
+export function writeRuntime(filesDir: string, config: RuntimeConfig): Promise<void> {
+  return writeTextAsync(runtimePath(filesDir), JSON.stringify(config));
+}
+
+export async function readRuntime(filesDir: string): Promise<RuntimeConfig | undefined> {
+  const text = await readText(runtimePath(filesDir));
   if (text === undefined) {
     return undefined;
   }
@@ -44,12 +98,12 @@ export function writeCoreError(filesDir: string, message: string): void {
   writeText(errorPath(filesDir), message);
 }
 
-export function takeCoreError(filesDir: string): string | undefined {
+export async function takeCoreError(filesDir: string): Promise<string | undefined> {
   const path = errorPath(filesDir);
-  if (!hasFile(path)) {
+  const message = await readText(path);
+  if (message === undefined) {
     return undefined;
   }
-  const message = readTextSync(path) ?? '';
-  fs.unlinkSync(path);
+  await fs.unlink(path);
   return message;
 }

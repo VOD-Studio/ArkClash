@@ -1,5 +1,5 @@
 import { webSocket } from '@kit.NetworkKit';
-import { CONTROLLER_ADDRESS, readRuntime } from '../shared/Runtime';
+import { CONTROLLER_ADDRESS, readRuntime, RuntimeConfig } from '../shared/Runtime';
 
 // 内核重启或刚启动时 WebSocket 可能连不上，重试有上限，避免内核不在时空转耗电。
 const RETRY_DELAY_MS = 2000;
@@ -16,6 +16,8 @@ export class ControllerSocket {
   private filesDir: string = '';
   private retries: number = 0;
   private retryTimer: number = -1;
+  private generation: number = 0;
+  private opening: boolean = false;
 
   /** path 含查询参数，比如 '/connections?interval=2000'。 */
   constructor(path: string, onMessage: (text: string) => void) {
@@ -24,7 +26,7 @@ export class ControllerSocket {
   }
 
   get active(): boolean {
-    return this.socket !== undefined || this.retryTimer !== -1;
+    return this.opening || this.socket !== undefined || this.retryTimer !== -1;
   }
 
   /** 已经在订阅时不做任何事。 */
@@ -38,6 +40,8 @@ export class ControllerSocket {
   }
 
   stop(): void {
+    ++this.generation;
+    this.opening = false;
     if (this.retryTimer !== -1) {
       clearTimeout(this.retryTimer);
       this.retryTimer = -1;
@@ -51,36 +55,47 @@ export class ControllerSocket {
   }
 
   private open(): void {
-    const runtime = readRuntime(this.filesDir);
-    if (runtime === undefined) {
-      return;
-    }
-    const socket = webSocket.createWebSocket();
-    this.socket = socket;
-    socket.on('message', (err, data) => {
-      if (err || typeof data !== 'string') {
+    const generation = ++this.generation;
+    this.opening = true;
+    readRuntime(this.filesDir).then((runtime: RuntimeConfig | undefined): void => {
+      if (generation !== this.generation) {
         return;
       }
-      this.retries = 0;
-      this.onMessage(data);
+      this.opening = false;
+      if (runtime === undefined) {
+        return;
+      }
+      const socket = webSocket.createWebSocket();
+      this.socket = socket;
+      socket.on('message', (err, data) => {
+        if (this.socket !== socket || err || typeof data !== 'string') {
+          return;
+        }
+        this.retries = 0;
+        this.onMessage(data);
+      });
+      const retry = (): void => {
+        if (this.socket !== socket) {
+          return;
+        }
+        this.stop();
+        if (this.retries >= MAX_RETRIES) {
+          return;
+        }
+        this.retries++;
+        this.retryTimer = setTimeout((): void => {
+          this.retryTimer = -1;
+          this.open();
+        }, RETRY_DELAY_MS);
+      };
+      socket.on('close', retry);
+      socket.on('error', retry);
+      const header: Record<string, string> = { 'Authorization': `Bearer ${runtime.secret}` };
+      socket.connect(`ws://${CONTROLLER_ADDRESS}${this.path}`, { header: header }).catch(retry);
+    }).catch((): void => {
+      if (generation === this.generation) {
+        this.opening = false;
+      }
     });
-    const retry = () => {
-      if (this.socket !== socket) {
-        return;
-      }
-      this.stop();
-      if (this.retries >= MAX_RETRIES) {
-        return;
-      }
-      this.retries++;
-      this.retryTimer = setTimeout(() => {
-        this.retryTimer = -1;
-        this.open();
-      }, RETRY_DELAY_MS);
-    };
-    socket.on('close', retry);
-    socket.on('error', retry);
-    const header: Record<string, string> = { 'Authorization': `Bearer ${runtime.secret}` };
-    socket.connect(`ws://${CONTROLLER_ADDRESS}${this.path}`, { header: header }).catch(retry);
   }
 }
