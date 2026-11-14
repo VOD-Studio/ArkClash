@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { AppStorageV2, SymbolGlyphModifier } from '@kit.ArkUI';
 import { HdsBarStyle, HdsTabs, HdsTabsBarChangeMode, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
-import { connection, Connection, ConnectionState } from '../client/Connection';
+import { connection, Connection } from '../client/Connection';
 import { traffic } from '../client/Traffic';
 import { sheetMaterial } from '../components/Theme';
 import { ConnectionBar } from '../features/home/ConnectionBar';
@@ -39,6 +39,7 @@ struct Index {
   @Local profileSheetRequested: boolean = false;
   @Local profileDetailRequested: string = '';
   @Local proxyPicker: boolean = false;
+  @Local profilePicker: boolean = false;
   @Local homeEditing: boolean = false;
   @Local closeEditSignal: number = 0;
   @Local conn: Connection = connection;
@@ -46,6 +47,7 @@ struct Index {
   @Local miniBarExpanded: boolean = false;
   private tabs: HdsTabsController = new HdsTabsController();
   private pickerScroller: ListScroller = new ListScroller();
+  private profilePickerScroller: ListScroller = new ListScroller();
   // 每个页签一个 Scroller，绑定给 HdsTabs：页面滚动时页签栏收起、连接条展开。
   private scrollers: Scroller[] = [new Scroller(), new ListScroller(), new ListScroller(), new Scroller()];
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -81,6 +83,15 @@ struct Index {
     return this.profiles.active();
   }
 
+  @Computed
+  get summaryGroupIcons(): Record<string, string> {
+    const icons: Record<string, string> = {};
+    for (const group of this.profiles.summary?.groups ?? []) {
+      if (group.icon !== undefined && group.icon !== '') { icons[group.name] = group.icon; }
+    }
+    return icons;
+  }
+
   // 流量推送只在有人看的时候订阅：首页可见，或者连接条展开着。
   @Monitor('tab', 'foreground', 'miniBarExpanded', 'conn.state')
   syncTraffic(): void {
@@ -101,6 +112,10 @@ struct Index {
   }
 
   onBackPress(): boolean {
+    if (this.profilePicker) {
+      this.profilePicker = false;
+      return true;
+    }
     if (this.proxyPicker) {
       this.proxyPicker = false;
       return true;
@@ -141,6 +156,8 @@ struct Index {
               onScrollDirection: (down: boolean) => this.onScrollDirection(down),
               topInset: this.topInset(),
               profileReady: this.profiles.ready,
+              canSwitchProfile: this.profiles.items.length > 1,
+              onSwitchProfile: (): void => { this.profilePicker = true; },
               profileId: this.activeProfile()?.id ?? '',
               profileProxyCount: this.profiles.summary?.proxies ?? -1,
               profileSource: this.activeProfile()?.isSubscription === true ? 'url' : 'local',
@@ -160,6 +177,7 @@ struct Index {
               totalBytes: this.activeProfile()?.state.usage?.total ?? 0,
               expireAt: this.activeProfile()?.state.usage?.expire ?? 0,
               summaryGroups: this.profiles.summary?.groups.map((g: SummaryGroup) => g.name) ?? [],
+              summaryGroupIcons: this.summaryGroupIcons,
               visible: this.tab === Tab.Home && this.foreground,
               onAddProfile: () => {
                 this.profileSheetRequested = true;
@@ -199,6 +217,7 @@ struct Index {
               onScrollDirection: (down: boolean) => this.onScrollDirection(down),
               store: this.profiles,
               topInset: this.topInset(),
+              visible: this.foreground && this.tab === Tab.Profiles,
               detailRequested: this.profileDetailRequested,
               onDetailHandled: () => { this.profileDetailRequested = ''; },
               sheetRequested: this.profileSheetRequested,
@@ -254,6 +273,12 @@ struct Index {
         })
         // 不避让键盘：输入法弹出时页签栏留在键盘后面，不被顶到屏幕中间。
         .expandSafeArea([SafeAreaType.KEYBOARD])
+        .bindSheet($$this.profilePicker, this.ProfilePicker(), {
+          title: { title: $r('app.string.tab_profiles') },
+          height: SheetSize.LARGE,
+          systemMaterial: sheetMaterial(),
+          showClose: true
+        })
       }
       .expandSafeArea([SafeAreaType.KEYBOARD])
       // Navigation 默认让开状态栏和手势条；这里让内容铺满窗口，避让交给各页的标题栏和悬浮栏。
@@ -267,7 +292,7 @@ struct Index {
     .width('100%')
     .height('100%')
     .expandSafeArea([SafeAreaType.KEYBOARD])
-    .bindSheet(this.proxyPicker, this.ProxyPicker(), {
+    .bindSheet($$this.proxyPicker, this.ProxyPicker(), {
       title: { title: $r('app.string.tab_proxies') },
       detents: [SheetSize.LARGE],
       systemMaterial: sheetMaterial(),
@@ -283,6 +308,16 @@ struct Index {
       onOpen: () => this.tabs.changeIndex(Tab.Proxies)
     })
   }
+  @Builder
+  ProfilePicker() {
+    ProfilesPage({
+      store: this.profiles,
+      scroller: this.profilePickerScroller,
+      pickerMode: true,
+      visible: this.foreground && this.profilePicker
+    })
+  }
+
 
   @Builder
   ProxyPicker() {
@@ -302,29 +337,11 @@ struct Index {
     })
   }
 
-  // 页面底色加一层顶部光晕；连接后光晕换成品牌色，用透明度交叉淡入。
   @Builder
   Backdrop() {
-    Stack() {
-      Column()
-        .width('100%')
-        .height('100%')
-        .linearGradient({
-          angle: 180,
-          colors: [[$r('app.color.page_glow_idle'), 0], [$r('app.color.page_background'), 0.5]]
-        })
-      Column()
-        .width('100%')
-        .height('100%')
-        .linearGradient({
-          angle: 180,
-          colors: [[$r('app.color.page_glow_connected'), 0], [$r('app.color.page_background'), 0.5]]
-        })
-        .opacity(this.conn.state === ConnectionState.Connected ? 1 : 0)
-        .animation({ duration: 400, curve: Curve.EaseInOut })
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor($r('app.color.page_background'))
+    Column()
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.page_background'))
   }
 }

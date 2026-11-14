@@ -752,7 +752,7 @@ test('已有同名自动首选可明确清除组pin，actual仍标记第二实�
   tests.cancel();
 });
 
-test('实际Controller首页摘要取自动组第二同名实例的历史', async () => {
+test('实际Controller首页摘要保留自动组第二同名实例历史及可见组图标', async () => {
   const harness = await consumerHarness();
   const controller = await import(await sourceModule('../entry/src/main/ets/client/Controller.ets',
     `import { http, CONTROLLER_ADDRESS, readRuntime } from ${JSON.stringify(harness.fixtureUrl)};\n`));
@@ -765,17 +765,21 @@ test('实际Controller首页摘要取自动组第二同名实例的历史', asyn
   const graph = harness.native.requests.shift();
   assert.equal(new URL(graph.url).pathname, '/arkclash/proxies');
   graph.reply(200, JSON.stringify({
-    proxies: { GLOBAL: { id: 'global', name: 'GLOBAL' }, Auto: { id: 'auto', name: 'Auto' } },
+    proxies: { GLOBAL: { id: 'global', name: 'GLOBAL' }, Auto: { id: 'auto', name: 'Auto' },
+      Hidden: { id: 'hidden', name: 'Hidden' } },
     nodes: {
-      global: { name: 'GLOBAL', type: 'Selector' }, auto: { name: 'Auto', type: 'URLTest' },
+      global: { name: 'GLOBAL', type: 'Selector' },
+      auto: { name: 'Auto', type: 'URLTest', icon: 'https://example.org/auto.svg' },
+      hidden: { name: 'Hidden', type: 'Selector', hidden: true, icon: 'https://example.org/hidden.svg' },
       first: { name: 'Shared', type: 'VLESS', history: [{ delay: 55 }] },
       second: { name: 'Shared', type: 'Trojan', history: [{ delay: 123 }] }
     },
-    members: { GLOBAL: [{ id: 'auto', name: 'Auto' }], Auto: [
+    members: { GLOBAL: [{ id: 'auto', name: 'Auto' }, { id: 'hidden', name: 'Hidden' }], Auto: [
       { id: 'first', name: 'Shared' }, { id: 'second', name: 'Shared' }
     ] }, actual: { Auto: 'second' }
   }));
-  assert.deepEqual(await pending, { group: 'Auto', node: 'Shared', delay: 123, retired: false, groups: ['Auto'] });
+  assert.deepEqual(await pending, { group: 'Auto', node: 'Shared', delay: 123, retired: false,
+    groups: ['Auto'], groupIcons: { Auto: 'https://example.org/auto.svg' } });
 });
 
 function retiredActualWireGraph() {

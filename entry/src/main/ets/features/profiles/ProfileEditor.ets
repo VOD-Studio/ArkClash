@@ -1,14 +1,17 @@
+import { formatDateTime } from '../../components/Format';
 import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { errorString } from '../../shared/profiles/Errors';
 import { describeError } from './ProfileErrors';
 import { ProfileDraft } from './ProfileDraft';
 import { ProfileEdit, ProfileStore } from './Profiles';
+import { ProfileSheetHeader } from './ProfileSheetHeader';
 
 @ComponentV2
 export struct ProfileEditor {
   @Param @Require store: ProfileStore;
   @Param @Require draft: ProfileDraft;
   @Event onSaved: () => void = (): void => {};
+  @Event onClose: () => void = (): void => {};
   @Local sourceShown: boolean = false;
   @Local sourceText: string = '';
   @Local sourceOriginal: string = '';
@@ -57,18 +60,18 @@ export struct ProfileEditor {
     return true;
   }
 
-  private sourceDismiss(action: DismissSheetAction): void {
+  private closeSource(dismiss: () => void): void {
     if (this.validating) { return; }
-    if (this.sourceText === this.sourceOriginal) { action.dismiss(); return; }
+    if (this.sourceText === this.sourceOriginal) { dismiss(); return; }
     this.getUIContext().showAlertDialog({
       title: $r('app.string.profile_unsaved_title'),
       message: $r('app.string.profile_unsaved_message'),
       autoCancel: false,
       buttons: [
-        { value: $r('app.string.profile_discard'), action: (): void => { action.dismiss(); } },
+        { value: $r('app.string.profile_discard'), action: (): void => { dismiss(); } },
         { value: $r('app.string.profile_keep_editing'), action: (): void => {} },
         { value: $r('app.string.action_save'), action: (): void => {
-          this.saveSource().then((saved: boolean): void => { if (saved) { action.dismiss(); } });
+          this.saveSource().then((saved: boolean): void => { if (saved) { dismiss(); } });
         } }
       ]
     });
@@ -111,71 +114,143 @@ export struct ProfileEditor {
   @Builder
   SourceEditor() {
     Column({ space: 12 }) {
+      ProfileSheetHeader({ titleText: this.draft.name, saving: this.validating,
+        onSave: (): void => { this.saveSource(); },
+        onClose: (): void => this.closeSource((): void => { this.sourceShown = false; }) })
+      if (this.sourceError !== '') {
+        Text(describeError(this.sourceError))
+          .fontColor($r('app.color.status_error'))
+          .padding(12)
+          .backgroundColor($r('app.color.error_soft'))
+          .width('100%')
+      }
       TextArea({ text: this.sourceText })
         .fontFamily('monospace')
         .fontSize(14)
+        .fontColor($r('sys.color.font_primary'))
+        .backgroundColor(Color.Transparent)
+        .borderRadius(0)
         .layoutWeight(1)
         .width('100%')
+        .enabled(!this.validating)
         .onChange((text: string): void => { this.sourceText = text; })
-      if (this.sourceError !== '') {
-        Text(describeError(this.sourceError)).fontColor($r('app.color.status_error')).width('100%')
-      }
-      Button($r('app.string.action_save'), { type: ButtonType.Capsule })
-        .width('100%').height(48).enabled(!this.validating)
-        .backgroundColor($r('app.color.brand')).fontColor($r('app.color.on_brand'))
-        .onClick((): void => { this.saveSource(); })
     }
-    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 24 })
+    .padding({ bottom: 24 })
     .height('100%')
   }
 
+  @Builder
+  FileMenu() {
+    Menu() {
+      MenuItem({ content: $r('app.string.action_edit') })
+        .onClick((): void => { this.openSource(); })
+      MenuItem({ content: $r('app.string.profile_upload_source') })
+        .onClick((): void => { this.pickSource(); })
+    }
+  }
+
   build() {
-    Scroll() {
-      Column({ space: 12 }) {
-        Text($r('app.string.field_name')).fontColor($r('sys.color.font_secondary')).width('100%')
-        TextInput({ text: this.draft.name }).maxLength(64).height(48)
-          .onChange((text: string): void => { this.draft.name = text; })
-        if (this.draft.subscription) {
-          Text($r('app.string.field_link')).fontColor($r('sys.color.font_secondary')).width('100%')
-          TextInput({ text: this.draft.link }).type(InputType.Password).showPasswordIcon(true).maxLength(2048).height(48)
-            .onChange((text: string): void => { this.draft.link = text; })
-          Row() {
-            Text($r('app.string.field_auto_update')).layoutWeight(1).fontColor($r('sys.color.font_primary'))
-            Toggle({ type: ToggleType.Switch, isOn: this.draft.autoUpdate })
-              .onChange((enabled: boolean): void => { this.draft.autoUpdate = enabled; })
-          }.height(48).width('100%')
-          if (this.draft.autoUpdate) {
-            Text($r('app.string.profile_interval_minutes')).fontColor($r('sys.color.font_secondary')).width('100%')
-            TextInput({ text: this.draft.interval }).type(InputType.Number).height(48)
-              .onChange((text: string): void => { this.draft.interval = text; })
+    Column() {
+      ProfileSheetHeader({ titleText: $r('app.string.edit_profile_title'), saving: this.draft.saving,
+        canSave: !this.loadingSource, onSave: (): void => { this.save(); }, onClose: (): void => this.onClose() })
+      Scroll() {
+        Column({ space: 24 }) {
+          if (this.draft.error !== '') {
+            Text(describeError(this.draft.error))
+              .fontSize(13).lineHeight(18)
+              .fontColor($r('app.color.status_error'))
+              .padding(12)
+              .backgroundColor($r('app.color.error_soft'))
+              .width('100%')
           }
+          Column() {
+            Row({ space: 16 }) {
+              Text($r('app.string.field_name')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+              TextInput({ text: this.draft.name, placeholder: $r('app.string.profile_field_required') })
+                .maxLength(64).fontSize(17).height(56).layoutWeight(1).textAlign(TextAlign.End).padding(0)
+                .fontColor($r('sys.color.font_primary')).backgroundColor(Color.Transparent)
+                .enterKeyType(EnterKeyType.Next)
+                .onChange((text: string): void => { this.draft.name = text; })
+            }
+            .padding({ left: 16, right: 16 }).width('100%')
+            if (this.draft.subscription) {
+              Row().height(0.5).width('100%').backgroundColor($r('app.color.divider')).margin({ left: 16, right: 14 })
+              Row({ space: 16 }) {
+                Text($r('app.string.field_link')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+                TextInput({ text: this.draft.link, placeholder: $r('app.string.profile_field_required') })
+                  .maxLength(2048).fontSize(17).height(56).layoutWeight(1).textAlign(TextAlign.End).padding(0)
+                  .fontColor($r('sys.color.font_primary')).backgroundColor(Color.Transparent)
+                  .enterKeyType(EnterKeyType.Next)
+                  .onChange((text: string): void => { this.draft.link = text; })
+              }
+              .padding({ left: 16, right: 16 }).width('100%')
+            }
+          }
+          .backgroundColor($r('app.color.card_background'))
+          .borderRadius(24).clip(true)
+          if (this.draft.subscription) {
+            Column() {
+              Row({ space: 16 }) {
+                Text($r('app.string.field_auto_update')).fontSize(17).lineHeight(22).layoutWeight(1)
+                  .fontColor($r('sys.color.font_primary'))
+                Toggle({ type: ToggleType.Switch, isOn: this.draft.autoUpdate })
+                  .selectedColor($r('app.color.brand'))
+                  .onChange((enabled: boolean): void => { this.draft.autoUpdate = enabled; })
+              }
+              .height(56).padding({ left: 16, right: 16 }).width('100%')
+              if (this.draft.autoUpdate) {
+                Row().height(0.5).width('100%').backgroundColor($r('app.color.divider')).margin({ left: 16, right: 14 })
+                Row({ space: 16 }) {
+                  Text($r('app.string.profile_update_interval')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+                  Row({ space: 4 }) {
+                    TextInput({ text: this.draft.interval, placeholder: $r('app.string.profile_field_required') })
+                      .type(InputType.Number).fontSize(17).height(56).layoutWeight(1).textAlign(TextAlign.End).padding(0)
+                      .fontColor($r('sys.color.font_primary')).backgroundColor(Color.Transparent)
+                      .onChange((text: string): void => { this.draft.interval = text; })
+                    Text($r('app.string.profile_minutes')).fontSize(15).lineHeight(20).fontColor($r('sys.color.font_secondary'))
+                  }
+                  .layoutWeight(1)
+                }
+                .padding({ left: 16, right: 16 }).width('100%')
+              }
+            }
+            .backgroundColor($r('app.color.card_background'))
+            .borderRadius(24).clip(true)
+          }
+          Row({ space: 8 }) {
+            Column({ space: 4 }) {
+              Text($r('app.string.profile_source_title')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+              if (this.draft.content !== undefined) {
+                Text($r('app.string.profile_source_draft')).fontSize(13).lineHeight(18).fontColor($r('sys.color.font_secondary'))
+              } else if ((this.store.find(this.draft.id)?.updatedAt ?? 0) > 0) {
+                Text($r('app.string.profile_updated', formatDateTime(this.store.find(this.draft.id)?.updatedAt ?? 0)))
+                  .fontSize(13).lineHeight(18)
+                  .fontColor($r('sys.color.font_secondary'))
+              }
+            }
+            .layoutWeight(1).alignItems(HorizontalAlign.Start)
+            if (this.loadingSource) {
+              LoadingProgress().width(20).height(20).color($r('app.color.brand'))
+            } else {
+              SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(16).fontColor([$r('sys.color.font_secondary')])
+            }
+          }
+          .width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
+          .constraintSize({ minHeight: 56 })
+          .backgroundColor($r('app.color.card_background')).borderRadius(24)
+          .enabled(!this.loadingSource)
+          .onClick((): void => { this.openSource(); })
+          .bindContextMenu(this.FileMenu(), ResponseType.LongPress)
         }
-        Row({ space: 8 }) {
-          Button($r('app.string.profile_edit_source')).layoutWeight(1).height(44)
-            .fontColor($r('sys.color.font_primary')).backgroundColor($r('app.color.track'))
-            .enabled(!this.loadingSource).onClick((): void => { this.openSource(); })
-          Button($r('app.string.profile_upload_source')).layoutWeight(1).height(44)
-            .fontColor($r('sys.color.font_primary')).backgroundColor($r('app.color.track'))
-            .enabled(!this.loadingSource).onClick((): void => { this.pickSource(); })
-        }
-        if (this.draft.content !== undefined) {
-          Text($r('app.string.profile_source_draft')).fontSize(13).fontColor($r('sys.color.font_secondary')).width('100%')
-        }
-        if (this.draft.error !== '') {
-          Text(describeError(this.draft.error)).fontSize(13).fontColor($r('app.color.status_error')).width('100%')
-        }
-        Button($r('app.string.action_save'), { type: ButtonType.Capsule })
-          .width('100%').height(48).backgroundColor($r('app.color.brand')).fontColor($r('app.color.on_brand'))
-          .enabled(!this.draft.saving && !this.loadingSource)
-          .onClick((): void => { this.save(); })
+        .enabled(!this.draft.saving)
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 24, bottom: 16 })
+        .width('100%')
+        .bindSheet($$this.sourceShown, this.SourceEditor(), {
+          height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
+          onWillDismiss: (action: DismissSheetAction): void => this.closeSource((): void => action.dismiss())
+        })
       }
-      .enabled(!this.draft.saving)
-      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8, bottom: 24 })
-      .bindSheet($$this.sourceShown, this.SourceEditor(), {
-        title: { title: $r('app.string.profile_source_title') }, height: SheetSize.LARGE,
-        systemMaterial: sheetMaterial(), showClose: true,
-        onWillDismiss: (action: DismissSheetAction): void => this.sourceDismiss(action)
-      })
+      .layoutWeight(1).width('100%').scrollBar(BarState.Off)
     }
     .width('100%').height('100%')
   }

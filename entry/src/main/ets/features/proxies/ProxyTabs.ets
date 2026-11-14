@@ -1,5 +1,6 @@
 import { PAGE_GUTTER } from '../../components/Theme';
 import { ProxyBrowser } from './Proxies';
+import { ProxyGroupTabs } from './ProxyGroupTabs';
 import { ProxyTabGrid } from './ProxyTabGrid';
 import { ProxyGroupView } from './ProxyView';
 
@@ -7,11 +8,10 @@ import { ProxyGroupView } from './ProxyView';
 export struct ProxyTabs {
   @Param @Require browser: ProxyBrowser;
   @Param active: boolean = false;
-  @Param pickerMode: boolean = false;
   @Param profileId: string = '';
+  @Param locateVersion: number = 0;
   @Event onListScroll: (offset: number, source: ScrollSource, scroller: Scroller) => void = () => {};
   @Event onScrollerReady: (scroller: Scroller) => void = () => {};
-  private tabScroller: ListScroller = new ListScroller();
   private fallbackScroller: ListScroller = new ListScroller();
   private scrollers: Map<string, ListScroller> = new Map<string, ListScroller>();
   private focusTimer: number = -1;
@@ -43,7 +43,6 @@ export struct ProxyTabs {
     if (this.active && this.browser.groups.length > 0) {
       this.focusTimer = setTimeout((): void => {
         this.focusTimer = -1;
-        this.tabScroller.scrollToIndex(this.browser.groupIndex, false, ScrollAlign.CENTER);
         if (current !== undefined) {
           this.scrollerFor(current).scrollTo({
             xOffset: 0, yOffset: this.browser.tabOffsets.get(current.key) ?? 0, animation: false
@@ -77,7 +76,11 @@ export struct ProxyTabs {
     }
   }
 
-  private locate(): void {
+  @Monitor('locateVersion')
+  locateSelection(): void {
+    if (!this.active) {
+      return;
+    }
     const target = this.browser.locate(this.browser.currentGroup);
     const group = this.browser.groups[target?.groupIndex ?? -1];
     if (target !== undefined && group !== undefined) {
@@ -92,61 +95,9 @@ export struct ProxyTabs {
   }
 
   build() {
-    Column({ space: 8 }) {
-      Row({ space: 4 }) {
-        List({ scroller: this.tabScroller, space: 8 }) {
-          LazyForEach(this.browser.source, (group: ProxyGroupView) => {
-            ListItem() {
-              Button(group.name, { type: ButtonType.Capsule })
-                .fontSize(14)
-                .labelStyle({ maxLines: 1, overflow: TextOverflow.Ellipsis })
-                .height(40)
-                .padding({ left: 16, right: 16 })
-                .fontColor(this.browser.currentGroup === group.name ? $r('app.color.on_brand') : $r('sys.color.font_primary'))
-                .backgroundColor(this.browser.currentGroup === group.name ? $r('app.color.brand') : $r('app.color.card_background'))
-                .accessibilitySelected(this.browser.currentGroup === group.name)
-                .onClick(() => this.browser.setCurrentGroup(group.name))
-            }
-          }, (group: ProxyGroupView): string => group.key)
-        }
-        .height(44)
-        .layoutWeight(1)
-        .listDirection(Axis.Horizontal)
-        .scrollBar(BarState.Off)
-        if (!this.pickerMode) {
-          Button({ type: ButtonType.Circle }) {
-            SymbolGlyph($r('sys.symbol.checkmark_circle'))
-              .fontSize(18)
-              .fontColor([$r('app.color.brand')])
-          }
-          .width(44)
-          .height(44)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText($r('app.string.proxy_locate_selected'))
-          .onClick(() => this.locate())
-        }
-        if ((this.browser.groups[this.browser.groupIndex]?.pinned ?? '') !== '') {
-          Button($r('app.string.proxy_clear_pin'))
-            .fontSize(12)
-            .fontColor($r('app.color.brand'))
-            .backgroundColor(Color.Transparent)
-            .enabled(this.browser.online || this.browser.offlineWritable)
-            .onClick(() => this.browser.clearPin(this.browser.currentGroup))
-        }
-        Button({ type: ButtonType.Circle }) {
-          SymbolGlyph($r('sys.symbol.bolt'))
-            .fontSize(18)
-            .fontColor([$r('app.color.brand')])
-        }
-        .width(44)
-        .height(44)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText($r('app.string.proxy_test_current_group'))
-        .enabled(this.browser.online && !(this.browser.groups[this.browser.groupIndex]?.testing ?? false))
-        .onClick(() => this.browser.test(this.browser.currentGroup))
-      }
-      .width('100%')
-      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+    Column() {
+      ProxyGroupTabs({ browser: this.browser, active: this.active })
+        .margin({ bottom: 16 })
       if (this.browser.groups[this.browser.groupIndex]?.actualRetired === true) {
         Column({ space: 4 }) {
           Text(this.browser.groups[this.browser.groupIndex]?.now ?? '')

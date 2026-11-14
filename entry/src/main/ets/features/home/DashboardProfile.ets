@@ -1,7 +1,9 @@
-import { formatBytes } from '../../components/Format';
-import { EmptyState } from '../../components/EmptyState';
-import { CARD } from '../../components/Theme';
-import { DashboardCardHeader } from './DashboardCardHeader';
+import { dashboardCount, dashboardTraffic, dashboardUpdatedAgo } from './DashboardFormat';
+import { dashboardCardShadow, DASHBOARD_CARD } from '../../components/Theme';
+import { DashboardUsageMeter } from './DashboardUsageMeter';
+import { AppGlyph } from '../../components/AppGlyph';
+import { DashboardFigure } from './DashboardFigure';
+import { DashboardHeaderAction } from './DashboardHeaderAction';
 
 const DASHBOARD_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -10,6 +12,7 @@ export struct DashboardProfile {
   @Param visible: boolean = false;
   @Param interactive: boolean = true;
   @Param profileReady: boolean = false;
+  @Param canSwitchProfile: boolean = false;
   @Param profileName: string = '';
   @Param profileUpdatedAt: number = 0;
   @Param profileUpdating: boolean = false;
@@ -58,91 +61,142 @@ export struct DashboardProfile {
   }
 
   private daysLeft(): number {
-    return Math.max(0, Math.ceil((this.expireAt * 1000 - this.clock) / DASHBOARD_DAY_MS));
+    return Math.max(0, Math.floor((this.expireAt * 1000 - this.clock) / DASHBOARD_DAY_MS));
   }
 
   private source(): ResourceStr {
     if (this.profileSource === 'custom') {
-      return $r('app.string.dash_profile_custom');
+      return $r('app.string.dash_profile_custom_type');
     }
-    return this.profileUpdatable ? $r('app.string.dash_profile_subscription') : $r('app.string.profile_source_local');
+    return this.profileUpdatable ? $r('app.string.dash_profile_remote') : $r('app.string.profile_source_local');
   }
 
   @Builder
   Usage() {
     Column({ space: 8 }) {
-      Row() {
-        Text($r('app.string.dash_profile_usage', Math.round(this.usedRatio() * 100)))
-          .fontSize(20)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.usedRatio() >= 0.9 ? $r('app.color.warning') : $r('sys.color.font_primary'))
-          .layoutWeight(1)
-        Text(`${formatBytes(Math.max(0, this.usedBytes))} / ${formatBytes(this.totalBytes)}`)
-          .fontSize(12)
+      Row({ space: 12 }) {
+        Text() {
+          Span(`${Math.round(this.usedRatio() * 100)}%`)
+            .fontSize(20)
+            .fontWeight(600)
+          Span(' ')
+          Span($r('app.string.dash_used_short'))
+            .fontSize(13)
+            .fontWeight(600)
+            .fontColor($r('sys.color.font_secondary'))
+        }
+        .lineHeight(25)
+        .fontFeature('"tnum" on')
+        Text(`${dashboardTraffic(Math.max(0, this.usedBytes))} / ${dashboardTraffic(this.totalBytes)}`)
+          .fontSize(13)
+          .lineHeight(18)
+          .fontFeature('"tnum" on')
           .fontColor($r('sys.color.font_secondary'))
+          .textAlign(TextAlign.End)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
       }
       .width('100%')
-      Progress({ value: this.usedRatio() * 100, total: 100, type: ProgressType.Capsule })
-        .width('100%')
-        .height(8)
-        .color(this.usedRatio() >= 0.9 ? $r('app.color.warning') : $r('app.color.brand'))
-        .backgroundColor($r('app.color.track'))
+      DashboardUsageMeter({ share: this.usedRatio() })
     }
     .width('100%')
   }
 
+
   build() {
-    Column({ space: 12 }) {
-      DashboardCardHeader({ title: $r('app.string.card_profile'), symbol: $r('sys.symbol.doc_text'), chevron: true })
-      if (this.profileReady) {
-        Text(this.profileName)
-          .fontSize(18)
-          .fontWeight(FontWeight.Medium)
-          .maxLines(2)
+    Column() {
+      Row({ space: 8 }) {
+        AppGlyph({ name: 'profiles', iconSize: 18, iconColor: $r('sys.color.font_secondary') })
+        Text($r('app.string.card_profile'))
+          .fontSize(15)
+          .lineHeight(20)
+          .fontWeight(600)
+          .layoutWeight(1)
+        if (this.profileReady && this.profileUpdatable) {
+          DashboardHeaderAction({ glyph: 'sync', actionLabel: $r('app.string.action_update'),
+            busy: this.profileUpdating, active: this.interactive, onPress: (): void => { this.onUpdate(); } })
+        }
+        AppGlyph({ name: 'chevronForward', iconSize: 18, iconColor: $r('sys.color.font_secondary') })
+      }
+      .width('100%')
+      .constraintSize({ minHeight: 26 })
+      Row() {
+        Text(this.profileReady ? this.profileName : $r('app.string.action_add_subscription'))
+          .fontSize(17)
+          .lineHeight(22)
+          .fontWeight(600)
+          .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .onClick((): void => { if (this.interactive) { this.onOpen(); } })
-        Text(this.source())
-          .fontSize(12)
-          .fontColor($r('sys.color.font_secondary'))
-        Text(this.profileUpdatedAt > 0 ? $r('app.string.dash_profile_updated',
-          new Date(this.profileUpdatedAt).toLocaleString()) : '—')
-          .fontSize(12)
-          .fontColor($r('sys.color.font_tertiary'))
-        if (this.totalBytes > 0) {
-          this.Usage()
-        } else {
-          Text($r('app.string.dash_profile_counts', this.groupCount >= 0 ? `${this.groupCount}` : '—',
-            this.proxyCount >= 0 ? `${this.proxyCount}` : '—', this.ruleCount >= 0 ? `${this.ruleCount}` : '—'))
-            .fontSize(13)
-            .fontColor($r('sys.color.font_secondary'))
+          .layoutWeight(1)
+        if (this.profileReady && this.canSwitchProfile) {
+          Button({ type: ButtonType.Circle }) {
+            AppGlyph({ name: 'swap', iconSize: 18, iconColor: $r('sys.color.font_secondary') })
+          }
+          .width(28)
+          .height(22)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .enabled(this.interactive)
+          .accessibilityText($r('app.string.dash_profile_switch'))
+          .hitTestBehavior(HitTestMode.Block)
+          .onClick((): void => { this.onSwitch(); })
         }
-        if (this.expireAt > 0) {
-          Text(this.expireAt * 1000 <= this.clock ? $r('app.string.usage_warn_expired') :
-            $r('app.string.days_left', this.daysLeft()))
+      }
+      .width('100%')
+      .margin({ top: 12 })
+      if (this.profileReady) {
+        Row({ space: 12 }) {
+          Text() {
+            if (this.profileUpdatedAt > 0) {
+              Span($r('app.string.dash_profile_updated_prefix'))
+              Span(dashboardUpdatedAgo(this.profileUpdatedAt, this.clock))
+            } else {
+              Span('—')
+            }
+          }
+            .accessibilityDescription(this.profileUpdatedAt > 0 ? new Date(this.profileUpdatedAt).toLocaleString() : '—')
             .fontSize(12)
-            .fontColor(this.daysLeft() <= 7 ? $r('app.color.warning') : $r('sys.color.font_secondary'))
+            .lineHeight(16)
+            .fontColor($r('sys.color.font_secondary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+          Text(this.expireAt > 0 ? $r('app.string.days_left', this.daysLeft()) : this.source())
+            .fontSize(12)
+            .lineHeight(16)
+            .fontColor(this.expireAt > 0 && this.daysLeft() <= 7 ? $r('app.color.warning') :
+              $r('sys.color.font_secondary'))
+            .maxLines(1)
         }
-        Row({ space: 8 }) {
-          Button($r('app.string.dash_profile_details'))
-            .onClick((): void => { if (this.interactive) { this.onOpen(); } })
-          Button($r('app.string.dash_profile_switch'))
-            .onClick((): void => { if (this.interactive) { this.onSwitch(); } })
-          if (this.profileUpdatable) {
-            Button(this.profileUpdating ? $r('app.string.services_checking') : $r('app.string.action_update'))
-              .enabled(!this.profileUpdating)
-              .onClick((): void => { if (this.interactive) { this.onUpdate(); } })
+        .width('100%')
+        Column() {
+          if (this.totalBytes > 0) {
+            this.Usage()
+          } else {
+            Row({ space: 16 }) {
+              DashboardFigure({ figureText: dashboardCount(this.groupCount),
+                label: $r('app.string.card_group') })
+              DashboardFigure({ figureText: dashboardCount(this.proxyCount),
+                label: $r('app.string.tab_proxies') })
+              DashboardFigure({ figureText: dashboardCount(this.ruleCount),
+                label: $r('app.string.dash_rules') })
+            }
+            .width('100%')
+            .justifyContent(FlexAlign.SpaceBetween)
           }
         }
-        .enabled(this.interactive)
-      } else {
-        EmptyState({
-          icon: $r('sys.symbol.doc_text'), title: $r('app.string.home_no_profile'),
-          hint: $r('app.string.home_no_profile_hint'), actionLabel: $r('app.string.action_add_subscription'),
-          onAction: (): void => { if (this.interactive) { this.onAdd(); } }
-        })
+        .width('100%')
+        .margin({ top: 14 })
       }
     }
     .alignItems(HorizontalAlign.Start)
-    .attributeModifier(CARD)
+    .attributeModifier(DASHBOARD_CARD)
+    .background(dashboardCardShadow)
+    .onClick((): void => {
+      if (this.interactive) {
+        if (this.profileReady) { this.onOpen(); } else { this.onAdd(); }
+      }
+    })
   }
 }

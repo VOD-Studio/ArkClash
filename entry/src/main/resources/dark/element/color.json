@@ -9,14 +9,6 @@
       "value": "#0B0D12"
     },
     {
-      "name": "page_glow_idle",
-      "value": "#1A2130"
-    },
-    {
-      "name": "page_glow_connected",
-      "value": "#183273"
-    },
-    {
       "name": "card_background",
       "value": "#1A1C22"
     },
@@ -107,6 +99,54 @@
     {
       "name": "memory_ui",
       "value": "#2C4A8C"
+    },
+    {
+      "name": "dash_series_secondary",
+      "value": "#374E85"
+    },
+    {
+      "name": "dash_addable_background",
+      "value": "#13151B"
+    },
+    {
+      "name": "dash_remove_background",
+      "value": "#93000A"
+    },
+    {
+      "name": "surface_block",
+      "value": "#24262D"
+    },
+    {
+      "name": "selection_tonal",
+      "value": "#245B8CFF"
+    },
+    {
+      "name": "dash_status_decoration",
+      "value": "#212738"
+    },
+    {
+      "name": "dash_running_background",
+      "value": "#005313"
+    },
+    {
+      "name": "profile_expiry_tonal",
+      "value": "#265B8CFF"
+    },
+    {
+      "name": "profile_expiry_error_tonal",
+      "value": "#26FF6B6B"
+    },
+    {
+      "name": "dashboard_shadow_contact",
+      "value": "#80000000"
+    },
+    {
+      "name": "dashboard_shadow_ambient",
+      "value": "#8C000000"
+    },
+    {
+      "name": "dashboard_shadow_diffuse",
+      "value": "#00000000"
     }
   ]
 }

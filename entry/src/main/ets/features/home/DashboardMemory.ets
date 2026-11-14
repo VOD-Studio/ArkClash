@@ -1,9 +1,9 @@
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { memoryStats, MemoryStats, UiMemoryStats } from '../../client/Stats';
-import { formatBytes } from '../../components/Format';
+import { dashboardTraffic, dashboardTrafficValue, DashboardTrafficValue } from './DashboardFormat';
 import { LabeledValue } from '../../components/Labels';
-import { CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { dashboardCardShadow, DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { DashboardCardHeader } from './DashboardCardHeader';
 
 @ComponentV2
@@ -62,48 +62,165 @@ export struct DashboardMemory {
       (this.conn.connected && this.core.sampledAt > 0 && this.clock - this.core.sampledAt > 5000);
   }
 
+
+  private totalRss(): number {
+    return this.ui.rssBytes + (this.conn.connected && this.core.received ? this.core.coreBytes : 0);
+  }
+
+  private rssReady(): boolean {
+    return this.ui.sampledAt > 0 && (this.conn.connected ? this.core.received :
+      this.conn.forward === 'stopped' && this.conn.intent === 'stopped');
+  }
+
+  @Computed
+  get totalRssValue(): DashboardTrafficValue {
+    return dashboardTrafficValue(this.totalRss());
+  }
+
   @Builder
   Details() {
-    Column({ space: 16 }) {
-      LabeledValue({ label: $r('app.string.dash_ui_pss_swap'),
-        value: this.ui.sampledAt > 0 ? formatBytes(this.ui.pssSwapBytes) : '—' })
-      LabeledValue({ label: $r('app.string.dash_ui_rss'),
-        value: this.ui.sampledAt > 0 ? formatBytes(this.ui.rssBytes) : '—' })
-      Text(this.ui.sampledAt > 0 ? new Date(this.ui.sampledAt).toLocaleString() : '—')
-        .fontSize(12)
-        .fontColor($r('sys.color.font_tertiary'))
-      LabeledValue({ label: $r('app.string.dash_vpn_rss'),
-        value: this.core.sampledAt > 0 ? formatBytes(this.core.coreBytes) : '—' })
-      Text(this.core.sampledAt > 0 ? new Date(this.core.sampledAt).toLocaleString() : '—')
-        .fontSize(12)
-        .fontColor($r('sys.color.font_tertiary'))
-      Text($r('app.string.dash_memory_scope'))
-        .fontSize(13)
-        .fontColor($r('sys.color.font_secondary'))
+    Scroll() {
+      Column({ space: 16 }) {
+        LabeledValue({ label: $r('app.string.dash_total_rss'),
+          value: this.rssReady() ? dashboardTraffic(this.totalRss()) : '—' })
+          .width('100%')
+          .padding({ left: 5, right: 5, top: 8 })
+        Column({ space: 12 }) {
+          Text($r('app.string.dash_memory_app'))
+            .fontSize(15)
+            .lineHeight(20)
+            .fontWeight(600)
+          LabeledValue({ label: $r('app.string.dash_ui_rss'),
+            value: this.ui.sampledAt > 0 ? dashboardTraffic(this.ui.rssBytes) : '—' })
+            .width('100%')
+          LabeledValue({ label: $r('app.string.dash_ui_pss_swap'),
+            value: this.ui.sampledAt > 0 ? dashboardTraffic(this.ui.pssSwapBytes) : '—' })
+            .width('100%')
+          Text(this.ui.sampledAt > 0 ? new Date(this.ui.sampledAt).toLocaleString() : '—')
+            .fontSize(12)
+            .lineHeight(16)
+            .fontColor($r('sys.color.font_tertiary'))
+            .width('100%')
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+        .padding(16)
+        .borderRadius(22)
+        .backgroundColor($r('app.color.tile_background'))
+        Column({ space: 12 }) {
+          Text($r('app.string.dash_memory_core'))
+            .fontSize(15)
+            .lineHeight(20)
+            .fontWeight(600)
+          LabeledValue({ label: $r('app.string.dash_vpn_rss'),
+            value: this.core.sampledAt > 0 ? dashboardTraffic(this.core.coreBytes) : '—' })
+            .width('100%')
+          Text(this.core.sampledAt > 0 ? new Date(this.core.sampledAt).toLocaleString() : '—')
+            .fontSize(12)
+            .lineHeight(16)
+            .fontColor($r('sys.color.font_tertiary'))
+            .width('100%')
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+        .padding(16)
+        .borderRadius(22)
+        .backgroundColor($r('app.color.tile_background'))
+        Text($r('app.string.dash_memory_scope'))
+          .fontSize(13)
+          .lineHeight(18)
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+        if (this.stale()) {
+          Text($r('app.string.dash_memory_stale'))
+            .fontSize(12)
+            .lineHeight(16)
+            .fontColor($r('app.color.warning'))
+            .width('100%')
+        }
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 24 })
     }
     .width('100%')
-    .padding(PAGE_GUTTER)
+    .height('100%')
+    .align(Alignment.TopStart)
+    .scrollBar(BarState.Off)
   }
 
   build() {
     Column({ space: 12 }) {
-      DashboardCardHeader({ title: $r('app.string.card_memory'), symbol: $r('sys.symbol.rectangle_stack'), chevron: true })
-      Row({ space: 12 }) {
-        LabeledValue({ label: $r('app.string.dash_ui_pss_swap'),
-          value: this.ui.sampledAt > 0 ? formatBytes(this.ui.pssSwapBytes) : '—' }).layoutWeight(1)
-        LabeledValue({ label: $r('app.string.dash_vpn_rss'),
-          value: this.conn.connected && this.core.received ? formatBytes(this.core.coreBytes) : '—' }).layoutWeight(1)
+      DashboardCardHeader({ title: $r('app.string.card_memory'), glyph: 'memory', chevron: true })
+      Column() {
+        Text() {
+          Span(this.rssReady() ? this.totalRssValue.amount : '—')
+            .fontSize(28)
+            .fontWeight(FontWeight.Bold)
+            .letterSpacing(-0.56)
+          Span(` ${this.totalRssValue.unit}`)
+            .fontSize(13)
+            .fontWeight(600)
+            .fontColor($r('sys.color.font_secondary'))
+        }
+        .lineHeight(34)
+        .fontFeature('"tnum" on')
+        Text($r('app.string.dash_total_rss'))
+          .fontSize(12)
+          .lineHeight(16)
+          .fontColor($r('sys.color.font_secondary'))
+        Row({ space: 2 }) {
+          if (this.rssReady() && this.totalRss() > 0) {
+            Row().height(8).layoutWeight(Math.max(1, this.ui.rssBytes)).backgroundColor($r('app.color.brand'))
+            if (this.conn.connected && this.core.coreBytes > 0) {
+              Row().height(8).layoutWeight(this.core.coreBytes).backgroundColor($r('app.color.dash_series_secondary'))
+            }
+          }
+        }
+        .width('100%')
+        .height(8)
+        .borderRadius(4)
+        .backgroundColor($r('app.color.track'))
+        .clip(true)
+        .margin({ top: 14 })
+        Flex({ wrap: FlexWrap.Wrap }) {
+          Row({ space: 6 }) {
+            Circle({ width: 8, height: 8 }).fill($r('app.color.brand')).strokeWidth(0)
+            Text($r('app.string.dash_memory_app')).fontSize(12).fontColor($r('sys.color.font_secondary'))
+            Text(this.ui.sampledAt > 0 ? dashboardTraffic(this.ui.rssBytes) : '—')
+              .fontSize(13)
+              .fontWeight(600)
+              .fontFeature('"tnum" on')
+          }
+          .margin({ right: 16, bottom: 4 })
+          Row({ space: 6 }) {
+            Circle({ width: 8, height: 8 }).fill($r('app.color.dash_series_secondary')).strokeWidth(0)
+            Text($r('app.string.dash_memory_core')).fontSize(12).fontColor($r('sys.color.font_secondary'))
+            Text(this.conn.connected && this.core.received ? dashboardTraffic(this.core.coreBytes) : '—')
+              .fontSize(13)
+              .fontWeight(600)
+              .fontFeature('"tnum" on')
+          }
+          .margin({ right: 16, bottom: 4 })
+        }
+        .width('100%')
+        .margin({ top: 10 })
+        if (this.stale()) {
+          Text($r('app.string.dash_memory_stale'))
+            .fontSize(12)
+            .fontColor($r('app.color.warning'))
+            .margin({ top: 8 })
+        }
       }
+      .alignItems(HorizontalAlign.Start)
       .width('100%')
-      Text(this.stale() ? $r('app.string.dash_memory_stale') : $r('app.string.dash_memory_scope_short'))
-        .fontSize(12)
-        .fontColor($r('sys.color.font_tertiary'))
     }
     .alignItems(HorizontalAlign.Start)
-    .attributeModifier(CARD)
+    .attributeModifier(DASHBOARD_CARD)
+    .background(dashboardCardShadow)
     .onClick((): void => { if (this.interactive) { this.details = true; } })
-    .bindSheet($$this.details, this.Details(), {
-      title: { title: $r('app.string.card_memory') }, detents: [SheetSize.MEDIUM],
+    .bindSheet($$this.details, (): void => { this.Details(); }, {
+      title: { title: $r('app.string.card_memory') }, detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       systemMaterial: sheetMaterial(), showClose: true
     })
   }

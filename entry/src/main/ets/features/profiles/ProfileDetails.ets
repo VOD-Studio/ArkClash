@@ -1,5 +1,5 @@
 import { formatBytes, formatDate, formatDateTime } from '../../components/Format';
-import { PAGE_GUTTER } from '../../components/Theme';
+import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { errorString } from '../../shared/profiles/Errors';
 import { ProfileSummary } from '../../shared/profiles/Summary';
 import { describeError } from './ProfileErrors';
@@ -12,6 +12,9 @@ export struct ProfileDetails {
   @Event onEdit: () => void = (): void => {};
   @Local details: ProfileSummary | undefined = undefined;
   @Local failure: string = '';
+  @Local sourceShown: boolean = false;
+  @Local sourceText: string = '';
+  @Local loadingSource: boolean = false;
   private visible: boolean = true;
 
   aboutToAppear(): void {
@@ -27,12 +30,41 @@ export struct ProfileDetails {
     return total > 0 ? Math.min(1, Math.max(0, this.used() / total)) : 0;
   }
 
+  private async openSource(): Promise<void> {
+    if (this.loadingSource) { return; }
+    this.loadingSource = true;
+    this.failure = '';
+    try {
+      const text = await this.store.source(this.item.id);
+      if (this.visible) { this.sourceText = text; this.sourceShown = true; }
+    } catch (e) {
+      if (this.visible) { this.failure = errorString(e as Object); }
+    } finally {
+      if (this.visible) { this.loadingSource = false; }
+    }
+  }
+
+  @Builder
+  SourcePreview() {
+    Scroll() {
+      Text(this.sourceText)
+        .fontFamily('monospace')
+        .fontSize(14)
+        .fontColor($r('sys.color.font_primary'))
+        .copyOption(CopyOptions.LocalDevice)
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 8, bottom: 24 })
+    }
+    .width('100%').height('100%').align(Alignment.TopStart)
+  }
+
   build() {
     Scroll() {
-      Column({ space: 16 }) {
+      Column({ space: 24 }) {
         Text(this.item.name)
-          .fontSize(20)
-          .fontWeight(FontWeight.Medium)
+          .fontSize(17)
+          .lineHeight(22)
+          .fontWeight(600)
           .fontColor($r('sys.color.font_primary'))
           .width('100%')
         Row({ space: 12 }) {
@@ -46,7 +78,7 @@ export struct ProfileDetails {
         .width('100%')
         if (this.item.isSubscription) {
           Text(this.item.url)
-            .fontSize(13)
+            .fontSize(15).lineHeight(20)
             .fontColor($r('sys.color.font_secondary'))
             .copyOption(CopyOptions.LocalDevice)
             .width('100%')
@@ -82,16 +114,35 @@ export struct ProfileDetails {
             .fontColor($r('app.color.status_error'))
             .width('100%')
         }
-        Button($r('app.string.action_edit'), { type: ButtonType.Capsule })
-          .width('100%')
-          .height(48)
-          .backgroundColor($r('app.color.brand'))
-          .fontColor($r('app.color.on_brand'))
+        Column() {
+          Row({ space: 16 }) {
+            Text($r('app.string.profile_source_preview')).fontSize(17).lineHeight(22)
+              .fontColor($r('sys.color.font_primary')).layoutWeight(1)
+            if (this.loadingSource) {
+              LoadingProgress().width(24).height(24).color($r('app.color.brand'))
+            } else {
+              SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(16).fontColor([$r('sys.color.font_secondary')])
+            }
+          }
+          .width('100%').height(56).padding({ left: 16, right: 16 })
+          .enabled(!this.loadingSource)
+          .onClick((): void => { this.openSource(); })
+          Row().height(0.5).width('100%').backgroundColor($r('app.color.divider')).margin({ left: 16, right: 14 })
+          Row({ space: 16 }) {
+            Text($r('app.string.action_edit')).fontSize(17).lineHeight(22)
+              .fontColor($r('sys.color.font_primary')).layoutWeight(1)
+            SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(16).fontColor([$r('sys.color.font_secondary')])
+          }
+          .width('100%').height(56).padding({ left: 16, right: 16 })
           .onClick((): void => this.onEdit())
+        }
+        .width('100%').backgroundColor($r('app.color.card_background')).borderRadius(24)
       }
       .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8, bottom: 24 })
     }
     .height('100%')
     .width('100%')
+    .bindSheet($$this.sourceShown, this.SourcePreview(), { title: { title: this.item.name },
+      height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true })
   }
 }

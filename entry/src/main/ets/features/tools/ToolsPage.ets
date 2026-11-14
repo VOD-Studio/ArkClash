@@ -10,22 +10,26 @@ export struct ToolsPage {
   @Param topInset: number = 0;
   @Event onOpen: (route: ToolRoute) => void = () => {};
 
+  @Builder
+  Content() {
+    this.Group([
+      new Entry(ToolRoute.Connections, $r('sys.symbol.list_bullet'), $r('app.string.tools_connections')),
+      new Entry(ToolRoute.Logs, $r('sys.symbol.doc_plaintext'), $r('app.string.tools_logs'))
+    ])
+    this.Group([
+      new Entry(ToolRoute.Settings, $r('sys.symbol.gearshape'), $r('app.string.tools_settings')),
+      new Entry(ToolRoute.About, $r('sys.symbol.info_circle'), $r('app.string.tools_about'))
+    ])
+  }
+
   build() {
     TabPage({
       title: $r('app.string.tab_tools'),
       topInset: this.topInset,
       scroller: this.scroller,
-      onScrollDirection: (down: boolean) => this.onScrollDirection(down)
-    }) {
-      this.Group([
-        new Entry(ToolRoute.Connections, $r('sys.symbol.list_bullet'), $r('app.string.tools_connections')),
-        new Entry(ToolRoute.Logs, $r('sys.symbol.doc_plaintext'), $r('app.string.tools_logs'))
-      ])
-      this.Group([
-        new Entry(ToolRoute.Settings, $r('sys.symbol.gearshape'), $r('app.string.tools_settings')),
-        new Entry(ToolRoute.About, $r('sys.symbol.info_circle'), $r('app.string.tools_about'))
-      ])
-    }
+      onScrollDirection: (down: boolean) => this.onScrollDirection(down),
+      content: (): void => this.Content()
+    })
   }
 
   @Builder

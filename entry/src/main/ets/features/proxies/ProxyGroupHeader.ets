@@ -1,4 +1,9 @@
+import { uiResourceText } from '../../components/ResourceText';
+import { AppGlyph } from '../../components/AppGlyph';
+import { proxyTextScale } from './ProxyMetrics';
 import { ProxyGroupView } from './ProxyView';
+
+const PROXY_GROUP_MONOGRAM = new RegExp('[\\p{L}\\p{N}]', 'u');
 
 @ComponentV2
 export struct ProxyGroupHeader {
@@ -7,128 +12,170 @@ export struct ProxyGroupHeader {
   @Param offlineWritable: boolean = false;
   @Param showLocate: boolean = true;
   @Param collapsible: boolean = true;
+  @Param active: boolean = true;
   @Event onToggle: () => void = () => {};
   @Event onLocate: () => void = () => {};
   @Event onTest: () => void = () => {};
   @Event onClearPin: () => void = () => {};
   @Local iconFailed: boolean = false;
+  @Local textScale: number = 1;
+
+  aboutToAppear(): void {
+    this.textScale = proxyTextScale(this.getUIContext());
+  }
 
   @Monitor('group.icon')
   resetIcon(): void {
     this.iconFailed = false;
   }
 
+  private monogram(): string {
+    const mark = PROXY_GROUP_MONOGRAM.exec(this.group.name);
+    return mark === null ? Array.from(this.group.name)[0] ?? '' : mark[0].toUpperCase();
+  }
+
+  private iconExtent(): number {
+    return 2 + 37 * this.textScale;
+  }
+
+  @Builder
+  private groupMenu() {
+    Menu() {
+      if (this.group.actualRetired) {
+        MenuItem({ content: $r('app.string.proxy_actual_retired') })
+          .enabled(false)
+      }
+      if (this.group.pinned !== '') {
+        MenuItem({ content: $r('app.string.proxy_pinned_name', this.group.pinned) })
+          .enabled(false)
+        MenuItem({ content: $r('app.string.proxy_clear_pin') })
+          .enabled(this.active && (this.online || this.offlineWritable))
+          .onClick(() => this.onClearPin())
+      }
+    }
+    .font({ size: 15, weight: FontWeight.Normal })
+  }
+
   build() {
-    Row({ space: 4 }) {
+    Row({ space: 6 }) {
       Button({ type: ButtonType.Normal }) {
-        Row({ space: 10 }) {
+        Row() {
           if (this.group.iconStyle !== 'hidden') {
             Stack() {
               if (this.group.icon !== '' && !this.iconFailed) {
                 Image(this.group.icon)
-                  .width(24)
-                  .height(24)
+                  .width(this.group.iconStyle === 'filled' ? this.iconExtent() - 12 : this.iconExtent())
+                  .height(this.group.iconStyle === 'filled' ? this.iconExtent() - 12 : this.iconExtent())
                   .objectFit(ImageFit.Contain)
                   .onError(() => { this.iconFailed = true; })
               } else {
-                Text(this.group.name.slice(0, 1))
-                  .fontSize(18)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.brand'))
+                Text(this.monogram())
+                  .fontSize((this.group.iconStyle === 'filled' ? this.iconExtent() - 12 : this.iconExtent()) * 0.62)
+                  .fontWeight(600)
+                  .fontColor(this.group.iconStyle === 'filled' ? $r('sys.color.font_secondary') : $r('app.color.brand'))
+                  .maxFontScale(1)
               }
             }
-            .width(36)
-            .height(36)
-            .borderRadius(10)
-            .backgroundColor(this.group.iconStyle === 'filled' ? $r('app.color.brand_soft') : Color.Transparent)
+            .width(this.iconExtent())
+            .height(this.iconExtent())
+            .borderRadius(14)
+            .backgroundColor(this.group.iconStyle === 'filled' ? $r('app.color.surface_block') : Color.Transparent)
+            .margin({ left: this.group.iconStyle === 'icon' ? 2 : 0, right: this.group.iconStyle === 'icon' ? 10 : 12 })
+          } else {
+            Blank()
+              .width(4)
           }
-          Column({ space: 4 }) {
+          Column({ space: 2 }) {
             Text(this.group.name)
               .fontSize(16)
-              .fontWeight(FontWeight.Medium)
+              .lineHeight(21)
+              .fontWeight(600)
               .fontColor($r('sys.color.font_primary'))
-              .maxLines(2)
+              .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .width('100%')
-            Text(this.group.now === '' ? this.group.type : `${this.group.type} · ${this.group.now}`)
+            Text(this.group.now)
               .fontSize(12)
-              .fontColor($r('sys.color.font_secondary'))
-              .maxLines(2)
+              .lineHeight(16)
+              .fontWeight(600)
+              .fontColor(this.group.actualRetired ? $r('app.color.warning') : $r('sys.color.font_secondary'))
+              .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .width('100%')
-            if (this.group.actualRetired) {
-              Text($r('app.string.proxy_actual_retired'))
-                .fontSize(11)
-                .fontColor($r('app.color.warning'))
-                .width('100%')
-            }
-            if (this.group.pinned !== '') {
-              Text($r('app.string.proxy_pinned_name', this.group.pinned))
-                .fontSize(11)
-                .fontColor($r('app.color.brand'))
-                .maxLines(2)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .width('100%')
-            }
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
-          if (this.collapsible) {
-            SymbolGlyph(this.group.expanded ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
-              .fontSize(12)
-              .fontColor([$r('sys.color.font_secondary')])
-          }
         }
         .width('100%')
       }
       .layoutWeight(1)
-      .padding({ left: 4, right: 4, top: 12, bottom: 12 })
+      .height(this.iconExtent())
+      .padding(0)
       .backgroundColor(Color.Transparent)
       .accessibilityText(this.group.name)
-      .accessibilityDescription(this.group.expanded ? $r('app.string.proxy_collapse_group') : $r('app.string.proxy_expand_group'))
-      .enabled(this.collapsible)
+      .accessibilityDescription(uiResourceText(this.getUIContext(), this.group.actualRetired ? $r('app.string.proxy_actual_retired') : this.group.now))
+      .enabled(this.active && this.collapsible)
       .onClick(() => this.onToggle())
-      if (this.group.expanded && this.showLocate) {
-        Button({ type: ButtonType.Circle }) {
-          SymbolGlyph($r('sys.symbol.checkmark_circle'))
-            .fontSize(18)
-            .fontColor([$r('app.color.brand')])
-        }
-        .width(44)
-        .height(44)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText($r('app.string.proxy_locate_selected'))
-        .onClick(() => this.onLocate())
-      }
-      if (this.group.pinned !== '') {
-        Button($r('app.string.proxy_clear_pin'))
-          .fontSize(12)
-          .fontColor($r('app.color.brand'))
-          .backgroundColor(Color.Transparent)
-          .enabled(this.online || this.offlineWritable)
-          .onClick(() => this.onClearPin())
-      }
       if (this.group.expanded) {
-        Button({ type: ButtonType.Circle }) {
-          if (this.group.testing) {
-            SymbolGlyph($r('sys.symbol.clock'))
-              .fontSize(18)
-              .fontColor([$r('sys.color.font_secondary')])
-          } else {
-            SymbolGlyph($r('sys.symbol.bolt'))
-              .fontSize(18)
-              .fontColor([$r('app.color.brand')])
+        Row() {
+          if (this.showLocate) {
+            Button({ type: ButtonType.Circle }) {
+              AppGlyph({ name: 'locate', iconSize: 19 })
+            }
+            .width(32)
+            .height(32)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .accessibilityText($r('app.string.proxy_locate_selected'))
+            .enabled(this.active)
+            .onClick(() => this.onLocate())
           }
+          Button({ type: ButtonType.Circle }) {
+            if (this.group.testing && this.active) {
+              LoadingProgress()
+                .width(24)
+                .height(24)
+                .color($r('sys.color.font_primary'))
+                .enableLoading(this.active)
+            } else {
+              AppGlyph({ name: 'bolt', iconSize: 20 })
+            }
+          }
+          .width(32)
+          .height(32)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText($r('app.string.proxy_test_current_group'))
+          .enabled(this.active && this.online && !this.group.testing)
+          .onClick(() => this.onTest())
         }
-        .width(44)
-        .height(44)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText($r('app.string.proxy_test_current_group'))
-        .enabled(this.online && !this.group.testing)
-        .onClick(() => this.onTest())
+        .borderRadius(16)
+        .backgroundColor($r('app.color.surface_block'))
+      } else {
+        Text(this.group.type)
+          .fontSize(12)
+          .lineHeight(16)
+          .fontWeight(600)
+          .fontColor($r('sys.color.font_secondary'))
+      }
+      if (this.collapsible) {
+        Button({ type: ButtonType.Circle }) {
+          AppGlyph({ name: this.group.expanded ? 'chevronUp' : 'chevronDown', iconSize: 20 })
+        }
+        .width(32)
+        .height(32)
+        .padding(0)
+        .backgroundColor($r('app.color.surface_block'))
+        .accessibilityText(this.group.expanded ? $r('app.string.proxy_collapse_group') : $r('app.string.proxy_expand_group'))
+        .enabled(this.active)
+        .onClick(() => this.onToggle())
       }
     }
     .width('100%')
-    .backgroundColor($r('app.color.page_background'))
+    .height(22 + 37 * this.textScale)
+    .padding(10)
+    .borderRadius({ topLeft: 24, topRight: 24, bottomLeft: this.group.expanded ? 0 : 24, bottomRight: this.group.expanded ? 0 : 24 })
+    .backgroundColor($r('app.color.card_background'))
+    .bindContextMenu(this.groupMenu, ResponseType.LongPress)
   }
 }

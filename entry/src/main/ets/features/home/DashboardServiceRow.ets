@@ -1,5 +1,7 @@
 import { ServiceAvailability, ServiceResult } from '../../client/ServiceCheck';
+import { uiResourceText } from '../../components/ResourceText';
 import { ServiceSlot, serviceInfo } from './Services';
+import { AppGlyph } from '../../components/AppGlyph';
 
 export function serviceAvailabilityLabel(status: ServiceAvailability): ResourceStr {
   switch (status) {
@@ -47,19 +49,13 @@ export struct DashboardServiceRow {
   @Param managing: boolean = false;
   @Param saving: boolean = false;
   @Param canDisable: boolean = true;
-  @Param canUp: boolean = false;
-  @Param canDown: boolean = false;
+  @Param shownOnDashboard: boolean = false;
   @Event onToggle: (visible: boolean) => void = () => {};
-  @Event onMove: (delta: number) => void = () => {};
   @Event onRun: () => void = () => {};
 
   private accessibleName(): string {
-    const name = serviceInfo(this.slot.id)?.name ?? this.slot.id;
-    if (typeof name === 'string') {
-      return name;
-    }
     try {
-      return this.getUIContext().getHostContext()?.resourceManager.getStringSync(name.id) ?? this.slot.id;
+      return uiResourceText(this.getUIContext(), serviceInfo(this.slot.id)?.name ?? this.slot.id);
     } catch (error) {
       return this.slot.id;
     }
@@ -79,63 +75,76 @@ export struct DashboardServiceRow {
       }
       .width(40)
       .height(40)
-      .borderRadius(20)
+      .borderRadius(12)
       .backgroundColor($r('app.color.service_icon_background'))
       Column({ space: 4 }) {
         Text(serviceInfo(this.slot.id)?.name ?? this.slot.id)
           .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .maxLines(2)
+          .lineHeight(20)
+          .fontWeight(600)
+          .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         if (this.slot.legacy) {
           Text($r('app.string.dash_legacy_service'))
             .fontSize(11)
             .fontColor($r('sys.color.font_tertiary'))
         }
+        if (this.managing && this.shownOnDashboard) {
+          Text($r('app.string.dash_service_shown'))
+            .fontSize(12)
+            .lineHeight(16)
+            .fontColor($r('sys.color.font_secondary'))
+        }
         if (!this.managing) {
           Text(serviceConnectivityLabel(this.result, this.checking))
             .fontSize(12)
+            .lineHeight(16)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
             .fontColor($r('sys.color.font_secondary'))
           Text(serviceAvailabilityLabel(this.result?.availability ?? 'unknown'))
             .fontSize(12)
             .fontColor($r('sys.color.font_tertiary'))
+            .lineHeight(16)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
           if (this.result !== undefined) {
             Text(new Date(this.result.checkedAt).toLocaleTimeString())
               .fontSize(11)
               .fontColor($r('sys.color.font_tertiary'))
+              .lineHeight(14)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
         }
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
       if (this.managing) {
-        Column({ space: 2 }) {
-          Button('↑')
-            .width(36)
-            .height(32)
-            .enabled(!this.saving && this.canUp)
-            .accessibilityText($r('app.string.dash_move_up'))
-            .onClick((): void => { this.onMove(-1); })
-          Button('↓')
-            .width(36)
-            .height(32)
-            .enabled(!this.saving && this.canDown)
-            .accessibilityText($r('app.string.dash_move_down'))
-            .onClick((): void => { this.onMove(1); })
-        }
         Toggle({ type: ToggleType.Switch, isOn: this.slot.visible })
           .enabled(!this.saving && (!this.slot.visible || this.canDisable))
           .accessibilityText(this.accessibleName())
           .onChange((visible: boolean): void => { this.onToggle(visible); })
       } else {
-        Button($r('app.string.dash_check'))
-          .enabled(!this.checking && serviceInfo(this.slot.id) !== undefined)
-          .onClick((): void => { this.onRun(); })
+        Button({ type: ButtonType.Circle }) {
+          if (this.checking) {
+            LoadingProgress().width(18).height(18)
+          } else {
+            AppGlyph({ name: 'sync', iconSize: 18, iconColor: $r('sys.color.font_secondary') })
+          }
+        }
+        .width(32)
+        .height(32)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText(uiResourceText(this.getUIContext(), $r('app.string.dash_check')))
+        .enabled(!this.checking && serviceInfo(this.slot.id) !== undefined)
+        .onClick((): void => { this.onRun(); })
       }
     }
     .width('100%')
-    .padding(12)
-    .borderRadius(12)
+    .padding({ left: 12, right: 16, top: 12, bottom: 12 })
+    .borderRadius(22)
     .backgroundColor($r('app.color.tile_background'))
   }
 }

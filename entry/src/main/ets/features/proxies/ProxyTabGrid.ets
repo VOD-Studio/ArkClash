@@ -28,6 +28,7 @@ export struct ProxyTabGrid {
               row: row,
               cardType: this.group.cardType,
               active: this.active,
+              groupType: this.group.type,
               onChoose: (node: string) => this.onChoose(node),
               onTest: (node: string) => this.onTest(node)
             })
@@ -40,7 +41,7 @@ export struct ProxyTabGrid {
     .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
     .contentEndOffset(FLOATING_BAR_INSET)
     .cachedCount(2)
-    .scrollBar(BarState.Off)
+    .scrollBar(BarState.Auto)
     .edgeEffect(EdgeEffect.Spring)
     .onWillScroll((offset: number, _state: ScrollState, source: ScrollSource) => this.onListScroll(offset, source))
   }

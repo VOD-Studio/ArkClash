@@ -2,7 +2,7 @@
   "string": [
     {
       "name": "tab_home",
-      "value": "首页"
+      "value": "仪表盘"
     },
     {
       "name": "tab_proxies",
@@ -1278,7 +1278,7 @@
     },
     {
       "name": "proxy_sort_none",
-      "value": "原始顺序"
+      "value": "默认"
     },
     {
       "name": "proxy_stale",
@@ -1379,6 +1379,194 @@
     {
       "name": "proxy_actual_retired",
       "value": "实际出站已从提供方移除，等待内核缓存更新"
+    },
+    {
+      "name": "profile_import_link",
+      "value": "从链接导入"
+    },
+    {
+      "name": "profile_import_file",
+      "value": "文件"
+    },
+    {
+      "name": "profile_import_single",
+      "value": "单个链接"
+    },
+    {
+      "name": "profile_import_batch",
+      "value": "批量导入"
+    },
+    {
+      "name": "profile_field_optional",
+      "value": "选填"
+    },
+    {
+      "name": "profile_field_required",
+      "value": "必填"
+    },
+    {
+      "name": "profile_update_interval",
+      "value": "更新间隔"
+    },
+    {
+      "name": "profile_minutes",
+      "value": "分钟"
+    },
+    {
+      "name": "profile_source_remote",
+      "value": "远程"
+    },
+    {
+      "name": "profile_source_preview",
+      "value": "查看源文件"
+    },
+    {
+      "name": "profile_updated_now",
+      "value": "刚刚"
+    },
+    {
+      "name": "profile_updated_minutes",
+      "value": "%d分前"
+    },
+    {
+      "name": "profile_updated_hours",
+      "value": "%d时前"
+    },
+    {
+      "name": "profile_updated_days",
+      "value": "%d天前"
+    },
+    {
+      "name": "profile_updated_months",
+      "value": "%d月前"
+    },
+    {
+      "name": "profile_updated_years",
+      "value": "%d年前"
+    },
+    {
+      "name": "dash_ip_organization",
+      "value": "IP 归属机构"
+    },
+    {
+      "name": "dash_card_description_status",
+      "value": "出口 IP 与运行状态"
+    },
+    {
+      "name": "dash_card_description_connections",
+      "value": "当前连接与分流统计"
+    },
+    {
+      "name": "dash_card_description_memory",
+      "value": "界面与内核的实际内存口径"
+    },
+    {
+      "name": "proxy_menu_style",
+      "value": "风格"
+    },
+    {
+      "name": "proxy_menu_size",
+      "value": "尺寸"
+    },
+    {
+      "name": "proxy_menu_layout",
+      "value": "布局"
+    },
+    {
+      "name": "proxy_menu_icon_style",
+      "value": "图标样式"
+    },
+    {
+      "name": "proxy_layout_tight",
+      "value": "紧凑"
+    },
+    {
+      "name": "proxy_groups",
+      "value": "策略组"
+    },
+    {
+      "name": "proxy_search_close",
+      "value": "取消搜索"
+    },
+    {
+      "name": "dash_rules",
+      "value": "规则"
+    },
+    {
+      "name": "dash_total_rss",
+      "value": "进程驻留内存合计（RSS）"
+    },
+    {
+      "name": "dash_memory_app",
+      "value": "应用"
+    },
+    {
+      "name": "dash_memory_core",
+      "value": "内核"
+    },
+    {
+      "name": "proxy_select",
+      "value": "选择"
+    },
+    {
+      "name": "proxy_preferred",
+      "value": "首选"
+    },
+    {
+      "name": "dash_updated_just_now",
+      "value": "刚刚"
+    },
+    {
+      "name": "dash_updated_minutes",
+      "value": "%d 分钟前"
+    },
+    {
+      "name": "dash_updated_hours",
+      "value": "%d 小时前"
+    },
+    {
+      "name": "dash_updated_days",
+      "value": "%d 天前"
+    },
+    {
+      "name": "dash_updated_months",
+      "value": "%d 个月前"
+    },
+    {
+      "name": "dash_updated_years",
+      "value": "%d 年前"
+    },
+    {
+      "name": "dash_profile_remote",
+      "value": "远程"
+    },
+    {
+      "name": "dash_profile_custom_type",
+      "value": "自定义"
+    },
+    {
+      "name": "dash_used_short",
+      "value": "已用"
+    },
+    {
+      "name": "dash_profile_updated_prefix",
+      "value": "更新于"
+    },
+    {
+      "name": "dash_service_shown",
+      "value": "显示在仪表盘"
+    },
+    {
+      "name": "dash_ip_asn",
+      "value": "ASN"
+    },
+    {
+      "name": "dash_probe_source",
+      "value": "查询来源"
+    },
+    {
+      "name": "dash_probe_checked_at",
+      "value": "检查时间"
     }
   ]
 }

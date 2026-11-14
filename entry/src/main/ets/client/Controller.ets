@@ -49,6 +49,7 @@ interface ProxyInfo {
   url?: string;
   history?: DelayHistory[];
   hidden?: boolean;
+  icon?: string;
 }
 
 interface ProxySummaryReference {
@@ -71,6 +72,7 @@ export interface GroupSummary {
   delay: number;
   retired: boolean;
   groups: string[]; // 按配置顺序
+  groupIcons?: Record<string, string>;
 }
 
 /** 非 2xx 时抛出 Error，message 优先用响应里的 message（ArkClash 自有接口的错误格式）。 */
@@ -181,14 +183,23 @@ export async function getMainGroup(filesDir: string): Promise<GroupSummary | und
   if (groups.length === 0) {
     return undefined;
   }
+  let groupIcons: Record<string, string> | undefined;
+  for (const name of groups) {
+    const icon = graph.nodes[graph.proxies[name].id].icon;
+    if (icon !== undefined && icon !== '') {
+      if (groupIcons === undefined) { groupIcons = {}; }
+      groupIcons[name] = icon;
+    }
+  }
   const group = groups[0];
   let actualId = graph.actual[group] ?? '';
-  let node = graph.nodes[actualId];
+  let node: ProxyInfo | undefined = graph.nodes[actualId];
   let retired = graph.retired?.[actualId] === true;
   const seen: Set<string> = new Set<string>([group]);
   while (node !== undefined && GROUP_TYPES.includes(node.type)) {
     if (seen.has(node.name)) {
-      return { group: group, node: '', delay: 0, retired: retired, groups: groups };
+      node = undefined;
+      break;
     }
     seen.add(node.name);
     actualId = graph.actual[node.name] ?? '';
@@ -197,5 +208,7 @@ export async function getMainGroup(filesDir: string): Promise<GroupSummary | und
   }
   const history = node?.history ?? [];
   const delay = history.length > 0 ? history[history.length - 1].delay : 0;
-  return { group: group, node: node?.name ?? '', delay: delay, retired: retired, groups: groups };
+  const summary: GroupSummary = { group: group, node: node?.name ?? '', delay: delay, retired: retired, groups: groups };
+  if (groupIcons !== undefined) { summary.groupIcons = groupIcons; }
+  return summary;
 }

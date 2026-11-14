@@ -1,7 +1,8 @@
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
-import { CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { dashboardCardShadow, DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { uiResourceText } from '../../components/ResourceText';
 import { DashboardCardHeader } from './DashboardCardHeader';
 import { DashboardServiceRow, serviceConnectivityLabel } from './DashboardServiceRow';
 import { DashboardServiceState } from './DashboardServiceState';
@@ -93,6 +94,7 @@ export struct DashboardServices {
     return this.exit.result?.ip ?? '—';
   }
 
+
   @Builder
   ServiceItem(slot: ServiceSlot) {
     DashboardServiceRow({
@@ -102,14 +104,8 @@ export struct DashboardServices {
       managing: this.managing,
       saving: this.settings.saving,
       canDisable: this.enabledSlots().length > 1,
-      canUp: this.settings.services.findIndex((item: ServiceSlot): boolean => item.id === slot.id) > 0,
-      canDown: this.settings.services.findIndex((item: ServiceSlot): boolean => item.id === slot.id) <
-        this.settings.services.length - 1,
+      shownOnDashboard: this.enabledIds().slice(0, 2).includes(slot.id),
       onToggle: (visible: boolean): void => { this.setVisible(slot.id, visible); },
-      onMove: (delta: number): void => {
-        const from = this.settings.services.findIndex((item: ServiceSlot): boolean => item.id === slot.id);
-        this.move(from, from + delta);
-      },
       onRun: (): void => { this.run([slot.id]); }
     })
   }
@@ -117,31 +113,48 @@ export struct DashboardServices {
   @Builder
   Details() {
     Column({ space: 12 }) {
-      Row({ space: 8 }) {
-        Text(this.exitAddress())
-          .fontSize(16)
-          .fontWeight(FontWeight.Medium)
-          .layoutWeight(1)
-        Text(this.conn.connected ? $r('app.string.dash_routed_exit') : $r('app.string.exit_local'))
+      if (!this.managing) {
+        Row({ space: 8 }) {
+          Text(this.exitAddress())
+            .fontSize(16)
+            .fontWeight(600)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+          Text(this.conn.connected ? $r('app.string.dash_routed_exit') : $r('app.string.exit_local'))
+            .fontSize(12)
+            .fontColor($r('sys.color.font_secondary'))
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .width('100%')
+        .padding(12)
+        .borderRadius(22)
+        .backgroundColor($r('app.color.tile_background'))
+        Text($r('app.string.dash_service_scope'))
           .fontSize(12)
-          .fontColor($r('sys.color.font_secondary'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .lineHeight(16)
+          .width('100%')
       }
-      .width('100%')
-      Text($r('app.string.dash_service_scope'))
-        .fontSize(12)
-        .fontColor($r('sys.color.font_tertiary'))
       Row({ space: 8 }) {
         Button(this.managing ? $r('app.string.dash_done') : $r('app.string.dash_service_manage'))
+          .layoutWeight(1)
+          .height(40)
           .enabled(!this.state.busy)
           .onClick((): void => { this.managing = !this.managing; })
-        Button(this.state.busy ? $r('app.string.action_cancel') : $r('app.string.dash_check_all'))
-          .enabled(!this.managing && !this.conn.busy)
-          .onClick((): void => {
-            if (this.state.busy) { this.state.cancel(); } else { this.run(this.enabledIds()); }
-          })
+        if (!this.managing) {
+          Button(this.state.busy ? $r('app.string.action_cancel') : $r('app.string.dash_check_all'))
+            .layoutWeight(1)
+            .height(40)
+            .enabled(!this.conn.busy)
+            .onClick((): void => {
+              if (this.state.busy) { this.state.cancel(); } else { this.run(this.enabledIds()); }
+            })
+        }
       }
       .width('100%')
-      if (this.state.failed) {
+      if (this.state.failed && !this.managing) {
         Text($r('app.string.dash_service_batch_failed'))
           .fontSize(12)
           .fontColor($r('app.color.status_error'))
@@ -164,66 +177,67 @@ export struct DashboardServices {
       .enabled(!this.settings.saving)
     }
     .width('100%')
+    .alignItems(HorizontalAlign.Start)
     .height('100%')
-    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 24 })
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8, bottom: 24 })
   }
 
   build() {
     Column({ space: 12 }) {
-      DashboardCardHeader({ title: $r('app.string.card_services'), symbol: $r('sys.symbol.link'), chevron: true })
-      Row({ space: 12 }) {
+      DashboardCardHeader({ title: $r('app.string.card_services'), glyph: 'verified', chevron: true })
+      Row({ space: 8 }) {
         ForEach(this.enabledSlots().slice(0, 2), (slot: ServiceSlot): void => {
-          Column({ space: 6 }) {
-            Stack() {
-              if (serviceInfo(slot.id) !== undefined) {
-                Image(serviceInfo(slot.id)?.icon)
-                  .width(24)
-                  .height(24)
-                  .objectFit(ImageFit.Contain)
-              } else {
-                Text(slot.id.slice(0, 1).toUpperCase()).fontSize(18)
+          Row({ space: 8 }) {
+            Stack({ alignContent: Alignment.BottomEnd }) {
+              Stack() {
+                if (serviceInfo(slot.id) !== undefined) {
+                  Image(serviceInfo(slot.id)?.icon)
+                    .width(18)
+                    .height(18)
+                    .objectFit(ImageFit.Contain)
+                } else {
+                  Text(slot.id.slice(0, 1).toUpperCase()).fontSize(14)
+                }
               }
+              .width(30)
+              .height(30)
+              .borderRadius(9)
+              .backgroundColor($r('app.color.service_icon_background'))
+              Circle({ width: 7, height: 7 })
+                .fill(this.state.busyIds.includes(slot.id) ? $r('sys.color.font_tertiary') :
+                  this.state.results[slot.id]?.reachability === 'reachable' ? $r('app.color.status_connected') :
+                  this.state.results[slot.id] === undefined ? $r('sys.color.font_tertiary') : $r('app.color.warning'))
+                .stroke($r('app.color.tile_background'))
+                .strokeWidth(2)
             }
-            .width(40)
-            .height(40)
-            .borderRadius(20)
-            .backgroundColor($r('app.color.service_icon_background'))
-            Text(serviceInfo(slot.id)?.name ?? slot.id)
-              .fontSize(14)
-              .fontWeight(FontWeight.Medium)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
             Text(serviceConnectivityLabel(this.state.results[slot.id], this.state.busyIds.includes(slot.id)))
               .fontSize(12)
-              .fontColor($r('sys.color.font_secondary'))
+              .lineHeight(16)
+              .fontWeight(600)
+              .fontFeature('"tnum" on')
+              .fontColor(this.state.results[slot.id]?.reachability === 'reachable' ? $r('app.color.status_connected') :
+                $r('sys.color.font_secondary'))
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
           }
-          .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
+          .height(44)
+          .padding({ left: 7, right: 12 })
+          .borderRadius(16)
+          .backgroundColor($r('app.color.tile_background'))
+          .accessibilityText(uiResourceText(this.getUIContext(), serviceInfo(slot.id)?.name ?? slot.id))
         }, (slot: ServiceSlot): string => slot.id)
       }
       .width('100%')
-      Text($r('app.string.dash_service_scope_short'))
-        .fontSize(12)
-        .fontColor($r('sys.color.font_tertiary'))
-      Row({ space: 8 }) {
-        Button($r('app.string.dash_service_details'))
-          .enabled(this.interactive)
-          .onClick((): void => { this.details = true; })
-        Button(this.state.busy ? $r('app.string.action_cancel') : $r('app.string.dash_check'))
-          .enabled(this.interactive && !this.conn.busy)
-          .onClick((): void => {
-            if (this.state.busy) {
-              this.state.cancel();
-            } else {
-              this.run(this.enabledIds().slice(0, 2));
-            }
-          })
-      }
     }
     .alignItems(HorizontalAlign.Start)
-    .attributeModifier(CARD)
-    .bindSheet($$this.details, this.Details(), {
-      title: { title: $r('app.string.card_services') }, detents: [SheetSize.LARGE],
+    .attributeModifier(DASHBOARD_CARD)
+    .background(dashboardCardShadow)
+    .onClick((): void => { if (this.interactive) { this.details = true; } })
+    .bindSheet($$this.details, (): void => { this.Details(); }, {
+      title: { title: this.managing ? $r('app.string.dash_service_manage') : $r('app.string.card_services') },
+      detents: [SheetSize.LARGE],
       systemMaterial: sheetMaterial(), showClose: true,
       onDisappear: (): void => { this.managing = false; }
     })

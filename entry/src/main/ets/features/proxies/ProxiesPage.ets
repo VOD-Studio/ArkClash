@@ -1,9 +1,7 @@
 import { common } from '@kit.AbilityKit';
-import {
-  HdsNavigation, HdsNavigationTitleMode, HdsTitleBarContentStyle, hdsMaterial, ScrollEffectType
-} from '@kit.UIDesignKit';
 import { Connection, connection } from '../../client/Connection';
 import { EmptyState } from '../../components/EmptyState';
+import { TabPage } from '../../components/TabPage';
 import { PAGE_GUTTER } from '../../components/Theme';
 import { ProfileSummary } from '../../shared/profiles/Summary';
 import { ProxyBrowser } from './Proxies';
@@ -11,12 +9,6 @@ import { ProxyFeedback } from './ProxyFeedback';
 import { ProxyGroupList } from './ProxyGroupList';
 import { ProxyTabs } from './ProxyTabs';
 import { ProxyToolbar } from './ProxyToolbar';
-import { ProxyGroupView } from './ProxyView';
-
-const PROXY_TITLE_STYLE: HdsTitleBarContentStyle = {
-  titleStyle: { mainTitleColor: $r('sys.color.font_primary') },
-  menuStyle: { iconColor: $r('sys.color.icon_primary'), backgroundColor: $r('sys.color.comp_background_tertiary') }
-};
 
 @ComponentV2
 export struct ProxiesPage {
@@ -35,6 +27,8 @@ export struct ProxiesPage {
   @Local browser: ProxyBrowser = new ProxyBrowser();
   @Local link: Connection = connection;
   @Local boundScroller: Scroller = new Scroller();
+  @Local tabLocateVersion: number = 0;
+  private availableWidth: number = 0;
   private scrollingDown: boolean = false;
   private locateTimer: number = -1;
   private savedProfile: string = '';
@@ -87,6 +81,7 @@ export struct ProxiesPage {
       this.restoreListPending = true;
       this.restoreListScroll();
     }
+    this.resizeNodes();
   }
 
   @Monitor('browser.groups')
@@ -108,21 +103,11 @@ export struct ProxiesPage {
     }
   }
 
-  private jumpToGroup(groupName: string): void {
-    if (this.browser.style.type !== 'list') {
+  private locate(groupName: string): void {
+    if (this.pickerMode || this.browser.style.type === 'tab') {
+      this.tabLocateVersion++;
       return;
     }
-    this.clearLocateTimer();
-    this.locateTimer = setTimeout((): void => {
-      this.locateTimer = -1;
-      const index = this.browser.groups.findIndex((group: ProxyGroupView): boolean => group.name === groupName);
-      if (this.visible && this.browser.style.type === 'list' && index >= 0) {
-        this.scroller.scrollToIndex(index, false, ScrollAlign.START);
-      }
-    }, 0);
-  }
-
-  private locate(groupName: string): void {
     const target = this.browser.locate(groupName);
     if (target === undefined) {
       return;
@@ -157,6 +142,27 @@ export struct ProxiesPage {
       this.scrollingDown = down;
       this.onScrollDirection(down);
     }
+  }
+
+  private resizeNodes(): void {
+    if (this.availableWidth > 0) {
+      this.browser.resize(this.availableWidth - PAGE_GUTTER * 2 -
+        (!this.pickerMode && this.browser.style.type === 'list' ? 20 : 0));
+    }
+  }
+
+  private hasFeedback(): boolean {
+    return this.profileId !== '' && (this.browser.loadError || this.browser.preferenceError ||
+      (!this.browser.online && this.browser.totalGroups > 0) || this.browser.notice !== '');
+  }
+
+  @Builder
+  private titleToolbar() {
+    ProxyToolbar({
+      browser: this.browser,
+      active: this.visible,
+      onLocate: (groupName: string) => this.locate(groupName)
+    })
   }
 
   @Builder
@@ -196,20 +202,18 @@ export struct ProxiesPage {
 
   @Builder
   private pageContent() {
-    Column({ space: 8 }) {
-      if (this.profileId !== '') {
-        Column({ space: 8 }) {
-          ProxyToolbar({
-            browser: this.browser, pickerMode: this.pickerMode, active: this.visible,
-            onOpenProfiles: () => this.onOpenProfiles(),
-            onLocate: (groupName: string) => this.jumpToGroup(groupName)
-          })
+    Column() {
+      if (this.pickerMode) {
+        ProxyToolbar({ browser: this.browser, pickerMode: true, active: this.visible })
+      }
+      if (this.hasFeedback()) {
+        Column() {
           ProxyFeedback({ browser: this.browser })
         }
         .width('100%')
-        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: this.pickerMode ? 0 : this.topInset + 84, bottom: 8 })
       }
-      if ((this.browser.loading || !this.profileReady) && this.profileId !== '') {
+      if ((this.browser.loading || !this.profileReady) && this.profileId !== '' && this.browser.groups.length === 0) {
         Column({ space: 12 }) {
           LoadingProgress()
             .width(32)
@@ -231,14 +235,17 @@ export struct ProxiesPage {
         .width('100%')
       } else if (this.pickerMode || this.browser.style.type === 'tab') {
         ProxyTabs({
-          browser: this.browser, active: this.visible, pickerMode: this.pickerMode, profileId: this.profileId,
+          browser: this.browser, active: this.visible, profileId: this.profileId,
+          locateVersion: this.tabLocateVersion,
           onScrollerReady: (scroller: Scroller) => { this.boundScroller = scroller; },
           onListScroll: (offset: number, source: ScrollSource, scroller: Scroller) => this.didScroll(offset, source, scroller)
         })
           .layoutWeight(1)
+          .padding({ top: this.pickerMode || this.hasFeedback() ? 0 : this.topInset + 84 })
       } else {
         ProxyGroupList({
           browser: this.browser, scroller: this.scroller, active: this.visible, pickerMode: this.pickerMode,
+          contentInset: this.hasFeedback() ? 0 : this.topInset + 84,
           onLocate: (group: string) => this.locate(group),
           onListScroll: (offset: number, source: ScrollSource) => this.didScroll(offset, source, this.scroller)
         })
@@ -247,45 +254,31 @@ export struct ProxiesPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ top: this.pickerMode ? 8 : this.topInset + 64 })
-    .onSizeChange((_before: SizeOptions, after: SizeOptions) => this.browser.resize(Number(after.width) - PAGE_GUTTER * 2))
+    .padding({ top: this.pickerMode ? 8 : 0 })
+    .onSizeChange((_before: SizeOptions, after: SizeOptions): void => {
+      this.availableWidth = Number(after.width);
+      this.resizeNodes();
+    })
   }
 
   build() {
     Column() {
-    if (this.pickerMode) {
-      Column() {
+      if (this.pickerMode) {
         this.pageContent()
+      } else {
+        TabPage({
+          title: $r('app.string.tab_proxies'),
+          scroller: this.boundScroller,
+          topInset: this.topInset,
+          contentOwnsScroll: true,
+          customTitle: true,
+          titleContent: (): void => this.titleToolbar(),
+          content: (): void => this.pageContent()
+        })
       }
-      .width('100%')
-      .height('100%')
-      .backgroundColor($r('app.color.page_background'))
-    } else {
-      HdsNavigation() {
-        this.pageContent()
-      }
-      .titleBar({
-        avoidLayoutSafeArea: true,
-        style: {
-          scrollEffectOpts: { enableScrollEffect: true, scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR },
-          systemMaterialEffect: {
-            materialType: hdsMaterial.MaterialType.IMMERSIVE, materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-          },
-          originalStyle: { contentStyle: PROXY_TITLE_STYLE },
-          scrollEffectStyle: { contentStyle: PROXY_TITLE_STYLE }
-        },
-        content: { title: { mainTitle: $r('app.string.tab_proxies') } }
-      })
-      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
-      .titleMode(HdsNavigationTitleMode.MINI)
-      .hideBackButton(true)
-      .hideToolBar(true)
-      .mode(NavigationMode.Stack)
-      .backgroundColor(Color.Transparent)
-      .bindToScrollable([this.boundScroller])
-    }
     }
     .width('100%')
     .height('100%')
+    .backgroundColor($r('app.color.page_background'))
   }
 }

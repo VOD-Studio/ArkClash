@@ -4,6 +4,7 @@ import { describeError } from './ProfileErrors';
 import { ProfileBatchResult } from './ProfileModels';
 import { ProfileStore } from './Profiles';
 import { ProfileResults } from './ProfileResults';
+import { ProfileSheetHeader } from './ProfileSheetHeader';
 
 @ComponentV2
 export struct ProfileImportSheet {
@@ -11,11 +12,28 @@ export struct ProfileImportSheet {
   @Param batch: boolean = false;
   @Event onDone: () => void = (): void => {};
   @Event onBusy: (busy: boolean) => void = (): void => {};
+  @Event onClose: () => void = (): void => {};
   @Local source: string = '';
   @Local label: string = '';
+  @Local importingMany: boolean = false;
+  @Local batchSource: string = '';
   @Local adding: boolean = false;
   @Local failure: string = '';
   @Local result: ProfileBatchResult | undefined = undefined;
+
+  aboutToAppear(): void { this.importingMany = this.batch; }
+
+  private toggleBatch(): void {
+    if (this.adding) { return; }
+    this.importingMany = !this.importingMany;
+    if (this.importingMany && this.batchSource === '') { this.batchSource = this.source; }
+    this.failure = '';
+    this.result = undefined;
+  }
+
+  private canSave(): boolean {
+    return !this.adding && (this.importingMany ? this.batchSource : this.source).trim() !== '';
+  }
 
   private async save(): Promise<void> {
     if (this.adding) { return; }
@@ -24,8 +42,8 @@ export struct ProfileImportSheet {
     this.failure = '';
     this.result = undefined;
     try {
-      if (this.batch) {
-        const result = await this.store.importLinks(this.source);
+      if (this.importingMany) {
+        const result = await this.store.importLinks(this.batchSource);
         this.result = result;
       } else {
         const failure = await this.store.addSubscription(this.source, this.label);
@@ -35,53 +53,104 @@ export struct ProfileImportSheet {
     finally { this.adding = false; this.onBusy(false); }
   }
 
+  @Builder
+  ImportActions() {
+    Button({ type: ButtonType.Circle }) {
+      SymbolGlyph(this.importingMany ? $r('sys.symbol.doc_text') : $r('sys.symbol.sort'))
+        .fontSize(24)
+        .fontColor([$r('sys.color.font_primary')])
+    }
+    .width(40).height(40).backgroundColor(Color.Transparent)
+    .enabled(!this.adding)
+    .accessibilityText(this.importingMany ? $r('app.string.profile_import_single') : $r('app.string.profile_import_batch'))
+    .onClick((): void => this.toggleBatch())
+  }
+
   build() {
-    Scroll() {
-      Column({ space: 12 }) {
-        if (this.batch) {
-          TextArea({ text: this.source, placeholder: $r('app.string.profile_batch_hint') })
-            .height(180)
-            .onChange((text: string): void => { this.source = text; })
-        } else {
-          TextInput({ text: this.label, placeholder: $r('app.string.profile_optional_name') })
-            .maxLength(64)
-            .height(48)
-            .onChange((text: string): void => { this.label = text; })
-          TextInput({ text: this.source, placeholder: $r('app.string.subscription_link') })
-            .type(InputType.Password)
-            .showPasswordIcon(true)
-            .maxLength(2048)
-            .height(48)
-            .enterKeyType(EnterKeyType.Go)
-            .onChange((text: string): void => { this.source = text; })
-            .onSubmit((): void => { if (!this.adding && this.source.trim() !== '') { this.save(); } })
-        }
-        if (this.failure !== '') {
-          Text(describeError(this.failure))
-            .fontSize(13)
-            .fontColor($r('app.color.status_error'))
-            .width('100%')
-        }
-        if (this.result !== undefined) { ProfileResults({ result: this.result }) }
-        if (this.adding) {
-          Row({ space: 8 }) {
-            LoadingProgress().width(20).height(20).color($r('app.color.brand'))
-            if (this.batch) {
-              Text($r('app.string.profile_batch_progress', this.store.importDone, this.store.importTotal))
+    Column() {
+      ProfileSheetHeader({ titleText: this.importingMany ? $r('app.string.profile_import_batch') : $r('app.string.profile_import_link'),
+        confirmLabel: $r('app.string.action_save_download'), saving: this.adding, canSave: this.canSave(),
+        actions: (): void => this.ImportActions(), onSave: (): void => { this.save(); }, onClose: (): void => this.onClose() })
+      Scroll() {
+        Column({ space: 24 }) {
+          if (this.failure !== '') {
+            Text(describeError(this.failure))
+              .fontSize(13).lineHeight(18)
+              .fontColor($r('app.color.status_error'))
+              .padding(12)
+              .backgroundColor($r('app.color.error_soft'))
+              .width('100%')
+          }
+          if (this.importingMany) {
+            Column({ space: 8 }) {
+              TextArea({ text: this.batchSource, placeholder: $r('app.string.profile_batch_hint') })
+                .height(200)
+                .fontSize(17)
+                .fontColor($r('sys.color.font_primary'))
+                .backgroundColor($r('app.color.card_background'))
+                .borderRadius(24)
+                .onChange((text: string): void => { this.batchSource = text; })
+              Text($r('app.string.profile_batch_hint'))
+                .fontSize(13).lineHeight(18)
                 .fontColor($r('sys.color.font_secondary'))
+                .width('100%')
             }
+          } else {
+            Column() {
+              Row({ space: 16 }) {
+                Text($r('app.string.field_name')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+                TextInput({ text: this.label, placeholder: $r('app.string.profile_field_optional') })
+                  .maxLength(64)
+                  .layoutWeight(1)
+                  .height(56)
+                  .fontSize(17)
+                  .textAlign(TextAlign.End)
+                  .padding(0)
+                  .fontColor($r('sys.color.font_primary'))
+                  .backgroundColor(Color.Transparent)
+                  .enterKeyType(EnterKeyType.Next)
+                  .onChange((text: string): void => { this.label = text; })
+              }
+              .padding({ left: 16, right: 16 })
+              .width('100%')
+              Row().height(0.5).width('100%').backgroundColor($r('app.color.divider')).margin({ left: 16, right: 14 })
+              Row({ space: 16 }) {
+                Text($r('app.string.subscription_link')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+                TextInput({ text: this.source, placeholder: $r('app.string.profile_field_required') })
+                  .maxLength(2048)
+                  .layoutWeight(1)
+                  .height(56)
+                  .fontSize(17)
+                  .textAlign(TextAlign.End)
+                  .padding(0)
+                  .fontColor($r('sys.color.font_primary'))
+                  .backgroundColor(Color.Transparent)
+                  .enterKeyType(EnterKeyType.Go)
+                  .onChange((text: string): void => { this.source = text; })
+                  .onSubmit((): void => { if (this.canSave()) { this.save(); } })
+              }
+              .padding({ left: 16, right: 16 })
+              .width('100%')
+            }
+            .backgroundColor($r('app.color.card_background'))
+            .borderRadius(24).clip(true)
+          }
+          if (this.result !== undefined) { ProfileResults({ result: this.result }) }
+          if (this.adding && this.importingMany) {
+            Text($r('app.string.profile_batch_progress', this.store.importDone, this.store.importTotal))
+              .fontSize(13).lineHeight(18)
+              .fontColor($r('sys.color.font_secondary'))
           }
         }
-        Button($r('app.string.action_save_download'), { type: ButtonType.Capsule })
-          .width('100%')
-          .height(48)
-          .backgroundColor($r('app.color.brand'))
-          .fontColor($r('app.color.on_brand'))
-          .enabled(!this.adding && this.source.trim() !== '')
-          .onClick((): void => { this.save(); })
+        .enabled(!this.adding)
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 24, bottom: 20 })
+        .width('100%')
       }
-      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8, bottom: 24 })
+      .layoutWeight(1)
+      .width('100%')
+      .scrollBar(BarState.Off)
     }
+    .height('100%')
     .width('100%')
   }
 }

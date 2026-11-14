@@ -1,8 +1,10 @@
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { getMainGroup, GroupSummary } from '../../client/Controller';
-import { CARD } from '../../components/Theme';
+import { dashboardCardShadow, DASHBOARD_CARD } from '../../components/Theme';
 import { DashboardCardHeader } from './DashboardCardHeader';
+import { AppGlyph } from '../../components/AppGlyph';
+import { DashboardGroupAvatar } from './DashboardGroupAvatar';
 
 @ComponentV2
 export struct DashboardGroups {
@@ -12,6 +14,7 @@ export struct DashboardGroups {
   @Param profileId: string = '';
   @Param routeRevision: string = '';
   @Param summaryGroups: string[] = [];
+  @Param summaryGroupIcons: Record<string, string> = {};
   @Event onOpen: () => void = () => {};
   @Local conn: Connection = connection;
   @Local summary: GroupSummary | undefined = undefined;
@@ -74,9 +77,9 @@ export struct DashboardGroups {
     return this.summaryGroups;
   }
 
-  private initial(name: string): string {
-    const point = name.codePointAt(0);
-    return point === undefined ? '?' : String.fromCodePoint(point);
+  private iconSource(name: string): string {
+    const icons = this.conn.connected ? this.summary?.groupIcons : this.summaryGroupIcons;
+    return icons === undefined ? '' : icons[name] ?? '';
   }
 
   private hint(): ResourceStr {
@@ -100,61 +103,86 @@ export struct DashboardGroups {
 
   build() {
     Column({ space: 12 }) {
-      DashboardCardHeader({ title: $r('app.string.card_group'), symbol: $r('sys.symbol.square_stack_3d'),
-        chevron: this.names().length > 0 })
-      Row() {
-        Text(this.conn.connected && this.conn.mode !== 'direct' && this.summary === undefined ? '—' :
-          `${this.names().length}`)
-          .fontSize(32)
-          .fontWeight(FontWeight.Bold)
+      Row({ space: 8 }) {
+        DashboardCardHeader({ title: $r('app.string.card_group'), glyph: 'layers',
+          chevron: this.names().length > 0 })
           .layoutWeight(1)
-        Row({ space: -8 }) {
-          ForEach(this.names().slice(0, 4), (name: string): void => {
-            Text(this.initial(name))
-              .fontSize(13)
-              .fontWeight(FontWeight.Medium)
-              .textAlign(TextAlign.Center)
-              .width(32)
-              .height(32)
-              .borderRadius(16)
-              .backgroundColor($r('app.color.tile_background'))
-              .border({ width: 2, color: $r('app.color.card_background') })
-          }, (name: string): string => name)
-          if (this.names().length > 4) {
-            Text(`+${this.names().length - 4}`)
-              .fontSize(12)
-              .textAlign(TextAlign.Center)
-              .width(32)
-              .height(32)
-              .borderRadius(16)
-              .backgroundColor($r('app.color.tile_background'))
-              .border({ width: 2, color: $r('app.color.card_background') })
-          }
+        if (this.summary !== undefined && this.summary.delay < 0) {
+          Text($r('app.string.dash_delay_timeout'))
+            .fontSize(11)
+            .fontWeight(600)
+            .fontColor($r('app.color.warning'))
+            .padding({ left: 7, right: 7, top: 3, bottom: 3 })
+            .borderRadius(7)
+            .backgroundColor($r('app.color.tile_background'))
         }
       }
       .width('100%')
-      Text(this.hint())
-        .fontSize(13)
-        .fontColor($r('sys.color.font_secondary'))
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-      if (this.summary !== undefined && this.summary.delay !== 0) {
-        Text(this.summary.delay < 0 ? $r('app.string.dash_delay_timeout') : `${this.summary.delay} ms`)
-          .fontSize(13)
-          .fontColor(this.summary.delay > 0 && this.summary.delay < 600 ? $r('app.color.status_connected') :
-            $r('app.color.warning'))
-      }
-      if (this.failed) {
-        Button($r('app.string.dash_retry'))
-          .enabled(this.interactive && !this.loading)
-          .onClick((): void => { this.refresh(); })
-      } else if (this.names().length > 0) {
-        Button($r('app.string.action_switch_node'))
-          .enabled(this.interactive)
-          .onClick((): void => { this.onOpen(); })
+      if (this.names().length > 0) {
+        Row({ space: 12 }) {
+          Text() {
+            Span(`${this.names().length}`)
+              .fontSize(40)
+              .fontWeight(FontWeight.Bold)
+              .letterSpacing(-0.8)
+            Span(' ')
+            Span($r('app.string.group_count_unit'))
+              .fontSize(15)
+              .fontWeight(600)
+              .fontColor($r('sys.color.font_secondary'))
+          }
+          .lineHeight(44)
+          .fontFeature('"tnum" on')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Clip })
+          .layoutWeight(1)
+          Row({ space: -8 }) {
+            ForEach(this.names().slice(0, 4), (name: string): void => {
+              DashboardGroupAvatar({ groupName: name, iconSource: this.iconSource(name) })
+            }, (name: string): string => name)
+            if (this.names().length > 4) {
+              Text(`+${this.names().length - 4}`)
+                .fontSize(12)
+                .fontWeight(600)
+                .textAlign(TextAlign.Center)
+                .fontColor($r('sys.color.font_secondary'))
+                .width(40)
+                .height(40)
+                .borderRadius(14)
+                .backgroundColor($r('app.color.tile_background'))
+                .border({ width: 3, color: $r('app.color.card_background') })
+            }
+          }
+        }
+        .width('100%')
+      } else {
+        Column({ space: 6 }) {
+          Stack() {
+            AppGlyph({ name: 'layers', iconSize: 26, iconColor: $r('sys.color.font_secondary') })
+          }
+          .width(64)
+          .height(64)
+          .borderRadius(22)
+          .backgroundColor($r('app.color.tile_background'))
+          Text(this.hint())
+            .fontSize(15)
+            .lineHeight(20)
+            .fontWeight(600)
+            .fontColor($r('sys.color.font_secondary'))
+            .textAlign(TextAlign.Center)
+          if (this.failed) {
+            Button($r('app.string.dash_retry'))
+              .enabled(this.interactive && !this.loading)
+              .onClick((): void => { this.refresh(); })
+          }
+        }
+        .width('100%')
+        .padding({ top: 12, bottom: 12 })
       }
     }
     .alignItems(HorizontalAlign.Start)
-    .attributeModifier(CARD)
+    .attributeModifier(DASHBOARD_CARD)
+    .background(dashboardCardShadow)
+    .onClick((): void => { if (this.interactive && this.names().length > 0) { this.onOpen(); } })
   }
 }

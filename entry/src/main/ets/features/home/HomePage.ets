@@ -2,10 +2,12 @@ import { common } from '@kit.AbilityKit';
 import { HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { TabPage } from '../../components/TabPage';
 import { CARD } from '../../components/Theme';
+import { uiResourceText } from '../../components/ResourceText';
 import { DashboardConnections } from './DashboardConnections';
 import { DashboardGroups } from './DashboardGroups';
 import { DashboardLan } from './DashboardLan';
-import { dashboardCardTitle, DASHBOARD_CARDS, movedDashboardCards } from './DashboardLayout';
+import { dashboardCardDescription, dashboardCardGlyph, dashboardCardTitle, DASHBOARD_CARDS,
+  dashboardCardMotionSeed, movedDashboardCards } from './DashboardLayout';
 import { DashboardMemory } from './DashboardMemory';
 import { DashboardMode } from './DashboardMode';
 import { DashboardProfile } from './DashboardProfile';
@@ -14,6 +16,8 @@ import { dashboardSettings, DashboardSettings } from './DashboardSettings';
 import { DashboardSpeed } from './DashboardSpeed';
 import { DashboardStatus } from './DashboardStatus';
 import { DashboardVpn } from './DashboardVpn';
+import { AppGlyph } from '../../components/AppGlyph';
+import { DashboardEditMotion } from './DashboardEditMotion';
 
 @ComponentV2
 export struct HomePage {
@@ -21,6 +25,7 @@ export struct HomePage {
   @Event onScrollDirection: (down: boolean) => void = () => {};
   @Param topInset: number = 0;
   @Param profileReady: boolean = false;
+  @Param canSwitchProfile: boolean = false;
   @Param profileId: string = '';
   @Param profileName: string = '';
   @Param profileUpdatedAt: number = 0;
@@ -31,6 +36,7 @@ export struct HomePage {
   @Param profileRuleCount: number = -1;
   @Param routeRevision: string = '';
   @Param summaryGroups: string[] = [];
+  @Param summaryGroupIcons: Record<string, string> = {};
   @Param usedBytes: number = 0;
   @Param totalBytes: number = 0;
   @Param expireAt: number = 0;
@@ -39,6 +45,7 @@ export struct HomePage {
   @Event onAddProfile: () => void = () => {};
   @Event onOpenProfiles: () => void = () => {};
   @Event onOpenProfile: () => void = (): void => { this.onOpenProfiles(); };
+  @Event onSwitchProfile: () => void = () => {};
   @Event onUpdateProfile: () => void = () => {};
   @Event onOpenProxies: () => void = () => {};
   @Event onEditingChanged: (editing: boolean) => void = () => {};
@@ -87,10 +94,6 @@ export struct HomePage {
     }
   }
 
-  private move(id: string, delta: number): void {
-    const from = this.settings.cards.indexOf(id);
-    this.saveCards(movedDashboardCards(this.settings.cards, from, from + delta));
-  }
 
   private drop(target: string): void {
     if (this.dragging === '' || this.dragging === target) {
@@ -113,40 +116,84 @@ export struct HomePage {
     }
   }
 
+
   @Builder
-  Editor(id: string) {
-    Row({ space: 6 }) {
-      Text(dashboardCardTitle(id))
-        .fontSize(13)
-        .fontColor($r('sys.color.font_secondary'))
-        .layoutWeight(1)
-        .draggable(true)
-        .onDragStart((): DragItemInfo => {
-          this.dragging = id;
-          return { extraInfo: id };
-        })
-        .onDragEnd((): void => { this.dragging = ''; })
-        .accessibilityDescription($r('app.string.dash_drag_hint'))
-      Button('↑')
-        .width(36)
-        .height(32)
-        .enabled(this.settings.cards.indexOf(id) > 0)
-        .accessibilityText($r('app.string.dash_move_up'))
-        .onClick((): void => { this.move(id, -1); })
-      Button('↓')
-        .width(36)
-        .height(32)
-        .enabled(this.settings.cards.indexOf(id) < this.settings.cards.length - 1)
-        .accessibilityText($r('app.string.dash_move_down'))
-        .onClick((): void => { this.move(id, 1); })
-      if (id !== 'status') {
-        Button($r('app.string.dash_remove'))
-          .height(32)
-          .onClick((): void => { this.saveCards(this.settings.cards.filter((card: string): boolean => card !== id)); })
+  AddCard(id: string) {
+    Row({ space: 12 }) {
+      Button({ type: ButtonType.Circle }) {
+        AppGlyph({ name: 'add', iconSize: 16, iconColor: Color.White })
       }
+      .width(28)
+      .height(28)
+      .padding(0)
+      .backgroundColor($r('app.color.brand'))
+      .accessibilityText(uiResourceText(this.getUIContext(), dashboardCardTitle(id)))
+      .onClick((): void => { this.saveCards([...this.settings.cards, id]); })
+      Stack() {
+        AppGlyph({ name: dashboardCardGlyph(id), iconSize: 20, iconColor: $r('sys.color.font_secondary') })
+      }
+      .width(40)
+      .height(40)
+      .borderRadius(14)
+      .backgroundColor($r('app.color.card_background'))
+      Column() {
+        Text(dashboardCardTitle(id))
+          .fontSize(15)
+          .lineHeight(20)
+          .fontWeight(600)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        if (dashboardCardDescription(id) !== '') {
+          Text(dashboardCardDescription(id))
+            .fontSize(12)
+            .fontColor($r('sys.color.font_secondary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
     }
     .width('100%')
+    .height(64)
+    .padding({ left: 12, right: 8 })
+    .borderRadius(22)
+    .backgroundColor($r('app.color.dash_addable_background'))
     .enabled(!this.settings.saving)
+  }
+
+  @Builder
+  EditableCard(id: string) {
+    DashboardEditMotion({ active: this.editing && this.visible, seed: dashboardCardMotionSeed(id) }) {
+      Stack({ alignContent: Alignment.TopEnd }) {
+        Column() { this.Card(id) }
+          .width('100%')
+          .enabled(!this.editing)
+        if (this.editing && id !== 'status') {
+          Button({ type: ButtonType.Circle }) {
+            AppGlyph({ name: 'remove', iconSize: 16, iconColor: $r('app.color.status_error') })
+          }
+          .width(28)
+          .height(28)
+          .padding(0)
+          .backgroundColor($r('app.color.dash_remove_background'))
+          .enabled(!this.settings.saving)
+          .accessibilityText($r('app.string.dash_remove'))
+          .onClick((): void => {
+            this.saveCards(this.settings.cards.filter((card: string): boolean => card !== id));
+          })
+        }
+      }
+      .width('100%')
+      .draggable(this.editing && !this.settings.saving)
+      .onDragStart((): DragItemInfo => {
+        this.dragging = id;
+        return { extraInfo: id };
+      })
+      .onDragEnd((): void => { this.dragging = ''; })
+      .onDrop((): void => { if (this.editing) { this.drop(id); } })
+      .accessibilityDescription(uiResourceText(this.getUIContext(), this.editing ? $r('app.string.dash_drag_hint') : ''))
+    }
   }
 
   @Builder
@@ -161,19 +208,21 @@ export struct HomePage {
     } else if (id === 'profile') {
       DashboardProfile({
         visible: this.visible, interactive: !this.editing, profileReady: this.profileReady, profileName: this.profileName,
+        canSwitchProfile: this.canSwitchProfile,
         profileUpdatedAt: this.profileUpdatedAt, profileUpdating: this.profileUpdating,
         profileUpdatable: this.profileUpdatable, profileSource: this.profileSource, usedBytes: this.usedBytes,
         totalBytes: this.totalBytes, expireAt: this.expireAt, groupCount: this.profileReady ? this.summaryGroups.length : -1,
         proxyCount: this.profileProxyCount, ruleCount: this.profileRuleCount,
         onAdd: (): void => { this.onAddProfile(); }, onOpen: (): void => { this.onOpenProfile(); },
-        onSwitch: (): void => { this.onOpenProfiles(); }, onUpdate: (): void => { this.onUpdateProfile(); }
+        onSwitch: (): void => { this.onSwitchProfile(); }, onUpdate: (): void => { this.onUpdateProfile(); }
       })
     } else if (id === 'groups') {
       DashboardGroups({ visible: this.visible, interactive: !this.editing, profileReady: this.profileReady,
         profileId: this.profileId, routeRevision: this.routeRevision, summaryGroups: this.summaryGroups,
+        summaryGroupIcons: this.summaryGroupIcons,
         onOpen: (): void => { this.onOpenProxies(); } })
     } else if (id === 'vpn') {
-      DashboardVpn()
+      DashboardVpn({ visible: this.visible, interactive: !this.editing })
     } else if (id === 'services') {
       DashboardServices({ visible: this.visible, interactive: !this.editing, profileId: this.profileId,
         routeRevision: this.routeRevision })
@@ -186,9 +235,8 @@ export struct HomePage {
     }
   }
 
-  build() {
-    TabPage({ title: $r('app.string.tab_home'), topInset: this.topInset, scroller: this.scroller,
-      menus: this.menus(), onScrollDirection: (down: boolean): void => { this.onScrollDirection(down); } }) {
+  @Builder
+  DashboardContent() {
       if (this.settings.failure !== '') {
         Column({ space: 8 }) {
           Text(this.settings.failure === 'conflict' ? $r('app.string.dash_save_conflict') :
@@ -207,37 +255,36 @@ export struct HomePage {
         .attributeModifier(CARD)
       }
       if (this.settings.ready) {
-        ForEach(this.settings.cards, (id: string): void => {
-          Column({ space: 8 }) {
-            if (this.editing) {
-              this.Editor(id)
+        Column({ space: 8 }) {
+          ForEach(this.settings.cards, (id: string): void => {
+            this.EditableCard(id)
+          }, (id: string): string => id)
+          if (this.editing && this.availableCards().length > 0) {
+            Column({ space: 8 }) {
+              Text($r('app.string.dash_add_cards'))
+                .fontSize(13)
+                .fontWeight(600)
+                .fontColor($r('sys.color.font_secondary'))
+                .padding({ left: 8, top: 4, right: 8, bottom: 10 })
+              ForEach(this.availableCards(), (id: string): void => {
+                this.AddCard(id)
+              }, (id: string): string => id)
             }
-            Column() { this.Card(id) }
-              .width('100%')
-              .enabled(!this.editing)
+            .width('100%')
+            .alignItems(HorizontalAlign.Start)
+            .margin({ top: 14 })
           }
-          .width('100%')
-          .onDrop((): void => { if (this.editing) { this.drop(id); } })
-        }, (id: string): string => id)
-        if (this.editing) {
-          Column({ space: 10 }) {
-            Text($r('app.string.dash_add_cards'))
-              .fontWeight(FontWeight.Medium)
-            ForEach(this.availableCards(), (id: string): void => {
-              Button(dashboardCardTitle(id))
-                .width('100%')
-                .enabled(!this.settings.saving)
-                .onClick((): void => { this.saveCards([...this.settings.cards, id]); })
-            }, (id: string): string => id)
-            Text($r('app.string.dash_edit_hint'))
-              .fontSize(12)
-              .fontColor($r('sys.color.font_tertiary'))
-          }
-          .attributeModifier(CARD)
         }
+        .width('100%')
+        .constraintSize({ maxWidth: 560 })
       } else if (this.settings.failure === '') {
         LoadingProgress().width(32).height(32)
       }
     }
+
+  build() {
+    TabPage({ title: this.editing ? $r('app.string.dash_edit_cards') : $r('app.string.tab_home'),
+      topInset: this.topInset, scroller: this.scroller, content: (): void => this.DashboardContent(),
+      menus: this.menus(), onScrollDirection: (down: boolean): void => { this.onScrollDirection(down); } })
   }
 }

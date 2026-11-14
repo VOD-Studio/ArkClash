@@ -8,6 +8,8 @@ export struct ProxyNodeLine {
   @Param @Require row: ProxyNodeRow;
   @Param cardType: ProxyDensity = 'standard';
   @Param active: boolean = true;
+  @Param nestedSurface: boolean = false;
+  @Param groupType: string = '';
   @Event onChoose: (node: string) => void = () => {};
   @Event onTest: (node: string) => void = () => {};
 
@@ -18,6 +20,8 @@ export struct ProxyNodeLine {
           node: node,
           cardType: this.cardType,
           active: this.active,
+          nestedSurface: this.nestedSurface,
+          groupType: this.groupType,
           onChoose: () => this.onChoose(node.id),
           onTest: () => this.onTest(node.id)
         })

@@ -1,7 +1,7 @@
 import { CapsuleSegmentButtonV2, SegmentButtonV2Items, uiMaterial } from '@kit.ArkUI';
 import { connection, Connection } from '../../client/Connection';
 import { OutboundMode } from '../../client/Controller';
-import { CARD } from '../../components/Theme';
+import { dashboardCardShadow, DASHBOARD_CARD } from '../../components/Theme';
 import { DashboardCardHeader } from './DashboardCardHeader';
 
 const DASHBOARD_MODES: OutboundMode[] = ['rule', 'global', 'direct'];
@@ -33,8 +33,8 @@ export struct DashboardMode {
   }
 
   build() {
-    Column({ space: 8 }) {
-      DashboardCardHeader({ title: $r('app.string.card_mode'), symbol: $r('sys.symbol.route') })
+    Column({ space: 12 }) {
+      DashboardCardHeader({ title: $r('app.string.card_mode'), glyph: 'split' })
       CapsuleSegmentButtonV2({
         items: this.modeItems,
         selectedIndex: Math.max(0, DASHBOARD_MODES.indexOf(this.conn.mode as OutboundMode)),
@@ -42,6 +42,7 @@ export struct DashboardMode {
         enableStateAnimation: false,
         backgroundSystemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR })
       })
+        .width('100%')
         .enabled(this.interactive && !this.conn.modePending && !this.conn.busy)
       if (this.conn.modePending || this.requested !== '') {
         Text($r('app.string.dash_mode_pending'))
@@ -58,6 +59,7 @@ export struct DashboardMode {
       }
     }
     .alignItems(HorizontalAlign.Start)
-    .attributeModifier(CARD)
+    .attributeModifier(DASHBOARD_CARD)
+    .background(dashboardCardShadow)
   }
 }

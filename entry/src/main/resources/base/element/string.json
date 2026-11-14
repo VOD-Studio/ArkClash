@@ -22,7 +22,7 @@
     },
     {
       "name": "tab_home",
-      "value": "Home"
+      "value": "Dashboard"
     },
     {
       "name": "tab_proxies",
@@ -1142,7 +1142,7 @@
     },
     {
       "name": "proxy_density_loose",
-      "value": "Comfortable"
+      "value": "Loose"
     },
     {
       "name": "proxy_density_standard",
@@ -1298,7 +1298,7 @@
     },
     {
       "name": "proxy_sort_none",
-      "value": "Original order"
+      "value": "Default"
     },
     {
       "name": "proxy_stale",
@@ -1399,6 +1399,194 @@
     {
       "name": "proxy_actual_retired",
       "value": "The active outbound was removed from its provider; waiting for the core cache to refresh."
+    },
+    {
+      "name": "profile_import_link",
+      "value": "Import from link"
+    },
+    {
+      "name": "profile_import_file",
+      "value": "File"
+    },
+    {
+      "name": "profile_import_single",
+      "value": "Single link"
+    },
+    {
+      "name": "profile_import_batch",
+      "value": "Batch import"
+    },
+    {
+      "name": "profile_field_optional",
+      "value": "Optional"
+    },
+    {
+      "name": "profile_field_required",
+      "value": "Required"
+    },
+    {
+      "name": "profile_update_interval",
+      "value": "Update interval"
+    },
+    {
+      "name": "profile_minutes",
+      "value": "min"
+    },
+    {
+      "name": "profile_source_remote",
+      "value": "Remote"
+    },
+    {
+      "name": "profile_source_preview",
+      "value": "View source file"
+    },
+    {
+      "name": "profile_updated_now",
+      "value": "Just now"
+    },
+    {
+      "name": "profile_updated_minutes",
+      "value": "%dm ago"
+    },
+    {
+      "name": "profile_updated_hours",
+      "value": "%dh ago"
+    },
+    {
+      "name": "profile_updated_days",
+      "value": "%dd ago"
+    },
+    {
+      "name": "profile_updated_months",
+      "value": "%dmo ago"
+    },
+    {
+      "name": "profile_updated_years",
+      "value": "%dy ago"
+    },
+    {
+      "name": "dash_ip_organization",
+      "value": "IP organization"
+    },
+    {
+      "name": "dash_card_description_status",
+      "value": "Outbound IP and runtime status"
+    },
+    {
+      "name": "dash_card_description_connections",
+      "value": "Current connections and routing statistics"
+    },
+    {
+      "name": "dash_card_description_memory",
+      "value": "UI and core memory measurements"
+    },
+    {
+      "name": "proxy_menu_style",
+      "value": "Style"
+    },
+    {
+      "name": "proxy_menu_size",
+      "value": "Size"
+    },
+    {
+      "name": "proxy_menu_layout",
+      "value": "Layout"
+    },
+    {
+      "name": "proxy_menu_icon_style",
+      "value": "Icon style"
+    },
+    {
+      "name": "proxy_layout_tight",
+      "value": "Tight"
+    },
+    {
+      "name": "proxy_groups",
+      "value": "Proxy group"
+    },
+    {
+      "name": "proxy_search_close",
+      "value": "Cancel search"
+    },
+    {
+      "name": "dash_rules",
+      "value": "Rules"
+    },
+    {
+      "name": "dash_total_rss",
+      "value": "Combined process resident memory (RSS)"
+    },
+    {
+      "name": "dash_memory_app",
+      "value": "App"
+    },
+    {
+      "name": "dash_memory_core",
+      "value": "Core"
+    },
+    {
+      "name": "proxy_select",
+      "value": "Select"
+    },
+    {
+      "name": "proxy_preferred",
+      "value": "Preferred"
+    },
+    {
+      "name": "dash_updated_just_now",
+      "value": "Just now"
+    },
+    {
+      "name": "dash_updated_minutes",
+      "value": "%d minutes ago"
+    },
+    {
+      "name": "dash_updated_hours",
+      "value": "%d hours ago"
+    },
+    {
+      "name": "dash_updated_days",
+      "value": "%d days ago"
+    },
+    {
+      "name": "dash_updated_months",
+      "value": "%d months ago"
+    },
+    {
+      "name": "dash_updated_years",
+      "value": "%d years ago"
+    },
+    {
+      "name": "dash_profile_remote",
+      "value": "Remote"
+    },
+    {
+      "name": "dash_profile_custom_type",
+      "value": "Custom"
+    },
+    {
+      "name": "dash_used_short",
+      "value": "used"
+    },
+    {
+      "name": "dash_profile_updated_prefix",
+      "value": "Updated "
+    },
+    {
+      "name": "dash_service_shown",
+      "value": "Shown on dashboard"
+    },
+    {
+      "name": "dash_ip_asn",
+      "value": "ASN"
+    },
+    {
+      "name": "dash_probe_source",
+      "value": "Lookup source"
+    },
+    {
+      "name": "dash_probe_checked_at",
+      "value": "Checked at"
     }
   ]
 }

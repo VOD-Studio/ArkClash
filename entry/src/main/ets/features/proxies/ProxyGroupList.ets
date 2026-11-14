@@ -15,6 +15,7 @@ export struct ProxyGroupList {
   @Param @Require scroller: Scroller;
   @Param active: boolean = false;
   @Param pickerMode: boolean = false;
+  @Param contentInset: number = 0;
   @Event onLocate: (group: string) => void = () => {};
   @Event onListScroll: (offset: number, source: ScrollSource) => void = () => {};
 
@@ -26,6 +27,7 @@ export struct ProxyGroupList {
       offlineWritable: this.browser.offlineWritable,
       showLocate: !this.pickerMode,
       collapsible: !this.pickerMode,
+      active: this.active,
       onToggle: () => this.browser.toggleGroup($$.group.name),
       onLocate: () => this.onLocate($$.group.name),
       onTest: () => this.browser.test($$.group.name),
@@ -33,10 +35,22 @@ export struct ProxyGroupList {
     })
   }
 
+  @Builder
+  private groupFooter($$: ProxyHeaderBinding) {
+    if ($$.group.expanded) {
+      Row()
+        .width('100%')
+        .height(2)
+    }
+  }
+
   build() {
     List({ scroller: this.scroller, space: 8 }) {
       LazyForEach(this.browser.source, (group: ProxyGroupView) => {
-        ListItemGroup({ header: () => { this.groupHeader({ group: group }); } }) {
+        ListItemGroup({
+          header: () => { this.groupHeader({ group: group }); },
+          footer: () => { this.groupFooter({ group: group }); }
+        }) {
           if (group.expanded && group.nodes.length === 0) {
             ListItem() {
               EmptyState({
@@ -51,22 +65,28 @@ export struct ProxyGroupList {
                   row: row,
                   cardType: group.cardType,
                   active: this.active,
+                  nestedSurface: true,
+                  groupType: group.type,
                   onChoose: (node: string) => this.browser.choose(group.name, node),
                   onTest: (node: string) => this.browser.test(group.name, node)
                 })
               }
+              .padding({ left: 10, right: 10 })
             }, (row: ProxyNodeRow): string => row.key)
           }
         }
+        .backgroundColor($r('app.color.card_background'))
+        .borderRadius(24)
       }, (group: ProxyGroupView): string => group.key)
     }
     .width('100%')
     .height('100%')
     .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+    .contentStartOffset(this.contentInset)
     .contentEndOffset(FLOATING_BAR_INSET)
     .cachedCount(2)
     .sticky(StickyStyle.Header)
-    .scrollBar(BarState.Off)
+    .scrollBar(BarState.Auto)
     .edgeEffect(EdgeEffect.Spring)
     .onWillScroll((offset: number, _state: ScrollState, source: ScrollSource) => this.onListScroll(offset, source))
   }

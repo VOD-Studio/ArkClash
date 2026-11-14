@@ -1,4 +1,4 @@
-import { common } from '@kit.AbilityKit';
+import { proxyTextScale } from './ProxyMetrics';
 import { ProxyBrowser } from './Proxies';
 import { ProxyGroupJumpItem } from './ProxyGroupJumpItem';
 import { ProxyGroupView } from './ProxyView';
@@ -8,16 +8,12 @@ export struct ProxyGroupJumpList {
   @Param @Require browser: ProxyBrowser;
   @Param active: boolean = true;
   @Event onChoose: (groupName: string) => void = () => {};
-  @Local rowExtent: number = 48;
+  @Local rowExtent: number = 44;
   private scroller: ListScroller = new ListScroller();
   private focusTimer: number = -1;
 
   aboutToAppear(): void {
-    const ui = this.getUIContext();
-    const context = ui.getHostContext() as common.UIAbilityContext;
-    const scale = ui.isFollowingSystemFontScale() ?
-      Math.min(context.config.fontSizeScale ?? 1, ui.getMaxFontScale()) : 1;
-    this.rowExtent = Math.max(48, Math.ceil(20 * scale + 24));
+    this.rowExtent = Math.ceil(20 * proxyTextScale(this.getUIContext()) + 24);
     this.focusCurrentGroup();
   }
 
@@ -46,7 +42,7 @@ export struct ProxyGroupJumpList {
   }
 
   private viewportHeight(): number {
-    return Math.min(320, this.rowExtent * this.browser.groups.length);
+    return Math.min(7.5, this.browser.groups.length) * this.rowExtent;
   }
 
   build() {

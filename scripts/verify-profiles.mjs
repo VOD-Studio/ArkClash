@@ -98,6 +98,7 @@ const parseLinks = exportedFunction(path.join(featureDir, 'ProfileActions.ets'),
 const nextDue = exportedFunction(path.join(etsDir, 'shared/profiles/Updater.ets'), 'nextDue',
   "import { intervalMinutes } from './Store';\nconst MINUTE_MS = 60000;");
 const { runProfileBatch } = load(path.join(featureDir, 'ProfileBatch.ets'));
+const { profileResultLines } = load(path.join(featureDir, 'ProfileResultLines.ets'));
 
 async function sandbox(run) {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'arkclash-profile-case-'));
@@ -185,6 +186,55 @@ test('manual batches use at most four tasks and retain partial successes and fai
   assert.equal(result.succeeded, 7);
   assert.equal(result.skipped, 2);
   assert.equal(result.failures.length, 2);
+});
+
+test('failure result rows retain duplicate invalid links and a separate description for each error group', () => {
+  const failures = [
+    { id: '', name: '', error: 'url_invalid', line: 7 },
+    { id: 'saved', name: 'Saved profile', error: 'network' },
+    { id: '', name: '', error: 'url_invalid', line: 7 }
+  ];
+  const rows = profileResultLines(failures);
+  assert.deepEqual(Array.from(rows, (row) => [row.description, row.error, row.name, row.line, row.first, row.last]), [
+    [false, 'url_invalid', '', 7, true, false],
+    [false, 'url_invalid', '', 7, false, true],
+    [true, 'url_invalid', '', undefined, false, false],
+    [false, 'network', 'Saved profile', undefined, true, true],
+    [true, 'network', '', undefined, false, false]
+  ]);
+  const keys = Array.from(rows, (row) => row.key);
+  assert.equal(new Set(keys).size, rows.length);
+  const regrouped = profileResultLines([failures[1], failures[0], failures[2]]);
+  assert.deepEqual(Array.from(regrouped.filter((row) => row.error === 'url_invalid'), (row) => row.key), keys.slice(0, 3));
+  assert.deepEqual(Array.from(regrouped.filter((row) => row.error === 'network'), (row) => row.key), keys.slice(3));
+  assert.equal(profileResultLines([]).length, 0);
+});
+
+test('large same-error results expose every failure as one row with stable unique keys', () => {
+  const failures = Array.from({ length: 4096 }, (_, index) => ({
+    id: '', name: '', error: 'url_invalid', line: Math.floor(index / 2) + 1
+  }));
+  const rows = profileResultLines(failures);
+  assert.equal(rows.length, 4097);
+  for (let index = 0; index < failures.length; index++) {
+    assert.equal(rows[index].description, false);
+    assert.equal(rows[index].line, failures[index].line);
+    assert.equal(rows[index].name, failures[index].name);
+    assert.equal(rows[index].first, index === 0);
+    assert.equal(rows[index].last, index === failures.length - 1);
+  }
+  assert.equal(rows.at(-1).description, true);
+  assert.equal(rows.at(-1).error, 'url_invalid');
+  const keys = Array.from(rows, (row) => row.key);
+  assert.equal(new Set(keys).size, 4097);
+  assert.deepEqual(Array.from(profileResultLines(failures.map((failure) => ({ ...failure }))), (row) => row.key), keys);
+  const extended = profileResultLines([{ id: 'new', name: 'New failure', error: 'url_invalid', line: 0 }, ...failures]);
+  assert.deepEqual(Array.from(extended.slice(1), (row) => row.key), keys);
+  const ambiguous = profileResultLines([
+    { id: 'a:1', name: 'b', error: 'network', line: 2 },
+    { id: 'a', name: '2:b', error: 'network', line: 1 }
+  ]);
+  assert.notEqual(ambiguous[0].key, ambiguous[1].key);
 });
 
 const storeImport = "import { checkProfileCommit, findProfile, listPath, readListAsync, readOptionalText, writeList, writeProfileText, withProfileStorage, removeProfileFile, yamlPath, summaryPath, statePath, selectedPath } from '../../shared/profiles/Store';";

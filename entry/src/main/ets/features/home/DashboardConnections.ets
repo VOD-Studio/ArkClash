@@ -1,9 +1,9 @@
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { connectionStats, ConnectionStats } from '../../client/Stats';
-import { LabeledValue } from '../../components/Labels';
-import { CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
-import { DashboardCardHeader } from './DashboardCardHeader';
+import { dashboardCardShadow, DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { DashboardFigure } from './DashboardFigure';
+import { dashboardCount } from './DashboardFormat';
 
 @ComponentV2
 export struct DashboardConnections {
@@ -51,56 +51,88 @@ export struct DashboardConnections {
   }
 
   private count(number: number): string {
-    return this.conn.connected && this.stats.received ? number.toLocaleString() : '—';
+    return this.conn.connected && this.stats.received ? dashboardCount(number) : '—';
   }
 
   private stale(): boolean {
     return this.stats.failed || (this.stats.sampledAt > 0 && this.clock - this.stats.sampledAt > 3500);
   }
 
+
   @Builder
   Counts() {
-    Row({ space: 8 }) {
-      LabeledValue({ label: $r('app.string.stat_active'), value: this.count(this.stats.active) }).layoutWeight(1)
-      LabeledValue({ label: $r('app.string.stat_proxied'), value: this.count(this.stats.proxied) }).layoutWeight(1)
-      LabeledValue({ label: $r('app.string.stat_direct'), value: this.count(this.stats.direct) }).layoutWeight(1)
+    Row() {
+      DashboardFigure({ figureText: this.count(this.stats.active), label: $r('app.string.stat_active'),
+        figureSize: 22, figureLeading: 28, figureWeight: 700, centered: true })
+        .layoutWeight(1)
+        .padding({ top: 10, bottom: 10 })
+      DashboardFigure({ figureText: this.count(this.stats.proxied), label: $r('app.string.stat_proxied'),
+        figureSize: 22, figureLeading: 28, figureWeight: 700, centered: true })
+        .layoutWeight(1)
+        .padding({ top: 10, bottom: 10 })
+      DashboardFigure({ figureText: this.count(this.stats.direct), label: $r('app.string.stat_direct'),
+        figureSize: 22, figureLeading: 28, figureWeight: 700, centered: true })
+        .layoutWeight(1)
+        .padding({ top: 10, bottom: 10 })
     }
     .width('100%')
   }
 
   @Builder
   Details() {
-    Column({ space: 16 }) {
+    Scroll() {
+      Column({ space: 16 }) {
+        Column() {
+          this.Counts()
+        }
+        .width('100%')
+        .padding(8)
+        .borderRadius(22)
+        .backgroundColor($r('app.color.tile_background'))
+        Text($r('app.string.dash_connections_scope'))
+          .fontSize(13)
+          .lineHeight(18)
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+        Text(this.stats.sampledAt > 0 ? new Date(this.stats.sampledAt).toLocaleString() : '—')
+          .fontSize(12)
+          .lineHeight(16)
+          .fontColor($r('sys.color.font_tertiary'))
+          .width('100%')
+        if (this.stale()) {
+          Text($r('app.string.dash_stats_stale'))
+            .fontSize(12)
+            .lineHeight(16)
+            .fontColor($r('app.color.warning'))
+            .width('100%')
+        }
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8, bottom: 24 })
+    }
+    .width('100%')
+    .height('100%')
+    .align(Alignment.TopStart)
+    .scrollBar(BarState.Off)
+  }
+
+  build() {
+    Column() {
       this.Counts()
-      Text($r('app.string.dash_connections_scope'))
-        .fontSize(13)
-        .fontColor($r('sys.color.font_secondary'))
-      Text(this.stats.sampledAt > 0 ? new Date(this.stats.sampledAt).toLocaleString() : '—')
-        .fontSize(12)
-        .fontColor($r('sys.color.font_tertiary'))
       if (this.stale()) {
         Text($r('app.string.dash_stats_stale'))
           .fontSize(12)
           .fontColor($r('app.color.warning'))
       }
     }
-    .width('100%')
-    .padding(PAGE_GUTTER)
-  }
-
-  build() {
-    Column({ space: 12 }) {
-      DashboardCardHeader({ title: $r('app.string.card_conn_stats'), symbol: $r('sys.symbol.list_bullet'), chevron: true })
-      this.Counts()
-      Text(this.stale() ? $r('app.string.dash_stats_stale') : $r('app.string.dash_connections_live'))
-        .fontSize(12)
-        .fontColor($r('sys.color.font_tertiary'))
-    }
-    .alignItems(HorizontalAlign.Start)
-    .attributeModifier(CARD)
+    .attributeModifier(DASHBOARD_CARD)
+    .background(dashboardCardShadow)
+    .padding(8)
+    .accessibilityText($r('app.string.card_conn_stats'))
     .onClick((): void => { if (this.interactive) { this.details = true; } })
-    .bindSheet($$this.details, this.Details(), {
-      title: { title: $r('app.string.card_conn_stats') }, detents: [SheetSize.MEDIUM],
+    .bindSheet($$this.details, (): void => { this.Details(); }, {
+      title: { title: $r('app.string.card_conn_stats') }, detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       systemMaterial: sheetMaterial(), showClose: true
     })
   }

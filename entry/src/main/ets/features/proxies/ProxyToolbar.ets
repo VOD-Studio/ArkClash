@@ -1,43 +1,18 @@
-import { sheetMaterial } from '../../components/Theme';
+import { SymbolGlyphModifier } from '@kit.ArkUI';
+import { AppGlyph } from '../../components/AppGlyph';
 import { ProxyBrowser } from './Proxies';
 import { copyProxyStyle, ProxyDensity, ProxyIconStyle, ProxySort } from './ProxyLogic';
-import { ProxyGroupJumpList } from './ProxyGroupJumpList';
 
 @ComponentV2
 export struct ProxyToolbar {
   @Param @Require browser: ProxyBrowser;
   @Param pickerMode: boolean = false;
   @Param active: boolean = true;
-  @Event onOpenProfiles: () => void = () => {};
   @Event onLocate: (groupName: string) => void = () => {};
-  @Local groupsShown: boolean = false;
-  @Local popupWidth: number = 280;
+  @Local searchShown: boolean = false;
   private densities: ProxyDensity[] = ['loose', 'standard', 'compact'];
-  private sorts: ProxySort[] = ['none', 'name', 'delay'];
+  private sorts: ProxySort[] = ['none', 'delay', 'name'];
   private icons: ProxyIconStyle[] = ['filled', 'icon', 'hidden'];
-
-  aboutToDisappear(): void {
-    this.groupsShown = false;
-  }
-
-  @Monitor('active', 'pickerMode', 'browser.groups')
-  closeUnavailableGroups(): void {
-    if (!this.active || this.pickerMode || this.browser.groups.length === 0) {
-      this.groupsShown = false;
-    }
-  }
-
-  private toggleGroups(): void {
-    if (this.active && this.browser.groups.length > 0) {
-      this.groupsShown = !this.groupsShown;
-    }
-  }
-
-  private chooseGroup(groupName: string): void {
-    this.groupsShown = false;
-    this.browser.setCurrentGroup(groupName);
-    this.onLocate(groupName);
-  }
 
   private densityLabel(density: ProxyDensity): ResourceStr {
     switch (density) {
@@ -85,9 +60,9 @@ export struct ProxyToolbar {
     this.browser.changeStyle(style);
   }
 
-  private toggleLayout(): void {
+  private changeLayout(layout: 'list' | 'tab'): void {
     const style = copyProxyStyle(this.browser.style);
-    style.type = style.type === 'list' ? 'tab' : 'list';
+    style.type = layout;
     this.browser.changeStyle(style);
   }
 
@@ -97,148 +72,199 @@ export struct ProxyToolbar {
     this.browser.changeStyle(style);
   }
 
+  private closeSearch(): void {
+    this.browser.setQuery('');
+    this.searchShown = false;
+  }
+
+  @Builder
+  private layoutMenu() {
+    Menu() {
+      MenuItem({ content: $r('app.string.proxy_view_tab') })
+        .selected(this.browser.style.type === 'tab')
+        .selectIcon(true)
+        .onClick(() => this.changeLayout('tab'))
+      MenuItem({ content: $r('app.string.proxy_view_list') })
+        .selected(this.browser.style.type === 'list')
+        .selectIcon(true)
+        .onClick(() => this.changeLayout('list'))
+    }
+    .font({ size: 15, weight: FontWeight.Normal })
+  }
+
+  @Builder
+  private sortMenu() {
+    Menu() {
+      ForEach(this.sorts, (sort: ProxySort) => {
+        MenuItem({ content: this.sortLabel(sort) })
+          .selected(this.browser.style.sortType === sort)
+          .selectIcon(true)
+          .onClick(() => this.changeSort(sort))
+      }, (sort: ProxySort): string => sort)
+    }
+    .font({ size: 15, weight: FontWeight.Normal })
+  }
+
+  @Builder
+  private gridMenu() {
+    Menu() {
+      ForEach(this.densities, (density: ProxyDensity) => {
+        MenuItem({ content: density === 'compact' ? $r('app.string.proxy_layout_tight') : this.densityLabel(density) })
+          .selected(this.browser.style.layout === density)
+          .selectIcon(true)
+          .onClick(() => this.changeDensity(density, false))
+      }, (density: ProxyDensity): string => density)
+    }
+    .font({ size: 15, weight: FontWeight.Normal })
+  }
+
+  @Builder
+  private cardMenu() {
+    Menu() {
+      ForEach(this.densities, (density: ProxyDensity) => {
+        MenuItem({ content: this.densityLabel(density) })
+          .selected(this.browser.style.cardType === density)
+          .selectIcon(true)
+          .onClick(() => this.changeDensity(density, true))
+      }, (density: ProxyDensity): string => density)
+    }
+    .font({ size: 15, weight: FontWeight.Normal })
+  }
+
+  @Builder
+  private iconMenu() {
+    Menu() {
+      ForEach(this.icons, (icon: ProxyIconStyle) => {
+        MenuItem({ content: this.iconLabel(icon) })
+          .selected(this.browser.style.iconStyle === icon)
+          .selectIcon(true)
+          .onClick(() => this.changeIcon(icon))
+      }, (icon: ProxyIconStyle): string => icon)
+    }
+    .font({ size: 15, weight: FontWeight.Normal })
+  }
+
   @Builder
   private styleMenu() {
     Menu() {
-      MenuItemGroup({ header: $r('app.string.proxy_sort') }) {
-        ForEach(this.sorts, (sort: ProxySort) => {
-          MenuItem({ content: this.sortLabel(sort) })
-            .selected(this.browser.style.sortType === sort)
-            .selectIcon(true)
-            .onClick(() => this.changeSort(sort))
-        }, (sort: ProxySort): string => sort)
+      if (this.browser.style.type === 'tab') {
+        MenuItem({ content: $r('app.string.proxy_locate_selected'), symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.scope')) })
+          .enabled(this.active && this.browser.groups.length > 0)
+          .onClick(() => this.onLocate(this.browser.currentGroup))
       }
-      MenuItemGroup({ header: $r('app.string.proxy_layout_density') }) {
-        ForEach(this.densities, (density: ProxyDensity) => {
-          MenuItem({ content: this.densityLabel(density) })
-            .selected(this.browser.style.layout === density)
-            .selectIcon(true)
-            .onClick(() => this.changeDensity(density, false))
-        }, (density: ProxyDensity): string => density)
+      if ((this.browser.groups[this.browser.groupIndex]?.pinned ?? '') !== '') {
+        MenuItem({ content: $r('app.string.proxy_clear_pin') })
+          .enabled(this.active && (this.browser.online || this.browser.offlineWritable))
+          .onClick(() => this.browser.clearPin(this.browser.currentGroup))
       }
-      MenuItemGroup({ header: $r('app.string.proxy_card_density') }) {
-        ForEach(this.densities, (cardDensity: ProxyDensity) => {
-          MenuItem({ content: this.densityLabel(cardDensity) })
-            .selected(this.browser.style.cardType === cardDensity)
-            .selectIcon(true)
-            .onClick(() => this.changeDensity(cardDensity, true))
-        }, (cardDensity: ProxyDensity): string => cardDensity)
+      MenuItem({
+        content: $r('app.string.proxy_menu_style'),
+        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.list_bullet')),
+        builder: this.layoutMenu
+      })
+      MenuItem({ content: $r('app.string.proxy_sort'), symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.sort')), builder: this.sortMenu })
+      MenuItem({
+        content: $r('app.string.proxy_menu_layout'),
+        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.square_grid_2x2')),
+        builder: this.gridMenu
+      })
+      MenuItem({ content: $r('app.string.proxy_menu_size'), symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.textformat')), builder: this.cardMenu })
+      if (this.browser.style.type === 'list') {
+        MenuItem({ content: $r('app.string.proxy_menu_icon_style'), symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.picture')), builder: this.iconMenu })
       }
-      MenuItemGroup({ header: $r('app.string.proxy_group_icons') }) {
-        ForEach(this.icons, (icon: ProxyIconStyle) => {
-          MenuItem({ content: this.iconLabel(icon) })
-            .selected(this.browser.style.iconStyle === icon)
-            .selectIcon(true)
-            .onClick(() => this.changeIcon(icon))
-        }, (icon: ProxyIconStyle): string => icon)
-      }
-      MenuItem({ content: $r('app.string.proxy_hide_timeout') })
+      MenuItem({ content: $r('app.string.proxy_hide_timeout'), symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.eye_slash')) })
         .selected(this.browser.style.hideTimeoutProxies)
         .selectIcon(true)
         .onClick(() => this.toggleTimeout())
-      MenuItem({ content: $r('app.string.proxy_open_profiles') })
-        .onClick(() => this.onOpenProfiles())
     }
+    .font({ size: 15, weight: FontWeight.Normal })
   }
 
   @Builder
-  private groupChoices() {
-    ProxyGroupJumpList({
-      browser: this.browser,
-      active: this.active && this.groupsShown,
-      onChoose: (groupName: string) => this.chooseGroup(groupName)
-    })
+  private testAction() {
+    Button({ type: ButtonType.Circle }) {
+      if (this.browser.groups[this.browser.groupIndex]?.testing === true && this.active) {
+        LoadingProgress()
+          .width(24)
+          .height(24)
+          .color($r('sys.color.font_primary'))
+          .enableLoading(this.active)
+      } else {
+        AppGlyph({ name: 'bolt', iconSize: 24 })
+      }
+    }
+    .width(44)
+    .height(44)
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .accessibilityText($r('app.string.proxy_test_current_group'))
+    .enabled(this.active && this.browser.online && !(this.browser.groups[this.browser.groupIndex]?.testing ?? false))
+    .onClick(() => this.browser.test(this.browser.currentGroup))
   }
 
   build() {
-    Column({ space: 8 }) {
-      Row({ space: 8 }) {
+    Row({ space: 8 }) {
+      if (this.searchShown || this.pickerMode) {
         TextInput({ text: this.browser.query, placeholder: $r('app.string.proxy_search') })
           .layoutWeight(1)
           .height(44)
-          .fontSize(14)
+          .fontSize(17)
           .backgroundColor($r('app.color.card_background'))
+          .borderRadius(22)
           .enterKeyType(EnterKeyType.Search)
           .onChange((query: string) => this.browser.setQuery(query))
-        if (this.browser.query !== '') {
+        if (this.browser.style.type === 'tab' || this.pickerMode) {
+          this.testAction()
+        }
+        if (!this.pickerMode) {
           Button({ type: ButtonType.Circle }) {
-            SymbolGlyph($r('sys.symbol.xmark'))
-              .fontSize(16)
-              .fontColor([$r('sys.color.font_secondary')])
+            AppGlyph({ name: 'close', iconSize: 24 })
           }
           .width(44)
           .height(44)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText($r('app.string.proxy_clear_search'))
-          .onClick(() => this.browser.setQuery(''))
+          .padding(0)
+          .backgroundColor($r('app.color.card_background'))
+          .accessibilityText($r('app.string.proxy_search_close'))
+          .onClick(() => this.closeSearch())
         }
+      } else {
+        Text($r('app.string.tab_proxies'))
+          .fontSize(24)
+          .lineHeight(30)
+          .fontWeight(600)
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+        Row() {
+          Button({ type: ButtonType.Circle }) {
+            AppGlyph({ name: 'search', iconSize: 24 })
+          }
+          .width(44)
+          .height(44)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText($r('app.string.proxy_search'))
+          .onClick(() => { this.searchShown = true; })
+          if (this.browser.style.type === 'tab') {
+            this.testAction()
+          }
+        }
+        .borderRadius(22)
+        .backgroundColor($r('app.color.card_background'))
         Button({ type: ButtonType.Circle }) {
-          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-            .fontSize(18)
-            .fontColor([$r('app.color.brand')])
+          AppGlyph({ name: 'more', iconSize: 24 })
         }
         .width(44)
         .height(44)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText($r('app.string.proxy_refresh'))
-        .enabled(!this.browser.loading)
-        .onClick(() => this.browser.refresh())
-      }
-      .width('100%')
-      if (!this.pickerMode) {
-        Row({ space: 8 }) {
-          Button(this.browser.style.type === 'list' ? $r('app.string.proxy_view_list') : $r('app.string.proxy_view_tab'))
-            .fontSize(12)
-            .fontColor($r('app.color.brand'))
-            .backgroundColor($r('app.color.brand_soft'))
-            .height(36)
-            .onClick(() => this.toggleLayout())
-          Button($r('app.string.proxy_jump_group'))
-            .fontSize(12)
-            .fontColor($r('app.color.brand'))
-            .backgroundColor(Color.Transparent)
-            .height(36)
-            .enabled(this.active && this.browser.groups.length > 0)
-            .onClick(() => this.toggleGroups())
-            .bindPopup(this.groupsShown, {
-              builder: this.groupChoices,
-              placement: Placement.BottomLeft,
-              enableArrow: false,
-              autoCancel: true,
-              focusable: true,
-              mask: true,
-              targetSpace: 8,
-              width: this.popupWidth,
-              radius: 16,
-              popupColor: $r('app.color.card_background'),
-              systemMaterial: sheetMaterial(),
-              onStateChange: (event: PopupStateChangeParam): void => {
-                if (!event.isVisible) {
-                  this.groupsShown = false;
-                }
-              }
-            })
-          Blank()
-          Button({ type: ButtonType.Circle }) {
-            SymbolGlyph($r('sys.symbol.slider_horizontal_2'))
-              .fontSize(18)
-              .fontColor([$r('app.color.brand')])
-          }
-          .width(44)
-          .height(36)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText($r('app.string.proxy_style'))
-          .bindMenu(this.styleMenu)
-        }
-        .width('100%')
+        .padding(0)
+        .backgroundColor($r('app.color.card_background'))
+        .accessibilityText($r('app.string.proxy_style'))
+        .bindMenu(this.styleMenu)
       }
     }
     .width('100%')
-    .onSizeChange((_before: SizeOptions, after: SizeOptions): void => {
-      const available = Number(after.width);
-      if (available > 0) {
-        this.popupWidth = Math.min(280, available);
-      }
-    })
+    .height(this.pickerMode ? 56 : 72)
+    .padding({ left: 16, right: 16 })
   }
 }

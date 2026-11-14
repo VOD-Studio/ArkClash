@@ -4,7 +4,7 @@ import { HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { EmptyState } from '../../components/EmptyState';
 import { ListSource } from '../../components/ListSource';
 import { TabPage } from '../../components/TabPage';
-import { CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { ProfileCard } from './ProfileCard';
 import { ProfileDetails } from './ProfileDetails';
 import { ProfileDraft } from './ProfileDraft';
@@ -21,6 +21,8 @@ export struct ProfilesPage {
   @Param @Require scroller: Scroller;
   @Event onScrollDirection: (down: boolean) => void = (): void => {};
   @Param topInset: number = 0;
+  @Param pickerMode: boolean = false;
+  @Param visible: boolean = true;
   @Param sheetRequested: boolean = false;
   @Event onSheetHandled: () => void = (): void => {};
   @Param detailRequested: string = '';
@@ -28,18 +30,35 @@ export struct ProfilesPage {
   @Local detailShown: boolean = false;
   @Local detailItem: ProfileItem | undefined = undefined;
   @Local addShown: boolean = false;
-  @Local batchImport: boolean = false;
   @Local adding: boolean = false;
   @Local editShown: boolean = false;
   @Local draft: ProfileDraft | undefined = undefined;
   @Local sortShown: boolean = false;
   @Local resultShown: boolean = false;
   @Local result: ProfileBatchResult | undefined = undefined;
+  @Local profileColumns: number = 1;
+  @Local currentTime: number = Date.now();
   private rows: ListSource<ProfileItem> = new ListSource<ProfileItem>();
+  private clockTimer: number = -1;
+  private clockInView: boolean = false;
+
+  private clockVisible(visible: boolean): void {
+    this.clockInView = visible;
+    if (this.clockTimer !== -1) { clearInterval(this.clockTimer); this.clockTimer = -1; }
+    if (visible && this.visible) {
+      this.currentTime = Date.now();
+      this.clockTimer = setInterval((): void => { this.currentTime = Date.now(); }, 60000);
+    }
+  }
+
+  aboutToDisappear(): void { this.clockVisible(false); }
+
+  @Monitor('visible')
+  onVisibilityChange(): void { this.clockVisible(this.clockInView); }
 
   @Monitor('sheetRequested')
   onSheetRequested(): void {
-    if (this.sheetRequested) { this.openAdd(false); this.onSheetHandled(); }
+    if (this.sheetRequested) { this.openAdd(); this.onSheetHandled(); }
   }
 
   @Monitor('detailRequested', 'store.loaded')
@@ -61,7 +80,7 @@ export struct ProfilesPage {
   onItemsChanged(): void { this.rows.replace(this.store.items); }
 
   private toast(message: ResourceStr): void { this.getUIContext().getPromptAction().showToast({ message: message }); }
-  private openAdd(batch: boolean): void { this.batchImport = batch; this.addShown = true; }
+  private openAdd(): void { this.addShown = true; }
   private openEdit(item: ProfileItem): void { this.draft = new ProfileDraft(item); this.editShown = true; }
 
   private menus(): HdsNavigationMenuItemOptions[] {
@@ -70,7 +89,7 @@ export struct ProfilesPage {
       menus.push({ content: { label: $r('app.string.action_update_all'), icon: $r('sys.symbol.arrow_clockwise'),
         isEnabled: !this.store.updatingAll, action: (): void => { this.updateAll(); } } });
     }
-    if (this.store.items.length > 1) {
+    if (this.store.items.length > 0) {
       menus.push({ content: { label: $r('app.string.profile_sort'), icon: $r('sys.symbol.sort'),
         action: (): void => { this.sortShown = true; } } });
     }
@@ -81,13 +100,11 @@ export struct ProfilesPage {
 
   private showAddMenu(): void {
     this.getUIContext().getPromptAction().showActionMenu({ buttons: [
-      { text: $r('app.string.action_add_subscription'), color: $r('sys.color.font_primary') },
-      { text: $r('app.string.profile_batch_links'), color: $r('sys.color.font_primary') },
-      { text: $r('app.string.action_import_file'), color: $r('sys.color.font_primary') }
+      { text: $r('app.string.profile_import_file'), color: $r('sys.color.font_primary') },
+      { text: $r('app.string.subscription_link'), color: $r('sys.color.font_primary') }
     ] }).then((result: promptAction.ActionMenuSuccessResponse): void => {
-      if (result.index === 0) { this.openAdd(false); }
-      else if (result.index === 1) { this.openAdd(true); }
-      else { this.importLocal(); }
+      if (result.index === 0) { this.importLocal(); }
+      else if (result.index === 1) { this.openAdd(); }
     }).catch((): void => {});
   }
 
@@ -105,8 +122,14 @@ export struct ProfilesPage {
       $r('app.string.download_failed', describeError(failure)));
   }
   private async updateAll(): Promise<void> {
-    this.result = await this.store.updateAll();
-    this.resultShown = true;
+    const result: ProfileBatchResult = await this.store.updateAll();
+    this.result = result;
+    if (result.failures.length === 1) {
+      const failure = result.failures[0];
+      this.toast($r('app.string.profile_update_failed', failure.name, describeError(failure.error)));
+    } else if (result.failures.length > 1) {
+      this.resultShown = true;
+    }
   }
   private async export(item: ProfileItem): Promise<void> {
     const failure = await this.store.export(item.id);
@@ -131,18 +154,18 @@ export struct ProfilesPage {
         } }
     });
   }
-  private dismissEditor(action: DismissSheetAction): void {
+  private closeEditor(dismiss: () => void): void {
     const draft = this.draft;
-    if (draft === undefined) { action.dismiss(); return; }
+    if (draft === undefined) { dismiss(); return; }
     if (draft.saving) { return; }
-    if (!draft.dirty()) { action.dismiss(); return; }
+    if (!draft.dirty()) { dismiss(); return; }
     this.getUIContext().showAlertDialog({
       title: $r('app.string.profile_unsaved_title'), message: $r('app.string.profile_unsaved_message'), autoCancel: false,
       buttons: [
-        { value: $r('app.string.profile_discard'), action: (): void => action.dismiss() },
+        { value: $r('app.string.profile_discard'), action: (): void => dismiss() },
         { value: $r('app.string.profile_keep_editing'), action: (): void => {} },
         { value: $r('app.string.action_save'), action: (): void => {
-          draft.save?.().then((saved: boolean): void => { if (saved) { action.dismiss(); } });
+          draft.save?.().then((saved: boolean): void => { if (saved) { dismiss(); } });
         } }
       ]
     });
@@ -150,8 +173,27 @@ export struct ProfilesPage {
 
   @Builder
   Content() {
-    TabPage({ title: $r('app.string.tab_profiles'), topInset: this.topInset, scroller: this.scroller,
-      listMode: true, menus: this.menus(), onScrollDirection: (down: boolean): void => this.onScrollDirection(down) }) {
+    if (this.pickerMode) {
+      List({ scroller: this.scroller, space: 8 }) {
+        this.ProfileList()
+      }
+      .width('100%').height('100%')
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+      .contentStartOffset(8).contentEndOffset(24)
+      .lanes(this.profileColumns, 8)
+      .cachedCount(2)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
+    } else {
+      TabPage({ title: $r('app.string.tab_profiles'), topInset: this.topInset, scroller: this.scroller,
+        listMode: true, listSpacing: 8, listLanes: this.profileColumns, listGutter: 8,
+        menus: this.menus(), onScrollDirection: (down: boolean): void => this.onScrollDirection(down),
+        content: (): void => this.ProfileList() })
+    }
+  }
+
+  @Builder
+  ProfileList() {
       if (!this.store.loaded) {
         ListItem() { LoadingProgress().width(32).height(32).color($r('app.color.brand')) }
       } else if (this.store.loadError !== '') {
@@ -160,15 +202,15 @@ export struct ProfilesPage {
             Text($r('app.string.profile_load_error', describeError(this.store.loadError)))
               .fontColor($r('app.color.status_error'))
             Button($r('app.string.action_update')).onClick((): void => this.store.retryLoad())
-          }.attributeModifier(CARD)
+          }.width('100%').padding(16)
         }
       } else if (this.store.items.length === 0) {
         ListItem() {
           Column() {
             EmptyState({ icon: $r('sys.symbol.doc_text'), title: $r('app.string.home_no_profile'),
-              hint: $r('app.string.home_no_profile_hint'), actionLabel: $r('app.string.action_add_subscription'),
-              onAction: (): void => this.openAdd(false) })
-          }.attributeModifier(CARD)
+              hint: $r('app.string.home_no_profile_hint'), actionLabel: $r('app.string.action_add'),
+              onAction: (): void => this.showAddMenu() })
+          }.width('100%')
         }
       } else {
         if (this.store.connected && this.store.applyError !== '') {
@@ -187,17 +229,17 @@ export struct ProfilesPage {
         }
         LazyForEach(this.rows, (item: ProfileItem) => {
           ListItem() {
-            ProfileCard({ item: item, selected: this.store.selectedId() === item.id,
+            ProfileCard({ item: item, selected: this.store.selectedId() === item.id, currentTime: this.currentTime,
               applying: this.store.pending === item.id, running: this.store.connected && this.store.running === item.id,
               removable: this.store.canRemove(item.id), onSelect: (): void => { this.select(item); },
               onEdit: (): void => this.openEdit(item), onRemove: (): void => this.confirmRemove(item),
               onCopy: (): void => { this.copyLink(item); }, onExport: (): void => { this.export(item); },
-              onUpdate: (): void => { this.update(item); } })
+              onUpdate: (): void => { this.update(item); },
+              onDetails: (): void => { this.detailItem = item; this.detailShown = true; } })
           }
         }, (item: ProfileItem): string => item.id)
       }
     }
-  }
 
   @Builder
   EditSheet() {
@@ -205,17 +247,21 @@ export struct ProfilesPage {
       ProfileEditor({ store: this.store, draft: this.draft, onSaved: (): void => {
         if (this.draft !== undefined) { this.draft.saving = false; }
         this.editShown = false;
-      } })
+      }, onClose: (): void => this.closeEditor((): void => { this.editShown = false; }) })
     }
   }
   @Builder
   AddSheet() {
-    ProfileImportSheet({ store: this.store, batch: this.batchImport, onDone: (): void => {
+    ProfileImportSheet({ store: this.store, onDone: (): void => {
       this.adding = false; this.addShown = false;
-    }, onBusy: (busy: boolean): void => { this.adding = busy; } })
+    }, onBusy: (busy: boolean): void => { this.adding = busy; },
+      onClose: (): void => { if (!this.adding) { this.addShown = false; } } })
   }
   @Builder
-  SortSheet() { ProfileSortSheet({ store: this.store, onSaved: (): void => { this.sortShown = false; } }) }
+  SortSheet() {
+    ProfileSortSheet({ store: this.store, onSaved: (): void => { this.sortShown = false; },
+      onClose: (): void => { this.sortShown = false; } })
+  }
   @Builder
   ResultSheet() {
     Column() { if (this.result !== undefined) { ProfileResults({ result: this.result }) } }
@@ -240,9 +286,9 @@ export struct ProfilesPage {
           Column() {
           Column() { this.Content() }
             .width('100%').height('100%')
-            .bindSheet($$this.editShown, this.EditSheet(), { title: { title: $r('app.string.edit_profile_title') },
-              height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true,
-              onWillDismiss: (action: DismissSheetAction): void => this.dismissEditor(action),
+            .bindSheet($$this.editShown, this.EditSheet(), {
+              height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
+              onWillDismiss: (action: DismissSheetAction): void => this.closeEditor((): void => action.dismiss()),
               onDisappear: (): void => { this.draft = undefined; } })
           }
           .width('100%').height('100%')
@@ -250,18 +296,20 @@ export struct ProfilesPage {
             height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true })
         }
         .width('100%').height('100%')
-        .bindSheet($$this.sortShown, this.SortSheet(), { title: { title: $r('app.string.profile_sort') },
-          height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true })
+        .bindSheet($$this.sortShown, this.SortSheet(), {
+          height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false })
       }
       .width('100%').height('100%')
       .bindSheet($$this.resultShown, this.ResultSheet(), { title: { title: $r('app.string.action_update_all') },
         height: SheetSize.FIT_CONTENT, systemMaterial: sheetMaterial(), showClose: true })
     }
     .width('100%').height('100%')
-    .bindSheet($$this.addShown, this.AddSheet(), { title: { title: this.batchImport ?
-      $r('app.string.profile_batch_links') : $r('app.string.add_subscription_title') },
-      height: this.batchImport ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
-      systemMaterial: sheetMaterial(), showClose: true,
+    .onSizeChange((_previous: SizeOptions, next: SizeOptions): void => {
+      this.profileColumns = Math.max(1, Math.min(3, Math.floor((Number(next.width ?? 0) - 32 + 8) / (300 + 8))));
+    })
+    .onVisibleAreaChange([0.0, 1.0], (visible: boolean, ratio: number): void => this.clockVisible(visible && ratio > 0))
+    .bindSheet($$this.addShown, this.AddSheet(), {
+      height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
       onWillDismiss: (action: DismissSheetAction): void => { if (!this.adding) { action.dismiss(); } } })
   }
 }
