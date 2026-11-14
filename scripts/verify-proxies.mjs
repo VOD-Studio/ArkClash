@@ -204,12 +204,34 @@ function putDelay(state, group, name, delay, map) {
   map.set(logic.proxyDelayKey(state, leaf), delay);
 }
 
-test('默认列表、none排序、标准样式、全部折叠', () => {
-  assert.deepEqual(logic.defaultProxyStyle(), {
-    type: 'list', sortType: 'none', layout: 'standard', cardType: 'standard', iconStyle: 'filled', hideTimeoutProxies: false
+test('旧页签偏好恢复为可折叠列表，保留排序、尺寸和图标设置', async () => {
+  const harness = await consumerHarness();
+  const context = { filesDir: '/fixture' };
+  const prefs = await harness.native.preferences.getPreferences();
+  await prefs.put('proxyStyle', JSON.stringify({
+    revision: 3,
+    style: { type: 'tab', sortType: 'name', layout: 'compact', cardType: 'loose',
+      iconStyle: 'hidden', hideTimeoutProxies: false }
+  }));
+  const saved = await harness.preferences.loadProxyPreferences(context, 'one');
+  const groups = view.buildProxyViews({
+    snapshot: snapshot(), style: saved.style, view: saved.view, query: '', columns: 3,
+    latest: new Map(), completedForGroup: () => new Map(), phases: new Map(), pending: new Map(),
+    testingGroups: new Set(), previous: [], picker: false
   });
-  assert.deepEqual(logic.validProxyView({ expanded: [], currentGroup: '' }, ['Main', 'Auto'], 'rule'),
-    { expanded: [], currentGroup: 'Main' });
+  const main = groups.find(group => group.name === 'Main');
+  assert.equal(main.expanded, false);
+  assert.equal(main.rows.totalCount(), 0);
+  assert.equal(main.cardType, 'loose');
+  assert.equal(main.iconStyle, 'hidden');
+  assert.equal(saved.style.layout, 'compact');
+  const next = logic.copyProxyStyle(saved.style);
+  next.cardType = 'compact';
+  assert.equal(await harness.preferences.saveProxyStyle(context, saved.styleRevision, next), 4);
+  const reloaded = await harness.preferences.loadProxyPreferences(context, 'one');
+  assert.equal(reloaded.style.cardType, 'compact');
+  assert.equal(reloaded.style.sortType, 'name');
+  assert.equal(reloaded.style.iconStyle, 'hidden');
 });
 
 test('真实视图展开和快速反向保留组身份，向LazyForEach发送局部增删而非重载', () => {

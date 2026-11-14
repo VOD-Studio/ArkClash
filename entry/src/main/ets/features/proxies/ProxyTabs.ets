@@ -7,7 +7,6 @@ export struct ProxyTabs {
   @Param @Require browser: ProxyBrowser;
   @Param active: boolean = false;
   @Param profileId: string = '';
-  @Param locateVersion: number = 0;
   @Param contentInset: number = 0;
   @Param motionEnabled: boolean = false;
   @Local pageIndex: number = 0;
@@ -18,7 +17,6 @@ export struct ProxyTabs {
   private requestedIndex: number = -1;
   private swiperBound: boolean = false;
   private boundGroup: string = '';
-  private locatePending: boolean = false;
   private fallbackScroller: ListScroller = new ListScroller();
   private scrollers: Map<string, ListScroller> = new Map<string, ListScroller>();
   private readyGroups: Set<string> = new Set<string>();
@@ -33,7 +31,6 @@ export struct ProxyTabs {
   aboutToDisappear(): void {
     this.swiperBound = false;
     this.boundGroup = '';
-    this.locatePending = false;
     this.readyGroups.clear();
   }
 
@@ -70,7 +67,6 @@ export struct ProxyTabs {
     const current = this.browser.groups[this.browser.groupIndex];
     if (!this.active || current === undefined) {
       this.boundGroup = '';
-      this.locatePending = false;
       return;
     }
     if (!this.readyGroups.has(current.key)) {
@@ -85,20 +81,10 @@ export struct ProxyTabs {
       scroller.scrollTo({ xOffset: 0, yOffset: this.browser.tabOffsets.get(current.key) ?? 0, animation: false });
     }
     this.onScrollerReady(scroller);
-    if (this.locatePending) {
-      this.locatePending = false;
-      const target = this.browser.locate(current.name);
-      if (target !== undefined && this.readyGroups.has(current.key) && this.browser.groups.includes(current)) {
-        const feedback = this.browser.loadError || this.browser.preferenceError || this.browser.notice !== '';
-        scroller.scrollToItemInGroup(feedback ? 1 : 0,
-          target.rowIndex + (current.actualRetired ? 1 : 0), false, ScrollAlign.CENTER);
-      }
-    }
   }
 
   @Monitor('profileId')
   resetScrollers(): void {
-    this.locatePending = false;
     this.boundGroup = '';
     this.syncScrollers();
   }
@@ -141,14 +127,6 @@ export struct ProxyTabs {
     const group = this.browser.groups[index];
     if (this.active && group !== undefined && group.name !== this.browser.currentGroup) {
       this.browser.setCurrentGroup(group.name);
-    }
-  }
-
-  @Monitor('locateVersion')
-  locateSelection(): void {
-    if (this.active) {
-      this.locatePending = true;
-      this.syncScrollers();
     }
   }
 

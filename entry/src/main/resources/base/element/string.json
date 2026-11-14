@@ -1305,14 +1305,6 @@
       "value": "Unknown type"
     },
     {
-      "name": "proxy_view_list",
-      "value": "List"
-    },
-    {
-      "name": "proxy_view_tab",
-      "value": "Tabs"
-    },
-    {
       "name": "dash_probe_busy",
       "value": "Probe capacity is busy. No result was obtained; retry."
     },
@@ -1435,10 +1427,6 @@
     {
       "name": "dash_card_description_memory",
       "value": "UI and core memory measurements"
-    },
-    {
-      "name": "proxy_menu_style",
-      "value": "Style"
     },
     {
       "name": "proxy_menu_size",

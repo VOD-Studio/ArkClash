@@ -30,7 +30,6 @@ export struct ProxiesPage {
   @Local browser: ProxyBrowser = new ProxyBrowser();
   @Local link: Connection = connection;
   @Local boundScroller: Scroller = new Scroller();
-  @Local tabLocateVersion: number = 0;
   @Local reduceMotion: boolean = true;
   private reductionListener: (enabled: boolean) => void = (enabled: boolean): void => {
     this.reduceMotion = enabled;
@@ -72,7 +71,7 @@ export struct ProxiesPage {
 
   @Monitor('browser.appearance.style')
   resetBoundScroller(): void {
-    if (this.browser.style.type === 'list') {
+    if (!this.pickerMode) {
       this.boundScroller = this.scroller;
       this.restoreListPending = true;
       this.restoreListScroll();
@@ -82,7 +81,7 @@ export struct ProxiesPage {
 
   @Monitor('browser.groups')
   restoreListScroll(): void {
-    if (this.restoreListPending && this.visible && this.browser.style.type === 'list' &&
+    if (this.restoreListPending && this.visible && !this.pickerMode &&
       this.browser.groups.length > 0 && this.listOwner === 'groups') {
       this.restoreListPending = false;
       this.scroller.scrollTo({ xOffset: 0, yOffset: this.browser.listOffsets.get(this.profileId) ?? 0, animation: false });
@@ -106,10 +105,6 @@ export struct ProxiesPage {
     if (!this.visible) {
       return;
     }
-    if (this.pickerMode || this.browser.style.type === 'tab') {
-      this.tabLocateVersion++;
-      return;
-    }
     if (this.listOwner !== 'groups') {
       return;
     }
@@ -126,10 +121,10 @@ export struct ProxiesPage {
 
   private didScroll(offset: number, source: ScrollSource, scroller: Scroller): void {
     if (scroller !== this.boundScroller ||
-      (!this.pickerMode && this.browser.style.type === 'list' && this.listOwner === '')) {
+      (!this.pickerMode && this.listOwner === '')) {
       return;
     }
-    if (this.browser.style.type === 'list' && this.listOwner === 'groups' && scroller === this.scroller) {
+    if (this.listOwner === 'groups' && scroller === this.scroller) {
       this.browser.listOffsets.set(this.profileId, Math.max(0, scroller.currentOffset().yOffset + offset));
     }
     if (!this.visible || this.pickerMode || source === ScrollSource.EDGE_EFFECT) {
@@ -150,7 +145,7 @@ export struct ProxiesPage {
   private resizeNodes(): void {
     if (this.availableWidth > 0) {
       this.browser.resize(this.availableWidth - PAGE_GUTTER * 2 -
-        (!this.pickerMode && this.browser.style.type === 'list' ? 20 : 0));
+        (this.pickerMode ? 0 : 20));
     }
   }
 
@@ -167,8 +162,7 @@ export struct ProxiesPage {
     ProxyToolbar({
       browser: this.browser,
       active: this.visible,
-      motionEnabled: this.motionEnabled(),
-      onLocate: (groupName: string) => this.locate(groupName)
+      motionEnabled: this.motionEnabled()
     })
   }
 
@@ -253,11 +247,10 @@ export struct ProxiesPage {
         })
         .onAppear((): void => this.listReady('empty'))
         .onDisAppear((): void => this.listRelease('empty'))
-      } else if (this.pickerMode || this.browser.style.type === 'tab') {
+      } else if (this.pickerMode) {
         ProxyTabs({
           browser: this.browser, active: this.visible, profileId: this.profileId,
-          locateVersion: this.tabLocateVersion,
-          contentInset: this.pickerMode ? 0 : this.topInset + 72,
+          contentInset: 0,
           motionEnabled: this.motionEnabled(),
           onScrollerReady: (scroller: Scroller) => { this.listOwner = ''; this.boundScroller = scroller; },
           onListScroll: (offset: number, source: ScrollSource, scroller: Scroller) => this.didScroll(offset, source, scroller)

@@ -10,7 +10,6 @@ export struct ProxyToolbar {
   @Param pickerMode: boolean = false;
   @Param active: boolean = true;
   @Param motionEnabled: boolean = false;
-  @Event onLocate: (groupName: string) => void = () => {};
   @Local searchShown: boolean = false;
   private densities: ProxyDensity[] = ['loose', 'standard', 'compact'];
   private sorts: ProxySort[] = ['none', 'delay', 'name'];
@@ -62,12 +61,6 @@ export struct ProxyToolbar {
     this.browser.changeStyle(style);
   }
 
-  private changeLayout(layout: 'list' | 'tab'): void {
-    const style = copyProxyStyle(this.browser.style);
-    style.type = layout;
-    this.browser.changeStyle(style);
-  }
-
   private toggleTimeout(): void {
     const style = copyProxyStyle(this.browser.style);
     style.hideTimeoutProxies = !style.hideTimeoutProxies;
@@ -77,21 +70,6 @@ export struct ProxyToolbar {
   private closeSearch(): void {
     this.browser.setQuery('');
     this.searchShown = false;
-  }
-
-  @Builder
-  private layoutMenu() {
-    Menu() {
-      MenuItem({ content: $r('app.string.proxy_view_tab') })
-        .selected(this.browser.style.type === 'tab')
-        .selectIcon(true)
-        .onClick(() => this.changeLayout('tab'))
-      MenuItem({ content: $r('app.string.proxy_view_list') })
-        .selected(this.browser.style.type === 'list')
-        .selectIcon(true)
-        .onClick(() => this.changeLayout('list'))
-    }
-    .font({ size: 15, weight: FontWeight.Normal })
   }
 
   @Builder
@@ -149,21 +127,11 @@ export struct ProxyToolbar {
   @Builder
   private styleMenu() {
     Menu() {
-      if (this.browser.style.type === 'tab') {
-        MenuItem({ content: $r('app.string.proxy_locate_selected'), symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.scope')) })
-          .enabled(this.active && this.browser.groups.length > 0)
-          .onClick(() => this.onLocate(this.browser.currentGroup))
-      }
       if ((this.browser.groups[this.browser.groupIndex]?.pinned ?? '') !== '') {
         MenuItem({ content: $r('app.string.proxy_clear_pin') })
           .enabled(this.active && (this.browser.online || this.browser.offlineWritable))
           .onClick(() => this.browser.clearPin(this.browser.currentGroup))
       }
-      MenuItem({
-        content: $r('app.string.proxy_menu_style'),
-        symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.list_bullet')),
-        builder: this.layoutMenu
-      })
       MenuItem({ content: $r('app.string.proxy_sort'), symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.sort')), builder: this.sortMenu })
       MenuItem({
         content: $r('app.string.proxy_menu_layout'),
@@ -171,9 +139,7 @@ export struct ProxyToolbar {
         builder: this.gridMenu
       })
       MenuItem({ content: $r('app.string.proxy_menu_size'), symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.textformat')), builder: this.cardMenu })
-      if (this.browser.style.type === 'list') {
-        MenuItem({ content: $r('app.string.proxy_menu_icon_style'), symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.picture')), builder: this.iconMenu })
-      }
+      MenuItem({ content: $r('app.string.proxy_menu_icon_style'), symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.picture')), builder: this.iconMenu })
       MenuItem({ content: $r('app.string.proxy_hide_timeout'), symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.eye_slash')) })
         .selected(this.browser.style.hideTimeoutProxies)
         .selectIcon(true)
@@ -213,7 +179,7 @@ export struct ProxyToolbar {
           .borderRadius(22)
           .enterKeyType(EnterKeyType.Search)
           .onChange((query: string) => this.browser.setQuery(query))
-        if (this.browser.style.type === 'tab' || this.pickerMode) {
+        if (this.pickerMode) {
           this.testAction()
         }
         if (!this.pickerMode) {
@@ -240,9 +206,6 @@ export struct ProxyToolbar {
           .attributeModifier(HEADER_ACTION)
           .accessibilityText($r('app.string.proxy_search'))
           .onClick(() => { this.searchShown = true; })
-          if (this.browser.style.type === 'tab') {
-            this.testAction()
-          }
         }
         Button({ type: ButtonType.Circle }) {
           AppGlyph({ name: 'more', iconSize: 24 })

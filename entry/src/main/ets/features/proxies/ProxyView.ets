@@ -207,7 +207,7 @@ export function buildProxyViews(input: ProxyViewBuild): ProxyGroupView[] {
     });
     const previousRows = group.rows.values();
     const rows: ProxyNodeRow[] = [];
-    if (group.expanded || input.style.type === 'tab') {
+    if (group.expanded) {
       for (let index = 0; index < group.nodes.length; index += input.columns) {
         let rowKey = `${group.key}.${input.columns}`;
         for (let position = index; position < Math.min(index + input.columns, group.nodes.length); position++) {

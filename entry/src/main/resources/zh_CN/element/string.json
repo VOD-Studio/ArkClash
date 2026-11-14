@@ -1285,14 +1285,6 @@
       "value": "未知类型"
     },
     {
-      "name": "proxy_view_list",
-      "value": "列表"
-    },
-    {
-      "name": "proxy_view_tab",
-      "value": "标签"
-    },
-    {
       "name": "dash_probe_busy",
       "value": "探测繁忙，尚未取得结果，请重试"
     },
@@ -1415,10 +1407,6 @@
     {
       "name": "dash_card_description_memory",
       "value": "界面与内核的实际内存口径"
-    },
-    {
-      "name": "proxy_menu_style",
-      "value": "风格"
     },
     {
       "name": "proxy_menu_size",

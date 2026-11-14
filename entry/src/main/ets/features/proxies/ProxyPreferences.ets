@@ -54,7 +54,7 @@ function styleRecord(text: string): ProxySavedStyle {
   }
   const saved = JSON.parse(text) as ProxySavedStyle;
   const style = saved.style;
-  if (style === undefined || !['list', 'tab'].includes(style.type) ||
+  if (style === undefined ||
     !['none', 'name', 'delay'].includes(style.sortType) ||
     !['loose', 'standard', 'compact'].includes(style.layout) ||
     !['loose', 'standard', 'compact'].includes(style.cardType) ||
@@ -62,7 +62,7 @@ function styleRecord(text: string): ProxySavedStyle {
     typeof saved.revision !== 'number') {
     throw new Error('proxy_style_invalid');
   }
-  return saved;
+  return { revision: saved.revision, style: copyProxyStyle(style) };
 }
 
 function viewRecord(text: string): ProxySavedView {
@@ -112,13 +112,7 @@ export async function saveProxyStyle(context: common.UIAbilityContext, expectedR
     if (saved.revision !== expectedRevision) {
       throw new Error('proxy_style_conflict');
     }
-    // 保留未来版本添加的字段，只覆盖当前样式面板拥有的键。
-    saved.style.type = style.type;
-    saved.style.sortType = style.sortType;
-    saved.style.layout = style.layout;
-    saved.style.cardType = style.cardType;
-    saved.style.iconStyle = style.iconStyle;
-    saved.style.hideTimeoutProxies = style.hideTimeoutProxies;
+    saved.style = copyProxyStyle(style);
     saved.revision++;
     await commitPreference(prefs, 'proxyStyle', before, JSON.stringify(saved));
     revision = saved.revision;

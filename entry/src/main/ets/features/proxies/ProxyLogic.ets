@@ -5,7 +5,6 @@ export type ProxyDensity = 'loose' | 'standard' | 'compact';
 export type ProxyIconStyle = 'filled' | 'icon' | 'hidden';
 
 export interface ProxyStyle {
-  type: 'list' | 'tab';
   sortType: ProxySort;
   layout: ProxyDensity;
   cardType: ProxyDensity;
@@ -37,14 +36,14 @@ export interface ProxyDelayDisplay {
 
 export function defaultProxyStyle(): ProxyStyle {
   return {
-    type: 'list', sortType: 'none', layout: 'standard', cardType: 'standard',
+    sortType: 'none', layout: 'standard', cardType: 'standard',
     iconStyle: 'filled', hideTimeoutProxies: false
   };
 }
 
 export function copyProxyStyle(style: ProxyStyle): ProxyStyle {
   return {
-    type: style.type, sortType: style.sortType, layout: style.layout, cardType: style.cardType,
+    sortType: style.sortType, layout: style.layout, cardType: style.cardType,
     iconStyle: style.iconStyle, hideTimeoutProxies: style.hideTimeoutProxies
   };
 }

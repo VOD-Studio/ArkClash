@@ -289,7 +289,7 @@ export class ProxyBrowser {
     }
     this.located = group.nodes[index];
     this.located.located = true;
-    if (!group.expanded && this.style.type === 'list' && this.input?.picker !== true) {
+    if (!group.expanded && this.input?.picker !== true) {
       this.toggleGroup(groupName);
     }
     return { groupIndex: groupIndex, rowIndex: Math.floor(index / proxyColumnCount(this.availableWidth, this.style.layout)) };
