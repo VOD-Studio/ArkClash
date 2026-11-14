@@ -130,11 +130,6 @@ export struct ProfileImportSheet {
             .borderRadius(24).clip(true)
           }
           if (this.result !== undefined) { ProfileResults({ result: this.result }) }
-          if (this.adding && this.importingMany) {
-            Text($r('app.string.profile_batch_progress', this.store.importDone, this.store.importTotal))
-              .fontSize(13).lineHeight(18)
-              .fontColor($r('sys.color.font_secondary'))
-          }
         }
         .enabled(!this.adding)
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 24, bottom: 20 })

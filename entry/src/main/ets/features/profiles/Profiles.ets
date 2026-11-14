@@ -40,10 +40,6 @@ export class ProfileStore {
   @Trace loaded: boolean = false;
   @Trace loadError: string = '';
   @Trace applyError: string = '';
-  @Trace batchDone: number = 0;
-  @Trace batchTotal: number = 0;
-  @Trace importDone: number = 0;
-  @Trace importTotal: number = 0;
   private filesDir: string = '';
   private context?: common.UIAbilityContext;
   private foreground: boolean = true;
@@ -188,9 +184,7 @@ export class ProfileStore {
     }
     const jobs = parsed.entries.map((entry: ProfileLinkEntry): ProfileBatchJob =>
       ({ id: '', name: hostOf(entry.source), line: entry.line, run: (): Promise<string | undefined> => this.addSubscription(entry.source) }));
-    return await runProfileBatch(jobs, parsed.skipped, (done: number, total: number): void => {
-      this.importDone = done; this.importTotal = total;
-    });
+    return await runProfileBatch(jobs, parsed.skipped);
   }
 
   async update(id: string): Promise<string | undefined> {
@@ -218,9 +212,7 @@ export class ProfileStore {
       .map((item: ProfileItem): ProfileBatchJob => ({ id: item.id, name: item.name,
         run: (): Promise<string | undefined> => this.update(item.id) }));
     try {
-      return await runProfileBatch(jobs, 0, (done: number, total: number): void => {
-        this.batchDone = done; this.batchTotal = total;
-      });
+      return await runProfileBatch(jobs, 0);
     } finally { this.updatingAll = false; }
   }
 

@@ -185,12 +185,6 @@ export struct ProfilesPage {
               .fontColor($r('app.color.status_error'))
           }
         }
-        if (this.store.updatingAll) {
-          ListItem() {
-            Text($r('app.string.profile_batch_progress', this.store.batchDone, this.store.batchTotal))
-              .fontColor($r('sys.color.font_secondary'))
-          }
-        }
         LazyForEach(this.rows, (item: ProfileItem) => {
           ListItem() {
             ProfileCard({ item: item, selected: this.store.selectedId() === item.id, currentTime: this.currentTime,

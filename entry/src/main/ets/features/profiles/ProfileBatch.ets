@@ -9,11 +9,14 @@ export interface ProfileBatchJob {
 }
 
 export async function runProfileBatch(jobs: ProfileBatchJob[], skipped: number,
-  onProgress: (done: number, total: number) => void): Promise<ProfileBatchResult> {
+  onProgress?: (done: number, total: number) => void): Promise<ProfileBatchResult> {
   const result: ProfileBatchResult = { total: jobs.length, succeeded: 0, skipped: skipped, failures: [] };
   let cursor = 0;
   let completed = 0;
-  onProgress(0, jobs.length);
+  const report = (done: number, total: number): void => {
+    if (onProgress !== undefined) { onProgress(done, total); }
+  };
+  report(0, jobs.length);
   const worker = async (): Promise<void> => {
     while (cursor < jobs.length) {
       const job = jobs[cursor++];
@@ -24,7 +27,7 @@ export async function runProfileBatch(jobs: ProfileBatchJob[], skipped: number,
         const detail: ProfileBatchFailure = { id: job.id, name: job.name, line: job.line, error: failure };
         result.failures.push(detail);
       }
-      onProgress(++completed, jobs.length);
+      report(++completed, jobs.length);
     }
   };
   const workers: Promise<void>[] = [];

@@ -925,10 +925,6 @@
       "value": "第 %d 行：%s"
     },
     {
-      "name": "profile_batch_progress",
-      "value": "%d / %d"
-    },
-    {
       "name": "profile_sort",
       "value": "配置排序"
     },

@@ -945,10 +945,6 @@
       "value": "Line %d: %s"
     },
     {
-      "name": "profile_batch_progress",
-      "value": "%d / %d"
-    },
-    {
       "name": "profile_sort",
       "value": "Sort profiles"
     },
