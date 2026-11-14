@@ -593,14 +593,6 @@
       "value": "全部检测"
     },
     {
-      "name": "dash_connections_live",
-      "value": "当前活动连接，页面隐藏时停止采集"
-    },
-    {
-      "name": "dash_connections_scope",
-      "value": "这里展示当前活动连接，不是会话累计或请求历史。未识别出站的连接只计入活动总数。页面隐藏期间不补采。"
-    },
-    {
       "name": "dash_copy_address",
       "value": "复制地址"
     },

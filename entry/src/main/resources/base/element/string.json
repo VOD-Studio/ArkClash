@@ -613,14 +613,6 @@
       "value": "Check all"
     },
     {
-      "name": "dash_connections_live",
-      "value": "Active connections; collection pauses while hidden"
-    },
-    {
-      "name": "dash_connections_scope",
-      "value": "These are active connections, not session totals or request history. Connections with unknown outbound paths count only toward the active total. Hidden periods are not backfilled."
-    },
-    {
       "name": "dash_copy_address",
       "value": "Copy address"
     },

@@ -298,7 +298,7 @@ export struct HomePage {
       DashboardServices({ visible: this.visible, interactive: !this.editing, profileId: this.profileId,
         routeRevision: this.routeRevision })
     } else if (id === 'connections') {
-      DashboardConnections({ visible: this.visible, interactive: !this.editing })
+      DashboardConnections()
     } else if (id === 'lan') {
       DashboardLan({ visible: this.visible, interactive: !this.editing, routeRevision: this.routeRevision })
     } else if (id === 'memory') {
