@@ -220,6 +220,10 @@ func TestDelayCancellationPreservesHealthHistoryAndAutomaticConsumers(t *testing
 					}
 				}
 				group := cfg.Proxies[groupName].Adapter().(outboundgroup.ProxyGroup)
+				// 先按完整预热历史重算，取消前后使用相同的选路缓存状态。
+				if automatic, ok := group.(*outboundgroup.URLTest); ok {
+					automatic.ForceSet("")
+				}
 				selected := group.Now()
 				node := providerDelayNode(t, cfg, "Remote", selected)
 				beforeHistory := node.DelayHistory()
