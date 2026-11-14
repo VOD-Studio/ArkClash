@@ -20,6 +20,7 @@ export struct DashboardGroups {
   @Local summary: GroupSummary | undefined = undefined;
   @Local loading: boolean = false;
   @Local failed: boolean = false;
+  @Local figureWidth: number = 0;
   private generation: number = 0;
   private target: string = '';
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -101,6 +102,18 @@ export struct DashboardGroups {
     return $r('app.string.node_after_connect');
   }
 
+  private avatarCount(): number {
+    const count = this.names().length;
+    return Math.min(4, count) + (count > 4 ? 1 : 0);
+  }
+
+  private avatarSize(): number {
+    if (this.figureWidth <= 8 || this.avatarCount() === 0) {
+      return 40;
+    }
+    return Math.min(40, (this.figureWidth - 8) / 2 / (1 + (this.avatarCount() - 1) * 0.8));
+  }
+
   build() {
     Column({ space: 12 }) {
       Row({ space: 8 }) {
@@ -119,7 +132,7 @@ export struct DashboardGroups {
       }
       .width('100%')
       if (this.names().length > 0) {
-        Row({ space: 12 }) {
+        Row({ space: 8 }) {
           Text() {
             Span(`${this.names().length}`)
               .fontSize(40)
@@ -136,25 +149,30 @@ export struct DashboardGroups {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Clip })
           .layoutWeight(1)
-          Row({ space: -8 }) {
-            ForEach(this.names().slice(0, 4), (name: string): void => {
-              DashboardGroupAvatar({ groupName: name, iconSource: this.iconSource(name) })
+          Stack({ alignContent: Alignment.TopStart }) {
+            ForEach(this.names().slice(0, 4), (name: string, index: number): void => {
+              DashboardGroupAvatar({ groupName: name, iconSource: this.iconSource(name), badgeSize: this.avatarSize() })
+                .position({ x: index * this.avatarSize() * 0.8, y: 0 })
             }, (name: string): string => name)
             if (this.names().length > 4) {
               Text(`+${this.names().length - 4}`)
-                .fontSize(12)
+                .fontSize(this.avatarSize() * 0.3)
                 .fontWeight(600)
                 .textAlign(TextAlign.Center)
                 .fontColor($r('sys.color.font_secondary'))
-                .width(40)
-                .height(40)
-                .borderRadius(14)
+                .width(this.avatarSize())
+                .height(this.avatarSize())
+                .borderRadius(this.avatarSize() * 0.35)
                 .backgroundColor($r('app.color.tile_background'))
-                .border({ width: 3, color: $r('app.color.card_background') })
+                .border({ width: this.avatarSize() * 0.075, color: $r('app.color.card_background') })
+                .position({ x: 4 * this.avatarSize() * 0.8, y: 0 })
             }
           }
+          .width(this.avatarSize() * (1 + (this.avatarCount() - 1) * 0.8))
+          .height(this.avatarSize())
         }
         .width('100%')
+        .onAreaChange((_previous: Area, current: Area): void => { this.figureWidth = Number(current.width); })
       } else {
         Column({ space: 6 }) {
           Stack() {

@@ -19,6 +19,7 @@ export function dashboardGroupMonogram(name: string): string {
 export struct DashboardGroupAvatar {
   @Param groupName: string = '';
   @Param iconSource: string = '';
+  @Param badgeSize: number = 40;
   @Local iconLoaded: boolean = false;
   @Local iconFailed: boolean = false;
 
@@ -37,13 +38,13 @@ export struct DashboardGroupAvatar {
   Monogram() {
     if (this.mark !== '') {
       Text(this.mark)
-        .fontSize(17.36)
-        .lineHeight(17.36)
+        .fontSize(this.badgeSize * 0.434)
+        .lineHeight(this.badgeSize * 0.434)
         .fontWeight(600)
         .fontColor($r('sys.color.font_secondary'))
         .maxLines(1)
     } else {
-      AppGlyph({ name: 'layers', iconSize: 19.6, iconColor: $r('sys.color.font_secondary') })
+      AppGlyph({ name: 'layers', iconSize: this.badgeSize * 0.49, iconColor: $r('sys.color.font_secondary') })
     }
   }
 
@@ -54,19 +55,19 @@ export struct DashboardGroupAvatar {
       }
       if (this.iconSource !== '' && !this.iconFailed) {
         Image(this.iconSource)
-          .width(28)
-          .height(28)
+          .width(this.badgeSize * 0.7)
+          .height(this.badgeSize * 0.7)
           .objectFit(ImageFit.Contain)
           .opacity(this.iconLoaded ? 1 : 0)
           .onComplete((): void => { this.iconLoaded = true; })
           .onError((): void => { this.iconFailed = true; })
       }
     }
-    .width(40)
-    .height(40)
-    .borderRadius(14)
+    .width(this.badgeSize)
+    .height(this.badgeSize)
+    .borderRadius(this.badgeSize * 0.35)
     .backgroundColor($r('app.color.tile_background'))
-    .border({ width: 3, color: $r('app.color.card_background') })
+    .border({ width: this.badgeSize * 0.075, color: $r('app.color.card_background') })
     .clip(true)
     .accessibilityText(this.groupName)
   }
