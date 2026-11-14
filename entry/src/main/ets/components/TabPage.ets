@@ -4,7 +4,7 @@ import {
   HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, HdsTitleBarContentStyle, hdsMaterial,
   ScrollEffectType, TitleBarContentOptions
 } from '@kit.UIDesignKit';
-import { FLOATING_BAR_INSET, PAGE_GUTTER, SECTION_GAP } from './Theme';
+import { FLOATING_BAR_INSET, HEADER_ACTION, PAGE_GUTTER, SECTION_GAP } from './Theme';
 
 // 对齐 Prism 的 pageToolbarHeight；标题和正文起点必须使用同一尺寸。
 const TITLE_BAR_HEIGHT = 72;
@@ -93,17 +93,14 @@ export struct TabPage {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
         Repeat($$.menus).each((menu: RepeatItem<HdsNavigationMenuItemOptions>): void => {
-          Button() {
+          Button({ type: ButtonType.Circle }) {
             if (menu.item.content?.icon !== undefined) {
               SymbolGlyph(menu.item.content.icon as Resource)
                 .fontSize(24)
                 .fontColor([$r('sys.color.icon_primary')])
             }
           }
-          .width(40)
-          .height(40)
-          .borderRadius(20)
-          .backgroundColor($r('app.color.surface_block'))
+          .attributeModifier(HEADER_ACTION)
           .enabled(menu.item.content?.isEnabled ?? true)
           .accessibilityText(uiResourceText(this.getUIContext(), menu.item.content?.label ?? ''))
           .onClick((): void => { menu.item.content?.action?.(); })

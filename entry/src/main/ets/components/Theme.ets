@@ -35,8 +35,27 @@ export class CardModifier implements AttributeModifier<ColumnAttribute> {
   }
 }
 
+export class HeaderActionModifier implements AttributeModifier<ButtonAttribute> {
+  private readonly material: uiMaterial.ImmersiveMaterial = new uiMaterial.ImmersiveMaterial({
+    style: uiMaterial.ImmersiveStyle.THIN,
+    interactive: true,
+    lightEffect: {}
+  });
+
+  applyNormalAttribute(instance: ButtonAttribute): void {
+    instance
+      .width(40)
+      .height(40)
+      .padding(0)
+      .borderRadius(20)
+      .buttonStyle(ButtonStyleMode.NORMAL)
+      .systemMaterial(this.material);
+  }
+}
+
 export const CARD: CardModifier = new CardModifier();
 export const DASHBOARD_CARD: CardModifier = new CardModifier(34, 20, 18, $r('app.color.dashboard_shadow'));
+export const HEADER_ACTION: HeaderActionModifier = new HeaderActionModifier();
 
 /** 沉浸光感材质。设备不支持时系统自动退化成背景色、描边和阴影的组合。 */
 export function sheetMaterial(): uiMaterial.ImmersiveMaterial {

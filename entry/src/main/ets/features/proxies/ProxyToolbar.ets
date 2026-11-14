@@ -1,5 +1,6 @@
 import { SymbolGlyphModifier } from '@kit.ArkUI';
 import { AppGlyph } from '../../components/AppGlyph';
+import { HEADER_ACTION } from '../../components/Theme';
 import { ProxyBrowser } from './Proxies';
 import { copyProxyStyle, ProxyDensity, ProxyIconStyle, ProxySort } from './ProxyLogic';
 
@@ -193,10 +194,7 @@ export struct ProxyToolbar {
         AppGlyph({ name: 'bolt', iconSize: 24 })
       }
     }
-    .width(44)
-    .height(44)
-    .padding(0)
-    .backgroundColor(Color.Transparent)
+    .attributeModifier(HEADER_ACTION)
     .accessibilityText($r('app.string.proxy_test_current_group'))
     .enabled(this.active && this.browser.online && !(this.browser.groups[this.browser.groupIndex]?.testing ?? false))
     .onClick(() => this.browser.test(this.browser.currentGroup))
@@ -220,10 +218,7 @@ export struct ProxyToolbar {
           Button({ type: ButtonType.Circle }) {
             AppGlyph({ name: 'close', iconSize: 24 })
           }
-          .width(44)
-          .height(44)
-          .padding(0)
-          .backgroundColor($r('app.color.card_background'))
+          .attributeModifier(HEADER_ACTION)
           .accessibilityText($r('app.string.proxy_search_close'))
           .onClick(() => this.closeSearch())
         }
@@ -236,29 +231,21 @@ export struct ProxyToolbar {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
-        Row() {
+        Row({ space: 8 }) {
           Button({ type: ButtonType.Circle }) {
             AppGlyph({ name: 'search', iconSize: 24 })
           }
-          .width(44)
-          .height(44)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
+          .attributeModifier(HEADER_ACTION)
           .accessibilityText($r('app.string.proxy_search'))
           .onClick(() => { this.searchShown = true; })
           if (this.browser.style.type === 'tab') {
             this.testAction()
           }
         }
-        .borderRadius(22)
-        .backgroundColor($r('app.color.card_background'))
         Button({ type: ButtonType.Circle }) {
           AppGlyph({ name: 'more', iconSize: 24 })
         }
-        .width(44)
-        .height(44)
-        .padding(0)
-        .backgroundColor($r('app.color.card_background'))
+        .attributeModifier(HEADER_ACTION)
         .accessibilityText($r('app.string.proxy_style'))
         .bindMenu(this.styleMenu)
       }
