@@ -117,12 +117,12 @@
       "value": "#F2F4F8"
     },
     {
-      "name": "selection_tonal",
-      "value": "#242E6BFF"
+      "name": "proxy_node_background",
+      "value": "#F5F2F3"
     },
     {
-      "name": "node_surface",
-      "value": "#F5F2F3"
+      "name": "selection_tonal",
+      "value": "#242E6BFF"
     },
     {
       "name": "dash_status_decoration",

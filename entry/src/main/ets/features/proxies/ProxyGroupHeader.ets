@@ -40,6 +40,13 @@ export struct ProxyGroupHeader {
     return 2 + 37 * this.textScale;
   }
 
+  private bottomRadius(): number {
+    if (this.group.reveal.running) {
+      return 0;
+    }
+    return this.group.expanded ? 24 * this.group.floating : 24;
+  }
+
   @Builder
   private groupMenu() {
     Menu() {
@@ -179,9 +186,11 @@ export struct ProxyGroupHeader {
     .width('100%')
     .height(22 + 37 * this.textScale)
     .padding(10)
-    .borderRadius(24)
+    .borderRadius({ topLeft: 24, topRight: 24,
+      bottomLeft: this.bottomRadius(), bottomRight: this.bottomRadius() })
     .backgroundColor($r('app.color.card_background'))
-    .shadow({ radius: 12, offsetY: 3, color: $r('app.color.dashboard_shadow') })
+    .shadow({ radius: 16 * this.group.lift, offsetY: 4 * this.group.lift,
+      color: $r('app.color.dashboard_shadow') })
     .bindContextMenu(this.groupMenu, ResponseType.LongPress)
   }
 }

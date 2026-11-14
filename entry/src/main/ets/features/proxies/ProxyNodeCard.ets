@@ -183,8 +183,7 @@ export struct ProxyNodeCard {
     .height(proxyCardHeight(this.cardType, this.textScale))
     .borderRadius(20)
     .border({ width: this.node.located ? 2 : 0, color: $r('app.color.brand') })
-    .backgroundColor(this.node.selected || this.node.pinned ? $r('app.color.selection_tonal') :
-      $r('app.color.node_surface'))
+    .backgroundColor(this.nestedSurface ? $r('app.color.proxy_node_background') : $r('app.color.card_background'))
     .animation({ duration: this.active && this.motionEnabled ? 160 : 0, curve: Curve.EaseOut })
     .bindContextMenu(this.nodeMenu, ResponseType.LongPress)
   }

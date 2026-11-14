@@ -62,10 +62,12 @@ export class ProxyNodeView {
   }
 }
 
+@ObservedV2
 export class ProxyNodeRow {
   key: string;
   nodes: ProxyNodeView[];
   blanks: string[];
+  @Trace last: boolean = false;
 
   constructor(key: string, nodes: ProxyNodeView[], columns: number) {
     this.key = key;
@@ -81,7 +83,6 @@ export class ProxyNodeRow {
 export class ProxyGroupReveal {
   @Trace running: boolean = false;
   @Trace extent: number = 0;
-  @Trace opacity: number = 1;
   @Trace rows: ProxyNodeRow[] = [];
   firstRow: number = 0;
   crop: number = 0;
@@ -89,14 +90,6 @@ export class ProxyGroupReveal {
   rowExtent: number = 0;
   anchorOffset: number = 0;
   version: number = 0;
-
-  get tailOffset(): number {
-    return this.running ? this.extent - this.fullExtent : 0;
-  }
-
-  cacheCount(headerExtent: number): number {
-    return Math.ceil(this.fullExtent / headerExtent) + 2;
-  }
 
   begin(rows: ProxyNodeRow[], rowExtent: number, viewportHeight: number, expanded: boolean): void {
     this.firstRow = Math.max(0, Math.min(rows.length - 1, this.firstRow));
@@ -107,7 +100,6 @@ export class ProxyGroupReveal {
     this.fullExtent = Math.max(0, this.rows.length * rowExtent - this.crop +
       (this.rows.length > 0 && this.firstRow + this.rows.length === rows.length ? 2 : 0));
     this.extent = expanded ? this.fullExtent : 0;
-    this.opacity = expanded ? 1 : 0;
     this.running = this.rows.length > 0;
   }
 }
@@ -128,6 +120,8 @@ export class ProxyGroupView {
   @Trace iconStyle: ProxyIconStyle = 'filled';
   @Trace cardType: ProxyDensity = 'standard';
   @Trace rowCount: number = 0;
+  @Trace floating: number = 0;
+  @Trace lift: number = 0;
   @Trace reveal: ProxyGroupReveal = new ProxyGroupReveal();
   readonly rows: ProxyListSource<ProxyNodeRow> = new ProxyListSource<ProxyNodeRow>();
   nodes: ProxyNodeView[] = [];
@@ -225,6 +219,7 @@ export function buildProxyViews(input: ProxyViewBuild): ProxyGroupView[] {
           previousRow.nodes.length === Math.min(input.columns, group.nodes.length - index) &&
           previousRow.nodes.every((card: ProxyNodeView, position: number): boolean => card === group.nodes[index + position]) ?
           previousRow : new ProxyNodeRow(rowKey, group.nodes.slice(index, index + input.columns), input.columns));
+        rows[rows.length - 1].last = index + input.columns >= group.nodes.length;
       }
     }
     group.rowCount = rows.length;

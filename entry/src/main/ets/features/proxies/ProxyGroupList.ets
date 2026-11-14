@@ -8,6 +8,12 @@ import { proxyCardHeight, proxyTextScale } from './ProxyMetrics';
 import { ProxyNodeLine } from './ProxyNodeLine';
 import { ProxyGroupView, ProxyNodeRow } from './ProxyView';
 
+// 逐帧更新布局高度；普通 height 动画只插值绘制尺寸，不能驱动懒加载列表逐帧排版。
+@AnimatableExtend(ListItem)
+function proxyPanelHeight(value: number) {
+  .height(value)
+}
+
 interface ProxyHeaderBinding {
   group: ProxyGroupView;
 }
@@ -31,7 +37,7 @@ export struct ProxyGroupList {
   @Event onScrollerReady: () => void = () => {};
   @Event onScrollerRelease: () => void = () => {};
   @Local movingGroup: ProxyGroupView | undefined = undefined;
-  private viewportHeight: number = 0;
+  @Local viewportHeight: number = 0;
   private textScale: number = 1;
   private listY: number = 0;
   private listBound: boolean = false;
@@ -74,6 +80,18 @@ export struct ProxyGroupList {
     return 22 + 37 * this.textScale;
   }
 
+  private foldAnimation(group: ProxyGroupView): AnimateParam {
+    const version = group.reveal.version;
+    return {
+      curve: curves.springMotion(0.28, 1),
+      onFinish: (): void => {
+        if (this.listBound && this.movingGroup === group && group.reveal.version === version) {
+          this.finishReveal(true);
+        }
+      }
+    };
+  }
+
   private canUse(group: ProxyGroupView): boolean {
     return this.listBound && this.active && this.browser.groups.includes(group);
   }
@@ -83,26 +101,20 @@ export struct ProxyGroupList {
       return;
     }
     const top = Number(area.globalPosition.y);
+    const extent = Number(area.height);
     this.groupTops.set(group.key, top);
-  }
-
-  private followingGroup(group: ProxyGroupView): boolean {
-    const moving = this.movingGroup;
-    if (moving === undefined || !moving.reveal.running) {
-      return false;
+    // 只在本组内容滚过标题后浮起；组尾推出标题时先收掉阴影。
+    const under = group.expanded && !group.reveal.running ?
+      Math.max(0, this.listY + this.contentInset - top) : 0;
+    const floating = Math.min(1, under / 16);
+    const remaining = extent - this.headerExtent() - under;
+    const lift = Math.max(0, Math.min(1, Math.min(under, remaining) / 16));
+    if (group.floating !== floating) {
+      group.floating = floating;
     }
-    const movingIndex = this.browser.groups.indexOf(moving);
-    return movingIndex >= 0 && this.browser.groups.indexOf(group) > movingIndex;
-  }
-
-  private followingOffset(group: ProxyGroupView): number {
-    const moving = this.movingGroup;
-    return moving !== undefined && this.followingGroup(group) ? moving.reveal.tailOffset : 0;
-  }
-
-  private motionCacheCount(): number {
-    return this.movingGroup === undefined ? 2 :
-      this.movingGroup.reveal.cacheCount(this.headerExtent());
+    if (group.lift !== lift) {
+      group.lift = lift;
+    }
   }
 
   private toggleGroup(group: ProxyGroupView): void {
@@ -126,7 +138,7 @@ export struct ProxyGroupList {
       const distance = expanded ? Math.max(0, this.listY + this.contentInset - top) : 0;
       const rowExtent = this.rowExtent(group);
       const offset = this.scroller.currentOffset().yOffset;
-      // List先一次提交固定窗口占位，真实动画只改裁剪边界和其后各组的同量位移。
+      // 只绘制当前视口内的节点，ListItem 的真实高度驱动后续分组布局。
       this.getUIContext().animateToImmediately({ duration: 0 }, (): void => {
         UIUtils.applySync<void>((): void => {
           reveal.firstRow = Math.floor(distance / rowExtent);
@@ -149,15 +161,8 @@ export struct ProxyGroupList {
     } else {
       UIUtils.applySync<void>((): void => this.browser.toggleGroup(group.name));
     }
-    this.getUIContext().animateTo({ curve: curves.springMotion(0.28, 1), onFinish: (): void => {
-      if (this.listBound && this.movingGroup === group && reveal.version === version) {
-        this.finishReveal(true);
-      }
-    } }, (): void => {
-      UIUtils.applySync<void>((): void => {
-        reveal.extent = group.expanded ? reveal.fullExtent : 0;
-        reveal.opacity = group.expanded ? 1 : 0;
-      });
+    UIUtils.applySync<void>((): void => {
+      reveal.extent = group.expanded ? reveal.fullExtent : 0;
     });
   }
 
@@ -192,19 +197,6 @@ export struct ProxyGroupList {
     }
   }
 
-  private touch(event: TouchEvent): void {
-    const group = this.movingGroup;
-    if (event.type !== TouchType.Down || group === undefined || !this.listBound) {
-      return;
-    }
-    const touchY = event.touches[0]?.y;
-    const top = this.groupTops.get(group.key);
-    const headerTop = Math.max(this.contentInset, (top ?? this.listY) - this.listY);
-    if (touchY !== undefined && (touchY < headerTop || touchY > headerTop + this.headerExtent())) {
-      this.finishReveal(true);
-    }
-  }
-
   private locate(group: ProxyGroupView): void {
     if (this.canUse(group)) {
       this.finishReveal(true);
@@ -214,14 +206,28 @@ export struct ProxyGroupList {
 
   @Builder
   private groupHeader($$: ProxyHeaderBinding) {
-    ProxyGroupHeader({
-      group: $$.group, online: this.browser.online, offlineWritable: this.browser.offlineWritable,
-      showLocate: !this.pickerMode, collapsible: !this.pickerMode,
-      active: this.active, motionEnabled: this.motionEnabled,
-      onToggle: () => this.toggleGroup($$.group), onLocate: () => this.locate($$.group),
-      onTest: (): void => { if (this.canUse($$.group)) { this.browser.test($$.group.name); } },
-      onClearPin: (): void => { if (this.canUse($$.group)) { this.browser.clearPin($$.group.name); } }
-    })
+    Stack() {
+      if ($$.group.expanded && !$$.group.reveal.running) {
+        // 遮挡层随原生吸顶标题同帧移动，由本组边界裁剪，不影响其他分组的沉浸滚动。
+        Column()
+          .width('100%')
+          .height(this.viewportHeight + 24)
+          .position({ x: 0, y: -this.viewportHeight })
+          .backgroundColor($r('app.color.page_background'))
+          .hitTestBehavior(HitTestMode.None)
+      }
+      ProxyGroupHeader({
+        group: $$.group, online: this.browser.online, offlineWritable: this.browser.offlineWritable,
+        showLocate: !this.pickerMode, collapsible: !this.pickerMode,
+        active: this.active, motionEnabled: this.motionEnabled,
+        onToggle: () => this.toggleGroup($$.group), onLocate: () => this.locate($$.group),
+        onTest: (): void => { if (this.canUse($$.group)) { this.browser.test($$.group.name); } },
+        onClearPin: (): void => { if (this.canUse($$.group)) { this.browser.clearPin($$.group.name); } }
+      })
+    }
+    .width('100%')
+    .height(this.headerExtent())
+    .zIndex(1)
   }
 
   @Builder
@@ -247,60 +253,71 @@ export struct ProxyGroupList {
         }
       }
       LazyForEach(this.browser.source, (group: ProxyGroupView) => {
-        ListItemGroup({
-          header: (): void => this.groupHeader({ group: group }),
-          headerStyle: ListItemGroupHeaderFooterStyle.NONE
-        }) {
-          if (group.reveal.running) {
-            ListItem() {
+        if (group.reveal.running) {
+          ListItem() {
+            Column() {
+              this.groupHeader({ group: group })
               Column() {
-                Column() {
-                  ForEach(group.reveal.rows, (row: ProxyNodeRow) => {
-                    this.nodeLine({ group: group, row: row })
-                  }, (row: ProxyNodeRow): string => row.key)
-                }
-                .width('100%')
-                .translate({ y: -group.reveal.crop })
+                ForEach(group.reveal.rows, (row: ProxyNodeRow) => {
+                  this.nodeLine({ group: group, row: row })
+                }, (row: ProxyNodeRow): string => row.key)
               }
               .width('100%')
-              .height(group.reveal.extent)
-              .align(Alignment.TopStart)
-              .justifyContent(FlexAlign.Start)
-              .backgroundColor(Color.Transparent)
-              .borderRadius(24)
-              .opacity(group.reveal.opacity)
-              .clip(true)
-              .renderFit(RenderFit.TOP_LEFT)
+              .height(group.reveal.fullExtent + group.reveal.crop)
+              .translate({ y: -group.reveal.crop })
             }
-            .height(group.reveal.fullExtent)
-          } else if (group.expanded && group.rowCount === 0) {
-            ListItem() {
-              EmptyState({ title: $r('app.string.proxy_group_empty'),
-                hint: group.dynamic ? $r('app.string.proxy_dynamic_offline') : $r('app.string.proxy_group_empty_hint') })
-            }
-            .backgroundColor($r('app.color.card_background'))
-            .borderRadius(24)
-          } else {
-            LazyForEach(group.rows, (row: ProxyNodeRow) => {
-              ListItem() {
-                this.nodeLine({ group: group, row: row })
-              }
-            }, (row: ProxyNodeRow): string => row.key)
+            .width('100%')
+            .height(this.headerExtent() + group.reveal.fullExtent + group.reveal.crop)
+            .alignItems(HorizontalAlign.Start)
           }
+          .proxyPanelHeight(this.headerExtent() + group.reveal.extent)
+          .animation(this.foldAnimation(group))
+          .align(Alignment.TopStart)
+          .backgroundColor($r('app.color.card_background'))
+          .borderRadius(24)
+          .clip(true)
+          .transition(TransitionEffect.IDENTITY)
+          .onAreaChange((_before: Area, after: Area): void => this.groupArea(group, after))
+        } else {
+          ListItemGroup({
+            header: (): void => this.groupHeader({ group: group }),
+            headerStyle: ListItemGroupHeaderFooterStyle.NONE
+          }) {
+            if (group.expanded && group.rowCount === 0) {
+              ListItem() {
+                EmptyState({ title: $r('app.string.proxy_group_empty'),
+                  hint: group.dynamic ? $r('app.string.proxy_dynamic_offline') : $r('app.string.proxy_group_empty_hint') })
+              }
+              .backgroundColor($r('app.color.card_background'))
+              .borderRadius({ bottomLeft: 24, bottomRight: 24 })
+            } else {
+              LazyForEach(group.rows, (row: ProxyNodeRow) => {
+                ListItem() {
+                  this.nodeLine({ group: group, row: row })
+                }
+                .padding({ bottom: row.last ? 2 : 0 })
+                .backgroundColor($r('app.color.card_background'))
+                .borderRadius({ bottomLeft: row.last ? 24 : 0, bottomRight: row.last ? 24 : 0 })
+              }, (row: ProxyNodeRow): string => row.key)
+            }
+          }
+          .backgroundColor($r('app.color.card_background'))
+          .borderRadius(24)
+          .clip(true)
+          .transition(TransitionEffect.IDENTITY)
+          .onAreaChange((_before: Area, after: Area): void => this.groupArea(group, after))
         }
-        .translate({ y: this.followingOffset(group) })
-        .transition(TransitionEffect.IDENTITY)
-        .onAreaChange((_before: Area, after: Area): void => this.groupArea(group, after))
       }, (group: ProxyGroupView): string => group.key)
     }
     .width('100%')
     .height('100%')
     .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
     .safeAreaPadding({ top: this.contentInset })
-    .contentStartOffset(12)
+    .contentStartOffset(0)
     .clipContent(ContentClipMode.BOUNDARY)
     .contentEndOffset(FLOATING_BAR_INSET)
-    .cachedCount(this.motionCacheCount(), this.movingGroup !== undefined)
+    .cachedCount(2)
+    .sticky(StickyStyle.Header)
     .scrollBar(BarState.Auto)
     .edgeEffect(EdgeEffect.Spring)
     .onAppear((): void => { this.listBound = true; this.onScrollerReady(); })
@@ -310,10 +327,9 @@ export struct ProxyGroupList {
       this.viewportHeight = Number(after.height);
       this.textScale = proxyTextScale(this.getUIContext());
     })
-    .onTouch((event: TouchEvent): void => this.touch(event))
     .onWillScroll((offset: number, _state: ScrollState, source: ScrollSource): void => {
       if (this.listBound) {
-        // 手指拖动会打断展开动画；位移必须立即归零，否则后续分组继续带着 tailOffset 叠在内容上。
+        // 开始拖动前切回懒加载列表，避免在折叠窗口中滚动。
         if (source === ScrollSource.DRAG && this.movingGroup !== undefined) {
           this.finishReveal(true);
         }

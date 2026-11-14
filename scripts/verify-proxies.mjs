@@ -257,9 +257,19 @@ test('真实视图展开和快速反向保留组身份，向LazyForEach发送局
   source.replace(rebuild(['Main']));
   assert.notEqual(group.rows.getData(0).key, beforeMembershipChange.key);
   assert.equal(group.rows.getData(0).nodes[1].name, 'Gamma JP');
+  const retainedRow = group.rows.getData(0);
+  assert.equal(retainedRow.last, false);
+  state.nodes.Main.members = ['Alpha US', 'Gamma JP'];
+  source.replace(rebuild(['Main']));
+  assert.equal(group.rows.getData(0), retainedRow);
+  assert.equal(retainedRow.last, true);
+  state.nodes.Main.members.push('beta HK', 'REJECT');
+  source.replace(rebuild(['Main']));
+  assert.equal(retainedRow.last, false);
+  assert.equal(group.rows.getData(1).last, true);
 });
 
-test('千节点真实窗口保持固定占位，后续组补偿与裁剪共用进度并保留锚点', () => {
+test('千节点折叠只绘制可见窗口并保留滚动锚点，组尾补齐外层留白', () => {
   const state = snapshot();
   state.nodes.Main.members = [];
   for (let index = 0; index < 1000; index++) {
@@ -283,18 +293,6 @@ test('千节点真实窗口保持固定占位，后续组补偿与裁剪共用�
   assert.equal(group.reveal.fullExtent, 7 * 94 - 15);
   assert.equal(group.reveal.anchorOffset + group.reveal.firstRow * group.reveal.rowExtent + group.reveal.crop,
     320 + 120 * 94 + 15);
-  const slot = group.reveal.fullExtent;
-  const window = group.reveal.rows;
-  for (const fraction of [0, 0.25, 0.75, 0.5, 0, 1]) {
-    group.reveal.extent = slot * fraction;
-    assert.equal(slot + group.reveal.tailOffset, group.reveal.extent);
-    assert.equal(group.reveal.fullExtent, slot);
-    assert.equal(group.reveal.rows, window);
-  }
-  assert.equal(group.reveal.cacheCount(59), 13);
-  assert.ok(group.reveal.cacheCount(59) < group.rowCount);
-  group.reveal.running = false;
-  assert.equal(group.reveal.tailOffset, 0);
   group.reveal.firstRow = 499;
   group.reveal.crop = 0;
   group.reveal.begin(rows, 94, 500, true);
