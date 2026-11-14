@@ -179,12 +179,9 @@ export struct ProxyGroupHeader {
     .width('100%')
     .height(22 + 37 * this.textScale)
     .padding(10)
-    .borderRadius({ topLeft: 24, topRight: 24,
-      bottomLeft: this.group.expanded && !this.group.reveal.running && !this.group.floating ? 0 : 24,
-      bottomRight: this.group.expanded && !this.group.reveal.running && !this.group.floating ? 0 : 24 })
+    .borderRadius(24)
     .backgroundColor($r('app.color.card_background'))
-    .shadow({ radius: this.group.floating ? 16 : 0, offsetY: this.group.floating ? 4 : 0,
-      color: $r('app.color.dashboard_shadow') })
+    .shadow({ radius: 12, offsetY: 3, color: $r('app.color.dashboard_shadow') })
     .bindContextMenu(this.groupMenu, ResponseType.LongPress)
   }
 }

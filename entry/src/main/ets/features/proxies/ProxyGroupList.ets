@@ -84,10 +84,6 @@ export struct ProxyGroupList {
     }
     const top = Number(area.globalPosition.y);
     this.groupTops.set(group.key, top);
-    const floating = group.expanded && top < this.listY + this.contentInset - 0.5;
-    if (group.floating !== floating) {
-      group.floating = floating;
-    }
   }
 
   private followingGroup(group: ProxyGroupView): boolean {
@@ -253,7 +249,7 @@ export struct ProxyGroupList {
       LazyForEach(this.browser.source, (group: ProxyGroupView) => {
         ListItemGroup({
           header: (): void => this.groupHeader({ group: group }),
-          headerStyle: this.followingGroup(group) ? ListItemGroupHeaderFooterStyle.NONE : ListItemGroupHeaderFooterStyle.FLOATING
+          headerStyle: ListItemGroupHeaderFooterStyle.NONE
         }) {
           if (group.reveal.running) {
             ListItem() {
@@ -270,8 +266,8 @@ export struct ProxyGroupList {
               .height(group.reveal.extent)
               .align(Alignment.TopStart)
               .justifyContent(FlexAlign.Start)
-              .backgroundColor(group.floating ? Color.Transparent : $r('app.color.card_background'))
-              .borderRadius({ bottomLeft: 24, bottomRight: 24 })
+              .backgroundColor(Color.Transparent)
+              .borderRadius(24)
               .opacity(group.reveal.opacity)
               .clip(true)
               .renderFit(RenderFit.TOP_LEFT)
@@ -282,17 +278,13 @@ export struct ProxyGroupList {
               EmptyState({ title: $r('app.string.proxy_group_empty'),
                 hint: group.dynamic ? $r('app.string.proxy_dynamic_offline') : $r('app.string.proxy_group_empty_hint') })
             }
-            .backgroundColor(group.floating ? Color.Transparent : $r('app.color.card_background'))
-            .borderRadius({ bottomLeft: 24, bottomRight: 24 })
+            .backgroundColor($r('app.color.card_background'))
+            .borderRadius(24)
           } else {
-            LazyForEach(group.rows, (row: ProxyNodeRow, index: number) => {
+            LazyForEach(group.rows, (row: ProxyNodeRow) => {
               ListItem() {
                 this.nodeLine({ group: group, row: row })
               }
-              .padding({ bottom: index === group.rowCount - 1 ? 2 : 0 })
-              .backgroundColor(group.floating ? Color.Transparent : $r('app.color.card_background'))
-              .borderRadius({ bottomLeft: index === group.rowCount - 1 ? 24 : 0,
-                bottomRight: index === group.rowCount - 1 ? 24 : 0 })
             }, (row: ProxyNodeRow): string => row.key)
           }
         }
@@ -309,7 +301,6 @@ export struct ProxyGroupList {
     .clipContent(ContentClipMode.BOUNDARY)
     .contentEndOffset(FLOATING_BAR_INSET)
     .cachedCount(this.motionCacheCount(), this.movingGroup !== undefined)
-    .sticky(StickyStyle.Header)
     .scrollBar(BarState.Auto)
     .edgeEffect(EdgeEffect.Spring)
     .onAppear((): void => { this.listBound = true; this.onScrollerReady(); })
@@ -322,6 +313,10 @@ export struct ProxyGroupList {
     .onTouch((event: TouchEvent): void => this.touch(event))
     .onWillScroll((offset: number, _state: ScrollState, source: ScrollSource): void => {
       if (this.listBound) {
+        // 手指拖动会打断展开动画；位移必须立即归零，否则后续分组继续带着 tailOffset 叠在内容上。
+        if (source === ScrollSource.DRAG && this.movingGroup !== undefined) {
+          this.finishReveal(true);
+        }
         this.onListScroll(offset, source);
       }
     })

@@ -132,7 +132,7 @@ export struct ProxyNodeCard {
         .height((this.cardType === 'compact' ? 20 : 40) * this.textScale)
         .alignItems(VerticalAlign.Top)
         .hitTestBehavior(HitTestMode.None)
-        if (this.cardType === 'loose' && (this.node.delay !== 0 || this.node.phase !== 'idle')) {
+        if (this.cardType === 'loose') {
           Text(this.description())
             .fontSize(13)
             .lineHeight(18)
@@ -184,7 +184,7 @@ export struct ProxyNodeCard {
     .borderRadius(20)
     .border({ width: this.node.located ? 2 : 0, color: $r('app.color.brand') })
     .backgroundColor(this.node.selected || this.node.pinned ? $r('app.color.selection_tonal') :
-      this.nestedSurface ? $r('app.color.surface_block') : $r('app.color.card_background'))
+      $r('app.color.node_surface'))
     .animation({ duration: this.active && this.motionEnabled ? 160 : 0, curve: Curve.EaseOut })
     .bindContextMenu(this.nodeMenu, ResponseType.LongPress)
   }

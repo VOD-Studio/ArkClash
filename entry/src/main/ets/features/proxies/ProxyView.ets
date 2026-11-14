@@ -128,7 +128,6 @@ export class ProxyGroupView {
   @Trace iconStyle: ProxyIconStyle = 'filled';
   @Trace cardType: ProxyDensity = 'standard';
   @Trace rowCount: number = 0;
-  @Trace floating: boolean = false;
   @Trace reveal: ProxyGroupReveal = new ProxyGroupReveal();
   readonly rows: ProxyListSource<ProxyNodeRow> = new ProxyListSource<ProxyNodeRow>();
   nodes: ProxyNodeView[] = [];
