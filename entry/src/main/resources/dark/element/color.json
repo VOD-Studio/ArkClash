@@ -121,6 +121,10 @@
       "value": "#211F26"
     },
     {
+      "name": "proxy_press_feedback",
+      "value": "#24FFFFFF"
+    },
+    {
       "name": "selection_tonal",
       "value": "#245B8CFF"
     },

@@ -5,6 +5,7 @@ import { ProxyDelay } from './ProxyDelay';
 import { ProxyDensity } from './ProxyLogic';
 import { proxyCardHeight, proxyTextScale } from './ProxyMetrics';
 import { ProxyNodeView } from './ProxyView';
+import { ProxyPressFeedback, ProxyPressState } from './ProxyPressFeedback';
 
 @ReusableV2
 @ComponentV2
@@ -16,11 +17,29 @@ export struct ProxyNodeCard {
   @Param nestedSurface: boolean = false;
   @Param groupType: string = '';
   @Local textScale: number = 1;
+  private press: ProxyPressState = new ProxyPressState();
   @Event onChoose: () => void = () => {};
   @Event onTest: () => void = () => {};
 
   aboutToAppear(): void {
     this.textScale = proxyTextScale(this.getUIContext());
+  }
+
+  aboutToDisappear(): void {
+    this.press.reset();
+  }
+
+  aboutToRecycle(): void {
+    this.press.recycle();
+  }
+
+  aboutToReuse(): void {
+    this.press.reset();
+  }
+
+  @Monitor('node', 'active', 'motionEnabled')
+  resetPress(): void {
+    this.press.reset();
   }
 
   private restriction(): ResourceStr {
@@ -82,12 +101,20 @@ export struct ProxyNodeCard {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Button({ type: ButtonType.Normal })
+      Button({ type: ButtonType.Normal }) {
+        ProxyPressFeedback({ feedback: this.press })
+      }
         .width('100%')
         .height('100%')
         .padding(0)
         .backgroundColor(Color.Transparent)
         .borderRadius(20)
+        .clip(true)
+        .stateEffect(!this.motionEnabled)
+        .onSizeChange((_before: SizeOptions, after: SizeOptions): void => {
+          this.press.resize(Number(after.width), Number(after.height));
+        })
+        .onTouch((event: TouchEvent): void => this.press.touch(event, this.getUIContext(), this.motionEnabled))
         .accessibilityText(this.node.name)
         .accessibilityDescription(this.accessibleState())
         .accessibilitySelected(this.node.selected || this.node.pinned)
