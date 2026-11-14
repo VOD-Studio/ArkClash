@@ -15,7 +15,7 @@ export function serviceAvailabilityLabel(status: ServiceAvailability): ResourceS
     case 'coming-soon': return $r('app.string.dash_unlock_soon');
     case 'timeout': return $r('app.string.dash_unlock_timeout');
     case 'failed': return $r('app.string.dash_unlock_failed');
-    default: return $r('app.string.dash_unlock_unknown');
+    default: return '—';
   }
 }
 
@@ -78,17 +78,24 @@ export struct DashboardServiceRow {
       .borderRadius(12)
       .backgroundColor($r('app.color.service_icon_background'))
       Column({ space: 4 }) {
-        Text(serviceInfo(this.slot.id)?.name ?? this.slot.id)
-          .fontSize(15)
-          .lineHeight(20)
-          .fontWeight(600)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        if (this.slot.legacy) {
-          Text($r('app.string.dash_legacy_service'))
-            .fontSize(11)
-            .fontColor($r('sys.color.font_tertiary'))
+        Row({ space: 8 }) {
+          Text(serviceInfo(this.slot.id)?.name ?? this.slot.id)
+            .fontSize(15)
+            .lineHeight(20)
+            .fontWeight(600)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+          if (!this.managing && this.result !== undefined && this.result.availability !== 'unknown') {
+            Text(serviceAvailabilityLabel(this.result.availability))
+              .fontSize(12)
+              .lineHeight(16)
+              .fontColor($r('sys.color.font_secondary'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
         }
+        .width('100%')
         if (this.managing && this.shownOnDashboard) {
           Text($r('app.string.dash_service_shown'))
             .fontSize(12)
@@ -96,26 +103,23 @@ export struct DashboardServiceRow {
             .fontColor($r('sys.color.font_secondary'))
         }
         if (!this.managing) {
-          Text(serviceConnectivityLabel(this.result, this.checking))
-            .fontSize(12)
-            .lineHeight(16)
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .fontColor($r('sys.color.font_secondary'))
-          Text(serviceAvailabilityLabel(this.result?.availability ?? 'unknown'))
-            .fontSize(12)
-            .fontColor($r('sys.color.font_tertiary'))
-            .lineHeight(16)
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          if (this.result !== undefined) {
-            Text(new Date(this.result.checkedAt).toLocaleTimeString())
-              .fontSize(11)
-              .fontColor($r('sys.color.font_tertiary'))
-              .lineHeight(14)
-              .maxLines(1)
+          Row({ space: 8 }) {
+            Text(serviceConnectivityLabel(this.result, this.checking))
+              .fontSize(12)
+              .lineHeight(16)
+              .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .fontColor($r('sys.color.font_secondary'))
+              .layoutWeight(1)
+            if (this.result !== undefined) {
+              Text(new Date(this.result.checkedAt).toLocaleTimeString())
+                .fontSize(11)
+                .fontColor($r('sys.color.font_tertiary'))
+                .lineHeight(14)
+                .maxLines(1)
+            }
           }
+          .width('100%')
         }
       }
       .alignItems(HorizontalAlign.Start)

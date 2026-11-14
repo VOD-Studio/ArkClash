@@ -104,7 +104,7 @@ export struct DashboardServices {
       managing: this.managing,
       saving: this.settings.saving,
       canDisable: this.enabledSlots().length > 1,
-      shownOnDashboard: this.enabledIds().slice(0, 2).includes(slot.id),
+      shownOnDashboard: this.enabledIds().slice(0, 4).includes(slot.id),
       onToggle: (visible: boolean): void => { this.setVisible(slot.id, visible); },
       onRun: (): void => { this.run([slot.id]); }
     })
@@ -131,11 +131,6 @@ export struct DashboardServices {
         .padding(12)
         .borderRadius(22)
         .backgroundColor($r('app.color.tile_background'))
-        Text($r('app.string.dash_service_scope'))
-          .fontSize(12)
-          .fontColor($r('sys.color.font_tertiary'))
-          .lineHeight(16)
-          .width('100%')
       }
       Row({ space: 8 }) {
         Button(this.managing ? $r('app.string.dash_done') : $r('app.string.dash_service_manage'))
@@ -185,49 +180,56 @@ export struct DashboardServices {
   build() {
     Column({ space: 12 }) {
       DashboardCardHeader({ title: $r('app.string.card_services'), glyph: 'verified', chevron: true })
-      Row({ space: 8 }) {
-        ForEach(this.enabledSlots().slice(0, 2), (slot: ServiceSlot): void => {
-          Row({ space: 8 }) {
-            Stack({ alignContent: Alignment.BottomEnd }) {
-              Stack() {
-                if (serviceInfo(slot.id) !== undefined) {
-                  Image(serviceInfo(slot.id)?.icon)
-                    .width(18)
-                    .height(18)
-                    .objectFit(ImageFit.Contain)
-                } else {
-                  Text(slot.id.slice(0, 1).toUpperCase()).fontSize(14)
+      Column({ space: 8 }) {
+        ForEach([0, 2], (first: number): void => {
+          if (first < this.enabledSlots().length) {
+            Row({ space: 8 }) {
+              ForEach(this.enabledSlots().slice(first, first + 2), (slot: ServiceSlot): void => {
+                Row({ space: 8 }) {
+                  Stack({ alignContent: Alignment.BottomEnd }) {
+                    Stack() {
+                      if (serviceInfo(slot.id) !== undefined) {
+                        Image(serviceInfo(slot.id)?.icon)
+                          .width(18)
+                          .height(18)
+                          .objectFit(ImageFit.Contain)
+                      } else {
+                        Text(slot.id.slice(0, 1).toUpperCase()).fontSize(14)
+                      }
+                    }
+                    .width(30)
+                    .height(30)
+                    .borderRadius(9)
+                    .backgroundColor($r('app.color.service_icon_background'))
+                    Circle({ width: 7, height: 7 })
+                      .fill(this.state.busyIds.includes(slot.id) ? $r('sys.color.font_tertiary') :
+                        this.state.results[slot.id]?.reachability === 'reachable' ? $r('app.color.status_connected') :
+                        this.state.results[slot.id] === undefined ? $r('sys.color.font_tertiary') : $r('app.color.warning'))
+                      .stroke($r('app.color.tile_background'))
+                      .strokeWidth(2)
+                  }
+                  Text(serviceConnectivityLabel(this.state.results[slot.id], this.state.busyIds.includes(slot.id)))
+                    .fontSize(12)
+                    .lineHeight(16)
+                    .fontWeight(600)
+                    .fontFeature('"tnum" on')
+                    .fontColor(this.state.results[slot.id]?.reachability === 'reachable' ? $r('app.color.status_connected') :
+                      $r('sys.color.font_secondary'))
+                    .maxLines(2)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .layoutWeight(1)
                 }
-              }
-              .width(30)
-              .height(30)
-              .borderRadius(9)
-              .backgroundColor($r('app.color.service_icon_background'))
-              Circle({ width: 7, height: 7 })
-                .fill(this.state.busyIds.includes(slot.id) ? $r('sys.color.font_tertiary') :
-                  this.state.results[slot.id]?.reachability === 'reachable' ? $r('app.color.status_connected') :
-                  this.state.results[slot.id] === undefined ? $r('sys.color.font_tertiary') : $r('app.color.warning'))
-                .stroke($r('app.color.tile_background'))
-                .strokeWidth(2)
+                .layoutWeight(1)
+                .height(44)
+                .padding({ left: 7, right: 12 })
+                .borderRadius(16)
+                .backgroundColor($r('app.color.tile_background'))
+                .accessibilityText(uiResourceText(this.getUIContext(), serviceInfo(slot.id)?.name ?? slot.id))
+              }, (slot: ServiceSlot): string => slot.id)
             }
-            Text(serviceConnectivityLabel(this.state.results[slot.id], this.state.busyIds.includes(slot.id)))
-              .fontSize(12)
-              .lineHeight(16)
-              .fontWeight(600)
-              .fontFeature('"tnum" on')
-              .fontColor(this.state.results[slot.id]?.reachability === 'reachable' ? $r('app.color.status_connected') :
-                $r('sys.color.font_secondary'))
-              .maxLines(2)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
+            .width('100%')
           }
-          .layoutWeight(1)
-          .height(44)
-          .padding({ left: 7, right: 12 })
-          .borderRadius(16)
-          .backgroundColor($r('app.color.tile_background'))
-          .accessibilityText(uiResourceText(this.getUIContext(), serviceInfo(slot.id)?.name ?? slot.id))
-        }, (slot: ServiceSlot): string => slot.id)
+        }, (first: number): string => first.toString())
       }
       .width('100%')
     }
@@ -236,7 +238,7 @@ export struct DashboardServices {
     .onClick((): void => { if (this.interactive) { this.details = true; } })
     .bindSheet($$this.details, this.Details, {
       title: { title: this.managing ? $r('app.string.dash_service_manage') : $r('app.string.card_services') },
-      detents: [SheetSize.LARGE],
+      detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       systemMaterial: sheetMaterial(), showClose: true,
       onDisappear: (): void => { this.managing = false; }
     })

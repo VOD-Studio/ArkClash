@@ -661,10 +661,6 @@
       "value": "网络信息读取或应用失败，请重试"
     },
     {
-      "name": "dash_legacy_service",
-      "value": "保留的旧扩展"
-    },
-    {
       "name": "dash_memory_scope",
       "value": "界面进程的 PSS + SwapPss 包含按比例分摊的共享页及交换页；VPN 进程显示 RSS，包含 Go 内核。这两项测量口径不同，不能相加作为整应用内存。"
     },
@@ -766,7 +762,7 @@
     },
     {
       "name": "dash_service_batch_failed",
-      "value": "本次检测未完成，请重试；已有结果保留原采样时间"
+      "value": "检测未完成，请重试"
     },
     {
       "name": "dash_service_details",
@@ -793,14 +789,6 @@
       "value": "访问受限 · HTTP %d"
     },
     {
-      "name": "dash_service_scope",
-      "value": "检测仅反映网络连通性，地区、账号和内容解锁状态另行判定。点击检测才会请求服务。"
-    },
-    {
-      "name": "dash_service_scope_short",
-      "value": "连通性检测 · 不代表服务解锁"
-    },
-    {
       "name": "dash_service_timeout",
       "value": "连通检测超时"
     },
@@ -810,7 +798,7 @@
     },
     {
       "name": "dash_service_untested",
-      "value": "尚未检测连通性"
+      "value": "未检测"
     },
     {
       "name": "dash_stale_retry",
@@ -883,10 +871,6 @@
     {
       "name": "dash_unlock_unavailable",
       "value": "服务不可用"
-    },
-    {
-      "name": "dash_unlock_unknown",
-      "value": "解锁状态未判定"
     },
     {
       "name": "dash_vpn",

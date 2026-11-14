@@ -681,10 +681,6 @@
       "value": "Could not read or apply network settings. Try again."
     },
     {
-      "name": "dash_legacy_service",
-      "value": "Retained legacy extension"
-    },
-    {
       "name": "dash_memory_scope",
       "value": "UI PSS + SwapPss includes proportional shared pages and swapped pages. VPN RSS includes the Go core. These measurements use different definitions and cannot be added into an app total."
     },
@@ -786,7 +782,7 @@
     },
     {
       "name": "dash_service_batch_failed",
-      "value": "The check did not complete. Retry; existing results retain their original timestamps."
+      "value": "Check incomplete. Try again."
     },
     {
       "name": "dash_service_details",
@@ -813,14 +809,6 @@
       "value": "Access restricted · HTTP %d"
     },
     {
-      "name": "dash_service_scope",
-      "value": "Checks report network connectivity. Region, account and content availability are separate. Requests start when you tap Check."
-    },
-    {
-      "name": "dash_service_scope_short",
-      "value": "Connectivity check · not an unlock result"
-    },
-    {
       "name": "dash_service_timeout",
       "value": "Connectivity check timed out"
     },
@@ -830,7 +818,7 @@
     },
     {
       "name": "dash_service_untested",
-      "value": "Connectivity not checked"
+      "value": "Not checked"
     },
     {
       "name": "dash_stale_retry",
@@ -903,10 +891,6 @@
     {
       "name": "dash_unlock_unavailable",
       "value": "Service unavailable"
-    },
-    {
-      "name": "dash_unlock_unknown",
-      "value": "Content availability not assessed"
     },
     {
       "name": "dash_vpn",
