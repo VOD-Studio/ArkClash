@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { traffic, Traffic } from '../../client/Traffic';
 import { DASHBOARD_CARD } from '../../components/Theme';
+import { uiResourceText } from '../../components/ResourceText';
 import { DashboardCardHeader } from './DashboardCardHeader';
 import { DashboardSpeedTile } from './DashboardSpeedTile';
 
@@ -45,13 +46,10 @@ export struct DashboardSpeed {
           .layoutWeight(1)
       }
       .width('100%')
-      if (this.stats.stale && this.conn.connected) {
-        Text($r('app.string.dash_traffic_stale'))
-          .fontSize(12)
-          .fontColor($r('app.color.warning'))
-      }
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
+    .accessibilityDescription(this.stats.stale && this.conn.connected ?
+      uiResourceText(this.getUIContext(), $r('app.string.dash_traffic_stale')) : '')
   }
 }

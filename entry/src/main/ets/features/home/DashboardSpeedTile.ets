@@ -22,29 +22,32 @@ export struct DashboardSpeedTile {
 
   @Monitor('samples', 'tileWidth', 'tileHeight')
   redraw(): void {
-    const graph = dashboardTrafficGraph(this.samples, this.upload, this.tileWidth + 4,
-      Math.max(0, this.tileHeight - 34));
+    const density = this.getUIContext().vp2px(1);
+    const graph = dashboardTrafficGraph(this.samples, this.upload, (this.tileWidth + 4) * density,
+      Math.max(0, this.tileHeight - 34) * density);
     this.linePath = graph.line;
     this.areaPath = graph.area;
   }
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Shape() {
-        Path().commands(this.areaPath)
+      Stack({ alignContent: Alignment.TopStart }) {
+        Path({ width: this.tileWidth + 4, height: Math.max(0, this.tileHeight - 34) }).commands(this.areaPath)
           .fill(this.upload ? $r('app.color.dash_series_secondary') : $r('app.color.brand'))
           .fillOpacity(0.14)
           .strokeWidth(0)
-        Path().commands(this.linePath)
+        Path({ width: this.tileWidth + 4, height: Math.max(0, this.tileHeight - 34) }).commands(this.linePath)
           .fillOpacity(0)
           .stroke(this.upload ? $r('app.color.dash_series_secondary') : $r('app.color.brand'))
-          .strokeWidth('2px')
+          .strokeWidth(1.5)
+          .strokeLineCap(LineCapStyle.Round)
+          .strokeLineJoin(LineJoinStyle.Round)
       }
-      .viewPort({ x: '0px', y: '0px', width: `${Math.max(1, this.tileWidth + 4)}px`,
-        height: `${Math.max(1, this.tileHeight - 34)}px` })
       .width(this.tileWidth + 4)
       .height(Math.max(0, this.tileHeight - 34))
       .position({ x: -2, y: 36 })
+      .hitTestBehavior(HitTestMode.None)
+      .accessibilityLevel('no')
       Column() {
         Row({ space: 4 }) {
           AppGlyph({ name: this.upload ? 'arrowUp' : 'arrowDown', iconSize: 16,
