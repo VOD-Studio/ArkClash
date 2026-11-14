@@ -733,10 +733,6 @@
       "value": "本地代理运行中"
     },
     {
-      "name": "dash_quality_unassessed",
-      "value": "尚未评估出口类型或风险。第三方提供的出口信息仅供参考。"
-    },
-    {
       "name": "dash_remove",
       "value": "移除"
     },
@@ -1579,6 +1575,62 @@
     {
       "name": "dash_runtime_tap_to_confirm",
       "value": "点按停止并确认代理状态"
+    },
+    {
+      "name": "dash_ip_type",
+      "value": "IP 类型"
+    },
+    {
+      "name": "dash_ip_residential",
+      "value": "住宅"
+    },
+    {
+      "name": "dash_ip_mobile",
+      "value": "移动网络"
+    },
+    {
+      "name": "dash_ip_business",
+      "value": "商业网络"
+    },
+    {
+      "name": "dash_ip_hosting",
+      "value": "数据中心"
+    },
+    {
+      "name": "dash_ip_type_unknown",
+      "value": "类型未知"
+    },
+    {
+      "name": "dash_ip_quality",
+      "value": "质量"
+    },
+    {
+      "name": "dash_ip_quality_unknown",
+      "value": "未知"
+    },
+    {
+      "name": "dash_ip_quality_good",
+      "value": "优"
+    },
+    {
+      "name": "dash_ip_quality_normal",
+      "value": "一般"
+    },
+    {
+      "name": "dash_ip_quality_risky",
+      "value": "风险"
+    },
+    {
+      "name": "dash_ip_checking",
+      "value": "检测中"
+    },
+    {
+      "name": "dash_ip_quality_source",
+      "value": "质量来源"
+    },
+    {
+      "name": "dash_ip_quality_failed",
+      "value": "类型与质量查询失败"
     }
   ]
 }

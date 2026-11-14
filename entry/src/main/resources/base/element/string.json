@@ -753,10 +753,6 @@
       "value": "Local proxy running"
     },
     {
-      "name": "dash_quality_unassessed",
-      "value": "Exit type and risk have not been assessed. Third-party exit information is for reference only."
-    },
-    {
       "name": "dash_remove",
       "value": "Remove"
     },
@@ -1599,6 +1595,62 @@
     {
       "name": "dash_runtime_tap_to_confirm",
       "value": "Tap to stop and confirm the proxy state"
+    },
+    {
+      "name": "dash_ip_type",
+      "value": "IP type"
+    },
+    {
+      "name": "dash_ip_residential",
+      "value": "Residential"
+    },
+    {
+      "name": "dash_ip_mobile",
+      "value": "Mobile"
+    },
+    {
+      "name": "dash_ip_business",
+      "value": "Business"
+    },
+    {
+      "name": "dash_ip_hosting",
+      "value": "Hosting"
+    },
+    {
+      "name": "dash_ip_type_unknown",
+      "value": "Unknown type"
+    },
+    {
+      "name": "dash_ip_quality",
+      "value": "Quality"
+    },
+    {
+      "name": "dash_ip_quality_unknown",
+      "value": "Unknown"
+    },
+    {
+      "name": "dash_ip_quality_good",
+      "value": "Good"
+    },
+    {
+      "name": "dash_ip_quality_normal",
+      "value": "Normal"
+    },
+    {
+      "name": "dash_ip_quality_risky",
+      "value": "Risky"
+    },
+    {
+      "name": "dash_ip_checking",
+      "value": "Checking"
+    },
+    {
+      "name": "dash_ip_quality_source",
+      "value": "Quality source"
+    },
+    {
+      "name": "dash_ip_quality_failed",
+      "value": "IP type and quality lookup failed"
     }
   ]
 }

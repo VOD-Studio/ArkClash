@@ -1,8 +1,12 @@
 import { RoutedProbeError, RoutedProbeFailure, RoutedProbeRequest } from './RoutedProbe';
+import { EXIT_IP_QUALITY_SOURCES, ExitIpQuality, exitIpQualityUrl, parseExitIpQuality } from './ExitIpQuality';
 
 const LOOKUP_URLS: string[] = ['https://ipwho.is/', 'https://api.ip.sb/geoip'];
 const TIMEOUT_MS = 5000;
 const REFRESH_MS = 60000;
+const QUALITY_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+const QUALITY_TIMEOUT_MS = 8000;
+const QUALITY_CACHE_LIMIT = 32;
 
 interface ExitIpConnection {
   org?: string;
@@ -61,6 +65,9 @@ export class ExitIpProbe {
   @Trace failed: boolean = false;
   @Trace stale: boolean = false;
   @Trace failure: RoutedProbeFailure | '' = '';
+  @Trace quality: ExitIpQuality | undefined = undefined;
+  @Trace qualityBusy: boolean = false;
+  @Trace qualityFailed: boolean = false;
   private generation: number = 0;
   private filesDir: string = '';
   private route: string = '';
@@ -68,6 +75,7 @@ export class ExitIpProbe {
   private observing: boolean = false;
   private lastStartedAt: number = 0;
   private request?: RoutedProbeRequest;
+  private qualityCache: Map<string, ExitIpQuality> = new Map();
 
   observe(filesDir: string, route: string, routed: boolean, active: boolean): void {
     const changed = route !== this.route || routed !== this.routed;
@@ -77,6 +85,8 @@ export class ExitIpProbe {
       this.route = route;
       this.routed = routed;
       this.result = undefined;
+      this.quality = undefined;
+      this.qualityFailed = false;
       this.failed = false;
       this.failure = '';
       this.stale = false;
@@ -89,7 +99,7 @@ export class ExitIpProbe {
       return;
     }
     if (!this.busy && (this.lastStartedAt === 0 || Date.now() - this.lastStartedAt >= REFRESH_MS)) {
-      this.refresh();
+      this.refresh(false);
     }
   }
 
@@ -98,9 +108,10 @@ export class ExitIpProbe {
     this.request?.cancel();
     this.request = undefined;
     this.busy = false;
+    this.qualityBusy = false;
   }
 
-  async refresh(): Promise<void> {
+  async refresh(forceQuality: boolean = true): Promise<void> {
     if (!this.observing || this.busy) {
       return;
     }
@@ -147,6 +158,7 @@ export class ExitIpProbe {
             revision: response.revision
           };
           this.stale = false;
+          await this.refreshQuality(generation, this.result, forceQuality);
           return;
         } catch (e) {
           if (generation !== this.generation) {
@@ -169,12 +181,79 @@ export class ExitIpProbe {
         this.failure = e instanceof RoutedProbeError ? e.reason : 'transport';
         if (this.failure === 'routeChanged') {
           this.result = undefined;
+          this.quality = undefined;
           this.stale = false;
         }
       }
     } finally {
       if (generation === this.generation) {
         this.busy = false;
+      }
+    }
+  }
+
+  private async refreshQuality(generation: number, result: ExitIp, force: boolean): Promise<void> {
+    const cached = this.qualityCache.get(result.ip);
+    this.quality = undefined;
+    this.qualityFailed = false;
+    if (!force && cached !== undefined && Date.now() - cached.checkedAt < QUALITY_MAX_AGE_MS) {
+      this.quality = cached;
+      return;
+    }
+    this.qualityBusy = true;
+    const deadline = Date.now() + QUALITY_TIMEOUT_MS;
+    try {
+      for (const source of EXIT_IP_QUALITY_SOURCES) {
+        if (generation !== this.generation || this.result !== result) {
+          return;
+        }
+        if (Date.now() >= deadline) {
+          break;
+        }
+        const request = new RoutedProbeRequest();
+        this.request = request;
+        try {
+          const response = await request.run(this.filesDir, exitIpQualityUrl(source, result.ip), 'GET',
+            Math.min(TIMEOUT_MS, deadline - Date.now()), result.routed);
+          if (generation !== this.generation || this.result !== result) {
+            return;
+          }
+          if (response.bootId !== result.bootId || response.revision !== result.revision) {
+            throw new RoutedProbeError('routeChanged');
+          }
+          if (response.status !== 200) {
+            continue;
+          }
+          const quality = parseExitIpQuality(response.body, result.ip, source);
+          if (quality === undefined) {
+            continue;
+          }
+          this.quality = quality;
+          if (this.qualityCache.size >= QUALITY_CACHE_LIMIT && !this.qualityCache.has(result.ip)) {
+            for (const oldest of this.qualityCache.keys()) {
+              this.qualityCache.delete(oldest);
+              break;
+            }
+          }
+          this.qualityCache.set(result.ip, quality);
+          return;
+        } catch (e) {
+          if (generation !== this.generation) {
+            return;
+          }
+          if (e instanceof RoutedProbeError && e.reason === 'routeChanged') {
+            throw e;
+          }
+        } finally {
+          if (this.request === request) {
+            this.request = undefined;
+          }
+        }
+      }
+      this.qualityFailed = true;
+    } finally {
+      if (generation === this.generation) {
+        this.qualityBusy = false;
       }
     }
   }

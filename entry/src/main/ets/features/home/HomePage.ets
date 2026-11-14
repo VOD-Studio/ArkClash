@@ -271,7 +271,7 @@ export struct HomePage {
   Card(id: string) {
     if (id === 'status') {
       DashboardStatus({ visible: this.visible, interactive: !this.editing, profileReady: this.profileReady,
-        profileId: this.profileId, routeRevision: this.routeRevision })
+        profileId: this.profileId, routeRevision: this.routeRevision, motionEnabled: this.visible && !this.reduceMotion })
     } else if (id === 'speed') {
       DashboardSpeed({ visible: this.visible })
     } else if (id === 'mode') {

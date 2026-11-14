@@ -1,21 +1,15 @@
 import { common } from '@kit.AbilityKit';
-import { pasteboard } from '@kit.BasicServicesKit';
-import { i18n } from '@kit.LocalizationKit';
 import { connection, Connection, ConnectionState } from '../../client/Connection';
 import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
-import { DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { DASHBOARD_CARD, sheetMaterial } from '../../components/Theme';
 import { dashboardSettings, DashboardSettings } from './DashboardSettings';
-import { DASHBOARD_COOKIE9, DASHBOARD_COOKIE12 } from './DashboardShapePaths';
-import {
-  homeHasPendingCleanup, homeRunActionLabel, homeRuntimeAppearsStarted, homeShouldStopRuntime
-} from './HomeRunControls';
+import { DASHBOARD_COOKIE12 } from './DashboardShapePaths';
+import { homeHasPendingCleanup, homeRunActionLabel, homeRuntimeAppearsStarted, homeShouldStopRuntime } from './HomeRunControls';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DashboardCountryBadge } from './DashboardCountryBadge';
-
-interface DashboardExitDetailField {
-  label: ResourceStr;
-  content: ResourceStr;
-}
+import { DashboardExitDetails } from './DashboardExitDetails';
+import { DashboardIpQuality } from './DashboardIpQuality';
+import { DashboardRunButton } from './DashboardRunButton';
 
 function dashboardUptime(milliseconds: number): string {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -29,6 +23,7 @@ function dashboardUptime(milliseconds: number): string {
 export struct DashboardStatus {
   @Param visible: boolean = false;
   @Param interactive: boolean = true;
+  @Param motionEnabled: boolean = false;
   @Param profileReady: boolean = false;
   @Param profileId: string = '';
   @Param routeRevision: string = '';
@@ -104,19 +99,6 @@ export struct DashboardStatus {
     return this.probe.busy ? $r('app.string.exit_ip_loading') : $r('app.string.dash_exit_failed');
   }
 
-  private country(): string {
-    const result = this.probe.result;
-    if (result === undefined) {
-      return '—';
-    }
-    try {
-      return result.countryCode !== '' ? i18n.System.getDisplayCountry(result.countryCode,
-        i18n.System.getSystemLocaleInstance().toString(), true) : result.country;
-    } catch (e) {
-      return result.country || '—';
-    }
-  }
-
   private shouldStop(): boolean {
     return homeShouldStopRuntime(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached,
       this.conn.hostState);
@@ -145,123 +127,9 @@ export struct DashboardStatus {
     }
   }
 
-  private async toggleHide(hidden: boolean): Promise<void> {
-    try {
-      await this.settings.commit({ hideIp: hidden }, this.settings.revision);
-    } catch (e) {
-      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.dash_save_failed') });
-    }
-  }
-
-  private async copyExit(): Promise<void> {
-    const result = this.probe.result;
-    if (this.settings.hideIp || result === undefined) {
-      return;
-    }
-    try {
-      await pasteboard.getSystemPasteboard().setData(pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, result.ip));
-      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.copied') });
-    } catch (e) {
-      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.dash_copy_failed') });
-    }
-  }
-
-  @Builder
-  DetailField(field: DashboardExitDetailField) {
-    Row({ space: 16 }) {
-      Text(field.label)
-        .fontSize(13)
-        .lineHeight(18)
-        .fontColor($r('sys.color.font_secondary'))
-        .constraintSize({ maxWidth: '38%' })
-      Text(field.content)
-        .fontSize(14)
-        .lineHeight(20)
-        .fontColor($r('sys.color.font_primary'))
-        .textAlign(TextAlign.End)
-        .wordBreak(WordBreak.BREAK_ALL)
-        .layoutWeight(1)
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Top)
-  }
-
   @Builder
   Details() {
-    Column() {
-      Scroll() {
-        Column({ space: 16 }) {
-          Text($r('app.string.dash_quality_unassessed'))
-            .fontSize(13)
-            .lineHeight(18)
-            .fontColor($r('sys.color.font_secondary'))
-            .width('100%')
-            .padding({ left: 5, right: 5, top: 8 })
-          Column({ space: 16 }) {
-            Column({ space: 6 }) {
-              Text($r('app.string.exit_ip'))
-                .fontSize(13)
-                .lineHeight(18)
-                .fontColor($r('sys.color.font_secondary'))
-              Text(this.address())
-                .fontSize(22)
-                .lineHeight(28)
-                .fontWeight(600)
-                .fontColor($r('sys.color.font_primary'))
-                .width('100%')
-                .wordBreak(WordBreak.BREAK_ALL)
-                .copyOption(this.settings.hideIp ? CopyOptions.None : CopyOptions.LocalDevice)
-            }
-            .width('100%')
-            .alignItems(HorizontalAlign.Start)
-            this.DetailField({ label: $r('app.string.region_label'), content: this.country() })
-            this.DetailField({ label: $r('app.string.dash_ip_organization'), content: this.probe.result?.org || '—' })
-            this.DetailField({ label: $r('app.string.dash_ip_asn'), content: this.probe.result?.asn || '—' })
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Start)
-          .padding(16)
-          .borderRadius(22)
-          .backgroundColor($r('app.color.tile_background'))
-          Column({ space: 16 }) {
-            this.DetailField({ label: $r('app.string.dash_probe_source'), content: this.probe.result?.source || '—' })
-            this.DetailField({ label: $r('app.string.dash_probe_checked_at'), content: this.probe.result !== undefined ?
-              new Date(this.probe.result.checkedAt).toLocaleString() : '—' })
-            Row({ space: 16 }) {
-              Text($r('app.string.dash_hide_ip'))
-                .fontSize(15)
-                .lineHeight(20)
-                .layoutWeight(1)
-              Toggle({ type: ToggleType.Switch, isOn: this.settings.hideIp })
-                .enabled(!this.settings.saving)
-                .onChange((hidden: boolean): void => { this.toggleHide(hidden); })
-            }
-            .width('100%')
-            .constraintSize({ minHeight: 40 })
-          }
-          .width('100%')
-          .padding(16)
-          .borderRadius(22)
-          .backgroundColor($r('app.color.tile_background'))
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-        .padding({ bottom: 16 })
-      }
-      .width('100%')
-      .layoutWeight(1)
-      .align(Alignment.TopStart)
-      .scrollBar(BarState.Off)
-      Button($r('app.string.dash_copy_ip'))
-        .width('100%')
-        .height(40)
-        .enabled(!this.settings.hideIp && this.probe.result !== undefined)
-        .onClick((): void => { this.copyExit(); })
-        .margin({ top: 8 })
-    }
-    .width('100%')
-    .height('100%')
-    .padding({ bottom: 24, left: PAGE_GUTTER, right: PAGE_GUTTER })
+    DashboardExitDetails()
   }
 
   @Builder
@@ -277,10 +145,13 @@ export struct DashboardStatus {
       .height(240)
       .rotate({ angle: this.conn.connected ? 30 : 0 })
       .scale({ x: this.conn.connected ? 1.12 : 1, y: this.conn.connected ? 1.12 : 1 })
+      .animation({ duration: this.motionEnabled ? 450 : 0, curve: Curve.EaseInOut })
       .offset({ x: 60, y: -66 })
     }
     .width('100%')
     .height('100%')
+    .hitTestBehavior(HitTestMode.None)
+    .accessibilityLevel('no')
   }
 
   build() {
@@ -310,12 +181,16 @@ export struct DashboardStatus {
               .borderRadius(7)
               .backgroundColor(this.conn.connected ? $r('app.color.dash_running_background') :
                 $r('app.color.tile_background'))
+              .accessibilityDescription(this.conn.error)
+              .onClick((): void => {
+                if (this.interactive && this.conn.error !== '') { this.showRuntimeError(this.conn.error); }
+              })
             }
             .width('100%')
             .constraintSize({ minHeight: 26 })
             Row({ space: 12 }) {
               DashboardCountryBadge({ countryCode: this.probe.result?.countryCode ?? '', busy: this.probe.busy,
-                running: this.conn.connected, visible: this.visible, interactive: this.interactive,
+                running: this.conn.connected, motionEnabled: this.motionEnabled, interactive: this.interactive,
                 onRefresh: (): void => { this.probe.refresh(); } })
               Column({ space: 4 }) {
                 if (this.probe.result === undefined && !this.probe.failed && !this.settings.hideIp) {
@@ -334,6 +209,7 @@ export struct DashboardStatus {
                     .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
                     .width('100%')
                     .lineHeight(28)
+                    .height(28)
                     .fontWeight(FontWeight.Bold)
                     .fontFeature('"tnum" on')
                     .fontColor(this.probe.failed && this.probe.result === undefined ? $r('app.color.status_error') :
@@ -341,17 +217,11 @@ export struct DashboardStatus {
                     .maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                 }
-                Text(this.probe.failed && this.probe.result === undefined ? $r('app.string.dash_retry_exit') :
-                  $r('app.string.dash_quality_unassessed'))
-                  .fontSize(12)
-                  .lineHeight(16)
-                  .height(28)
-                  .fontColor($r('sys.color.font_secondary'))
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                DashboardIpQuality({ quality: this.probe.quality, busy: this.probe.busy || this.conn.busy })
               }
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)
+              .constraintSize({ minHeight: 56 })
               .onClick((): void => { if (this.interactive) { this.details = true; } })
             }
             .width('100%')
@@ -370,6 +240,7 @@ export struct DashboardStatus {
                   .fontFeature('"tnum" on')
               }
               .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
               Column({ space: 2 }) {
                 Text($r('app.string.dash_ip_organization'))
                   .fontSize(12)
@@ -392,40 +263,15 @@ export struct DashboardStatus {
           }
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
-          Button({ type: ButtonType.Normal }) {
-            Stack() {
-              if (this.appearsStarted()) {
-                Shape() {
-                  Path().commands(DASHBOARD_COOKIE9).fill($r('app.color.brand')).strokeWidth(0)
-                }
-                .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
-                .width(88)
-                .height(88)
-                .rotate({ angle: 40 })
-              } else {
-                Circle({ width: 88, height: 88 })
-                  .fill(this.profileReady ? $r('app.color.brand') : $r('app.color.tile_background'))
-                  .strokeWidth(0)
-              }
-              if (this.conn.busy) {
-                LoadingProgress().width(30).height(30).color(Color.White)
-              } else {
-                AppGlyph({ name: this.appearsStarted() ? 'pause' : 'play', iconSize: 30,
-                  iconColor: this.profileReady || this.appearsStarted() ? Color.White : $r('sys.color.font_secondary') })
-              }
-            }
-            .width(88)
-            .height(88)
-          }
-          .width(88)
-          .height(88)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .enabled(this.interactive && (this.profileReady || this.shouldStop()) &&
-            this.conn.state !== ConnectionState.Disconnecting)
-          .accessibilityText(homeRunActionLabel(this.conn.intent, this.conn.forward,
-            this.conn.listenersOpen, this.conn.tunAttached, this.conn.hostState))
-          .onClick((): void => { this.toggleRun(); })
+          DashboardRunButton({
+            running: this.appearsStarted(), busy: this.conn.busy, visible: this.visible,
+            motionEnabled: this.motionEnabled,
+            interactive: this.interactive && (this.profileReady || this.shouldStop()) &&
+              this.conn.state !== ConnectionState.Disconnecting,
+            label: homeRunActionLabel(this.conn.intent, this.conn.forward,
+              this.conn.listenersOpen, this.conn.tunAttached, this.conn.hostState),
+            onToggle: (): void => { this.toggleRun(); }
+          })
         }
         .width('100%')
         .padding({ left: 20, right: 16, top: 18, bottom: 18 })
@@ -434,14 +280,6 @@ export struct DashboardStatus {
       .background(this.Decoration)
       .borderRadius(34)
       .clip(true)
-      if (this.probe.stale || this.probe.failed || this.conn.error !== '') {
-        Text(this.conn.error !== '' ? $r('app.string.dash_runtime_error') :
-          this.probe.failure === 'capacity' ? $r('app.string.dash_probe_busy') :
-          this.probe.failure === 'routeChanged' ? $r('app.string.dash_probe_changed') : $r('app.string.dash_stale_retry'))
-          .fontSize(12)
-          .fontColor(this.conn.error !== '' ? $r('app.color.status_error') : $r('app.color.warning'))
-          .padding({ left: 20, right: 20, bottom: 12 })
-      }
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)

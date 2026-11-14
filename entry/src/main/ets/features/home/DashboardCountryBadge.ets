@@ -1,5 +1,3 @@
-import { accessibility } from '@kit.AccessibilityKit';
-import { AnimatorResult } from '@kit.ArkUI';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DASHBOARD_CLOVER4 } from './DashboardShapePaths';
 
@@ -8,49 +6,18 @@ export struct DashboardCountryBadge {
   @Param countryCode: string = '';
   @Param busy: boolean = false;
   @Param running: boolean = false;
-  @Param visible: boolean = false;
+  @Param motionEnabled: boolean = false;
   @Param interactive: boolean = true;
   @Event onRefresh: () => void = () => {};
-  @Local turnDegrees: number = 0;
-  @Local reduceMotion: boolean = true;
-  private turns: AnimatorResult | undefined = undefined;
-  private reductionListener: (enabled: boolean) => void = (enabled: boolean): void => {
-    this.reduceMotion = enabled;
-    this.sync();
-  };
+  @Local spinning: boolean = false;
 
-  aboutToAppear(): void {
-    this.reduceMotion = accessibility.isAnimationReduceEnabledSync();
-    accessibility.onAnimationReduceStateChange(this.reductionListener);
-    this.sync();
-  }
-
-  aboutToDisappear(): void {
-    accessibility.offAnimationReduceStateChange(this.reductionListener);
-    this.stop();
-  }
-
-  @Monitor('busy', 'visible', 'reduceMotion')
+  @Monitor('busy', 'motionEnabled')
   sync(): void {
-    if (!this.busy || !this.visible || this.reduceMotion) {
-      this.stop();
-      return;
-    }
-    if (this.turns !== undefined) { return; }
-    this.turns = this.getUIContext().createAnimator({ duration: 1500, easing: 'linear', delay: 0,
-      fill: 'none', direction: 'normal', iterations: -1, begin: 0, end: 360 });
-    this.turns.onFrame = (progress: number): void => { this.turnDegrees = progress; };
-    this.turns.play();
-  }
-
-  private stop(): void {
-    this.turns?.cancel();
-    this.turns = undefined;
-    this.turnDegrees = 0;
+    this.spinning = this.busy && this.motionEnabled;
   }
 
   build() {
-    Button({ type: ButtonType.Normal }) {
+    Button({ type: ButtonType.Circle }) {
       Stack() {
         Shape() {
           Path().commands(DASHBOARD_CLOVER4).fill($r('app.color.tile_background')).strokeWidth(0)
@@ -58,7 +25,10 @@ export struct DashboardCountryBadge {
         .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
         .width(48)
         .height(48)
-        .rotate({ angle: this.turnDegrees })
+        .rotate({ angle: this.spinning ? 360 : 0 })
+        .animation({ duration: this.spinning ? 1500 : 0, curve: Curve.Linear,
+          iterations: this.spinning ? -1 : 1 })
+        .onAppear((): void => { this.sync(); })
         if (this.countryCode === '') {
           AppGlyph({ name: 'proxies', iconSize: 20.16,
             iconColor: this.running ? $r('sys.color.font_primary') : $r('sys.color.font_secondary') })
