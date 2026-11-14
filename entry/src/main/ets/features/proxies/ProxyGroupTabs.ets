@@ -9,6 +9,7 @@ import { ProxyGroupView } from './ProxyView';
 export struct ProxyGroupTabs {
   @Param @Require browser: ProxyBrowser;
   @Param active: boolean = false;
+  @Param motionEnabled: boolean = false;
   @Local hasMore: boolean = false;
   @Local groupsShown: boolean = false;
   @Local fadeAmount: number = 0;
@@ -19,7 +20,7 @@ export struct ProxyGroupTabs {
   private fullWidth: number = 0;
   private viewport: number = 0;
   private total: number = 0;
-  private focusTimer: number = -1;
+  private listBound: boolean = false;
 
   aboutToAppear(): void {
     this.measureTabs();
@@ -27,7 +28,7 @@ export struct ProxyGroupTabs {
 
   aboutToDisappear(): void {
     this.groupsShown = false;
-    this.clearTimer();
+    this.listBound = false;
   }
 
   @Monitor('browser.groups', 'active')
@@ -58,30 +59,22 @@ export struct ProxyGroupTabs {
 
   @Monitor('browser.groupIndex')
   reveal(): void {
-    this.clearTimer();
     if (!this.active) {
       this.groupsShown = false;
       return;
     }
-    if (this.browser.groups.length > 0) {
-      this.focusTimer = setTimeout((): void => {
-        this.focusTimer = -1;
-        if (this.active) {
-          this.scroller.scrollToIndex(this.browser.groupIndex, false, ScrollAlign.CENTER);
-          this.updateFade(0);
-        }
-      }, 0);
+    if (this.listBound && this.browser.groups.length > 0) {
+      this.scroller.scrollToIndex(this.browser.groupIndex, false, ScrollAlign.CENTER);
+      this.updateFade(0);
     }
   }
 
-  private clearTimer(): void {
-    if (this.focusTimer !== -1) {
-      clearTimeout(this.focusTimer);
-      this.focusTimer = -1;
-    }
-  }
 
   private updateFade(delta: number): void {
+    if (!this.listBound) {
+      this.fadeAmount = 0;
+      return;
+    }
     const remaining = this.total + 16 + (this.hasMore ? 0 : 16) - this.viewport -
       this.scroller.currentOffset().xOffset - delta;
     this.fadeAmount = this.hasMore ? Math.max(0, Math.min(1, remaining / 24)) : 0;
@@ -146,6 +139,7 @@ export struct ProxyGroupTabs {
                 .padding({ left: 16, right: 16 })
                 .fontColor(this.browser.currentGroup === group.name ? $r('app.color.on_brand') : $r('sys.color.font_secondary'))
                 .backgroundColor(this.browser.currentGroup === group.name ? $r('app.color.brand') : $r('app.color.card_background'))
+                .animation({ duration: this.active && this.motionEnabled ? 160 : 0, curve: Curve.EaseOut })
                 .accessibilitySelected(this.browser.currentGroup === group.name)
                 .enabled(this.active)
                 .onClick(() => this.chooseGroup(group.name))
@@ -157,6 +151,8 @@ export struct ProxyGroupTabs {
         .padding({ left: 16, right: this.hasMore ? 0 : 16 })
         .listDirection(Axis.Horizontal)
         .scrollBar(BarState.Off)
+        .onAppear((): void => { this.listBound = true; this.reveal(); })
+        .onDisAppear((): void => { this.listBound = false; })
         .onSizeChange((_before: SizeOptions, after: SizeOptions): void => {
           this.viewport = Number(after.width);
           this.updateFade(0);

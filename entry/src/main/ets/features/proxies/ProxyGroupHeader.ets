@@ -1,3 +1,4 @@
+import { curves } from '@kit.ArkUI';
 import { uiResourceText } from '../../components/ResourceText';
 import { AppGlyph } from '../../components/AppGlyph';
 import { proxyTextScale } from './ProxyMetrics';
@@ -13,6 +14,7 @@ export struct ProxyGroupHeader {
   @Param showLocate: boolean = true;
   @Param collapsible: boolean = true;
   @Param active: boolean = true;
+  @Param motionEnabled: boolean = false;
   @Event onToggle: () => void = () => {};
   @Event onLocate: () => void = () => {};
   @Event onTest: () => void = () => {};
@@ -151,6 +153,7 @@ export struct ProxyGroupHeader {
         }
         .borderRadius(16)
         .backgroundColor($r('app.color.surface_block'))
+        .transition(this.motionEnabled ? TransitionEffect.OPACITY : TransitionEffect.IDENTITY)
       } else {
         Text(this.group.type)
           .fontSize(12)
@@ -160,7 +163,9 @@ export struct ProxyGroupHeader {
       }
       if (this.collapsible) {
         Button({ type: ButtonType.Circle }) {
-          AppGlyph({ name: this.group.expanded ? 'chevronUp' : 'chevronDown', iconSize: 20 })
+          AppGlyph({ name: 'chevronDown', iconSize: 20 })
+            .rotate({ angle: this.group.expanded ? 180 : 0 })
+            .animation(this.motionEnabled ? { curve: curves.springMotion(0.28, 1) } : { duration: 0 })
         }
         .width(32)
         .height(32)
@@ -174,8 +179,12 @@ export struct ProxyGroupHeader {
     .width('100%')
     .height(22 + 37 * this.textScale)
     .padding(10)
-    .borderRadius({ topLeft: 24, topRight: 24, bottomLeft: this.group.expanded ? 0 : 24, bottomRight: this.group.expanded ? 0 : 24 })
+    .borderRadius({ topLeft: 24, topRight: 24,
+      bottomLeft: this.group.expanded && !this.group.reveal.running && !this.group.floating ? 0 : 24,
+      bottomRight: this.group.expanded && !this.group.reveal.running && !this.group.floating ? 0 : 24 })
     .backgroundColor($r('app.color.card_background'))
+    .shadow({ radius: this.group.floating ? 16 : 0, offsetY: this.group.floating ? 4 : 0,
+      color: $r('app.color.dashboard_shadow') })
     .bindContextMenu(this.groupMenu, ResponseType.LongPress)
   }
 }

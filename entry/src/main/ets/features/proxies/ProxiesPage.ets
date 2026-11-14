@@ -1,14 +1,17 @@
+import { accessibility } from '@kit.AccessibilityKit';
+import { UIUtils } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { Connection, connection } from '../../client/Connection';
 import { EmptyState } from '../../components/EmptyState';
 import { TabPage } from '../../components/TabPage';
-import { PAGE_GUTTER } from '../../components/Theme';
+import { FLOATING_BAR_INSET, PAGE_GUTTER } from '../../components/Theme';
 import { ProfileSummary } from '../../shared/profiles/Summary';
 import { ProxyBrowser } from './Proxies';
 import { ProxyFeedback } from './ProxyFeedback';
 import { ProxyGroupList } from './ProxyGroupList';
 import { ProxyTabs } from './ProxyTabs';
 import { ProxyToolbar } from './ProxyToolbar';
+import { ProxyLocateTarget } from './ProxyView';
 
 @ComponentV2
 export struct ProxiesPage {
@@ -28,23 +31,26 @@ export struct ProxiesPage {
   @Local link: Connection = connection;
   @Local boundScroller: Scroller = new Scroller();
   @Local tabLocateVersion: number = 0;
+  @Local reduceMotion: boolean = true;
+  private reductionListener: (enabled: boolean) => void = (enabled: boolean): void => {
+    this.reduceMotion = enabled;
+  };
   private availableWidth: number = 0;
   private scrollingDown: boolean = false;
-  private locateTimer: number = -1;
   private savedProfile: string = '';
-  private savedLayout: string = 'list';
   private restoreListPending: boolean = true;
+  private listOwner: string = '';
 
   aboutToAppear(): void {
     this.boundScroller = this.scroller;
+    this.reduceMotion = accessibility.isAnimationReduceEnabledSync();
+    accessibility.onAnimationReduceStateChange(this.reductionListener);
     this.configureBrowser();
   }
 
   aboutToDisappear(): void {
-    if (this.browser.style.type === 'list') {
-      this.browser.listOffsets.set(this.profileId, this.scroller.currentOffset().yOffset);
-    }
-    this.clearLocateTimer();
+    accessibility.offAnimationReduceStateChange(this.reductionListener);
+    this.listOwner = '';
     this.browser.suspend();
   }
 
@@ -52,14 +58,8 @@ export struct ProxiesPage {
     'link.mode', 'link.bootId')
   configureBrowser(): void {
     if (this.savedProfile !== this.profileId) {
-      if (this.savedProfile !== '' && this.savedLayout === 'list') {
-        this.browser.listOffsets.set(this.savedProfile, this.scroller.currentOffset().yOffset);
-      }
       this.savedProfile = this.profileId;
       this.restoreListPending = true;
-    }
-    if (!this.visible) {
-      this.clearLocateTimer();
     }
     this.browser.configure({
       context: this.getUIContext().getHostContext() as common.UIAbilityContext,
@@ -72,10 +72,6 @@ export struct ProxiesPage {
 
   @Monitor('browser.appearance.style')
   resetBoundScroller(): void {
-    if (this.savedLayout === 'list' && this.browser.style.type !== 'list') {
-      this.browser.listOffsets.set(this.profileId, this.scroller.currentOffset().yOffset);
-    }
-    this.savedLayout = this.browser.style.type;
     if (this.browser.style.type === 'list') {
       this.boundScroller = this.scroller;
       this.restoreListPending = true;
@@ -86,47 +82,54 @@ export struct ProxiesPage {
 
   @Monitor('browser.groups')
   restoreListScroll(): void {
-    if (this.restoreListPending && this.visible && this.browser.style.type === 'list' && this.browser.groups.length > 0) {
+    if (this.restoreListPending && this.visible && this.browser.style.type === 'list' &&
+      this.browser.groups.length > 0 && this.listOwner === 'groups') {
       this.restoreListPending = false;
-      this.clearLocateTimer();
-      this.locateTimer = setTimeout((): void => {
-        this.locateTimer = -1;
-        this.scroller.scrollTo({ xOffset: 0, yOffset: this.browser.listOffsets.get(this.profileId) ?? 0, animation: false });
-      }, 0);
+      this.scroller.scrollTo({ xOffset: 0, yOffset: this.browser.listOffsets.get(this.profileId) ?? 0, animation: false });
     }
   }
 
-  private clearLocateTimer(): void {
-    if (this.locateTimer !== -1) {
-      clearTimeout(this.locateTimer);
-      this.locateTimer = -1;
+  private listReady(owner: string): void {
+    this.listOwner = owner;
+    this.boundScroller = this.scroller;
+    this.restoreListScroll();
+  }
+
+  private listRelease(owner: string): void {
+    if (this.listOwner === owner) {
+      this.listOwner = '';
+      this.restoreListPending = true;
     }
   }
 
   private locate(groupName: string): void {
+    if (!this.visible) {
+      return;
+    }
     if (this.pickerMode || this.browser.style.type === 'tab') {
       this.tabLocateVersion++;
       return;
     }
-    const target = this.browser.locate(groupName);
-    if (target === undefined) {
+    if (this.listOwner !== 'groups') {
       return;
     }
-    this.clearLocateTimer();
-    this.locateTimer = setTimeout((): void => {
-      this.locateTimer = -1;
-      if (this.visible) {
-        if (this.scroller instanceof ListScroller) {
-          this.scroller.scrollToItemInGroup(target.groupIndex, target.rowIndex, false, ScrollAlign.CENTER);
-        } else {
-          this.scroller.scrollToIndex(target.groupIndex, false, ScrollAlign.START);
-        }
-      }
-    }, 0);
+    const target = UIUtils.applySync<ProxyLocateTarget | undefined>((): ProxyLocateTarget | undefined => this.browser.locate(groupName));
+    if (target === undefined || !this.visible || this.listOwner !== 'groups') {
+      return;
+    }
+    if (this.scroller instanceof ListScroller) {
+      this.scroller.scrollToItemInGroup(target.groupIndex + (this.hasFeedback() ? 1 : 0), target.rowIndex, false, ScrollAlign.CENTER);
+    } else {
+      this.scroller.scrollToIndex(target.groupIndex + (this.hasFeedback() ? 1 : 0), false, ScrollAlign.START);
+    }
   }
 
   private didScroll(offset: number, source: ScrollSource, scroller: Scroller): void {
-    if (this.browser.style.type === 'list' && this.visible) {
+    if (scroller !== this.boundScroller ||
+      (!this.pickerMode && this.browser.style.type === 'list' && this.listOwner === '')) {
+      return;
+    }
+    if (this.browser.style.type === 'list' && this.listOwner === 'groups' && scroller === this.scroller) {
       this.browser.listOffsets.set(this.profileId, Math.max(0, scroller.currentOffset().yOffset + offset));
     }
     if (!this.visible || this.pickerMode || source === ScrollSource.EDGE_EFFECT) {
@@ -152,8 +155,11 @@ export struct ProxiesPage {
   }
 
   private hasFeedback(): boolean {
-    return this.profileId !== '' && (this.browser.loadError || this.browser.preferenceError ||
-      (!this.browser.online && this.browser.totalGroups > 0) || this.browser.notice !== '');
+    return this.profileId !== '' && (this.browser.loadError || this.browser.preferenceError || this.browser.notice !== '');
+  }
+
+  private motionEnabled(): boolean {
+    return this.visible && !this.reduceMotion;
   }
 
   @Builder
@@ -161,6 +167,7 @@ export struct ProxiesPage {
     ProxyToolbar({
       browser: this.browser,
       active: this.visible,
+      motionEnabled: this.motionEnabled(),
       onLocate: (groupName: string) => this.locate(groupName)
     })
   }
@@ -204,48 +211,66 @@ export struct ProxiesPage {
   private pageContent() {
     Column() {
       if (this.pickerMode) {
-        ProxyToolbar({ browser: this.browser, pickerMode: true, active: this.visible })
+        ProxyToolbar({ browser: this.browser, pickerMode: true, active: this.visible,
+          motionEnabled: this.motionEnabled() })
       }
-      if (this.hasFeedback()) {
-        Column() {
-          ProxyFeedback({ browser: this.browser })
-        }
-        .width('100%')
-        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: this.pickerMode ? 0 : this.topInset + 84, bottom: 8 })
-      }
-      if ((this.browser.loading || !this.profileReady) && this.profileId !== '' && this.browser.groups.length === 0) {
-        Column({ space: 12 }) {
-          LoadingProgress()
-            .width(32)
-            .height(32)
-            .color($r('app.color.brand'))
-            .enableLoading(this.visible)
-          Text($r('app.string.proxy_loading'))
-            .fontSize(14)
-            .fontColor($r('sys.color.font_secondary'))
+      if (this.browser.groups.length === 0) {
+        List({ scroller: this.scroller }) {
+          if (this.hasFeedback()) {
+            ListItem() {
+              ProxyFeedback({ browser: this.browser })
+            }
+          }
+          ListItem() {
+            if (!this.browser.loadError && (this.browser.loading || !this.profileReady) && this.profileId !== '') {
+              Column({ space: 12 }) {
+                LoadingProgress()
+                  .width(32)
+                  .height(32)
+                  .color($r('app.color.brand'))
+                  .enableLoading(this.visible)
+                Text($r('app.string.proxy_loading'))
+                  .fontSize(14)
+                  .fontColor($r('sys.color.font_secondary'))
+              }
+              .width('100%')
+              .justifyContent(FlexAlign.Center)
+            } else {
+              this.emptyContent()
+            }
+          }
         }
         .layoutWeight(1)
         .width('100%')
-        .justifyContent(FlexAlign.Center)
-      } else if (this.browser.groups.length === 0) {
-        Column() {
-          this.emptyContent()
-        }
-        .layoutWeight(1)
-        .width('100%')
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+        .safeAreaPadding({ top: this.pickerMode ? 0 : this.topInset + 72 })
+        .contentStartOffset(12)
+        .contentEndOffset(FLOATING_BAR_INSET)
+        .clipContent(ContentClipMode.BOUNDARY)
+        .edgeEffect(EdgeEffect.Spring)
+        .onWillScroll((offset: number, _state: ScrollState, source: ScrollSource): void => {
+          if (this.listOwner === 'empty') { this.didScroll(offset, source, this.scroller); }
+        })
+        .onAppear((): void => this.listReady('empty'))
+        .onDisAppear((): void => this.listRelease('empty'))
       } else if (this.pickerMode || this.browser.style.type === 'tab') {
         ProxyTabs({
           browser: this.browser, active: this.visible, profileId: this.profileId,
           locateVersion: this.tabLocateVersion,
-          onScrollerReady: (scroller: Scroller) => { this.boundScroller = scroller; },
+          contentInset: this.pickerMode ? 0 : this.topInset + 72,
+          motionEnabled: this.motionEnabled(),
+          onScrollerReady: (scroller: Scroller) => { this.listOwner = ''; this.boundScroller = scroller; },
           onListScroll: (offset: number, source: ScrollSource, scroller: Scroller) => this.didScroll(offset, source, scroller)
         })
           .layoutWeight(1)
-          .padding({ top: this.pickerMode || this.hasFeedback() ? 0 : this.topInset + 84 })
       } else {
         ProxyGroupList({
           browser: this.browser, scroller: this.scroller, active: this.visible, pickerMode: this.pickerMode,
-          contentInset: this.hasFeedback() ? 0 : this.topInset + 84,
+          contentInset: this.topInset + 72,
+          motionEnabled: this.motionEnabled(),
+          feedbackVisible: this.hasFeedback(),
+          onScrollerReady: (): void => this.listReady('groups'),
+          onScrollerRelease: (): void => this.listRelease('groups'),
           onLocate: (group: string) => this.locate(group),
           onListScroll: (offset: number, source: ScrollSource) => this.didScroll(offset, source, this.scroller)
         })

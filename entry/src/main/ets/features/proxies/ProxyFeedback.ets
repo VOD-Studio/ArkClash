@@ -57,12 +57,6 @@ export struct ProxyFeedback {
         .borderRadius(12)
         .backgroundColor($r('app.color.warning_soft'))
       }
-      if (!this.browser.online && this.browser.totalGroups > 0 && !this.browser.loadError) {
-        Text(this.browser.offlineWritable ? $r('app.string.proxy_offline_saved') : $r('app.string.proxy_host_unknown'))
-          .fontSize(12)
-          .fontColor($r('sys.color.font_secondary'))
-          .width('100%')
-      }
       if (this.browser.notice !== '') {
         Row({ space: 8 }) {
           Text(this.noticeLabel())

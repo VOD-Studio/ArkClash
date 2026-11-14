@@ -7,6 +7,7 @@ export struct ProxyDelay {
   @Param @Require node: ProxyNodeView;
   @Param active: boolean = true;
   @Param textScale: number = 1;
+  @Param restriction: ResourceStr = '';
   @Event onTest: () => void = () => {};
 
   private delayColor(): ResourceColor {
@@ -30,6 +31,13 @@ export struct ProxyDelay {
       return $r('app.string.proxy_test_failed');
     }
     return this.node.delay > 0 ? $r('app.string.proxy_delay_ms', this.node.delay) : $r('app.string.delay_untested');
+  }
+
+  private accessibleState(): string {
+    const status = uiResourceText(this.getUIContext(), this.delayLabel());
+    const restriction = this.restriction !== '' ? this.restriction :
+      !this.node.online ? $r('app.string.proxy_test_offline') : '';
+    return restriction === '' ? status : `${status}，${uiResourceText(this.getUIContext(), restriction)}`;
   }
 
   build() {
@@ -61,7 +69,9 @@ export struct ProxyDelay {
     .backgroundColor(Color.Transparent)
     .enabled(this.active && this.node.testable && this.node.phase === 'idle')
     .accessibilityText($r('app.string.proxy_test_node'))
-    .accessibilityDescription(uiResourceText(this.getUIContext(), this.delayLabel()))
+    .accessibilityDescription(this.accessibleState())
     .onClick(() => this.onTest())
+    .visibility(this.node.testable || this.node.phase !== 'idle' || this.node.delay !== 0 ?
+      Visibility.Visible : Visibility.None)
   }
 }

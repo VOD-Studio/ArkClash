@@ -1,7 +1,7 @@
 import { connection } from '../../client/Connection';
 import { ProfileEvent, ProfileEvents } from '../../client/ProfileCommands';
 import { ProxySnapshot, readOfflineProxies, readOnlineProxies } from '../../client/Proxies';
-import { ListSource } from '../../components/ListSource';
+import { ProxyListSource } from './ProxyListSource';
 import {
   proxyColumnCount, proxyGroupNames,
   ProxyStyle, ProxyViewState, validProxyView
@@ -26,12 +26,13 @@ export class ProxyBrowser {
   @Trace offlineWritable: boolean = false;
   @Trace totalGroups: number = 0;
   @Trace groupIndex: number = 0;
-  readonly source: ListSource<ProxyGroupView> = new ListSource<ProxyGroupView>();
+  readonly source: ProxyListSource<ProxyGroupView> = new ProxyListSource<ProxyGroupView>();
   readonly listOffsets: Map<string, number> = new Map<string, number>();
   readonly tabOffsets: Map<string, number> = new Map<string, number>();
   @Trace appearance: ProxyAppearance = new ProxyAppearance((): void => this.rebuild());
   private input?: ProxyBrowserInput;
   private snapshot?: ProxySnapshot;
+  private located: ProxyNodeView | undefined = undefined;
   private view: ProxyViewState = { expanded: [], currentGroup: '' };
   private preferencesLoaded: boolean = false;
   private availableWidth: number = 360;
@@ -87,6 +88,7 @@ export class ProxyBrowser {
     }
     if (changedProfile) {
       this.snapshot = undefined;
+      this.located = undefined;
       this.groups = [];
       this.source.replace([]);
       this.totalGroups = 0;
@@ -282,7 +284,12 @@ export class ProxyBrowser {
       this.notice = 'filtered';
       return undefined;
     }
-    if (!group.expanded) {
+    if (this.located !== undefined) {
+      this.located.located = false;
+    }
+    this.located = group.nodes[index];
+    this.located.located = true;
+    if (!group.expanded && this.style.type === 'list' && this.input?.picker !== true) {
       this.toggleGroup(groupName);
     }
     return { groupIndex: groupIndex, rowIndex: Math.floor(index / proxyColumnCount(this.availableWidth, this.style.layout)) };

@@ -19,9 +19,11 @@ const client = await import(clientUrl);
 const logicUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyLogic.ets',
   `import { isProxyGroup, proxyMemberNode, PROXY_TEST_URL } from ${JSON.stringify(clientUrl)};\n`);
 const logic = await import(logicUrl);
-const listUrl = await sourceModule('../entry/src/main/ets/components/ListSource.ets');
+const listUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyListSource.ets',
+  `const DataOperationType = { ADD: 'add', DELETE: 'delete', CHANGE: 'change', RELOAD: 'reload' };\n`);
+const proxyList = await import(listUrl);
 const viewUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyView.ets',
-  `import { ListSource } from ${JSON.stringify(listUrl)};\n` +
+  `import { ProxyListSource } from ${JSON.stringify(listUrl)};\n` +
   `import { isProxyGroup, proxyMemberNode } from ${JSON.stringify(clientUrl)};\n` +
   `import { canTestProxy, proxyDelayKey, proxyGroupNames, proxyMembers, proxyPinnedMemberId, resolveProxyLeaf, selectableProxyGroup } from ${JSON.stringify(logicUrl)};\n`);
 const view = await import(viewUrl);
@@ -208,6 +210,97 @@ test('默认列表、none排序、标准样式、全部折叠', () => {
   });
   assert.deepEqual(logic.validProxyView({ expanded: [], currentGroup: '' }, ['Main', 'Auto'], 'rule'),
     { expanded: [], currentGroup: 'Main' });
+});
+
+test('真实视图展开和快速反向保留组身份，向LazyForEach发送局部增删而非重载', () => {
+  const state = snapshot();
+  const style = logic.defaultProxyStyle();
+  let previous = [];
+  const rebuild = expanded => {
+    previous = view.buildProxyViews({
+      snapshot: state, style, view: { expanded, currentGroup: 'Main' }, query: '', columns: 2,
+      latest: new Map(), completedForGroup: () => new Map(), phases: new Map(), pending: new Map(),
+      testingGroups: new Set(), previous, picker: false
+    });
+    return previous;
+  };
+  const source = new proxyList.ProxyListSource();
+  source.replace(rebuild([]));
+  const group = previous.find(candidate => candidate.name === 'Main');
+  const groupEvents = [];
+  const rowEvents = [];
+  const listener = events => ({
+    onDatasetChange(operations) { events.push(operations); },
+    onDataReloaded() { assert.fail('展开更新不应整表重载'); }
+  });
+  source.registerDataChangeListener(listener(groupEvents));
+  group.rows.registerDataChangeListener(listener(rowEvents));
+  source.replace(rebuild(['Main']));
+  assert.equal(previous.find(candidate => candidate.name === 'Main'), group);
+  assert.equal(group.rowCount, 2);
+  assert.deepEqual(rowEvents, [[{ type: 'add', index: 0, count: 2 }]]);
+  assert.deepEqual(groupEvents, []);
+  const firstRow = group.rows.getData(0);
+  source.replace(rebuild(['Main']));
+  assert.equal(group.rows.getData(0), firstRow);
+  assert.equal(rowEvents.length, 1);
+  source.replace(rebuild([]));
+  source.replace(rebuild(['Main']));
+  assert.equal(group.expanded, true);
+  assert.equal(group.rowCount, 2);
+  assert.deepEqual(rowEvents.slice(1), [
+    [{ type: 'delete', index: 0, count: 2 }], [{ type: 'add', index: 0, count: 2 }]
+  ]);
+  assert.deepEqual(groupEvents, []);
+  state.nodes.Main.members = ['Alpha US', 'Gamma JP', 'beta HK', 'REJECT'];
+  const beforeMembershipChange = group.rows.getData(0);
+  source.replace(rebuild(['Main']));
+  assert.notEqual(group.rows.getData(0).key, beforeMembershipChange.key);
+  assert.equal(group.rows.getData(0).nodes[1].name, 'Gamma JP');
+});
+
+test('千节点真实窗口保持固定占位，后续组补偿与裁剪共用进度并保留锚点', () => {
+  const state = snapshot();
+  state.nodes.Main.members = [];
+  for (let index = 0; index < 1000; index++) {
+    const id = `bounded-${index}`;
+    state.nodes.Main.members.push(id);
+    state.nodes[id] = { ...state.nodes['Alpha US'], id, name: id };
+  }
+  const groups = buildConsumerViews(state, {
+    latest: new Map(), phases: new Map(), testingGroups: new Set(), completedFor: () => new Map()
+  });
+  const group = groups.find(candidate => candidate.name === 'Main');
+  const rows = group.rows.values();
+  assert.equal(rows.length, 500);
+  group.reveal.firstRow = 120;
+  group.reveal.crop = 15;
+  group.reveal.anchorOffset = 320;
+  group.reveal.begin(rows, 94, 500, true);
+  assert.equal(group.reveal.rows.length, 7);
+  assert.equal(group.reveal.rows[0], rows[120]);
+  assert.equal(group.reveal.rows.at(-1), rows[126]);
+  assert.equal(group.reveal.fullExtent, 7 * 94 - 15);
+  assert.equal(group.reveal.anchorOffset + group.reveal.firstRow * group.reveal.rowExtent + group.reveal.crop,
+    320 + 120 * 94 + 15);
+  const slot = group.reveal.fullExtent;
+  const window = group.reveal.rows;
+  for (const fraction of [0, 0.25, 0.75, 0.5, 0, 1]) {
+    group.reveal.extent = slot * fraction;
+    assert.equal(slot + group.reveal.tailOffset, group.reveal.extent);
+    assert.equal(group.reveal.fullExtent, slot);
+    assert.equal(group.reveal.rows, window);
+  }
+  assert.equal(group.reveal.cacheCount(59), 13);
+  assert.ok(group.reveal.cacheCount(59) < group.rowCount);
+  group.reveal.running = false;
+  assert.equal(group.reveal.tailOffset, 0);
+  group.reveal.firstRow = 499;
+  group.reveal.crop = 0;
+  group.reveal.begin(rows, 94, 500, true);
+  assert.equal(group.reveal.rows.length, 1);
+  assert.equal(group.reveal.fullExtent, 96);
+  assert.equal(group.rows.totalCount(), 500);
 });
 
 test('五种组类型与手动选择权限，自动首选不冒充actual now', () => {

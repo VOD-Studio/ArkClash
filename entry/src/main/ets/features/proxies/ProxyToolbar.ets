@@ -9,6 +9,7 @@ export struct ProxyToolbar {
   @Param @Require browser: ProxyBrowser;
   @Param pickerMode: boolean = false;
   @Param active: boolean = true;
+  @Param motionEnabled: boolean = false;
   @Event onLocate: (groupName: string) => void = () => {};
   @Local searchShown: boolean = false;
   private densities: ProxyDensity[] = ['loose', 'standard', 'compact'];
@@ -179,6 +180,7 @@ export struct ProxyToolbar {
         .onClick(() => this.toggleTimeout())
     }
     .font({ size: 15, weight: FontWeight.Normal })
+    .subMenuExpandingMode(SubMenuExpandingMode.STACK_EXPAND)
   }
 
   @Builder
@@ -247,7 +249,10 @@ export struct ProxyToolbar {
         }
         .attributeModifier(HEADER_ACTION)
         .accessibilityText($r('app.string.proxy_style'))
-        .bindMenu(this.styleMenu)
+        .bindMenu(this.styleMenu, {
+          placement: Placement.BottomRight,
+          transition: this.motionEnabled ? undefined : TransitionEffect.IDENTITY
+        })
       }
     }
     .width('100%')
