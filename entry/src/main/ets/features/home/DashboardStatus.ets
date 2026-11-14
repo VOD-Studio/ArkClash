@@ -431,7 +431,7 @@ export struct DashboardStatus {
         .padding({ left: 20, right: 16, top: 18, bottom: 18 })
       }
       .width('100%')
-      .background((): void => { this.Decoration(); })
+      .background(this.Decoration)
       if (this.probe.stale || this.probe.failed || this.conn.error !== '') {
         Text(this.conn.error !== '' ? $r('app.string.dash_runtime_error') :
           this.probe.failure === 'capacity' ? $r('app.string.dash_probe_busy') :
@@ -446,7 +446,7 @@ export struct DashboardStatus {
     .background(dashboardCardShadow)
     .padding(0)
     .clip(true)
-    .bindSheet($$this.details, (): void => { this.Details(); }, {
+    .bindSheet($$this.details, this.Details, {
       title: { title: $r('app.string.dash_exit_details') }, detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       systemMaterial: sheetMaterial(), showClose: true
     })

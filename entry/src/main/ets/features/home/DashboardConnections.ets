@@ -131,7 +131,7 @@ export struct DashboardConnections {
     .padding(8)
     .accessibilityText($r('app.string.card_conn_stats'))
     .onClick((): void => { if (this.interactive) { this.details = true; } })
-    .bindSheet($$this.details, (): void => { this.Details(); }, {
+    .bindSheet($$this.details, this.Details, {
       title: { title: $r('app.string.card_conn_stats') }, detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       systemMaterial: sheetMaterial(), showClose: true
     })

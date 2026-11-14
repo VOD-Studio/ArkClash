@@ -235,7 +235,7 @@ export struct DashboardServices {
     .attributeModifier(DASHBOARD_CARD)
     .background(dashboardCardShadow)
     .onClick((): void => { if (this.interactive) { this.details = true; } })
-    .bindSheet($$this.details, (): void => { this.Details(); }, {
+    .bindSheet($$this.details, this.Details, {
       title: { title: this.managing ? $r('app.string.dash_service_manage') : $r('app.string.card_services') },
       detents: [SheetSize.LARGE],
       systemMaterial: sheetMaterial(), showClose: true,
