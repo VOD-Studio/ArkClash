@@ -148,6 +148,7 @@ export struct ProfileImportSheet {
       }
       .layoutWeight(1)
       .width('100%')
+      .align(Alignment.TopStart)
       .scrollBar(BarState.Off)
     }
     .height('100%')

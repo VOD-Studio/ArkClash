@@ -6,15 +6,14 @@ import { connection, Connection } from '../client/Connection';
 import { traffic } from '../client/Traffic';
 import { sheetMaterial } from '../components/Theme';
 import { ConnectionBar } from '../features/home/ConnectionBar';
-import { HomePage } from '../features/home/HomePage';
 import { ProfileItem, ProfileStore } from '../features/profiles/Profiles';
 import { ProfilesPage } from '../features/profiles/ProfilesPage';
-import { SummaryGroup } from '../shared/profiles/Summary';
 import { ProxiesPage } from '../features/proxies/ProxiesPage';
 import { ToolPage } from '../features/tools/ToolPages';
 import { ToolRoute } from '../features/tools/ToolRoutes';
 import { ToolsPage } from '../features/tools/ToolsPage';
 import { WindowInsets } from './WindowInsets';
+import { DashboardTab } from './DashboardTab';
 
 enum Tab {
   Home,
@@ -37,8 +36,6 @@ struct Index {
   @Local tab: number = Tab.Home;
   @Local foreground: boolean = true;
   @Local profiles: ProfileStore = new ProfileStore();
-  @Local profileSheetRequested: boolean = false;
-  @Local profileDetailRequested: string = '';
   @Local proxyPicker: boolean = false;
   @Local profilePicker: boolean = false;
   @Local homeEditing: boolean = false;
@@ -91,14 +88,6 @@ struct Index {
     return this.profiles.active();
   }
 
-  @Computed
-  get summaryGroupIcons(): Record<string, string> {
-    const icons: Record<string, string> = {};
-    for (const group of this.profiles.summary?.groups ?? []) {
-      if (group.icon !== undefined && group.icon !== '') { icons[group.name] = group.icon; }
-    }
-    return icons;
-  }
 
   // 流量推送只在有人看的时候订阅：首页可见，或者连接条展开着。
   @Monitor('tab', 'foreground', 'miniBarExpanded', 'conn.state')
@@ -159,45 +148,13 @@ struct Index {
       Navigation(this.stack) {
         HdsTabs({ barPosition: BarPosition.End, controller: this.tabs, index: this.tab }) {
           TabContent() {
-            HomePage({
-              scroller: this.scrollers[Tab.Home],
+            DashboardTab({
+              store: this.profiles, scroller: this.scrollers[Tab.Home], topInset: this.topInset(),
+              visible: this.tab === Tab.Home && this.foreground, closeEditSignal: this.closeEditSignal,
               onScrollDirection: (down: boolean) => this.onScrollDirection(down),
-              topInset: this.topInset(),
-              profileReady: this.profiles.ready,
-              canSwitchProfile: this.profiles.items.length > 1,
-              onSwitchProfile: (): void => { this.profilePicker = true; },
-              profileId: this.activeProfile()?.id ?? '',
-              profileProxyCount: this.profiles.summary?.proxies ?? -1,
-              profileSource: this.activeProfile()?.isSubscription === true ? 'url' : 'local',
-              routeRevision: this.conn.routeRevision,
-              closeEditSignal: this.closeEditSignal,
               onEditingChanged: (editing: boolean) => { this.homeEditing = editing; },
-              onOpenProfile: () => {
-                this.profileDetailRequested = this.activeProfile()?.id ?? '';
-                this.tabs.changeIndex(Tab.Profiles);
-              },
-              profileName: this.activeProfile()?.name ?? '',
-              profileUpdatedAt: this.activeProfile()?.state.updatedAt ?? 0,
-              profileUpdating: this.activeProfile()?.updating ?? false,
-              profileUpdatable: this.activeProfile()?.isSubscription ?? false,
-              usedBytes: (this.activeProfile()?.state.usage?.upload ?? 0) +
-                (this.activeProfile()?.state.usage?.download ?? 0),
-              totalBytes: this.activeProfile()?.state.usage?.total ?? 0,
-              expireAt: this.activeProfile()?.state.usage?.expire ?? 0,
-              summaryGroups: this.profiles.summary?.groups.map((g: SummaryGroup) => g.name) ?? [],
-              summaryGroupIcons: this.summaryGroupIcons,
-              visible: this.tab === Tab.Home && this.foreground,
-              onAddProfile: () => {
-                this.profileSheetRequested = true;
-                this.tabs.changeIndex(Tab.Profiles);
-              },
+              onSwitchProfile: (): void => { this.profilePicker = true; },
               onOpenProfiles: () => this.tabs.changeIndex(Tab.Profiles),
-              onUpdateProfile: () => {
-                const active = this.activeProfile();
-                if (active !== undefined) {
-                  this.profiles.update(active.id);
-                }
-              },
               onOpenProxies: () => { this.proxyPicker = true; }
             })
           }
@@ -226,12 +183,6 @@ struct Index {
               store: this.profiles,
               topInset: this.topInset(),
               visible: this.foreground && this.tab === Tab.Profiles,
-              detailRequested: this.profileDetailRequested,
-              onDetailHandled: () => { this.profileDetailRequested = ''; },
-              sheetRequested: this.profileSheetRequested,
-              onSheetHandled: () => {
-                this.profileSheetRequested = false;
-              }
             })
           }
           .tabBar(tabBar($r('sys.symbol.doc_text'), $r('sys.symbol.doc_text_fill'), $r('app.string.tab_profiles')))

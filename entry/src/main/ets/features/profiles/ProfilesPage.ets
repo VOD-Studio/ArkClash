@@ -8,7 +8,7 @@ import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { ProfileCard } from './ProfileCard';
 import { ProfileDetails } from './ProfileDetails';
 import { ProfileDraft } from './ProfileDraft';
-import { ProfileEditor } from './ProfileEditor';
+import { confirmProfileEditorDismiss, ProfileEditor } from './ProfileEditor';
 import { describeError } from './ProfileErrors';
 import { ProfileImportSheet } from './ProfileImportSheet';
 import { ProfileBatchResult, ProfileItem, ProfileStore } from './Profiles';
@@ -23,10 +23,6 @@ export struct ProfilesPage {
   @Param topInset: number = 0;
   @Param pickerMode: boolean = false;
   @Param visible: boolean = true;
-  @Param sheetRequested: boolean = false;
-  @Event onSheetHandled: () => void = (): void => {};
-  @Param detailRequested: string = '';
-  @Event onDetailHandled: () => void = (): void => {};
   @Local detailShown: boolean = false;
   @Local detailItem: ProfileItem | undefined = undefined;
   @Local addShown: boolean = false;
@@ -56,24 +52,8 @@ export struct ProfilesPage {
   @Monitor('visible')
   onVisibilityChange(): void { this.clockVisible(this.clockInView); }
 
-  @Monitor('sheetRequested')
-  onSheetRequested(): void {
-    if (this.sheetRequested) { this.openAdd(); this.onSheetHandled(); }
-  }
-
-  @Monitor('detailRequested', 'store.loaded')
-  onDetailRequested(): void {
-    if (this.detailRequested === '' || !this.store.loaded) { return; }
-    const item = this.store.find(this.detailRequested);
-    if (item !== undefined) { this.detailItem = item; this.detailShown = true; }
-    else { this.toast(describeError('not_found')); }
-    this.onDetailHandled();
-  }
-
   aboutToAppear(): void {
     this.rows.replace(this.store.items);
-    this.onSheetRequested();
-    this.onDetailRequested();
   }
 
   @Monitor('store.items')
@@ -154,22 +134,6 @@ export struct ProfilesPage {
         } }
     });
   }
-  private closeEditor(dismiss: () => void): void {
-    const draft = this.draft;
-    if (draft === undefined) { dismiss(); return; }
-    if (draft.saving) { return; }
-    if (!draft.dirty()) { dismiss(); return; }
-    this.getUIContext().showAlertDialog({
-      title: $r('app.string.profile_unsaved_title'), message: $r('app.string.profile_unsaved_message'), autoCancel: false,
-      buttons: [
-        { value: $r('app.string.profile_discard'), action: (): void => dismiss() },
-        { value: $r('app.string.profile_keep_editing'), action: (): void => {} },
-        { value: $r('app.string.action_save'), action: (): void => {
-          draft.save?.().then((saved: boolean): void => { if (saved) { dismiss(); } });
-        } }
-      ]
-    });
-  }
 
   @Builder
   Content() {
@@ -247,7 +211,8 @@ export struct ProfilesPage {
       ProfileEditor({ store: this.store, draft: this.draft, onSaved: (): void => {
         if (this.draft !== undefined) { this.draft.saving = false; }
         this.editShown = false;
-      }, onClose: (): void => this.closeEditor((): void => { this.editShown = false; }) })
+      }, onClose: (): void => confirmProfileEditorDismiss(this.getUIContext(), this.draft,
+        (): void => { this.editShown = false; }) })
     }
   }
   @Builder
@@ -288,7 +253,8 @@ export struct ProfilesPage {
             .width('100%').height('100%')
             .bindSheet($$this.editShown, this.EditSheet(), {
               height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
-              onWillDismiss: (action: DismissSheetAction): void => this.closeEditor((): void => action.dismiss()),
+              onWillDismiss: (action: DismissSheetAction): void =>
+                confirmProfileEditorDismiss(this.getUIContext(), this.draft, (): void => action.dismiss()),
               onDisappear: (): void => { this.draft = undefined; } })
           }
           .width('100%').height('100%')

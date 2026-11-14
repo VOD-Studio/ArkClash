@@ -1,3 +1,4 @@
+import { UIContext } from '@kit.ArkUI';
 import { formatDateTime } from '../../components/Format';
 import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { errorString } from '../../shared/profiles/Errors';
@@ -5,6 +6,23 @@ import { describeError } from './ProfileErrors';
 import { ProfileDraft } from './ProfileDraft';
 import { ProfileEdit, ProfileStore } from './Profiles';
 import { ProfileSheetHeader } from './ProfileSheetHeader';
+
+export function confirmProfileEditorDismiss(context: UIContext, draft: ProfileDraft | undefined,
+  dismiss: () => void): void {
+  if (draft === undefined) { dismiss(); return; }
+  if (draft.saving) { return; }
+  if (!draft.dirty()) { dismiss(); return; }
+  context.showAlertDialog({
+    title: $r('app.string.profile_unsaved_title'), message: $r('app.string.profile_unsaved_message'), autoCancel: false,
+    buttons: [
+      { value: $r('app.string.profile_discard'), action: (): void => dismiss() },
+      { value: $r('app.string.profile_keep_editing'), action: (): void => {} },
+      { value: $r('app.string.action_save'), action: (): void => {
+        draft.save?.().then((saved: boolean): void => { if (saved) { dismiss(); } });
+      } }
+    ]
+  });
+}
 
 @ComponentV2
 export struct ProfileEditor {
@@ -51,13 +69,19 @@ export struct ProfileEditor {
   private async saveSource(): Promise<boolean> {
     if (this.validating) { return false; }
     this.validating = true;
-    const failure = await this.store.validateSource(this.sourceText);
-    this.validating = false;
-    if (failure !== undefined) { this.sourceError = failure; return false; }
-    if (this.sourceText !== this.sourceOriginal) { this.draft.content = this.sourceText; }
-    this.sourceOriginal = this.sourceText;
-    this.sourceShown = false;
-    return true;
+    try {
+      const failure = await this.store.validateSource(this.sourceText);
+      if (failure !== undefined) { this.sourceError = failure; return false; }
+      if (this.sourceText !== this.sourceOriginal) { this.draft.content = this.sourceText; }
+      this.sourceOriginal = this.sourceText;
+      this.sourceShown = false;
+      return true;
+    } catch (e) {
+      this.sourceError = errorString(e as Object);
+      return false;
+    } finally {
+      this.validating = false;
+    }
   }
 
   private closeSource(dismiss: () => void): void {
@@ -98,6 +122,9 @@ export struct ProfileEditor {
       this.draft.saved();
       this.onSaved();
       return true;
+    } catch (e) {
+      this.draft.error = errorString(e as Object);
+      return false;
     } finally { this.draft.saving = false; }
   }
 
@@ -251,6 +278,7 @@ export struct ProfileEditor {
         })
       }
       .layoutWeight(1).width('100%').scrollBar(BarState.Off)
+      .align(Alignment.TopStart)
     }
     .width('100%').height('100%')
   }

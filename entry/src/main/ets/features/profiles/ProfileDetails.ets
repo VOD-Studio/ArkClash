@@ -142,6 +142,7 @@ export struct ProfileDetails {
     }
     .height('100%')
     .width('100%')
+    .align(Alignment.TopStart)
     .bindSheet($$this.sourceShown, this.SourcePreview(), { title: { title: this.item.name },
       height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true })
   }
