@@ -1,4 +1,6 @@
 import { common } from '@kit.AbilityKit';
+import { accessibility } from '@kit.AccessibilityKit';
+import { curves, UIUtils } from '@kit.ArkUI';
 import { HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { TabPage } from '../../components/TabPage';
 import { CARD } from '../../components/Theme';
@@ -51,14 +53,33 @@ export struct HomePage {
   @Event onEditingChanged: (editing: boolean) => void = () => {};
   @Local settings: DashboardSettings = dashboardSettings;
   @Local editing: boolean = false;
+  @Local displayedCards: string[] = [];
+  @Local reduceMotion: boolean = true;
+  private readonly cardTransition: TransitionEffect = TransitionEffect.opacity(0)
+    .combine(TransitionEffect.translate({ y: 8 }))
+    .animation({ curve: curves.springMotion(0.3, 0.9) });
+  private readonly controlTransition: TransitionEffect = TransitionEffect.opacity(0)
+    .combine(TransitionEffect.scale({ x: 0.8, y: 0.8 }))
+    .animation({ curve: curves.responsiveSpringMotion() });
+  private reductionListener: (enabled: boolean) => void = (enabled: boolean): void => {
+    this.reduceMotion = enabled;
+  };
   private dragging: string = '';
+  private appeared: boolean = false;
+  private savingCards: boolean = false;
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
 
   aboutToAppear(): void {
+    this.appeared = true;
+    this.reduceMotion = accessibility.isAnimationReduceEnabledSync();
+    accessibility.onAnimationReduceStateChange(this.reductionListener);
+    this.displayedCards = this.settings.cards;
     this.settings.load(this.context);
   }
 
   aboutToDisappear(): void {
+    this.appeared = false;
+    accessibility.offAnimationReduceStateChange(this.reductionListener);
     this.onEditingChanged(false);
   }
 
@@ -72,25 +93,62 @@ export struct HomePage {
     this.onEditingChanged(this.editing);
   }
 
+  private setEditing(editing: boolean): void {
+    if (!this.appeared || !this.visible || this.reduceMotion) {
+      this.editing = editing;
+      return;
+    }
+    this.getUIContext().animateTo({ curve: curves.springMotion(0.3, 0.9) }, (): void => {
+      this.editing = editing;
+      UIUtils.flushUIUpdates();
+    });
+  }
+
+  @Monitor('settings.cards')
+  updateDisplayedCards(): void {
+    if (!this.savingCards) {
+      this.displayedCards = this.settings.cards;
+    }
+  }
+
+  private presentCards(): void {
+    const cards = this.settings.cards;
+    if (!this.appeared || !this.visible || !this.editing || this.reduceMotion || this.displayedCards.length === 0) {
+      this.displayedCards = cards;
+      return;
+    }
+    // Monitor 不能同步刷新 UI；只在用户保存完成后提交呈现动画。
+    this.getUIContext().animateTo({ curve: curves.springMotion(0.3, 0.9) }, (): void => {
+      this.displayedCards = cards;
+      UIUtils.flushUIUpdates();
+    });
+  }
+
   private menus(): HdsNavigationMenuItemOptions[] {
     return [{
       content: {
         label: this.editing ? $r('app.string.dash_done') : $r('app.string.dash_edit_cards'),
         icon: this.editing ? $r('sys.symbol.checkmark') : $r('sys.symbol.pencil_line'),
         isEnabled: this.settings.ready,
-        action: (): void => { this.editing = !this.editing; }
+        action: (): void => { this.setEditing(!this.editing); }
       }
     }];
   }
 
   private async saveCards(cards: string[]): Promise<void> {
-    if (!this.editing || this.settings.saving) {
+    if (!this.editing || this.settings.saving || this.savingCards) {
       return;
     }
+    this.savingCards = true;
     try {
       await this.settings.commit({ cards: cards }, this.settings.revision);
     } catch (e) {
-      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.dash_save_failed') });
+      if (this.appeared) {
+        this.getUIContext().getPromptAction().showToast({ message: $r('app.string.dash_save_failed') });
+      }
+    } finally {
+      this.savingCards = false;
+      this.presentCards();
     }
   }
 
@@ -109,10 +167,19 @@ export struct HomePage {
   }
 
   private async retrySave(): Promise<void> {
+    if (this.settings.saving || this.savingCards) {
+      return;
+    }
+    this.savingCards = true;
     try {
       await this.settings.retryDraft();
     } catch (e) {
-      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.dash_save_failed') });
+      if (this.appeared) {
+        this.getUIContext().getPromptAction().showToast({ message: $r('app.string.dash_save_failed') });
+      }
+    } finally {
+      this.savingCards = false;
+      this.presentCards();
     }
   }
 
@@ -160,11 +227,13 @@ export struct HomePage {
     .borderRadius(22)
     .backgroundColor($r('app.color.dash_addable_background'))
     .enabled(!this.settings.saving)
+    .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.cardTransition)
   }
 
   @Builder
   EditableCard(id: string) {
-    DashboardEditMotion({ active: this.editing && this.visible, seed: dashboardCardMotionSeed(id) }) {
+    DashboardEditMotion({ active: this.editing && this.visible, seed: dashboardCardMotionSeed(id),
+      reduceMotion: this.reduceMotion }) {
       Stack({ alignContent: Alignment.TopEnd }) {
         Column() { this.Card(id) }
           .width('100%')
@@ -182,6 +251,7 @@ export struct HomePage {
           .onClick((): void => {
             this.saveCards(this.settings.cards.filter((card: string): boolean => card !== id));
           })
+          .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.controlTransition)
         }
       }
       .width('100%')
@@ -193,6 +263,7 @@ export struct HomePage {
       .onDragEnd((): void => { this.dragging = ''; })
       .onDrop((): void => { if (this.editing) { this.drop(id); } })
       .accessibilityDescription(uiResourceText(this.getUIContext(), this.editing ? $r('app.string.dash_drag_hint') : ''))
+      .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.cardTransition)
     }
   }
 
@@ -204,7 +275,7 @@ export struct HomePage {
     } else if (id === 'speed') {
       DashboardSpeed({ visible: this.visible })
     } else if (id === 'mode') {
-      DashboardMode({ interactive: !this.editing })
+      DashboardMode({ interactive: !this.editing, motionEnabled: this.visible && !this.reduceMotion })
     } else if (id === 'profile') {
       DashboardProfile({
         visible: this.visible, interactive: !this.editing, profileReady: this.profileReady, profileName: this.profileName,
@@ -256,7 +327,7 @@ export struct HomePage {
       }
       if (this.settings.ready) {
         Column({ space: 8 }) {
-          ForEach(this.settings.cards, (id: string): void => {
+          ForEach(this.displayedCards, (id: string): void => {
             this.EditableCard(id)
           }, (id: string): string => id)
           if (this.editing && this.availableCards().length > 0) {
@@ -273,6 +344,7 @@ export struct HomePage {
             .width('100%')
             .alignItems(HorizontalAlign.Start)
             .margin({ top: 14 })
+            .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.controlTransition)
           }
         }
         .width('100%')

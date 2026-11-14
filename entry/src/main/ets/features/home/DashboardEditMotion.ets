@@ -1,58 +1,31 @@
-import { accessibility } from '@kit.AccessibilityKit';
-import { AnimatorResult } from '@kit.ArkUI';
-
-const DASHBOARD_EDIT_SWINGS: number[] = [6, 7, 5];
-
 @ComponentV2
 export struct DashboardEditMotion {
   @Param active: boolean = false;
   @Param seed: number = 0;
+  @Param reduceMotion: boolean = true;
   @BuilderParam @Require content: () => void;
-  @Local turnDegrees: number = 0;
-  @Local bobOffset: number = 0;
-  @Local reduceMotion: boolean = true;
-  private sway: AnimatorResult | undefined = undefined;
-  private reductionListener: (enabled: boolean) => void = (enabled: boolean): void => {
-    this.reduceMotion = enabled;
-    this.sync();
-  };
-
-  aboutToAppear(): void {
-    this.reduceMotion = accessibility.isAnimationReduceEnabledSync();
-    accessibility.onAnimationReduceStateChange(this.reductionListener);
-    this.sync();
-  }
-
-  aboutToDisappear(): void {
-    accessibility.offAnimationReduceStateChange(this.reductionListener);
-    this.stop();
-  }
+  @Local angle: number = 0;
+  @Local lift: number = 0;
+  private appeared: boolean = false;
+  private looping: boolean = false;
 
   @Monitor('active', 'reduceMotion')
-  sync(): void {
-    if (!this.active || this.reduceMotion) {
-      this.stop();
+  syncAnimation(): void {
+    const looping = this.active && !this.reduceMotion;
+    if (!this.appeared || looping === this.looping) {
       return;
     }
-    if (this.sway !== undefined) {
-      return;
-    }
-    this.sway = this.getUIContext().createAnimator({ duration: 3600, easing: 'linear', delay: 0,
-      fill: 'none', direction: 'normal', iterations: -1, begin: 0, end: 1 });
-    this.sway.onFrame = (progress: number): void => {
-      const turn = progress * 2 * Math.PI * DASHBOARD_EDIT_SWINGS[this.seed % DASHBOARD_EDIT_SWINGS.length] +
-        this.seed * 1.7;
-      this.turnDegrees = Math.sin(turn) * 0.7;
-      this.bobOffset = Math.cos(turn) * 1.25;
-    };
-    this.sway.play();
-  }
-
-  private stop(): void {
-    this.sway?.cancel();
-    this.sway = undefined;
-    this.turnDegrees = 0;
-    this.bobOffset = 0;
+    this.looping = looping;
+    // 用零时长闭包改回原位，终止已提交的无限动画，而不是只替换下一次动画参数。
+    this.getUIContext().animateToImmediately({
+      duration: looping ? 360 + this.seed % 3 * 60 : 0,
+      curve: Curve.EaseInOut,
+      iterations: looping ? -1 : 1,
+      playMode: looping ? PlayMode.Alternate : PlayMode.Normal
+    }, (): void => {
+      this.angle = looping ? (this.seed % 2 === 0 ? 0.7 : -0.7) : 0;
+      this.lift = looping ? 0.7 : 0;
+    });
   }
 
   build() {
@@ -60,7 +33,14 @@ export struct DashboardEditMotion {
       this.content()
     }
     .width('100%')
-    .rotate({ angle: this.turnDegrees })
-    .offset({ y: this.bobOffset })
+    .rotate({ angle: this.angle })
+    .translate({ y: this.lift })
+    .onAppear((): void => { this.appeared = true; this.syncAnimation(); })
+    .onDisAppear((): void => {
+      this.appeared = false;
+      this.looping = false;
+      this.angle = 0;
+      this.lift = 0;
+    })
   }
 }

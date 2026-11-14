@@ -2,7 +2,7 @@ import { LengthMetrics } from '@kit.ArkUI';
 import { uiResourceText } from './ResourceText';
 import {
   HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, HdsTitleBarContentStyle, hdsMaterial,
-  ScrollEffectType
+  ScrollEffectType, TitleBarContentOptions
 } from '@kit.UIDesignKit';
 import { FLOATING_BAR_INSET, PAGE_GUTTER, SECTION_GAP } from './Theme';
 
@@ -16,6 +16,12 @@ const CONTENT_STYLE: HdsTitleBarContentStyle = {
   titleStyle: { mainTitleColor: $r('sys.color.font_primary') },
   menuStyle: { iconColor: $r('sys.color.icon_primary'), backgroundColor: $r('sys.color.comp_background_tertiary') }
 };
+
+interface TabPageHeaderState {
+  title: ResourceStr;
+  menus: HdsNavigationMenuItemOptions[];
+  customTitle: boolean;
+}
 
 /**
  * 一级页面的骨架，按 UI Design Kit 官方写法：标题栏叠在内容上，内容滚到标题栏下面时
@@ -61,13 +67,24 @@ export struct TabPage {
     return typeof label === 'string' ? label : `${label?.id ?? -1}`;
   }
 
+  private headerContent(title: ResourceStr, menus: HdsNavigationMenuItemOptions[],
+    customTitle: boolean): TitleBarContentOptions {
+    // 在 titleBar 的观察边界读取状态；旧 stackBuilder 只在延后执行时读取，未订阅参数更新。
+    return {
+      stackBuilderContent: {
+        builder: (): void => this.Header({ title: title, menus: menus, customTitle: customTitle }),
+        updated: true
+      }
+    };
+  }
+
   @Builder
-  Header() {
-    if (this.customTitle) {
+  Header($$: TabPageHeaderState) {
+    if ($$.customTitle) {
       this.titleContent()
     } else {
       Row({ space: 8 }) {
-        Text(this.title)
+        Text($$.title)
           .fontSize(24)
           .lineHeight(30)
           .fontWeight(600)
@@ -75,10 +92,10 @@ export struct TabPage {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
-        ForEach(this.menus, (menu: HdsNavigationMenuItemOptions): void => {
+        Repeat($$.menus).each((menu: RepeatItem<HdsNavigationMenuItemOptions>): void => {
           Button() {
-            if (menu.content?.icon !== undefined) {
-              SymbolGlyph(menu.content.icon as Resource)
+            if (menu.item.content?.icon !== undefined) {
+              SymbolGlyph(menu.item.content.icon as Resource)
                 .fontSize(24)
                 .fontColor([$r('sys.color.icon_primary')])
             }
@@ -87,10 +104,10 @@ export struct TabPage {
           .height(40)
           .borderRadius(20)
           .backgroundColor($r('app.color.surface_block'))
-          .enabled(menu.content?.isEnabled ?? true)
-          .accessibilityText(uiResourceText(this.getUIContext(), menu.content?.label ?? ''))
-          .onClick((): void => { menu.content?.action?.(); })
-        }, (menu: HdsNavigationMenuItemOptions): string => this.menuKey(menu))
+          .enabled(menu.item.content?.isEnabled ?? true)
+          .accessibilityText(uiResourceText(this.getUIContext(), menu.item.content?.label ?? ''))
+          .onClick((): void => { menu.item.content?.action?.(); })
+        }).key((menu: HdsNavigationMenuItemOptions): string => this.menuKey(menu))
       }
       .width('100%')
       .height(TITLE_BAR_HEIGHT)
@@ -157,9 +174,7 @@ export struct TabPage {
         originalStyle: { contentStyle: CONTENT_STYLE },
         scrollEffectStyle: { contentStyle: CONTENT_STYLE }
       },
-      content: {
-        stackBuilder: (): void => this.Header()
-      }
+      content: this.headerContent(this.title, this.menus, this.customTitle)
     })
     // 内容铺进状态栏，从状态栏和标题栏下面滚过；标题栏自己让开状态栏（avoidLayoutSafeArea）。
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])

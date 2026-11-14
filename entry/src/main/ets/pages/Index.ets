@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { accessibility } from '@kit.AccessibilityKit';
 import { AppStorageV2, SymbolGlyphModifier } from '@kit.ArkUI';
 import { HdsBarStyle, HdsTabs, HdsTabsBarChangeMode, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
 import { connection, Connection } from '../client/Connection';
@@ -45,6 +46,10 @@ struct Index {
   @Local conn: Connection = connection;
   @Local insets: WindowInsets = AppStorageV2.connect(WindowInsets, () => new WindowInsets())!;
   @Local miniBarExpanded: boolean = false;
+  @Local reduceMotion: boolean = true;
+  private reductionListener: (enabled: boolean) => void = (enabled: boolean): void => {
+    this.reduceMotion = enabled;
+  };
   private tabs: HdsTabsController = new HdsTabsController();
   private pickerScroller: ListScroller = new ListScroller();
   private profilePickerScroller: ListScroller = new ListScroller();
@@ -53,6 +58,8 @@ struct Index {
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
 
   aboutToAppear(): void {
+    this.reduceMotion = accessibility.isAnimationReduceEnabledSync();
+    accessibility.onAnimationReduceStateChange(this.reductionListener);
     this.profiles.load(this.context);
     this.conn.restore(this.context);
     this.syncProfiles();
@@ -60,6 +67,7 @@ struct Index {
   }
 
   aboutToDisappear(): void {
+    accessibility.offAnimationReduceStateChange(this.reductionListener);
     this.scrollers.forEach((scroller: Scroller) => this.tabs.unbindScroller(scroller));
     traffic.stop('shell');
     this.conn.observe(this.context, false);
@@ -149,7 +157,7 @@ struct Index {
     Stack() {
       this.Backdrop()
       Navigation(this.stack) {
-        HdsTabs({ barPosition: BarPosition.End, controller: this.tabs }) {
+        HdsTabs({ barPosition: BarPosition.End, controller: this.tabs, index: this.tab }) {
           TabContent() {
             HomePage({
               scroller: this.scrollers[Tab.Home],
@@ -243,7 +251,7 @@ struct Index {
         }
         .scrollable(false)
         // 有 BottomTabBarStyle 页签时切换动画默认是 0（没有动画），按其他样式的默认值给 300ms。
-        .animationDuration(300)
+        .animationDuration(this.reduceMotion ? 0 : 300)
         // 悬浮样式只在 barOverlap(true)、barPosition 为 End、横向页签时生效。
         .barOverlap(true)
         .vertical(false)

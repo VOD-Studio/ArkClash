@@ -8,6 +8,7 @@ const DASHBOARD_MODES: OutboundMode[] = ['rule', 'global', 'direct'];
 
 @ComponentV2
 export struct DashboardMode {
+  @Param motionEnabled: boolean = false;
   @Param interactive: boolean = true;
   @Local conn: Connection = connection;
   @Local requested: OutboundMode | '' = '';
@@ -39,7 +40,7 @@ export struct DashboardMode {
         items: this.modeItems,
         selectedIndex: Math.max(0, DASHBOARD_MODES.indexOf(this.conn.mode as OutboundMode)),
         $selectedIndex: (index: number): void => { this.choose(index); },
-        enableStateAnimation: false,
+        enableStateAnimation: this.motionEnabled,
         backgroundSystemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR })
       })
         .width('100%')
