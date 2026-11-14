@@ -6,11 +6,11 @@
     },
     {
       "name": "page_background",
-      "value": "#F2F4F8"
+      "value": "#EFEDEE"
     },
     {
       "name": "card_background",
-      "value": "#FFFFFF"
+      "value": "#FAF7F8"
     },
     {
       "name": "brand",
@@ -119,6 +119,10 @@
     {
       "name": "selection_tonal",
       "value": "#242E6BFF"
+    },
+    {
+      "name": "node_surface",
+      "value": "#F5F2F3"
     },
     {
       "name": "dash_status_decoration",
