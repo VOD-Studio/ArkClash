@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { getMainGroup, GroupSummary } from '../../client/Controller';
-import { dashboardCardShadow, DASHBOARD_CARD } from '../../components/Theme';
+import { DASHBOARD_CARD } from '../../components/Theme';
 import { DashboardCardHeader } from './DashboardCardHeader';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DashboardGroupAvatar } from './DashboardGroupAvatar';
@@ -182,7 +182,6 @@ export struct DashboardGroups {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
-    .background(dashboardCardShadow)
     .onClick((): void => { if (this.interactive && this.names().length > 0) { this.onOpen(); } })
   }
 }

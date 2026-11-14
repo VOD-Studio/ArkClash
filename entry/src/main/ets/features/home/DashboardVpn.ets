@@ -1,6 +1,6 @@
 import { connection, Connection } from '../../client/Connection';
 import { LabeledValue } from '../../components/Labels';
-import { dashboardCardShadow, DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DASHBOARD_COOKIE6 } from './DashboardShapePaths';
 
@@ -101,7 +101,6 @@ export struct DashboardVpn {
         .margin({ top: 8 })
     }
     .attributeModifier(DASHBOARD_CARD)
-    .background(dashboardCardShadow)
     .padding({ left: 20, right: 20, top: 16, bottom: 16 })
     .onClick((): void => { if (this.interactive) { this.details = true; } })
     .bindSheet($$this.details, this.Details, {

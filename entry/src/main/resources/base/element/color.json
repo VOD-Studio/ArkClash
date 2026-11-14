@@ -137,16 +137,8 @@
       "value": "#26E5484D"
     },
     {
-      "name": "dashboard_shadow_contact",
+      "name": "dashboard_shadow",
       "value": "#0D000000"
-    },
-    {
-      "name": "dashboard_shadow_ambient",
-      "value": "#0A000000"
-    },
-    {
-      "name": "dashboard_shadow_diffuse",
-      "value": "#17000000"
     }
   ]
 }

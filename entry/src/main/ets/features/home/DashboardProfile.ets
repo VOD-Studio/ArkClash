@@ -1,5 +1,5 @@
 import { dashboardCount, dashboardTraffic, dashboardUpdatedAgo } from './DashboardFormat';
-import { dashboardCardShadow, DASHBOARD_CARD } from '../../components/Theme';
+import { DASHBOARD_CARD } from '../../components/Theme';
 import { DashboardUsageMeter } from './DashboardUsageMeter';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DashboardFigure } from './DashboardFigure';
@@ -192,7 +192,6 @@ export struct DashboardProfile {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
-    .background(dashboardCardShadow)
     .onClick((): void => {
       if (this.interactive) {
         if (this.profileReady) { this.onOpen(); } else { this.onAdd(); }

@@ -1,7 +1,7 @@
 import { CapsuleSegmentButtonV2, SegmentButtonV2Items, uiMaterial } from '@kit.ArkUI';
 import { connection, Connection } from '../../client/Connection';
 import { OutboundMode } from '../../client/Controller';
-import { dashboardCardShadow, DASHBOARD_CARD } from '../../components/Theme';
+import { DASHBOARD_CARD } from '../../components/Theme';
 import { DashboardCardHeader } from './DashboardCardHeader';
 
 const DASHBOARD_MODES: OutboundMode[] = ['rule', 'global', 'direct'];
@@ -61,6 +61,5 @@ export struct DashboardMode {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
-    .background(dashboardCardShadow)
   }
 }

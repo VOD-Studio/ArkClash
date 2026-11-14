@@ -3,7 +3,7 @@ import { connection, Connection } from '../../client/Connection';
 import { memoryStats, MemoryStats, UiMemoryStats } from '../../client/Stats';
 import { dashboardTraffic, dashboardTrafficValue, DashboardTrafficValue } from './DashboardFormat';
 import { LabeledValue } from '../../components/Labels';
-import { dashboardCardShadow, DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { DashboardCardHeader } from './DashboardCardHeader';
 
 @ComponentV2
@@ -217,7 +217,6 @@ export struct DashboardMemory {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
-    .background(dashboardCardShadow)
     .onClick((): void => { if (this.interactive) { this.details = true; } })
     .bindSheet($$this.details, this.Details, {
       title: { title: $r('app.string.card_memory') }, detents: [SheetSize.MEDIUM, SheetSize.LARGE],

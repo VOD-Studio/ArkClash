@@ -3,7 +3,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { i18n } from '@kit.LocalizationKit';
 import { connection, Connection, ConnectionState } from '../../client/Connection';
 import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
-import { dashboardCardShadow, DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { dashboardSettings, DashboardSettings } from './DashboardSettings';
 import { DASHBOARD_COOKIE9, DASHBOARD_COOKIE12 } from './DashboardShapePaths';
 import {
@@ -432,6 +432,8 @@ export struct DashboardStatus {
       }
       .width('100%')
       .background(this.Decoration)
+      .borderRadius(34)
+      .clip(true)
       if (this.probe.stale || this.probe.failed || this.conn.error !== '') {
         Text(this.conn.error !== '' ? $r('app.string.dash_runtime_error') :
           this.probe.failure === 'capacity' ? $r('app.string.dash_probe_busy') :
@@ -443,9 +445,7 @@ export struct DashboardStatus {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
-    .background(dashboardCardShadow)
     .padding(0)
-    .clip(true)
     .bindSheet($$this.details, this.Details, {
       title: { title: $r('app.string.dash_exit_details') }, detents: [SheetSize.MEDIUM, SheetSize.LARGE],
       systemMaterial: sheetMaterial(), showClose: true

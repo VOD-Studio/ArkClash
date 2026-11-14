@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { traffic, Traffic } from '../../client/Traffic';
-import { dashboardCardShadow, DASHBOARD_CARD } from '../../components/Theme';
+import { DASHBOARD_CARD } from '../../components/Theme';
 import { DashboardCardHeader } from './DashboardCardHeader';
 import { DashboardSpeedTile } from './DashboardSpeedTile';
 
@@ -53,6 +53,5 @@ export struct DashboardSpeed {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
-    .background(dashboardCardShadow)
   }
 }

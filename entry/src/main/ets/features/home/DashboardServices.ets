@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
-import { dashboardCardShadow, DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { uiResourceText } from '../../components/ResourceText';
 import { DashboardCardHeader } from './DashboardCardHeader';
 import { DashboardServiceRow, serviceConnectivityLabel } from './DashboardServiceRow';
@@ -233,7 +233,6 @@ export struct DashboardServices {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
-    .background(dashboardCardShadow)
     .onClick((): void => { if (this.interactive) { this.details = true; } })
     .bindSheet($$this.details, this.Details, {
       title: { title: this.managing ? $r('app.string.dash_service_manage') : $r('app.string.card_services') },

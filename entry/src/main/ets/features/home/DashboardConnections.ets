@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { connectionStats, ConnectionStats } from '../../client/Stats';
-import { dashboardCardShadow, DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { DashboardFigure } from './DashboardFigure';
 import { dashboardCount } from './DashboardFormat';
 
@@ -127,7 +127,6 @@ export struct DashboardConnections {
       }
     }
     .attributeModifier(DASHBOARD_CARD)
-    .background(dashboardCardShadow)
     .padding(8)
     .accessibilityText($r('app.string.card_conn_stats'))
     .onClick((): void => { if (this.interactive) { this.details = true; } })

@@ -2,7 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { connection, Connection } from '../../client/Connection';
 import { getAllowLan, getProxyPort } from '../../client/Controller';
-import { dashboardCardShadow, DASHBOARD_CARD } from '../../components/Theme';
+import { DASHBOARD_CARD } from '../../components/Theme';
 import { lanAddress } from './LanAddress';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DashboardHeaderAction } from './DashboardHeaderAction';
@@ -185,6 +185,5 @@ export struct DashboardLan {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
-    .background(dashboardCardShadow)
   }
 }
