@@ -126,11 +126,6 @@ export struct DashboardMemory {
         .padding(16)
         .borderRadius(22)
         .backgroundColor($r('app.color.tile_background'))
-        Text($r('app.string.dash_memory_scope'))
-          .fontSize(13)
-          .lineHeight(18)
-          .fontColor($r('sys.color.font_secondary'))
-          .width('100%')
         if (this.stale()) {
           Text($r('app.string.dash_memory_stale'))
             .fontSize(12)

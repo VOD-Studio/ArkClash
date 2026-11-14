@@ -82,19 +82,13 @@ export struct ProfileImportSheet {
               .width('100%')
           }
           if (this.importingMany) {
-            Column({ space: 8 }) {
-              TextArea({ text: this.batchSource, placeholder: $r('app.string.profile_batch_hint') })
-                .height(200)
-                .fontSize(17)
-                .fontColor($r('sys.color.font_primary'))
-                .backgroundColor($r('app.color.card_background'))
-                .borderRadius(24)
-                .onChange((text: string): void => { this.batchSource = text; })
-              Text($r('app.string.profile_batch_hint'))
-                .fontSize(13).lineHeight(18)
-                .fontColor($r('sys.color.font_secondary'))
-                .width('100%')
-            }
+            TextArea({ text: this.batchSource, placeholder: $r('app.string.profile_batch_hint') })
+              .height(200)
+              .fontSize(17)
+              .fontColor($r('sys.color.font_primary'))
+              .backgroundColor($r('app.color.card_background'))
+              .borderRadius(24)
+              .onChange((text: string): void => { this.batchSource = text; })
           } else {
             Column() {
               Row({ space: 16 }) {

@@ -673,24 +673,12 @@
       "value": "Could not read or apply network settings. Try again."
     },
     {
-      "name": "dash_memory_scope",
-      "value": "UI PSS + SwapPss includes proportional shared pages and swapped pages. VPN RSS includes the Go core. These measurements use different definitions and cannot be added into an app total."
-    },
-    {
-      "name": "dash_memory_scope_short",
-      "value": "Separate processes and memory measurements"
-    },
-    {
       "name": "dash_memory_stale",
       "value": "Memory sample is stale or could not be read"
     },
     {
       "name": "dash_mode_failed",
       "value": "Mode change failed. The last confirmed mode is shown."
-    },
-    {
-      "name": "dash_mode_next_start",
-      "value": "Used on the next start"
     },
     {
       "name": "dash_mode_pending",
@@ -706,7 +694,7 @@
     },
     {
       "name": "dash_paused",
-      "value": "Paused; start intent is retained"
+      "value": "Paused"
     },
     {
       "name": "dash_profile_counts",
@@ -894,7 +882,7 @@
     },
     {
       "name": "dash_vpn_capability",
-      "value": "This version uses system VPN routing. Switching to local proxy mode is not available yet."
+      "value": "VPN mode cannot be changed"
     },
     {
       "name": "dash_vpn_closed",
@@ -1486,7 +1474,7 @@
     },
     {
       "name": "dash_total_rss",
-      "value": "Combined process resident memory (RSS)"
+      "value": "Total RSS"
     },
     {
       "name": "dash_memory_app",
@@ -1549,18 +1537,6 @@
       "value": "Shown on dashboard"
     },
     {
-      "name": "dash_ip_asn",
-      "value": "ASN"
-    },
-    {
-      "name": "dash_probe_source",
-      "value": "Lookup source"
-    },
-    {
-      "name": "dash_probe_checked_at",
-      "value": "Checked at"
-    },
-    {
       "name": "dash_runtime_unknown",
       "value": "Proxy state unconfirmed"
     },
@@ -1571,6 +1547,18 @@
     {
       "name": "dash_runtime_tap_to_confirm",
       "value": "Tap to stop and confirm the proxy state"
+    },
+    {
+      "name": "dash_ip_asn",
+      "value": "ASN"
+    },
+    {
+      "name": "dash_probe_source",
+      "value": "Lookup source"
+    },
+    {
+      "name": "dash_probe_checked_at",
+      "value": "Checked at"
     },
     {
       "name": "dash_ip_type",

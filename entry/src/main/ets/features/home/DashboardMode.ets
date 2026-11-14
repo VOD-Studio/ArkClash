@@ -53,10 +53,6 @@ export struct DashboardMode {
         Text($r('app.string.dash_mode_failed'))
           .fontSize(12)
           .fontColor($r('app.color.status_error'))
-      } else if (!this.conn.connected) {
-        Text($r('app.string.dash_mode_next_start'))
-          .fontSize(12)
-          .fontColor($r('sys.color.font_tertiary'))
       }
     }
     .alignItems(HorizontalAlign.Start)

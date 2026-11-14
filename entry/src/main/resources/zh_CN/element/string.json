@@ -653,24 +653,12 @@
       "value": "网络信息读取或应用失败，请重试"
     },
     {
-      "name": "dash_memory_scope",
-      "value": "界面进程的 PSS + SwapPss 包含按比例分摊的共享页及交换页；VPN 进程显示 RSS，包含 Go 内核。这两项测量口径不同，不能相加作为整应用内存。"
-    },
-    {
-      "name": "dash_memory_scope_short",
-      "value": "不同进程、不同口径，分别展示"
-    },
-    {
       "name": "dash_memory_stale",
       "value": "内存样本已过期或读取失败"
     },
     {
       "name": "dash_mode_failed",
       "value": "模式未能生效，仍显示最后确认的模式"
-    },
-    {
-      "name": "dash_mode_next_start",
-      "value": "将在下次启动时使用"
     },
     {
       "name": "dash_mode_pending",
@@ -686,7 +674,7 @@
     },
     {
       "name": "dash_paused",
-      "value": "已暂停，运行意图仍保留"
+      "value": "已暂停"
     },
     {
       "name": "dash_profile_counts",
@@ -874,7 +862,7 @@
     },
     {
       "name": "dash_vpn_capability",
-      "value": "当前版本使用系统 VPN 接管网络；本地代理模式切换尚不可用。"
+      "value": "VPN 模式不可切换"
     },
     {
       "name": "dash_vpn_closed",
@@ -1466,7 +1454,7 @@
     },
     {
       "name": "dash_total_rss",
-      "value": "进程驻留内存合计（RSS）"
+      "value": "RSS 合计"
     },
     {
       "name": "dash_memory_app",
@@ -1529,18 +1517,6 @@
       "value": "显示在仪表盘"
     },
     {
-      "name": "dash_ip_asn",
-      "value": "ASN"
-    },
-    {
-      "name": "dash_probe_source",
-      "value": "查询来源"
-    },
-    {
-      "name": "dash_probe_checked_at",
-      "value": "检查时间"
-    },
-    {
       "name": "dash_runtime_unknown",
       "value": "代理状态未确认"
     },
@@ -1551,6 +1527,18 @@
     {
       "name": "dash_runtime_tap_to_confirm",
       "value": "点按停止并确认代理状态"
+    },
+    {
+      "name": "dash_ip_asn",
+      "value": "ASN"
+    },
+    {
+      "name": "dash_probe_source",
+      "value": "查询来源"
+    },
+    {
+      "name": "dash_probe_checked_at",
+      "value": "检查时间"
     },
     {
       "name": "dash_ip_type",
