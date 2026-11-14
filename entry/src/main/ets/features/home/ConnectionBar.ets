@@ -3,7 +3,9 @@ import { connection, Connection, ConnectionState } from '../../client/Connection
 import { getMainGroup, GroupSummary } from '../../client/Controller';
 import { traffic, Traffic } from '../../client/Traffic';
 import { formatSpeed } from '../../components/Format';
-import { homeHasPendingCleanup, homeRunActionLabel, homeShouldStopRuntime } from './HomeRunControls';
+import {
+  homeHasPendingCleanup, homeRunActionLabel, homeRuntimeAppearsStarted, homeShouldStopRuntime
+} from './HomeRunControls';
 
 const BUTTON_SIZE = 40;
 
@@ -54,12 +56,13 @@ export struct ConnectionBar {
       .backgroundColor(this.connectedLike() ? $r('app.color.brand') : $r('app.color.brand_soft'))
       .enabled(this.conn.state !== ConnectionState.Disconnecting)
       .accessibilityText(homeRunActionLabel(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
-        this.conn.tunAttached))
+        this.conn.tunAttached, this.conn.hostState))
       .onClick((): void => {
-        const operation = this.connectedLike() ? this.conn.disconnect(this.context) :
-          this.conn.connect(this.context);
-        operation.catch((): void => {
-          this.getUIContext().getPromptAction().showToast({ message: $r('app.string.dash_runtime_error') });
+        const shouldStop = homeShouldStopRuntime(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
+          this.conn.tunAttached, this.conn.hostState);
+        const operation = shouldStop ? this.conn.disconnect(this.context) : this.conn.connect(this.context);
+        operation.catch((error: Error): void => {
+          this.getUIContext().getPromptAction().showToast({ message: this.conn.error || error.message });
         });
       })
 
@@ -91,11 +94,14 @@ export struct ConnectionBar {
   }
 
   private connectedLike(): boolean {
-    return homeShouldStopRuntime(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached) ||
+    return homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached) ||
       this.conn.state === ConnectionState.Disconnecting;
   }
 
   private primaryText(): ResourceStr {
+    if (this.conn.hostState === 'unknown' && !this.conn.busy) {
+      return $r('app.string.dash_runtime_unknown');
+    }
     if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached) &&
       this.conn.state !== ConnectionState.Disconnecting) {
       return $r('app.string.dash_cleanup_required');
@@ -116,6 +122,9 @@ export struct ConnectionBar {
   }
 
   private secondaryText(): ResourceStr {
+    if (this.conn.hostState === 'unknown' && !this.conn.busy) {
+      return $r('app.string.dash_runtime_tap_to_confirm');
+    }
     if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached)) {
       return $r('app.string.dash_stop_retry');
     }

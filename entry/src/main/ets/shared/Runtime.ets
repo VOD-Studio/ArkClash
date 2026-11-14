@@ -1,6 +1,8 @@
 // State shared by the UI process and ClashVpnAbility through the app's files
 // dir. The extension may also be started by the system without our Want
 // parameters, so everything it needs lives on disk.
+import { appManager } from '@kit.AbilityKit';
+import { process } from '@kit.ArkTS';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { readText, writeText, writeTextAsync } from './Files';
 
@@ -22,23 +24,36 @@ function errorPath(filesDir: string): string {
   return `${filesDir}/core_error.txt`;
 }
 
-interface RuntimeStopReceipt {
+export interface RuntimeInstance {
   secret: string;
   instance: string;
 }
 
+export async function readRuntimeInstance(filesDir: string): Promise<RuntimeInstance | undefined> {
+  const text = await readText(`${filesDir}/runtime-instance.json`);
+  if (text === undefined) {
+    return undefined;
+  }
+  const active = JSON.parse(text) as RuntimeInstance;
+  if (typeof active.secret !== 'string' || active.secret === '' ||
+    typeof active.instance !== 'string' || active.instance === '') {
+    throw new Error('代理实例信息无效，请重试');
+  }
+  return active;
+}
+
 export function beginRuntimeInstance(filesDir: string, secret: string, instance: string): Promise<void> {
-  const active: RuntimeStopReceipt = { secret: secret, instance: instance };
+  const active: RuntimeInstance = { secret: secret, instance: instance };
   return writeTextAsync(`${filesDir}/runtime-instance.json`, JSON.stringify(active));
 }
 
 export function writeRuntimeStopped(filesDir: string, secret: string, instance: string): Promise<void> {
-  const receipt: RuntimeStopReceipt = { secret: secret, instance: instance };
+  const receipt: RuntimeInstance = { secret: secret, instance: instance };
   return writeTextAsync(`${filesDir}/runtime-stopped.json`, JSON.stringify(receipt));
 }
 
 export async function wasRuntimeStopped(filesDir: string, secret: string): Promise<boolean> {
-  if (secret === '') {
+  if (typeof secret !== 'string' || secret === '') {
     return false;
   }
   const texts = await Promise.all<string | undefined>([
@@ -48,8 +63,8 @@ export async function wasRuntimeStopped(filesDir: string, secret: string): Promi
     return false;
   }
   try {
-    const active = JSON.parse(texts[0]) as RuntimeStopReceipt;
-    const receipt = JSON.parse(texts[1]) as RuntimeStopReceipt;
+    const active = JSON.parse(texts[0]) as RuntimeInstance;
+    const receipt = JSON.parse(texts[1]) as RuntimeInstance;
     return active.secret === secret && receipt.secret === secret &&
       typeof active.instance === 'string' && active.instance !== '' && receipt.instance === active.instance;
   } catch (error) {
@@ -57,20 +72,33 @@ export async function wasRuntimeStopped(filesDir: string, secret: string): Promi
   }
 }
 
-/** 没有当前实例的清理回执时，不能因 controller 失联就转为离线写入。 */
+/** 只有清理回执或系统确认除调用方外没有本应用进程，才允许离线写入。仅供 UI 进程调用。 */
 export async function runtimeMayBeActive(filesDir: string): Promise<boolean> {
   const path = `${filesDir}/runtime-instance.json`;
-  const text = await readText(path);
-  if (text === undefined) {
-    return fs.access(path);
+  const before = await readText(path);
+  const config = await readText(runtimePath(filesDir));
+  if (before !== undefined) {
+    try {
+      const active = JSON.parse(before) as RuntimeInstance;
+      const runtime = config === undefined ? undefined : JSON.parse(config) as RuntimeConfig;
+      if (runtime?.secret === active.secret && await wasRuntimeStopped(filesDir, active.secret)) {
+        return before !== await readText(path) || config !== await readText(runtimePath(filesDir));
+      }
+    } catch (_error) {
+      // 损坏或旧版本的实例文件仍可通过系统进程事实恢复，不能直接删除。
+    }
   }
   try {
-    const active = JSON.parse(text) as RuntimeStopReceipt;
-    if (typeof active.secret !== 'string' || active.secret === '' ||
-      typeof active.instance !== 'string' || active.instance === '') {
+    const processes = await appManager.getRunningProcessInformation();
+    // 本模块只能从 UI 查询。其他本应用进程一律保守视为可能持有 VPN，不猜系统进程名。
+    if (!processes.some((info: appManager.ProcessInformation): boolean => info.pid === process.pid) ||
+      processes.some((info: appManager.ProcessInformation): boolean => info.pid !== process.pid)) {
       return true;
     }
-    return !await wasRuntimeStopped(filesDir, active.secret);
+    if (before !== await readText(path) || config !== await readText(runtimePath(filesDir))) {
+      return true;
+    }
+    return before === undefined && await fs.access(path);
   } catch (_error) {
     return true;
   }

@@ -54,7 +54,9 @@ sequenceDiagram
   Note over Ext,UI: 启动失败时 Ext 写 core_error.txt，UI 读到后报错
 ```
 
-断开：UI 调 `stopVpnExtensionAbility`，扩展清理等待启动代次结束，再分别停止内核、销毁 VPN 连接；其中一项失败仍尝试另一项。扩展在创建资源前写入独立实例标识，两项都成功才写 `runtime-stopped.json`；UI 同时核对当前 secret 和实例，防止系统复用 secret 重新拉起时接受旧清理回执。controller 失联本身不算停止成功，清理失败保留重试入口。
+断开：UI 调 `stopVpnExtensionAbility`，扩展清理等待启动代次结束，再分别停止内核、销毁 VPN 连接；其中一项失败仍尝试另一项。扩展在创建资源前写入独立实例标识，两项都成功才写 `runtime-stopped.json`；UI 同时核对当前 secret 和实例，防止系统复用 secret 重新拉起时接受旧清理回执。系统直接杀死 VPN 进程或设备重启无法补写回执，此时由 `appManager.getRunningProcessInformation()` 成功返回且包含当前 UI PID、没有其他本应用进程，证明宿主已消失；查询前后 runtime/实例文件必须一致。查询异常、空列表、缺少 UI PID 或存在其他本应用进程均保留未知，不删除残留文件。controller 失联本身不算停止成功，清理失败保留停止确认入口（[ADR-0013](adr/0013-runtime-host-process-evidence.md)）。
+
+启动从等待配置短提交起由 `CoreClient` 模块内 Promise 和宿主代次保护，覆盖 runtime 写好但系统尚未创建 VPN 进程的窗口；此时宿主查询一律未知。公开停止先取消该代次、请求停止，再等待启动收尾后重新取证；启动自身清理使用私有停止函数，避免等待自身。界面首次恢复未知只显示待确认状态，不生成启动意图；停止确认动作不依赖是否曾在本 UI 进程启动过。已发出的 HTTP 运行快照须再次核 secret/实例，取消后晚到的就绪结果不得成为连接成功。
 
 节点选择携带 `expectedBootId` 和配置的 `expectedRevision`。`configRevision` 只在完整配置启动或热切换提交后前进；同一配置内连续选节点不会互相使请求过期。旧配置请求在 Go 事务内拒绝，持久化失败恢复原转发目标，幂等重放返回原操作结果。
 

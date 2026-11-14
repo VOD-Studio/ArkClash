@@ -4,7 +4,7 @@ import { common, Want } from '@kit.AbilityKit';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { http, vpnExtension } from '@kit.NetworkKit';
 import {
-  CONTROLLER_ADDRESS, readRuntime, runtimeMayBeActive, RuntimeConfig, takeCoreError, wasRuntimeStopped, writeRuntime
+  CONTROLLER_ADDRESS, readRuntime, readRuntimeInstance, runtimeMayBeActive, RuntimeConfig, takeCoreError, writeRuntime
 } from '../shared/Runtime';
 import { RuntimeStatus } from './Controller';
 import { withProfileStorage } from '../shared/profiles/Store';
@@ -12,6 +12,9 @@ import { withProfileStorage } from '../shared/profiles/Store';
 // Generous until Geo data is bundled: the first start may download it.
 const READY_TIMEOUT_MS = 30000;
 const READY_POLL_MS = 200;
+
+let pendingStart: Promise<RuntimeStatus> | undefined = undefined;
+let hostGeneration: number = 0;
 
 function vpnWant(context: common.UIAbilityContext): Want {
   return { bundleName: context.applicationInfo.name, abilityName: 'ClashVpnAbility' };
@@ -62,10 +65,26 @@ async function fetchStatus(secret: string, timeoutMs: number): Promise<RuntimeSt
 /** 只读取核心提交后的运行事实，controller 可达不等于转发已就绪。 */
 export async function probeCore(context: common.UIAbilityContext): Promise<RuntimeStatus | undefined> {
   const runtime = await readRuntime(context.filesDir);
-  if (runtime === undefined) {
+  return runtime === undefined ? undefined : fetchCurrentStatus(context.filesDir, runtime.secret, 1000);
+}
+
+async function fetchCurrentStatus(filesDir: string, secret: string,
+  timeoutMs: number): Promise<RuntimeStatus | undefined> {
+  const generation = hostGeneration;
+  const instance = await readRuntimeInstance(filesDir);
+  const runtime = await readRuntime(filesDir);
+  if (runtime?.secret !== secret || (instance !== undefined && instance.secret !== secret)) {
     return undefined;
   }
-  return fetchStatus(runtime.secret, 1000);
+  const status = await fetchStatus(secret, timeoutMs);
+  const current = await readRuntimeInstance(filesDir);
+  const latest = await readRuntime(filesDir);
+  if (generation !== hostGeneration || secret !== latest?.secret ||
+    instance?.secret !== current?.secret || instance?.instance !== current?.instance ||
+    (current !== undefined && current.secret !== secret)) {
+    return undefined;
+  }
+  return status;
 }
 
 export type CoreHostState = 'unknown' | 'stopped' | 'running';
@@ -75,12 +94,23 @@ export interface CoreHostSnapshot {
   status?: RuntimeStatus;
 }
 
-/** 实例文件先于资源创建；没有未清理实例时不等待已关闭的 controller 超时。 */
+/** 启动交接期间没有进程不等于停止，查询途中发生的启停也使旧证据失效。 */
 export async function readCoreHostStatus(context: common.UIAbilityContext): Promise<CoreHostSnapshot> {
-  if (!await runtimeMayBeActive(context.filesDir)) {
+  const generation = hostGeneration;
+  if (pendingStart !== undefined) {
+    return { state: 'unknown' };
+  }
+  const active = await runtimeMayBeActive(context.filesDir);
+  if (generation !== hostGeneration || pendingStart !== undefined) {
+    return { state: 'unknown' };
+  }
+  if (!active) {
     return { state: 'stopped' };
   }
   const status = await probeCore(context);
+  if (generation !== hostGeneration || pendingStart !== undefined) {
+    return { state: 'unknown' };
+  }
   return status?.running === true ? { state: 'running', status: status } : { state: 'unknown' };
 }
 
@@ -94,7 +124,23 @@ export class CoreStartError extends Error {
 }
 
 /** 一次有界启动；取消代次不会将晚到的成功交给界面。 */
-export async function startCore(context: common.UIAbilityContext, mode: string,
+export function startCore(context: common.UIAbilityContext, mode: string,
+  allowLan: boolean | undefined, isCurrent: () => boolean): Promise<RuntimeStatus> {
+  if (pendingStart !== undefined) {
+    return Promise.reject(new CoreStartError('代理正在启动，请稍后重试', true));
+  }
+  const generation = ++hostGeneration;
+  const pending = performStartCore(context, mode, allowLan,
+    (): boolean => generation === hostGeneration && isCurrent());
+  pendingStart = pending;
+  return pending.finally((): void => {
+    if (pendingStart === pending) {
+      pendingStart = undefined;
+    }
+  });
+}
+
+async function performStartCore(context: common.UIAbilityContext, mode: string,
   allowLan: boolean | undefined, isCurrent: () => boolean): Promise<RuntimeStatus> {
   let extensionStarted = false;
   try {
@@ -118,28 +164,32 @@ export async function startCore(context: common.UIAbilityContext, mode: string,
     await vpnExtension.startVpnExtensionAbility(vpnWant(context));
     extensionStarted = true;
     if (!isCurrent()) {
-      await stopCore(context);
+      await stopRuntimeResources(context);
       throw new Error('启动已取消');
     }
 
     const deadline = Date.now() + READY_TIMEOUT_MS;
     while (Date.now() < deadline) {
       if (!isCurrent()) {
-        await stopCore(context);
+        await stopRuntimeResources(context);
         throw new Error('启动已取消');
       }
       const error = await takeCoreError(filesDir);
       if (error !== undefined) {
         throw new Error(error);
       }
-      const status = await fetchStatus(secret, READY_POLL_MS);
+      const status = await fetchCurrentStatus(filesDir, secret, READY_POLL_MS);
+      if (!isCurrent()) {
+        await stopRuntimeResources(context);
+        throw new Error('启动已取消');
+      }
       if (status?.running === true && status.forward === 'running' && status.tunAttached &&
         status.profile !== '') {
         return status;
       }
       await sleep(READY_POLL_MS);
     }
-    await stopCore(context);
+    await stopRuntimeResources(context);
     throw new Error('代理启动超时，请重试');
   } catch (error) {
     throw new CoreStartError((error as Error).message, extensionStarted);
@@ -157,7 +207,22 @@ export async function updateRuntimeOptions(filesDir: string, mode: string, allow
 }
 
 export async function stopCore(context: common.UIAbilityContext): Promise<void> {
-  const secret = (await readRuntime(context.filesDir))?.secret ?? '';
+  ++hostGeneration;
+  const pending = pendingStart;
+  let failure: Error | undefined = undefined;
+  try {
+    await stopRuntimeResources(context);
+  } catch (error) {
+    failure = error as Error;
+  }
+  await pending?.catch((): void => {});
+  if (!await runtimeMayBeActive(context.filesDir)) {
+    return;
+  }
+  throw failure ?? new Error('尚未确认代理已停止，请重试');
+}
+
+async function stopRuntimeResources(context: common.UIAbilityContext): Promise<void> {
   let stopError: Error | undefined = undefined;
   try {
     await vpnExtension.stopVpnExtensionAbility(vpnWant(context));
@@ -166,7 +231,7 @@ export async function stopCore(context: common.UIAbilityContext): Promise<void> 
   }
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
-    if (await wasRuntimeStopped(context.filesDir, secret)) {
+    if (!await runtimeMayBeActive(context.filesDir)) {
       return;
     }
     if (stopError !== undefined) {

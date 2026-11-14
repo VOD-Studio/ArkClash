@@ -4,7 +4,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { connection as networkConnection } from '@kit.NetworkKit';
 import { OutboundMode, RuntimeStatus, setAllowLan, setMode } from './Controller';
 import { ControllerSocket } from './ControllerSocket';
-import { CoreHostState, CoreStartError, probeCore, readCoreHostStatus, startCore, stopCore, updateRuntimeOptions } from './CoreClient';
+import { CoreHostState, CoreStartError, readCoreHostStatus, startCore, stopCore, updateRuntimeOptions } from './CoreClient';
 import { flushProxySelections } from './Proxies';
 import { traffic } from './Traffic';
 import { runtimeMayBeActive } from '../shared/Runtime';
@@ -163,10 +163,11 @@ export class Connection {
       if (generation !== this.generation) {
         return;
       }
-      if (error instanceof CoreStartError && !error.extensionStarted) {
-        this.hostState = 'stopped';
+      const host = await readCoreHostStatus(context).catch((): undefined => undefined);
+      if (generation !== this.generation) {
+        return;
       }
-      if (this.hostState === 'stopped') {
+      if (host?.state === 'stopped') {
         this.applyStopped();
         this.forward = 'failed';
         this.error = (error as Error).message;
@@ -194,25 +195,27 @@ export class Connection {
     this.hostState = 'unknown';
     this.events.stop();
     const pending = this.startPending;
+    let failure: Error | undefined = undefined;
     try {
       await stopCore(context);
-      await pending?.catch((): void => {});
-      this.applyStopped();
     } catch (error) {
-      this.error = (error as Error).message;
-      let status: RuntimeStatus | undefined = undefined;
-      try {
-        status = await probeCore(context);
-      } catch (_error) {
-        status = undefined;
-      }
-      if (status !== undefined && status.running) {
-        this.applyStatus(status);
-      } else {
-        this.markUnknown((error as Error).message);
-      }
-      throw error as Error;
+      failure = error as Error;
     }
+    // 取消期间系统可能晚于第一次 stop 才创建扩展，必须等启动代次收尾后重新取证。
+    await pending?.catch((): void => {});
+    const host = await readCoreHostStatus(context).catch((): undefined => undefined);
+    if (host?.state === 'stopped') {
+      this.applyStopped();
+      return;
+    }
+    const error = failure ?? new Error('尚未确认代理已停止，请重试');
+    if (host?.state === 'running' && host.status !== undefined) {
+      this.applyStatus(host.status);
+      this.error = error.message;
+    } else {
+      this.markUnknown(error.message);
+    }
+    throw error;
   }
 
   async recheck(context: common.UIAbilityContext): Promise<boolean> {
@@ -266,7 +269,6 @@ export class Connection {
     this.hostState = 'unknown';
     this.state = ConnectionState.Disconnected;
     this.forward = 'failed';
-    this.intent = 'started';
     this.error = message;
     this.invalidateRoute();
     this.syncEvents();

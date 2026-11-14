@@ -6,7 +6,9 @@ import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
 import { dashboardCardShadow, DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { dashboardSettings, DashboardSettings } from './DashboardSettings';
 import { DASHBOARD_COOKIE9, DASHBOARD_COOKIE12 } from './DashboardShapePaths';
-import { homeHasPendingCleanup, homeRunActionLabel, homeShouldStopRuntime } from './HomeRunControls';
+import {
+  homeHasPendingCleanup, homeRunActionLabel, homeRuntimeAppearsStarted, homeShouldStopRuntime
+} from './HomeRunControls';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DashboardCountryBadge } from './DashboardCountryBadge';
 
@@ -70,6 +72,9 @@ export struct DashboardStatus {
   }
 
   private statusText(): ResourceStr {
+    if (this.conn.hostState === 'unknown' && !this.conn.busy) {
+      return $r('app.string.dash_runtime_unknown');
+    }
     if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached) &&
       this.conn.state !== ConnectionState.Disconnecting) {
       return $r('app.string.dash_cleanup_required');
@@ -113,7 +118,16 @@ export struct DashboardStatus {
   }
 
   private shouldStop(): boolean {
-    return homeShouldStopRuntime(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached);
+    return homeShouldStopRuntime(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached,
+      this.conn.hostState);
+  }
+
+  private appearsStarted(): boolean {
+    return homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached);
+  }
+
+  private showRuntimeError(message: ResourceStr): void {
+    this.getUIContext().getPromptAction().showToast({ message: message, duration: 4000 });
   }
 
   private async toggleRun(): Promise<void> {
@@ -127,7 +141,7 @@ export struct DashboardStatus {
         await this.conn.connect(this.context);
       }
     } catch (e) {
-      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.dash_runtime_error') });
+      this.showRuntimeError(this.conn.error || (e as Error).message || $r('app.string.dash_runtime_error'));
     }
   }
 
@@ -380,7 +394,7 @@ export struct DashboardStatus {
           .layoutWeight(1)
           Button({ type: ButtonType.Normal }) {
             Stack() {
-              if (this.shouldStop()) {
+              if (this.appearsStarted()) {
                 Shape() {
                   Path().commands(DASHBOARD_COOKIE9).fill($r('app.color.brand')).strokeWidth(0)
                 }
@@ -396,8 +410,8 @@ export struct DashboardStatus {
               if (this.conn.busy) {
                 LoadingProgress().width(30).height(30).color(Color.White)
               } else {
-                AppGlyph({ name: this.shouldStop() ? 'pause' : 'play', iconSize: 30,
-                  iconColor: this.profileReady || this.shouldStop() ? Color.White : $r('sys.color.font_secondary') })
+                AppGlyph({ name: this.appearsStarted() ? 'pause' : 'play', iconSize: 30,
+                  iconColor: this.profileReady || this.appearsStarted() ? Color.White : $r('sys.color.font_secondary') })
               }
             }
             .width(88)
@@ -410,7 +424,7 @@ export struct DashboardStatus {
           .enabled(this.interactive && (this.profileReady || this.shouldStop()) &&
             this.conn.state !== ConnectionState.Disconnecting)
           .accessibilityText(homeRunActionLabel(this.conn.intent, this.conn.forward,
-            this.conn.listenersOpen, this.conn.tunAttached))
+            this.conn.listenersOpen, this.conn.tunAttached, this.conn.hostState))
           .onClick((): void => { this.toggleRun(); })
         }
         .width('100%')

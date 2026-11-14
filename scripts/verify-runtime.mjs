@@ -29,8 +29,11 @@ const kits = {
       RequestMethod: { GET: 'GET' }, HttpDataType: { STRING: 0 },
       createHttp: () => ({
         async request() {
-          if (state.status === undefined) { throw new Error('controller unavailable'); }
-          return { responseCode: 200, result: JSON.stringify(state.status) };
+          const status = state.status;
+          state.requestingStatus = true;
+          await state.statusGate;
+          if (status === undefined) { throw new Error('controller unavailable'); }
+          return { responseCode: 200, result: JSON.stringify(status) };
         },
         destroy() {}
       })
@@ -38,6 +41,7 @@ const kits = {
     vpnExtension: {
       async startVpnExtensionAbility() {
         state.started++;
+        await state.startGate;
         if (state.startError) { throw state.startError; }
         state.active = true;
       },
@@ -51,14 +55,14 @@ const kits = {
   '../shared/Runtime': {
     CONTROLLER_ADDRESS: '127.0.0.1:19090',
     readRuntime: async () => state.runtime,
+    readRuntimeInstance: async () => state.instance,
     takeCoreError: async () => undefined,
     writeRuntime: async (_filesDir, runtime) => {
       state.runtime = runtime;
       state.writingRuntime = true;
       await state.runtimeWriteGate;
     },
-    wasRuntimeStopped: async (_filesDir, secret) => secret !== '' && secret === state.receipt,
-    runtimeMayBeActive: async () => state.active
+    runtimeMayBeActive: async () => state.active && state.receipt !== state.runtime.secret
   },
   '../shared/profiles/Store': {
     async withProfileStorage(_filesDir, operation) { await state.storageGate; return operation(); }
@@ -84,6 +88,8 @@ function loadConsumer(relative, bindings) {
   }).outputText;
   vm.runInNewContext(code, {
     Date: Clock, Promise, Error, JSON, Number, Math, Set, Map,
+    $r: key => key,
+    setTimeout(callback, milliseconds) { state.now += milliseconds; queueMicrotask(callback); },
     require(name) { assert.ok(name in bindings, `unexpected consumer module ${name}`); return bindings[name]; },
     module: consumer, exports: consumer.exports
   });
@@ -109,6 +115,7 @@ beforeEach(() => {
     runtime: { secret: 'fixture-session', stack: 'gvisor', mode: 'rule' },
     receipt: undefined, startError: undefined, stopError: undefined, stopCleans: false,
     active: false, flushError: false, saved: {}, writingRuntime: false,
+    instance: undefined, requestingStatus: false, statusGate: Promise.resolve(), startGate: Promise.resolve(),
     runtimeWriteGate: Promise.resolve(), storageGate: Promise.resolve() });
 });
 
@@ -140,6 +147,7 @@ test('TUN和内核同时就绪才返回成功', async () => {
 });
 
 test('controller失联且没有清理回执时停止失败', async () => {
+  state.active = true;
   await assert.rejects(core.stopCore(context), /尚未确认代理已停止/);
 });
 
@@ -149,17 +157,20 @@ test('同会话清理完成允许确认controller关闭后的停止', async () =
 });
 
 test('旧会话回执不能把当前会话误判为已停止', async () => {
+  state.active = true;
   state.receipt = 'previous-session';
   await assert.rejects(core.stopCore(context), /尚未确认代理已停止/);
 });
 
 test('系统停止失败且内核仍运行时传播错误', async () => {
+  state.active = true;
   state.status = ready;
   state.stopError = new Error('fixture system stop rejected');
   await assert.rejects(core.stopCore(context), /fixture system stop rejected/);
 });
 
 test('启动初始空快照不能证明系统VPN已销毁', async () => {
+  state.active = true;
   state.status = { ...ready, running: false, tunAttached: false, listenersOpen: false, bootId: '', revision: 0 };
   await assert.rejects(core.stopCore(context), /尚未确认代理已停止/);
 });
@@ -170,7 +181,7 @@ test('扩展启动前失败后，下一次按钮动作可直接连接', async ()
   state.startError = new Error('fixture extension start rejected');
   await assert.rejects(connection.connect(context), /fixture extension start rejected/);
   assert.equal(runControls.homeShouldStopRuntime(connection.intent, connection.forward,
-    connection.listenersOpen, connection.tunAttached), false);
+    connection.listenersOpen, connection.tunAttached, connection.hostState), false);
   state.startError = undefined;
   state.status = ready;
   await connection.connect(context);
@@ -220,25 +231,9 @@ test('真实核心已运行但尚未附加TUN时配置操作仍交给核心', as
 });
 
 test('系统复用secret重建扩展后，旧实例及迟到清理回执都不算新实例停止', async () => {
-  const files = new Map();
-  const runtimeModule = { exports: {} };
-  const runtimeBindings = {
-    '@kit.CoreFileKit': { fileIo: { access: async path => files.has(path) } },
-    './Files': {
-      writeTextAsync: async (path, text) => { files.set(path, text); },
-      readText: async (path) => files.get(path)
-    }
-  };
-  const runtimeSource = readFileSync(new URL('../entry/src/main/ets/shared/Runtime.ets', import.meta.url), 'utf8');
-  const runtimeCode = ts.transpileModule(runtimeSource, {
-    fileName: 'Runtime.ts',
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
-  }).outputText;
-  vm.runInNewContext(runtimeCode, {
-    require(name) { assert.ok(name in runtimeBindings, `unexpected runtime module ${name}`); return runtimeBindings[name]; },
-    module: runtimeModule, exports: runtimeModule.exports, Promise, JSON
-  });
-  const runtime = runtimeModule.exports;
+  const { fixture, runtime } = runtimeFixture();
+  fixture.processes = [{ pid: 41 }, { pid: 87 }];
+  await runtime.writeRuntime('/fixture', { secret: 'same-secret', stack: 'gvisor', mode: 'rule' });
   await runtime.beginRuntimeInstance('/fixture', 'same-secret', 'instance.one');
   assert.equal(await runtime.runtimeMayBeActive('/fixture'), true);
   await runtime.writeRuntimeStopped('/fixture', 'same-secret', 'instance.one');
@@ -315,4 +310,284 @@ test('未知宿主拒绝运行偏好写入，确认停止后恢复', async () =>
   assert.equal(await connection.recheck(context), false);
   await connection.changeMode('global');
   assert.equal(state.saved.outboundMode, 'global');
+});
+
+function runtimeFixture() {
+  const files = new Map();
+  const fixture = { processes: [{ pid: 41 }], processError: undefined, duringQuery: undefined };
+  const runtime = loadConsumer('../entry/src/main/ets/shared/Runtime.ets', {
+    '@kit.AbilityKit': { appManager: { async getRunningProcessInformation() {
+      if (fixture.processError) throw fixture.processError;
+      await fixture.duringQuery?.();
+      return fixture.processes;
+    } } },
+    '@kit.ArkTS': { process: { pid: 41 } },
+    '@kit.CoreFileKit': { fileIo: { access: async path => files.has(path) } },
+    './Files': {
+      writeTextAsync: async (path, text) => { files.set(path, text); },
+      readText: async path => files.get(path)
+    }
+  });
+  return { files, fixture, runtime };
+}
+
+test('异常死亡及设备重启留下的实例由系统进程证据恢复，不删除运行文件', async () => {
+  const { files, fixture, runtime } = runtimeFixture();
+  await runtime.beginRuntimeInstance('/fixture', 'old-secret', 'old-instance');
+  fixture.processes = [{ pid: 41 }, { pid: 87 }];
+  assert.equal(await runtime.runtimeMayBeActive('/fixture'), true);
+  fixture.processes = [{ pid: 41 }];
+  assert.equal(await runtime.runtimeMayBeActive('/fixture'), false);
+  assert.equal(files.has('/fixture/runtime-instance.json'), true);
+  assert.equal(files.has('/fixture/runtime-stopped.json'), false);
+  assert.equal(await runtime.wasRuntimeStopped('/fixture', 'old-secret'), false);
+});
+
+test('活宿主失联、PID复用、系统查询失败或未包含调用方均不能证明停止', async () => {
+  const { fixture, runtime } = runtimeFixture();
+  await runtime.beginRuntimeInstance('/fixture', 'session', 'instance');
+  fixture.processes = [{ pid: 41 }, { pid: 87 }];
+  assert.equal(await runtime.runtimeMayBeActive('/fixture'), true);
+  fixture.processError = new Error('system process query unavailable');
+  assert.equal(await runtime.runtimeMayBeActive('/fixture'), true);
+  fixture.processError = undefined;
+  fixture.processes = [];
+  assert.equal(await runtime.runtimeMayBeActive('/fixture'), true);
+});
+
+test('系统查询期间扩展换代时旧进程缺席不能证明新实例停止', async () => {
+  const { fixture, runtime } = runtimeFixture();
+  await runtime.beginRuntimeInstance('/fixture', 'session', 'instance.one');
+  fixture.duringQuery = async () => runtime.beginRuntimeInstance('/fixture', 'session', 'instance.two');
+  assert.equal(await runtime.runtimeMayBeActive('/fixture'), true);
+});
+
+test('首次进入未知状态不会自行生成启动意图，死宿主恢复后直接启动', async () => {
+  const connection = new Connection();
+  connection.restore(context);
+  state.active = true;
+  await assert.rejects(connection.recheck(context), /尚未确认代理状态/);
+  assert.equal(connection.intent, 'stopped');
+  assert.equal(connection.offlineWritable, false);
+  assert.equal(runControls.homeRuntimeAppearsStarted(connection.intent, connection.forward,
+    connection.listenersOpen, connection.tunAttached), false);
+  assert.equal(runControls.homeShouldStopRuntime(connection.intent, connection.forward,
+    connection.listenersOpen, connection.tunAttached, connection.hostState), true);
+  assert.equal(runControls.homeRunActionLabel(connection.intent, connection.forward,
+    connection.listenersOpen, connection.tunAttached, connection.hostState), 'app.string.dash_runtime_stop_confirm');
+  state.active = false;
+  assert.equal(await connection.recheck(context), false);
+  state.status = ready;
+  await connection.connect(context);
+  assert.equal(connection.connected, true);
+});
+
+test('停止已异常死亡的宿主不用等待永远不会出现的清理回执', async () => {
+  state.active = false;
+  await core.stopCore(context);
+  assert.equal(state.now, 1000);
+});
+
+test('runtime写入和系统启动回调等待期间，所有消费者都保留未知宿主', async () => {
+  let releaseWrite;
+  let releaseStart;
+  state.runtimeWriteGate = new Promise(resolve => { releaseWrite = resolve; });
+  state.startGate = new Promise(resolve => { releaseStart = resolve; });
+  state.status = ready;
+  const pending = core.startCore(context, 'rule', undefined, () => true);
+  while (!state.writingRuntime) await Promise.resolve();
+  assert.equal((await core.readCoreHostStatus(context)).state, 'unknown');
+  const observer = new Connection();
+  observer.restore(context);
+  await assert.rejects(observer.recheck(context), /尚未确认代理状态/);
+  assert.equal(observer.offlineWritable, false);
+  releaseWrite();
+  while (state.started === 0) await Promise.resolve();
+  assert.equal(state.active, false);
+  assert.equal((await core.readCoreHostStatus(context)).state, 'unknown');
+  releaseStart();
+  await pending;
+  assert.equal((await core.readCoreHostStatus(context)).state, 'running');
+});
+
+test('停止早于系统创建VPN进程时等待晚到启动收尾，不接受迟到成功', async () => {
+  let releaseStart;
+  state.startGate = new Promise(resolve => { releaseStart = resolve; });
+  state.status = ready;
+  state.stopCleans = true;
+  const starting = core.startCore(context, 'rule', undefined, () => true);
+  const rejected = assert.rejects(starting, /启动已取消/);
+  while (state.started === 0) await Promise.resolve();
+  let stopped = false;
+  const stopping = core.stopCore(context).then(() => { stopped = true; });
+  for (let turn = 0; turn < 10; turn++) await Promise.resolve();
+  assert.equal(stopped, false);
+  assert.equal((await core.readCoreHostStatus(context)).state, 'unknown');
+  releaseStart();
+  await Promise.all([rejected, stopping]);
+  assert.equal(state.active, false);
+  assert.equal((await core.readCoreHostStatus(context)).state, 'stopped');
+});
+
+test('晚到HTTP运行快照不能越过secret或实例换代', async () => {
+  for (const change of ['secret', 'instance']) {
+    let releaseStatus;
+    state.requestingStatus = false;
+    state.statusGate = new Promise(resolve => { releaseStatus = resolve; });
+    state.status = ready;
+    state.instance = { secret: state.runtime.secret, instance: 'instance.one' };
+    const pending = core.probeCore(context);
+    while (!state.requestingStatus) await Promise.resolve();
+    if (change === 'secret') state.runtime = { ...state.runtime, secret: 'new-secret' };
+    else state.instance = { secret: state.runtime.secret, instance: 'instance.two' };
+    releaseStatus();
+    assert.equal(await pending, undefined);
+  }
+});
+
+test('已发出的就绪请求在取消后返回成功也不能成为连接成功', async () => {
+  let releaseStatus;
+  let current = true;
+  state.statusGate = new Promise(resolve => { releaseStatus = resolve; });
+  state.status = ready;
+  state.stopCleans = true;
+  const pending = core.startCore(context, 'rule', undefined, () => current);
+  const rejected = assert.rejects(pending, /启动已取消/);
+  while (!state.requestingStatus) await Promise.resolve();
+  current = false;
+  releaseStatus();
+  await rejected;
+  assert.equal(state.active, false);
+});
+
+test('系统查询期间runtime会话改变会丢弃旧的停止证据', async () => {
+  const { fixture, runtime } = runtimeFixture();
+  await runtime.writeRuntime('/fixture', { secret: 'old-secret', stack: 'gvisor', mode: 'rule' });
+  await runtime.beginRuntimeInstance('/fixture', 'old-secret', 'old-instance');
+  fixture.duringQuery = async () => runtime.writeRuntime('/fixture', {
+    secret: 'new-secret', stack: 'gvisor', mode: 'rule'
+  });
+  assert.equal(await runtime.runtimeMayBeActive('/fixture'), true);
+});
+
+function runtimeConsumers() {
+  const { files, fixture, runtime } = runtimeFixture();
+  const localContext = { ...context, filesDir: '/fixture' };
+  Object.assign(fixture, { starts: 0, stops: 0, stopCleans: true, stopError: undefined });
+  const network = { ...kits['@kit.NetworkKit'], vpnExtension: {
+    async startVpnExtensionAbility() {
+      fixture.starts++;
+      fixture.processes = [{ pid: 41 }, { pid: 87 }];
+      const config = await runtime.readRuntime('/fixture');
+      await runtime.beginRuntimeInstance('/fixture', config.secret, `instance.${fixture.starts}`);
+    },
+    async stopVpnExtensionAbility() {
+      fixture.stops++;
+      if (fixture.stopError) throw fixture.stopError;
+      if (fixture.stopCleans) {
+        const instance = await runtime.readRuntimeInstance('/fixture');
+        if (instance) await runtime.writeRuntimeStopped('/fixture', instance.secret, instance.instance);
+        fixture.processes = [{ pid: 41 }];
+      }
+    }
+  } };
+  const client = loadConsumer('../entry/src/main/ets/client/CoreClient.ets', {
+    ...kits, '@kit.NetworkKit': network, '../shared/Runtime': runtime
+  });
+  const { Connection: ConsumerConnection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
+    '@kit.AbilityKit': {}, '@kit.BasicServicesKit': {}, '@kit.NetworkKit': {},
+    '@kit.ArkData': { preferences: { getPreferencesSync: () => prefs } },
+    './Controller': {}, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } },
+    './CoreClient': client, './Proxies': { flushProxySelections: async () => {} },
+    './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': runtime
+  });
+  const connection = new ConsumerConnection();
+  connection.restore(localContext);
+  return { files, fixture, runtime, client, connection, context: localContext };
+}
+
+test('真实Connection和CoreClient恢复异常死亡实例后可启停，重进页面不自动启动', async () => {
+  const { files, fixture, runtime, client, connection, context: localContext } = runtimeConsumers();
+  await runtime.writeRuntime('/fixture', { secret: 'old-secret', stack: 'gvisor', mode: 'rule' });
+  await runtime.beginRuntimeInstance('/fixture', 'old-secret', 'dead-instance');
+  assert.equal(await connection.recheck(localContext), false);
+  assert.equal(connection.intent, 'stopped');
+  assert.equal(connection.offlineWritable, true);
+  assert.equal(fixture.starts, 0);
+  assert.equal(files.has('/fixture/runtime-instance.json'), true);
+  state.status = ready;
+  await connection.connect(localContext);
+  assert.equal(connection.connected, true);
+  state.status = undefined;
+  await assert.rejects(connection.recheck(localContext), /尚未确认代理状态/);
+  assert.equal(connection.offlineWritable, false);
+  assert.equal(connection.intent, 'started');
+  await connection.disconnect(localContext);
+  assert.equal(connection.intent, 'stopped');
+  assert.equal(connection.offlineWritable, true);
+  assert.equal((await client.readCoreHostStatus(localContext)).state, 'stopped');
+});
+
+test('真实消费者遇到复用secret的新活实例时拒绝旧清理回执，保留停止入口', async () => {
+  const { fixture, runtime, connection, context: localContext } = runtimeConsumers();
+  await runtime.writeRuntime('/fixture', { secret: 'same-secret', stack: 'gvisor', mode: 'rule' });
+  await runtime.beginRuntimeInstance('/fixture', 'same-secret', 'instance.one');
+  await runtime.writeRuntimeStopped('/fixture', 'same-secret', 'instance.one');
+  await runtime.beginRuntimeInstance('/fixture', 'same-secret', 'instance.two');
+  fixture.processes = [{ pid: 41 }, { pid: 87 }];
+  fixture.stopError = new Error('system refused stop');
+  await assert.rejects(connection.recheck(localContext), /尚未确认代理状态/);
+  assert.equal(connection.intent, 'stopped');
+  assert.equal(connection.offlineWritable, false);
+  assert.equal(runControls.homeShouldStopRuntime(connection.intent, connection.forward,
+    connection.listenersOpen, connection.tunAttached, connection.hostState), true);
+  await assert.rejects(connection.disconnect(localContext), /system refused stop/);
+  assert.equal(connection.hostState, 'unknown');
+  fixture.stopError = undefined;
+  await connection.disconnect(localContext);
+  assert.equal(connection.offlineWritable, true);
+});
+
+test('真实Connection不发布跨扩展实例晚到的旧boot，重查后只采用新boot', async () => {
+  const { fixture, runtime, connection, context: localContext } = runtimeConsumers();
+  await runtime.writeRuntime('/fixture', { secret: 'same-secret', stack: 'gvisor', mode: 'rule' });
+  await runtime.beginRuntimeInstance('/fixture', 'same-secret', 'instance.one');
+  fixture.processes = [{ pid: 41 }, { pid: 87 }];
+  let releaseStatus;
+  state.status = { ...ready, bootId: 'old.boot' };
+  state.statusGate = new Promise(resolve => { releaseStatus = resolve; });
+  const pending = connection.recheck(localContext);
+  const rejected = assert.rejects(pending, /尚未确认代理状态/);
+  while (!state.requestingStatus) await Promise.resolve();
+  await runtime.beginRuntimeInstance('/fixture', 'same-secret', 'instance.two');
+  releaseStatus();
+  await rejected;
+  assert.equal(connection.bootId, '');
+  assert.equal(connection.offlineWritable, false);
+  state.status = { ...ready, bootId: 'new.boot' };
+  state.statusGate = Promise.resolve();
+  assert.equal(await connection.recheck(localContext), true);
+  assert.equal(connection.bootId, 'new.boot');
+});
+
+test('缺少本UI的非空列表和不带secret的伪回执都保持未知', async () => {
+  const { files, fixture, runtime } = runtimeFixture();
+  fixture.processes = [{ pid: 87 }];
+  files.set('/fixture/runtime-instance.json', JSON.stringify({ instance: 'invalid' }));
+  files.set('/fixture/runtime-stopped.json', JSON.stringify({ instance: 'invalid' }));
+  assert.equal(await runtime.wasRuntimeStopped('/fixture', undefined), false);
+  assert.equal(await runtime.runtimeMayBeActive('/fixture'), true);
+});
+
+test('旧安装只有runtime及新扩展尚未写实例时，有其它本应用进程仍为未知', async () => {
+  const { fixture, runtime, client, connection, context: localContext } = runtimeConsumers();
+  await runtime.writeRuntime('/fixture', { secret: 'legacy-secret', stack: 'gvisor', mode: 'rule' });
+  fixture.processes = [{ pid: 41 }, { pid: 87 }];
+  assert.equal((await client.readCoreHostStatus(localContext)).state, 'unknown');
+  await assert.rejects(connection.recheck(localContext), /尚未确认代理状态/);
+  assert.equal(connection.offlineWritable, false);
+  assert.equal(connection.intent, 'stopped');
+  fixture.processes = [{ pid: 41 }];
+  assert.equal(await connection.recheck(localContext), false);
+  assert.equal(connection.offlineWritable, true);
 });

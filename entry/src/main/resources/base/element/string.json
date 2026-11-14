@@ -1587,6 +1587,18 @@
     {
       "name": "dash_probe_checked_at",
       "value": "Checked at"
+    },
+    {
+      "name": "dash_runtime_unknown",
+      "value": "Proxy state unconfirmed"
+    },
+    {
+      "name": "dash_runtime_stop_confirm",
+      "value": "Stop and confirm proxy"
+    },
+    {
+      "name": "dash_runtime_tap_to_confirm",
+      "value": "Tap to stop and confirm the proxy state"
     }
   ]
 }

@@ -1567,6 +1567,18 @@
     {
       "name": "dash_probe_checked_at",
       "value": "检查时间"
+    },
+    {
+      "name": "dash_runtime_unknown",
+      "value": "代理状态未确认"
+    },
+    {
+      "name": "dash_runtime_stop_confirm",
+      "value": "停止并确认代理"
+    },
+    {
+      "name": "dash_runtime_tap_to_confirm",
+      "value": "点按停止并确认代理状态"
     }
   ]
 }
