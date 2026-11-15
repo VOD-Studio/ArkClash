@@ -91,6 +91,24 @@ function exportedFunction(file, name, prelude) {
   return load(file, `${prelude}\n${declaration.getText(ast)}`)[name];
 }
 
+// 只提取实际组件的控制逻辑；原生布局与动效由真机验收。
+function componentControl(name, overrides = {}) {
+  const file = path.join(featureDir, `${name}.ets`);
+  const text = fs.readFileSync(file, 'utf8').replace(new RegExp(`\\bstruct\\s+${name}\\b`), `class ${name}`);
+  const ast = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declaration = ast.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === name);
+  const members = declaration.members.filter(member => {
+    const decorators = ts.getDecorators(member) ?? [];
+    return member.name !== undefined && member.name.getText(ast) !== 'build' &&
+      (ts.isPropertyDeclaration(member) || ts.isMethodDeclaration(member)) &&
+      !decorators.some(decorator => decorator.expression.getText(ast) === 'Builder');
+  }).map(member => {
+    const decorators = ts.getDecorators(member) ?? [];
+    return text.slice(decorators.at(-1)?.end ?? member.getStart(ast), member.end);
+  }).join('\n');
+  return load(file, `export class ${name} {\n${members}\n}`, overrides)[name];
+}
+
 const store = load(path.join(etsDir, 'shared/profiles/Store.ets'));
 const download = load(path.join(etsDir, 'shared/profiles/Download.ets'));
 const parseLinks = exportedFunction(path.join(featureDir, 'ProfileActions.ets'), 'parseProfileLinks',
@@ -1049,4 +1067,44 @@ test('saving from dirty editor dismissal keeps failed changes open and closes on
   await chooseSave();
   assert.equal(saved, 2);
   assert.equal(dismissed, 1);
+});
+
+test('配置批量失败在后台保留，恢复可见后只展示一次', async () => {
+  const { ListSource } = load(path.join(etsDir, 'components/ListSource.ets'));
+  const resources = (key) => key;
+  const { describeError } = load(path.join(featureDir, 'ProfileErrors.ets'), undefined, { $r: resources });
+  const Page = componentControl('ProfilesPage', {
+    ListSource, describeError, $r: resources, setInterval: () => 1, clearInterval: () => {}
+  });
+  for (const count of [1, 2]) {
+    let finish;
+    const result = { failures: Array.from({ length: count }, (_, index) =>
+      ({ id: `profile-${index}`, name: `Profile ${index}`, error: 'download' })) };
+    const toasts = [];
+    const page = new Page();
+    page.store = { applyError: 'download', updateAll: () => new Promise(resolve => { finish = resolve; }) };
+    page.getUIContext = () => ({ getPromptAction: () => ({ showToast: ({ message }) => toasts.push(message) }) });
+    page.clockVisible(true);
+    toasts.length = 0;
+    const updating = page.updateAll();
+    page.visible = false;
+    page.onVisibilityChange();
+    finish(result);
+    await updating;
+    assert.equal(page.resultShown, false);
+    assert.deepEqual(toasts, []);
+    page.visible = true;
+    page.onVisibilityChange();
+    assert.equal(page.resultShown, count > 1);
+    assert.equal(page.result, result);
+    assert.deepEqual(toasts, count === 1 ? ['app.string.profile_update_failed'] : []);
+    page.resultShown = false;
+    page.visible = false;
+    page.onVisibilityChange();
+    page.visible = true;
+    page.onVisibilityChange();
+    assert.equal(page.resultShown, false);
+    assert.equal(toasts.length, count === 1 ? 1 : 0);
+    page.aboutToDisappear();
+  }
 });

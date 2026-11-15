@@ -42,6 +42,8 @@ export struct ProfilesPage {
   private clockInView: boolean = false;
   private activeActions: number = 0;
   private reportedApplyError: string = '';
+  private pendingResult: boolean = false;
+  private pendingResultError: string = '';
 
   private clockVisible(visible: boolean): void {
     this.clockInView = visible;
@@ -72,11 +74,27 @@ export struct ProfilesPage {
   }
 
   private consumeApplyError(): void {
+    if (this.consumeBatchResult()) { return; }
     if (this.draft?.saving === true || (this.editShown && this.draft?.error === this.store.applyError)) {
       this.reportedApplyError = this.store.applyError;
       return;
     }
     if (this.activeActions === 0) { this.reportResult(undefined); }
+  }
+
+  private consumeBatchResult(): boolean {
+    const result = this.result;
+    if (!this.pendingResult || result === undefined) { return false; }
+    if (!this.visible || !this.clockInView) { return true; }
+    this.pendingResult = false;
+    this.reportedApplyError = this.pendingResultError;
+    if (result.failures.length === 1) {
+      const failure = result.failures[0];
+      this.toast($r('app.string.profile_update_failed', failure.name, describeError(failure.error)));
+    } else {
+      this.resultShown = true;
+    }
+    return true;
   }
 
   private reportResult(failure: string | undefined, success?: ResourceStr, errorMessage?: ResourceStr): void {
@@ -152,14 +170,8 @@ export struct ProfilesPage {
     try {
       const result: ProfileBatchResult = await this.store.updateAll();
       this.result = result;
-      if (result.failures.length === 1) {
-        const failure = result.failures[0];
-        this.reportResult(failure.error, undefined,
-          $r('app.string.profile_update_failed', failure.name, describeError(failure.error)));
-      } else if (result.failures.length > 1) {
-        this.reportedApplyError = this.store.applyError;
-        if (this.visible && this.clockInView) { this.resultShown = true; }
-      }
+      this.pendingResult = result.failures.length > 0;
+      this.pendingResultError = this.store.applyError;
     } finally { this.activeActions--; this.consumeApplyError(); }
   }
   private async export(item: ProfileItem): Promise<void> {
