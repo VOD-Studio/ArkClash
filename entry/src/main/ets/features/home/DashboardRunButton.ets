@@ -1,7 +1,8 @@
 import { curves } from '@kit.ArkUI';
 import { uiResourceText } from '../../components/ResourceText';
 
-const START_CURVE = curves.cubicBezierCurve(0.34, 1.56, 0.64, 1);
+const START_CURVE = curves.cubicBezierCurve(0.175, 0.885, 0.32, 1.275);
+const STOP_CURVE = curves.cubicBezierCurve(0.55, 0.055, 0.675, 0.19);
 const RUN_BUTTON_SHAPE = 'M54 4 C71 2 86 4 92 14 C102 31 93 58 84 77 C78 90 69 100 58 99 ' +
   'C42 97 23 84 12 70 C-1 55 -1 37 9 24 C19 10 35 5 54 4 Z';
 
@@ -55,20 +56,21 @@ export struct DashboardRunButton {
       Stack() {
         Shape() {
           Path().commands(RUN_BUTTON_SHAPE)
-            .fill($r('app.color.dash_run_background'))
+            .fill($r('app.color.brand'))
             .strokeWidth(0)
         }
         .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
         .width(84)
         .height(84)
-        .rotate({ angle: this.running ? 16 : 0 })
-        .animation({ duration: this.motionEnabled && this.visible ? 450 : 0, curve: START_CURVE })
+        .rotate({ angle: this.running ? 40 : 0 })
+        .scale({ x: this.running ? 1.02 : 1, y: this.running ? 1.02 : 1 })
+        .animation({ duration: this.motionEnabled && this.visible ? 450 : 0,
+          curve: this.running ? START_CURVE : STOP_CURVE })
         SymbolGlyph(this.running ? $r('sys.symbol.pause_fill') : $r('sys.symbol.play_fill'))
           .fontSize(30)
-          .fontColor([$r('app.color.dash_run_foreground')])
+          .fontColor([$r('app.color.on_brand')])
           .width(30)
           .height(30)
-          .symbolEffect(new ReplaceSymbolEffect(EffectScope.WHOLE), this.motionEnabled && this.visible)
           .opacity(this.busy ? 0 : 1)
           .animation({ duration: this.motionEnabled && this.visible ? 140 : 0, curve: Curve.EaseOut })
           .hitTestBehavior(HitTestMode.None)
@@ -76,7 +78,7 @@ export struct DashboardRunButton {
         LoadingProgress()
           .width(30)
           .height(30)
-          .color($r('app.color.dash_run_foreground'))
+          .color($r('app.color.on_brand'))
           .enableLoading(this.loadingShown)
           .opacity(this.busy ? 1 : 0)
           .animation(this.loadingAnimation())
@@ -98,7 +100,7 @@ export struct DashboardRunButton {
         .opacity(this.available || this.running || this.busy ? 1 : 0.45)
       },
       pressed: {
-        .scale({ x: this.motionEnabled ? 0.94 : 1, y: this.motionEnabled ? 0.94 : 1 })
+        .scale({ x: this.motionEnabled ? 0.92 : 1, y: this.motionEnabled ? 0.98 : 1 })
         .opacity(0.88)
       },
       disabled: {

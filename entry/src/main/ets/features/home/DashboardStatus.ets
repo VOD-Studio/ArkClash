@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { curves } from '@kit.ArkUI';
 import { connection, Connection, ConnectionState } from '../../client/Connection';
 import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
 import { DASHBOARD_CARD, sheetMaterial } from '../../components/Theme';
@@ -10,6 +11,9 @@ import { DashboardCountryBadge } from './DashboardCountryBadge';
 import { DashboardExitDetails } from './DashboardExitDetails';
 import { DashboardIpQuality } from './DashboardIpQuality';
 import { DashboardRunButton } from './DashboardRunButton';
+
+const START_CURVE = curves.cubicBezierCurve(0.175, 0.885, 0.32, 1.275);
+const STOP_CURVE = curves.cubicBezierCurve(0.55, 0.055, 0.675, 0.19);
 
 function dashboardUptime(milliseconds: number): string {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -111,7 +115,8 @@ export struct DashboardStatus {
   }
 
   private appearsStarted(): boolean {
-    return homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached);
+    return this.conn.state !== ConnectionState.Disconnecting &&
+      homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached);
   }
 
   private showRuntimeError(message: ResourceStr): void {
@@ -163,15 +168,15 @@ export struct DashboardStatus {
     Stack({ alignContent: Alignment.TopEnd }) {
       Shape() {
         Path().commands(DASHBOARD_COOKIE12)
-          .fill(this.conn.connected ? $r('app.color.dash_status_decoration') : $r('app.color.tile_background'))
+          .fill(this.appearsStarted() ? $r('app.color.dash_status_decoration') : $r('app.color.dash_status_idle_decoration'))
           .strokeWidth(0)
       }
       .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
       .width(240)
       .height(240)
-      .rotate({ angle: this.conn.connected ? 30 : 0 })
-      .scale({ x: this.conn.connected ? 1.12 : 1, y: this.conn.connected ? 1.12 : 1 })
-      .animation({ duration: this.motionEnabled ? 450 : 0, curve: Curve.EaseInOut })
+      .rotate({ angle: this.appearsStarted() ? 30 : 0 })
+      .scale({ x: this.appearsStarted() ? 1.12 : 1, y: this.appearsStarted() ? 1.12 : 1 })
+      .animation({ duration: this.motionEnabled ? 450 : 0, curve: this.appearsStarted() ? START_CURVE : STOP_CURVE })
       .offset({ x: 60, y: -66 })
     }
     .width('100%')

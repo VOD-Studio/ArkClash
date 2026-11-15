@@ -130,15 +130,11 @@
     },
     {
       "name": "dash_status_decoration",
-      "value": "#EAF0FF"
+      "value": "#D9E5FF"
     },
     {
-      "name": "dash_run_background",
-      "value": "#3A3332"
-    },
-    {
-      "name": "dash_run_foreground",
-      "value": "#FFFFFF"
+      "name": "dash_status_idle_decoration",
+      "value": "#E9E5EC"
     },
     {
       "name": "dash_running_background",
