@@ -977,6 +977,10 @@
       "value": "继续编辑"
     },
     {
+      "name": "profile_saved_toast",
+      "value": "已保存"
+    },
+    {
       "name": "profile_manual_auto_update",
       "value": "配置文件已经修改，是否关闭自动更新？"
     },

@@ -997,6 +997,10 @@
       "value": "Keep editing"
     },
     {
+      "name": "profile_saved_toast",
+      "value": "Saved"
+    },
+    {
       "name": "profile_manual_auto_update",
       "value": "The source file was edited. Turn off automatic updates?"
     },

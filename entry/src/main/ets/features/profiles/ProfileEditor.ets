@@ -12,15 +12,22 @@ export function confirmProfileEditorDismiss(context: UIContext, draft: ProfileDr
   if (draft === undefined) { dismiss(); return; }
   if (draft.saving) { return; }
   if (!draft.dirty()) { dismiss(); return; }
-  context.showAlertDialog({
-    title: $r('app.string.profile_unsaved_title'), message: $r('app.string.profile_unsaved_message'), autoCancel: false,
-    buttons: [
-      { value: $r('app.string.profile_discard'), action: (): void => dismiss() },
-      { value: $r('app.string.profile_keep_editing'), action: (): void => {} },
-      { value: $r('app.string.action_save'), action: (): void => {
+  let choice: 'save' | 'discard' | undefined = undefined;
+  context.showActionSheet({
+    title: $r('app.string.profile_unsaved_title'), message: $r('app.string.profile_unsaved_message'),
+    alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+    sheets: [
+      { title: $r('app.string.action_save'), action: (): void => { choice = 'save'; } },
+      { title: $r('app.string.profile_discard'), action: (): void => { choice = 'discard'; } }
+    ],
+    confirm: { value: $r('app.string.profile_keep_editing'), defaultFocus: true, action: (): void => {} },
+    onWillDismiss: (action: DismissDialogAction): void => action.dismiss(),
+    onDidDisappear: (): void => {
+      if (choice === 'discard') { dismiss(); }
+      if (choice === 'save') {
         draft.save?.().then((saved: boolean): void => { if (saved) { dismiss(); } });
-      } }
-    ]
+      }
+    }
   });
 }
 
@@ -36,9 +43,13 @@ export struct ProfileEditor {
   @Local sourceError: string = '';
   @Local loadingSource: boolean = false;
   @Local validating: boolean = false;
+  private cancelAutoUpdateChoice: (() => void) | undefined = undefined;
 
   aboutToAppear(): void { this.draft.save = (): Promise<boolean> => this.save(); }
-  aboutToDisappear(): void { this.draft.save = undefined; }
+  aboutToDisappear(): void {
+    this.draft.save = undefined;
+    this.cancelAutoUpdateChoice?.();
+  }
 
   private async openSource(): Promise<void> {
     this.loadingSource = true;
@@ -87,17 +98,22 @@ export struct ProfileEditor {
   private closeSource(dismiss: () => void): void {
     if (this.validating) { return; }
     if (this.sourceText === this.sourceOriginal) { dismiss(); return; }
-    this.getUIContext().showAlertDialog({
-      title: $r('app.string.profile_unsaved_title'),
-      message: $r('app.string.profile_unsaved_message'),
-      autoCancel: false,
-      buttons: [
-        { value: $r('app.string.profile_discard'), action: (): void => { dismiss(); } },
-        { value: $r('app.string.profile_keep_editing'), action: (): void => {} },
-        { value: $r('app.string.action_save'), action: (): void => {
+    let choice: 'save' | 'discard' | undefined = undefined;
+    this.getUIContext().showActionSheet({
+      title: $r('app.string.profile_unsaved_title'), message: $r('app.string.profile_unsaved_message'),
+      alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+      sheets: [
+        { title: $r('app.string.action_save'), action: (): void => { choice = 'save'; } },
+        { title: $r('app.string.profile_discard'), action: (): void => { choice = 'discard'; } }
+      ],
+      confirm: { value: $r('app.string.profile_keep_editing'), defaultFocus: true, action: (): void => {} },
+      onWillDismiss: (action: DismissDialogAction): void => action.dismiss(),
+      onDidDisappear: (): void => {
+        if (choice === 'discard') { dismiss(); }
+        if (choice === 'save') {
           this.saveSource().then((saved: boolean): void => { if (saved) { dismiss(); } });
-        } }
-      ]
+        }
+      }
     });
   }
 
@@ -107,7 +123,9 @@ export struct ProfileEditor {
     this.draft.error = '';
     try {
       if (this.draft.content !== undefined && this.draft.subscription && this.draft.autoUpdate) {
-        this.draft.autoUpdate = !(await this.askDisableAutoUpdate());
+        const disabled = await this.askDisableAutoUpdate();
+        if (disabled === undefined) { return false; }
+        this.draft.autoUpdate = !disabled;
       }
       const edit: ProfileEdit = { name: this.draft.name, url: this.draft.link,
         autoUpdate: this.draft.autoUpdate, intervalMinutes: Number(this.draft.interval),
@@ -120,6 +138,7 @@ export struct ProfileEditor {
         return false;
       }
       this.draft.saved();
+      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.profile_saved_toast') });
       this.onSaved();
       return true;
     } catch (e) {
@@ -128,12 +147,28 @@ export struct ProfileEditor {
     } finally { this.draft.saving = false; }
   }
 
-  private askDisableAutoUpdate(): Promise<boolean> {
-    return new Promise<boolean>((resolve: (disabled: boolean) => void): void => {
-      this.getUIContext().showAlertDialog({
-        message: $r('app.string.profile_manual_auto_update'), autoCancel: false,
-        primaryButton: { value: $r('app.string.profile_keep_auto_update'), action: (): void => resolve(false) },
-        secondaryButton: { value: $r('app.string.profile_disable_auto_update'), action: (): void => resolve(true) }
+  private askDisableAutoUpdate(): Promise<boolean | undefined> {
+    return new Promise<boolean | undefined>((resolve: (disabled: boolean | undefined) => void): void => {
+      let settled = false;
+      const finish = (disabled: boolean | undefined): void => {
+        if (settled) { return; }
+        settled = true;
+        this.cancelAutoUpdateChoice = undefined;
+        resolve(disabled);
+      };
+      this.cancelAutoUpdateChoice = (): void => finish(undefined);
+      this.getUIContext().showActionSheet({
+        title: $r('app.string.profile_source_title'), message: $r('app.string.profile_manual_auto_update'),
+        alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+        sheets: [
+          { title: $r('app.string.profile_keep_auto_update'), action: (): void => finish(false) },
+          { title: $r('app.string.profile_disable_auto_update'), action: (): void => finish(true) }
+        ],
+        confirm: { value: $r('app.string.action_cancel'), defaultFocus: true,
+          action: (): void => finish(undefined) },
+        cancel: (): void => finish(undefined),
+        onWillDismiss: (action: DismissDialogAction): void => { finish(undefined); action.dismiss(); },
+        onDidDisappear: (): void => finish(undefined)
       });
     });
   }

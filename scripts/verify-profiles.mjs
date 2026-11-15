@@ -1006,3 +1006,47 @@ test('real acknowledged reload compensates a conflicting disk commit through HTT
       } finally { await fixture.close(); }
     });
   });
+
+const confirmEditorDismiss = exportedFunction(path.join(featureDir, 'ProfileEditor.ets'), 'confirmProfileEditorDismiss',
+  'const $r = (key: string): string => key; const DialogAlignment = { Bottom: 0 }; const sheetMaterial = (): undefined => undefined;');
+
+test('dirty editor dismissal keeps the draft on cancellation and discards only after the chosen sheet closes', () => {
+  let panel;
+  let dismissed = 0;
+  let saved = 0;
+  const context = { showActionSheet: (options) => { panel = options; } };
+  const draft = { saving: false, dirty: () => true, save: async () => { saved++; return true; } };
+  confirmEditorDismiss(context, draft, () => { dismissed++; });
+  panel.onWillDismiss({ dismiss() {} });
+  panel.onDidDisappear();
+  assert.equal(dismissed, 0);
+  assert.equal(saved, 0);
+  confirmEditorDismiss(context, draft, () => { dismissed++; });
+  panel.sheets.find((item) => item.title === 'app.string.profile_discard').action();
+  assert.equal(dismissed, 0);
+  panel.onDidDisappear();
+  assert.equal(dismissed, 1);
+  assert.equal(saved, 0);
+});
+
+test('saving from dirty editor dismissal keeps failed changes open and closes only after a successful save', async () => {
+  let panel;
+  let dismissed = 0;
+  let saved = 0;
+  let success = false;
+  const context = { showActionSheet: (options) => { panel = options; } };
+  const draft = { saving: false, dirty: () => true, save: async () => { saved++; return success; } };
+  const chooseSave = async () => {
+    confirmEditorDismiss(context, draft, () => { dismissed++; });
+    panel.sheets.find((item) => item.title === 'app.string.action_save').action();
+    panel.onDidDisappear();
+    await flushProfileCallbacks();
+  };
+  await chooseSave();
+  assert.equal(saved, 1);
+  assert.equal(dismissed, 0);
+  success = true;
+  await chooseSave();
+  assert.equal(saved, 2);
+  assert.equal(dismissed, 1);
+});
