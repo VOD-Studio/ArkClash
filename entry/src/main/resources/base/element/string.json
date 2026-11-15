@@ -478,7 +478,7 @@
     },
     {
       "name": "profile_current",
-      "value": "Current"
+      "value": "Selected"
     },
     {
       "name": "profile_switching",
@@ -919,10 +919,6 @@
     {
       "name": "profile_load_error",
       "value": "Unable to read profiles: %s"
-    },
-    {
-      "name": "profile_apply_error",
-      "value": "Target saved; the previous profile is still running: %s"
     },
     {
       "name": "profile_running",

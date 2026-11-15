@@ -458,7 +458,7 @@
     },
     {
       "name": "profile_current",
-      "value": "当前"
+      "value": "已选择"
     },
     {
       "name": "profile_switching",
@@ -899,10 +899,6 @@
     {
       "name": "profile_load_error",
       "value": "配置读取失败：%s"
-    },
-    {
-      "name": "profile_apply_error",
-      "value": "目标已保存，仍在运行之前的配置：%s"
     },
     {
       "name": "profile_running",

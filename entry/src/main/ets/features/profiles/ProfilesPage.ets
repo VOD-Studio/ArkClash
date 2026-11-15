@@ -37,6 +37,8 @@ export struct ProfilesPage {
   private rows: ListSource<ProfileItem> = new ListSource<ProfileItem>();
   private clockTimer: number = -1;
   private clockInView: boolean = false;
+  private activeActions: number = 0;
+  private reportedApplyError: string = '';
 
   private clockVisible(visible: boolean): void {
     this.clockInView = visible;
@@ -45,6 +47,7 @@ export struct ProfilesPage {
       this.currentTime = Date.now();
       this.clockTimer = setInterval((): void => { this.currentTime = Date.now(); }, 60000);
     }
+    this.consumeApplyError();
   }
 
   aboutToDisappear(): void { this.clockVisible(false); }
@@ -59,7 +62,32 @@ export struct ProfilesPage {
   @Monitor('store.items')
   onItemsChanged(): void { this.rows.replace(this.store.items); }
 
-  private toast(message: ResourceStr): void { this.getUIContext().getPromptAction().showToast({ message: message }); }
+  @Monitor('store.applyError')
+  onApplyErrorChanged(): void {
+    if (this.store.applyError === '') { this.reportedApplyError = ''; }
+    this.consumeApplyError();
+  }
+
+  private consumeApplyError(): void {
+    if (this.activeActions === 0) { this.reportResult(undefined); }
+  }
+
+  private reportResult(failure: string | undefined, success?: ResourceStr, errorMessage?: ResourceStr): void {
+    if (!this.visible || !this.clockInView) { return; }
+    const applyError = this.store.applyError;
+    const error = failure ?? (applyError !== '' && applyError !== this.reportedApplyError ? applyError : undefined);
+    if (error !== undefined) {
+      // 手动结果与状态监听共用消费记录，避免同次失败弹出两次提示。
+      this.reportedApplyError = applyError;
+      this.toast(failure !== undefined && errorMessage !== undefined ? errorMessage : describeError(error));
+    } else if (success !== undefined) {
+      this.toast(success);
+    }
+  }
+
+  private toast(message: ResourceStr): void {
+    if (this.visible && this.clockInView) { this.getUIContext().getPromptAction().showToast({ message: message }); }
+  }
   private openAdd(): void { this.addShown = true; }
   private openEdit(item: ProfileItem): void { this.draft = new ProfileDraft(item); this.editShown = true; }
 
@@ -89,27 +117,43 @@ export struct ProfilesPage {
   }
 
   private async importLocal(): Promise<void> {
-    const failure = await this.store.importLocal();
-    if (failure !== undefined) { this.toast($r('app.string.import_failed', describeError(failure))); }
+    this.activeActions++;
+    try {
+      const failure = await this.store.importLocal();
+      this.reportResult(failure, undefined,
+        failure === undefined ? undefined : $r('app.string.import_failed', describeError(failure)));
+    } finally { this.activeActions--; this.consumeApplyError(); }
   }
   private async select(item: ProfileItem): Promise<void> {
-    const failure = await this.store.select(item.id);
-    if (failure !== undefined) { this.toast($r('app.string.profile_switch_failed', describeError(failure))); }
+    this.activeActions++;
+    try {
+      const failure = await this.store.select(item.id);
+      this.reportResult(failure, undefined,
+        failure === undefined ? undefined : $r('app.string.profile_switch_failed', describeError(failure)));
+    } finally { this.activeActions--; this.consumeApplyError(); }
   }
   private async update(item: ProfileItem): Promise<void> {
-    const failure = await this.store.update(item.id);
-    this.toast(failure === undefined ? $r('app.string.profile_updated_toast') :
-      $r('app.string.download_failed', describeError(failure)));
+    this.activeActions++;
+    try {
+      const failure = await this.store.update(item.id);
+      this.reportResult(failure, $r('app.string.profile_updated_toast'),
+        failure === undefined ? undefined : $r('app.string.download_failed', describeError(failure)));
+    } finally { this.activeActions--; this.consumeApplyError(); }
   }
   private async updateAll(): Promise<void> {
-    const result: ProfileBatchResult = await this.store.updateAll();
-    this.result = result;
-    if (result.failures.length === 1) {
-      const failure = result.failures[0];
-      this.toast($r('app.string.profile_update_failed', failure.name, describeError(failure.error)));
-    } else if (result.failures.length > 1) {
-      this.resultShown = true;
-    }
+    this.activeActions++;
+    try {
+      const result: ProfileBatchResult = await this.store.updateAll();
+      this.result = result;
+      if (result.failures.length === 1) {
+        const failure = result.failures[0];
+        this.reportResult(failure.error, undefined,
+          $r('app.string.profile_update_failed', failure.name, describeError(failure.error)));
+      } else if (result.failures.length > 1) {
+        this.reportedApplyError = this.store.applyError;
+        if (this.visible && this.clockInView) { this.resultShown = true; }
+      }
+    } finally { this.activeActions--; this.consumeApplyError(); }
   }
   private async export(item: ProfileItem): Promise<void> {
     const failure = await this.store.export(item.id);
@@ -177,14 +221,6 @@ export struct ProfilesPage {
           }.width('100%')
         }
       } else {
-        if (this.store.connected && this.store.applyError !== '') {
-          ListItem() {
-            Text(this.store.applyError === 'apply_failed' ? describeError(this.store.applyError) :
-              $r('app.string.profile_apply_error', describeError(this.store.applyError)))
-              .fontSize(13)
-              .fontColor($r('app.color.status_error'))
-          }
-        }
         LazyForEach(this.rows, (item: ProfileItem) => {
           ListItem() {
             ProfileCard({ item: item, selected: this.store.selectedId() === item.id, currentTime: this.currentTime,
