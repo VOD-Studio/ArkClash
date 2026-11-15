@@ -41,7 +41,7 @@ export struct DashboardTab {
   @Builder
   Details() {
     if (this.detailItem !== undefined) {
-      ProfileDetailsSheet({ store: this.store, item: this.detailItem })
+      ProfileDetailsSheet({ store: this.store, item: this.detailItem, visible: this.visible && this.detailShown })
     }
   }
 

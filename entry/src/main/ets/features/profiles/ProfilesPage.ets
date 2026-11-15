@@ -300,7 +300,7 @@ export struct ProfilesPage {
   @Builder
   EditSheet() {
     if (this.draft !== undefined) {
-      ProfileEditor({ store: this.store, draft: this.draft, onSaved: (): void => {
+      ProfileEditor({ store: this.store, draft: this.draft, visible: this.visible && this.editShown, onSaved: (): void => {
         if (this.draft !== undefined) { this.draft.saving = false; }
         this.editShown = false;
       }, onClose: (): void => confirmProfileEditorDismiss(this.getUIContext(), this.draft,

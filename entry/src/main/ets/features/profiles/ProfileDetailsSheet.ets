@@ -8,13 +8,14 @@ import { ProfileItem, ProfileStore } from './Profiles';
 export struct ProfileDetailsSheet {
   @Param @Require store: ProfileStore;
   @Param @Require item: ProfileItem;
+  @Param @Require visible: boolean;
   @Local editing: boolean = false;
   @Local draft: ProfileDraft | undefined = undefined;
 
   @Builder
   Editor() {
     if (this.draft !== undefined) {
-      ProfileEditor({ store: this.store, draft: this.draft,
+      ProfileEditor({ store: this.store, draft: this.draft, visible: this.visible && this.editing,
         onSaved: (): void => {
           if (this.draft !== undefined) { this.draft.saving = false; }
           this.editing = false;

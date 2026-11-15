@@ -35,6 +35,7 @@ export function confirmProfileEditorDismiss(context: UIContext, draft: ProfileDr
 export struct ProfileEditor {
   @Param @Require store: ProfileStore;
   @Param @Require draft: ProfileDraft;
+  @Param @Require visible: boolean;
   @Event onSaved: () => void = (): void => {};
   @Event onClose: () => void = (): void => {};
   @Local sourceShown: boolean = false;
@@ -43,22 +44,38 @@ export struct ProfileEditor {
   @Local loadingSource: boolean = false;
   @Local validating: boolean = false;
   private cancelAutoUpdateChoice: (() => void) | undefined = undefined;
-  private visible: boolean = false;
+  private appeared: boolean = false;
+  private pendingFailure: string | undefined = undefined;
 
-  aboutToAppear(): void { this.visible = true; this.draft.save = (): Promise<boolean> => this.save(); }
+  aboutToAppear(): void {
+    this.appeared = true;
+    this.draft.save = (): Promise<boolean> => this.save();
+    this.consumeFailure();
+  }
   aboutToDisappear(): void {
-    this.visible = false;
+    this.appeared = false;
+    this.pendingFailure = undefined;
     this.draft.save = undefined;
     this.cancelAutoUpdateChoice?.();
   }
 
   private toast(message: ResourceStr): void {
-    if (this.visible) { this.getUIContext().getPromptAction().showToast({ message: message }); }
+    if (this.appeared && this.visible) { this.getUIContext().getPromptAction().showToast({ message: message }); }
   }
 
   private reportFailure(failure: string): void {
     this.draft.error = failure;
+    if (!this.appeared) { return; }
+    this.pendingFailure = failure;
+    this.consumeFailure();
+  }
+
+  @Monitor('visible')
+  consumeFailure(): void {
+    const failure = this.pendingFailure;
+    if (!this.appeared || !this.visible || failure === undefined) { return; }
     this.toast(describeError(failure));
+    this.pendingFailure = undefined;
   }
 
   private async openSource(): Promise<void> {
@@ -67,7 +84,7 @@ export struct ProfileEditor {
     this.draft.error = '';
     try {
       const text = this.draft.content ?? await this.store.source(this.draft.id);
-      if (!this.visible) { return; }
+      if (!this.appeared) { return; }
       this.sourceText = text;
       this.sourceOriginal = this.sourceText;
       this.sourceShown = true;
@@ -82,7 +99,7 @@ export struct ProfileEditor {
       const text = await this.store.pickSource();
       if (text !== undefined) {
         const original = this.draft.content ?? await this.store.source(this.draft.id);
-        if (!this.visible) { return; }
+        if (!this.appeared) { return; }
         this.sourceOriginal = original;
         this.sourceText = text;
         this.sourceShown = true;
@@ -97,7 +114,7 @@ export struct ProfileEditor {
     try {
       const failure = await this.store.validateSource(this.sourceText);
       if (failure !== undefined) { this.reportFailure(failure); return false; }
-      if (!this.visible) { return false; }
+      if (!this.appeared) { return false; }
       if (this.sourceText !== this.sourceOriginal) { this.draft.content = this.sourceText; }
       this.sourceOriginal = this.sourceText;
       this.sourceShown = false;
@@ -154,7 +171,7 @@ export struct ProfileEditor {
       }
       this.draft.saved();
       this.toast($r('app.string.profile_saved_toast'));
-      if (this.visible) { this.onSaved(); }
+      if (this.appeared) { this.onSaved(); }
       return true;
     } catch (e) {
       this.reportFailure(errorString(e as Object));

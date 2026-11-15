@@ -1108,3 +1108,39 @@ test('配置批量失败在后台保留，恢复可见后只展示一次', async
     page.aboutToDisappear();
   }
 });
+
+test('编辑保存失败在后台不提前消费，返回前台只提示一次并保留草稿', async () => {
+  const resources = (key) => key;
+  const { describeError } = load(path.join(featureDir, 'ProfileErrors.ets'), undefined, { $r: resources });
+  const { errorString } = load(path.join(etsDir, 'shared/profiles/Errors.ets'));
+  const Editor = componentControl('ProfileEditor', { describeError, errorString, $r: resources });
+  await sandbox(async (dir) => {
+    const fixture = await actualProfileConsumer(dir);
+    const editor = new Editor();
+    const toasts = [];
+    try {
+      editor.store = fixture.view;
+      editor.draft = fixture.draft('p1');
+      editor.visible = true;
+      editor.getUIContext = () => ({ getPromptAction: () => ({ showToast: ({ message }) => toasts.push(message) }) });
+      editor.aboutToAppear();
+      editor.draft.name = '';
+      const saving = editor.save();
+      editor.visible = false;
+      assert.equal(await saving, false);
+      assert.deepEqual(toasts, []);
+      assert.notEqual(editor.draft.error, '');
+      assert.equal(editor.draft.saving, false);
+      assert.equal(editor.draft.name, '');
+      assert.equal(editor.draft.dirty(), true);
+      editor.visible = true;
+      editor.consumeFailure();
+      assert.deepEqual(toasts, [describeError(editor.draft.error)]);
+      editor.consumeFailure();
+      assert.equal(toasts.length, 1);
+    } finally {
+      editor.aboutToDisappear();
+      await fixture.close();
+    }
+  });
+});
