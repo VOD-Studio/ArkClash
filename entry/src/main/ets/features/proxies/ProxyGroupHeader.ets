@@ -144,9 +144,10 @@ export struct ProxyGroupHeader {
       }
       .width('100%')
       .height(22 + 37 * this.textScale)
-      .padding(10)
-      .borderRadius({ topLeft: 24, topRight: 24,
-        bottomLeft: this.bottomRadius(), bottomRight: this.bottomRadius() })
+      .padding(6)
+      // 卡片色边框给按压反馈留出 4vp 内边距，不缩小整行按钮的命中区。
+      .border({ width: 4, color: $r('app.color.card_background') })
+      .borderRadius(24)
       .backgroundColor(Color.Transparent)
       .accessibilityText(this.group.name)
       .accessibilityDescription(uiResourceText(this.getUIContext(), this.group.actualRetired ? $r('app.string.proxy_actual_retired') : this.group.now))
