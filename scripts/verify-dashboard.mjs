@@ -408,6 +408,54 @@ try {
   const hiddenQualityRequest = requests.at(-1); exit.observe('/unused', 'last-route', false, false);
   respond(hiddenQualityRequest, { ip: '203.0.113.11', type: 'hosting' }); await cancelledQuality;
   assert.equal(hiddenQualityRequest.destroyed, true); assert.equal(exit.quality, undefined);
+
+  const coordinatedServices = new DashboardServiceState();
+  const coordinatedExit = new exits.ExitIpProbe();
+  const coordinatedStart = requests.length;
+  const coordinatedIds = ['google', 'github', 'youtube'];
+  coordinatedServices.observe('/unused', 'before-switch', true, true, coordinatedIds);
+  coordinatedExit.observe('/unused', 'before-switch', true, true);
+  await flush();
+  const retiringRequests = requests.slice(coordinatedStart);
+  assert.equal(retiringRequests.length, 4);
+  coordinatedServices.observe('/unused', 'discarded-switch', true, true, coordinatedIds);
+  coordinatedExit.observe('/unused', 'after-switch', true, true);
+  await flush();
+  assert.equal(requests.length, coordinatedStart + 4, '取消尚未返回时不得抢占内核的执行名额');
+  coordinatedServices.observe('/unused', 'discarded-switch', true, false, coordinatedIds);
+  coordinatedServices.observe('/unused', 'after-switch', true, true, coordinatedIds);
+  await flush();
+  const bypass = new checks.ServiceCheckTask().run('/unused',
+    [{ id: 'google', url: probeTarget }], 'stopped', false);
+  await flush();
+  const bypassRequest = requests.at(-1);
+  assert.equal(bypassRequest.url, probeTarget);
+  respond(bypassRequest, {}, 204);
+  assert.equal((await bypass)[0].httpCode, 204, '停止后的直连不能被旧内核请求阻塞');
+  for (const request of retiringRequests) {
+    assert.equal(request.destroyed, true);
+    respondProbe(request, { ip: '192.0.2.4' });
+  }
+  await flush();
+  const admittedRequests = requests.slice(coordinatedStart + 5);
+  assert.equal(admittedRequests.length, 4, '已取消的排队任务不得再次发送');
+  for (const request of admittedRequests) {
+    respondProbe(request, { ip: '198.51.100.7', country_code: 'US' });
+  }
+  await flush();
+  respondProbe(requests.at(-1), { ip: '198.51.100.7', type: 'isp' });
+  await flush();
+  for (const id of coordinatedIds) {
+    assert.equal(coordinatedServices.results[id].route, 'after-switch');
+    assert.equal(coordinatedServices.results[id].reachability, 'reachable');
+  }
+  assert.equal(coordinatedExit.result.ip, '198.51.100.7');
+  assert.equal(coordinatedExit.result.route, 'after-switch');
+  assert.equal(coordinatedExit.quality.level, 'good');
+  assert.equal(coordinatedExit.busy, false);
+  coordinatedServices.observe('/unused', 'after-switch', true, false, coordinatedIds);
+  coordinatedExit.observe('/unused', 'after-switch', true, false);
+
   const { UiMemoryStats } = load(path.join(ets, 'client/Stats.ets'));
   const memory = new UiMemoryStats(); await memory.refresh();
   assert.equal(memory.pssSwapBytes, 11 * 1024); assert.equal(memory.rssBytes, 17 * 1024);

@@ -20,6 +20,12 @@ interface RoutedProbeWire {
   revision?: number;
 }
 
+interface ProbeWaiter {
+  owner: RoutedProbeRequest;
+  resolve: () => void;
+  reject: (error: RoutedProbeError) => void;
+}
+
 export class RoutedProbeError extends Error {
   reason: RoutedProbeFailure;
   controlStatus: number;
@@ -43,14 +49,45 @@ function routedProbeFailure(status: number): RoutedProbeFailure {
 
 /** 运行时由核心规则拨号；停止时 SDK 直连。controller 凭据只发送给本机控制面。 */
 export class RoutedProbeRequest {
+  private static active: number = 0;
+  private static waiting: ProbeWaiter[] = [];
+  private acquired: boolean = false;
   private cancelled: boolean = false;
   private request?: http.HttpRequest;
 
   cancel(): void {
     this.cancelled = true;
+    const index = RoutedProbeRequest.waiting.findIndex((waiter: ProbeWaiter): boolean => waiter.owner === this);
+    if (index >= 0) {
+      RoutedProbeRequest.waiting.splice(index, 1)[0].reject(new RoutedProbeError('cancelled'));
+    }
     const request = this.request;
     this.request = undefined;
     request?.destroy();
+  }
+
+  private acquire(): Promise<void> {
+    // 与内核的四个执行名额一致；旧请求真正结束后，新出口才接手名额。
+    if (RoutedProbeRequest.active < 4) {
+      RoutedProbeRequest.active++;
+      this.acquired = true;
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve, reject): void => {
+      RoutedProbeRequest.waiting.push({ owner: this, resolve: resolve, reject: reject });
+    });
+  }
+
+  private release(): void {
+    if (!this.acquired) { return; }
+    this.acquired = false;
+    const next = RoutedProbeRequest.waiting.shift();
+    if (next === undefined) {
+      RoutedProbeRequest.active--;
+    } else {
+      next.owner.acquired = true;
+      next.resolve();
+    }
   }
 
   async run(filesDir: string, target: string, method: RoutedProbeMethod, timeoutMs: number,
@@ -63,6 +100,8 @@ export class RoutedProbeRequest {
       let address = target;
       const header: Record<string, string> = {};
       if (routed) {
+        await this.acquire();
+        if (this.cancelled) { throw new RoutedProbeError('cancelled'); }
         const runtime = await readRuntime(filesDir);
         if (runtime === undefined || runtime.secret === '') {
           throw new RoutedProbeError('controller');
@@ -130,6 +169,7 @@ export class RoutedProbeRequest {
         this.request = undefined;
         request.destroy();
       }
+      this.release();
     }
   }
 }
