@@ -30,6 +30,47 @@
 
 * **ui:** 使用系统异步接口采集界面进程内存，避免在 ArkTS 主线程同步读取 smaps。
 
+## [0.5.0](https://github.com/VOD-Studio/ArkClash/compare/v0.4.0...v0.5.0) (2026-11-15)
+
+
+### 新增
+
+* **client:** 同步运行会话与节点选择状态 ([19e8fc9](https://github.com/VOD-Studio/ArkClash/commit/19e8fc952c571913404fc8ce5b74bad4c398840d))
+* **core:** 提供配置会话的控制事务 ([66b6584](https://github.com/VOD-Studio/ArkClash/commit/66b6584e36dd660bd3310e5a4e3e5f292c4fe50c))
+* **profiles:** 实现按配置存储与更新事务 ([1303820](https://github.com/VOD-Studio/ArkClash/commit/1303820a2e7637749b2de0946ce8c6d94d6a6862))
+* **proxies:** 接入分组节点页面与选择弹层 ([18bc298](https://github.com/VOD-Studio/ArkClash/commit/18bc2981fbf1466ba2605f2523cd5e2f7f9307a4))
+* **ui:** 接通仪表盘与配置页面 ([98bf565](https://github.com/VOD-Studio/ArkClash/commit/98bf565cd67fb5242ecc5c426b1d227465f4ead4))
+* **ui:** 接通日用三页并对齐代理交互 ([c9964e2](https://github.com/VOD-Studio/ArkClash/commit/c9964e2520a66b7d4c8b08cf81565f2b376d4169))
+
+
+### 修复
+
+* **profiles:** 移除批量刷新和导入的重复计数 ([ee62a1c](https://github.com/VOD-Studio/ArkClash/commit/ee62a1c6847f43ab35778f8ddb083ec5e645fcb0))
+* **proxies:** 修复分组过渡与滚动器生命周期 ([e01a987](https://github.com/VOD-Studio/ArkClash/commit/e01a9872d7c2e8bd79a4e58ccc95f8b813a664fc))
+* **proxies:** 修正分组折叠与吸顶边界 ([41f3f49](https://github.com/VOD-Studio/ArkClash/commit/41f3f4994170faa491a8736758846fc51e9bf1c5))
+* **proxies:** 按 FlClash 对齐分组标题与节点卡样式 ([8463698](https://github.com/VOD-Studio/ArkClash/commit/84636981344e1a456edbf563f9a8ad600578d0e0))
+* **proxies:** 补齐节点按压扩散与复用清理 ([9fd35d7](https://github.com/VOD-Studio/ArkClash/commit/9fd35d7518c5972264f167720c252295ee87f6f1))
+* **runtime:** 恢复异常终止后的代理启停状态 ([59dfca3](https://github.com/VOD-Studio/ArkClash/commit/59dfca3954da1f486280b7cbffd6c85469db37ec))
+* **ui:** 使用不被外层裁剪的原生卡片阴影 ([efc0343](https://github.com/VOD-Studio/ArkClash/commit/efc034399b3dd47480ce571bcc053a3ed9baebd9))
+* **ui:** 保留详情抽屉的组件宿主 ([f6d7a40](https://github.com/VOD-Studio/ArkClash/commit/f6d7a40a345d0fc83a7a51fadc35cf639887fc70))
+* **ui:** 在首页原位打开配置详情抽屉 ([7823523](https://github.com/VOD-Studio/ArkClash/commit/7823523e1ca770afb5941203cb3bbab029dc2b99))
+* **ui:** 将未实现的连接统计标为开发中 ([c4ebb2f](https://github.com/VOD-Studio/ArkClash/commit/c4ebb2f12655656f47bb55043b80da4297f8a791))
+* **ui:** 展示最多四项服务状态预览 ([58804d4](https://github.com/VOD-Studio/ArkClash/commit/58804d4997c01f5a1ceb4d724f78d0d90fa9ba8b))
+* **ui:** 恢复网络速度图表的实际绘制尺寸 ([cf2d8fe](https://github.com/VOD-Studio/ArkClash/commit/cf2d8fe59bc9f6769da5606b7bbab7b36238dd90))
+* **ui:** 按 FlClash 调整页面、卡片与节点卡的底色层级 ([2b7fac5](https://github.com/VOD-Studio/ArkClash/commit/2b7fac513400b812164e2f4c7a8d54a296b35f6c))
+* **ui:** 收敛卡片编辑与原生动效状态 ([496e493](https://github.com/VOD-Studio/ArkClash/commit/496e4931312d2cd7445501b7a85c9b24696d2685))
+* **ui:** 校正代理组摘要头像的叠放布局 ([5bdeb70](https://github.com/VOD-Studio/ArkClash/commit/5bdeb702b1caddc29fb052be57ff93e3a96dadfd))
+* **ui:** 校正配置用量波形的绘制坐标 ([a398331](https://github.com/VOD-Studio/ArkClash/commit/a3983318dc9066a241c0765b286cd3796de8a46d))
+* **ui:** 稳定状态卡布局并补齐真实出口信息 ([e19cb95](https://github.com/VOD-Studio/ArkClash/commit/e19cb9599aa9c1bc9d72e6e639279e912c92a5ba))
+* **ui:** 精简仪表盘与抽屉的重复说明 ([08ce3b1](https://github.com/VOD-Studio/ArkClash/commit/08ce3b1729c0d43781af7fa4dbe2b0cc2f2df9c7))
+* **ui:** 纠正三页布局并保留原生交互组件 ([2111bed](https://github.com/VOD-Studio/ArkClash/commit/2111beda251758c5feba39298ce08fe946deeef8))
+* **ui:** 统一三页标题按钮的原生材质 ([127f1a8](https://github.com/VOD-Studio/ArkClash/commit/127f1a8d6fb4e0b02d636e654332756d53c7430c))
+
+
+### 重构
+
+* **proxies:** 移除页签风格并保留分组列表 ([23c214e](https://github.com/VOD-Studio/ArkClash/commit/23c214eb729b51304eaf000c91eaedbcd072d49a))
+
 ## [0.4.0](https://github.com/VOD-Studio/ArkClash/compare/v0.3.0...v0.4.0) (2026-11-07)
 
 
