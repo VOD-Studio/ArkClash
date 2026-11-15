@@ -137,8 +137,8 @@
       "value": "#E9E5EC"
     },
     {
-      "name": "dash_running_background",
-      "value": "#94F990"
+      "name": "success_foreground",
+      "value": "#146B3B"
     },
     {
       "name": "profile_expiry_tonal",

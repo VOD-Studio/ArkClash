@@ -198,19 +198,19 @@ export struct DashboardStatus {
                 .fontWeight(600)
               Row({ space: 4 }) {
                 if (this.conn.connected) {
-                  Circle({ width: 5, height: 5 }).fill($r('app.color.status_connected')).strokeWidth(0)
+                  Circle({ width: 5, height: 5 }).fill($r('app.color.success_foreground')).strokeWidth(0)
                 }
                 Text(this.conn.connected ? $r('app.string.chip_running') : this.statusText())
                   .fontSize(11)
                   .lineHeight(13)
                   .fontWeight(600)
-                  .fontColor(this.conn.connected ? $r('app.color.status_connected') : $r('sys.color.font_secondary'))
+                  .fontColor(this.conn.connected ? $r('app.color.success_foreground') : $r('sys.color.font_secondary'))
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
               }
               .padding({ left: 7, right: 7, top: 3, bottom: 3 })
               .borderRadius(7)
-              .backgroundColor(this.conn.connected ? $r('app.color.dash_running_background') :
+              .backgroundColor(this.conn.connected ? $r('app.color.success_soft') :
                 $r('app.color.tile_background'))
               .accessibilityDescription(this.conn.error)
               .onClick((): void => {
