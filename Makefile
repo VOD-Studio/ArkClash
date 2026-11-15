@@ -9,6 +9,9 @@ help: ## 列出所有目标
 core: ## 交叉编译 mihomo 内核到 entry/libs/（补丁版 Go 工具链）
 	scripts/build-core.sh
 
+core-codeql: ## 使用标准 Go 和补丁依赖构建 CodeQL 分析产物，不用于装机
+	scripts/ci/build-codeql.sh
+
 geodata: ## 按 geodata.lock 下载 Geo 数据到 rawfile/geo/，随 HAP 打包
 	scripts/fetch-geodata.sh
 
@@ -36,4 +39,4 @@ test: ## 宿主业务回归（TESTS=profiles|proxies|dashboard|runtime|core，�
 clean: ## 清理构建产物（保留 .toolchain/ 里的补丁工具链）
 	rm -rf entry/build entry/.cxx .hvigor dist entry/libs
 
-.PHONY: help core geodata geodata-update hap install run log lint test clean
+.PHONY: help core core-codeql geodata geodata-update hap install run log lint test clean

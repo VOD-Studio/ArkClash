@@ -153,6 +153,7 @@ gh run download -R VOD-Studio/ArkClash -n hap-debug $(gh run list -R VOD-Studio/
 
 - **常规 CI 的 HAP 任务被跳过**：没配置 `HARMONYOS_TOOLS_REPO`，或者是外部 fork 发起的 PR（拿不到 secret）。
 - **自动发版显示成功，但 Release 没有 HAP**：检查各任务结果，不能只看 workflow 总状态。自动发版会跳过仅供手动补传的 `check`；GitHub Actions 的隐式 `success()` 会把跳过沿依赖链传播，所以 `hap`、`publish` 都要用 `!cancelled()` 加直接上游 `result == 'success'` 显式放行。旧 tag 的 workflow 不随 `main` 更新；已有版本缺包时，按「发版」第 4 步手动补传。
+- **CodeQL 构建缺少 `tunnel.DialContext` 等符号**：分析同样依赖 mihomo 补丁，不能直接在 `core/` 执行裸 `go build`。统一用 `make core-codeql`，它保持 CodeQL 能跟踪的标准 Go，同时准备 mihomo/gVisor 补丁和临时 modfile，并用 `-a` 强制提取；分析产物随后删除，不用于装机或分发。
 - **dependabot 的 PR 上 HAP 报「没有 HARMONYOS_TOOLS_TOKEN」**：在 Dependabot secrets 里补配，见「变量与密钥」。
 - **机器人 PR 上没有「CI 通过」**：见「机器人 PR」。
 - **下载 Command Line Tools 报 404 或 403**：token 过期，或者没有授予那个私有仓库的权限。
