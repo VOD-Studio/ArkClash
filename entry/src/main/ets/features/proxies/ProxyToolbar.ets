@@ -132,6 +132,17 @@ export struct ProxyToolbar {
           .enabled(this.active && (this.browser.online || this.browser.offlineWritable))
           .onClick(() => this.browser.clearPin(this.browser.currentGroup))
       }
+      if (this.browser.loadError || this.browser.preferenceError) {
+        MenuItem({ content: $r('app.string.proxy_retry') })
+          .onClick((): void => {
+            if (this.browser.preferenceError) {
+              this.browser.retryPreferences();
+            }
+            if (this.browser.loadError) {
+              this.browser.refresh();
+            }
+          })
+      }
       MenuItem({ content: $r('app.string.proxy_sort'), symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.sort')), builder: this.sortMenu })
       MenuItem({
         content: $r('app.string.proxy_menu_layout'),

@@ -130,11 +130,15 @@
     },
     {
       "name": "dash_status_decoration",
-      "value": "#212738"
+      "value": "#293D66"
     },
     {
-      "name": "dash_running_background",
-      "value": "#005313"
+      "name": "dash_status_idle_decoration",
+      "value": "#302D36"
+    },
+    {
+      "name": "success_foreground",
+      "value": "#76E6A8"
     },
     {
       "name": "profile_expiry_tonal",

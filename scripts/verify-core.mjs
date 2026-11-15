@@ -11,7 +11,7 @@ test('核心选择持久化、回滚、规则探测与实际请求取消', { tim
   const root = fileURLToPath(new URL('../', import.meta.url));
   const sandbox = await mkdtemp(join(tmpdir(), 'arkclash-core-host-'));
   try {
-    for (const file of ['go.mod', 'go.sum', 'runtime.go', 'selection.go', 'delay.go', 'probe.go', 'proxies.go']) {
+    for (const file of ['go.mod', 'go.sum', 'runtime.go', 'selection.go', 'delay.go', 'probe.go', 'probe_body.go', 'proxies.go']) {
       await copyFile(join(root, 'core', file), join(sandbox, file));
     }
     for (const file of ['core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go']) {

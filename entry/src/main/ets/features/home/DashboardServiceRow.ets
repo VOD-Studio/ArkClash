@@ -1,4 +1,5 @@
-import { ServiceAvailability, ServiceResult } from '../../client/ServiceCheck';
+import { ServiceResult } from '../../client/ServiceCheck';
+import { ServiceAvailability } from '../../client/ServiceRuleTypes';
 import { uiResourceText } from '../../components/ResourceText';
 import { ServiceSlot, serviceInfo } from './Services';
 import { AppGlyph } from '../../components/AppGlyph';
@@ -26,6 +27,11 @@ export function serviceConnectivityLabel(result: ServiceResult | undefined, chec
   if (result === undefined) {
     return $r('app.string.dash_service_untested');
   }
+  if (result.availability === 'available') {
+    return result.delay > 0 ? $r('app.string.dash_service_reachable', result.delay) :
+      serviceAvailabilityLabel(result.availability);
+  }
+  if (result.availability !== 'unknown') { return serviceAvailabilityLabel(result.availability); }
   if (result.failure === 'capacity') {
     return $r('app.string.dash_probe_busy');
   }
@@ -34,7 +40,9 @@ export function serviceConnectivityLabel(result: ServiceResult | undefined, chec
   }
   switch (result.reachability) {
     case 'reachable': return $r('app.string.dash_service_reachable', result.delay);
-    case 'restricted': return $r('app.string.dash_service_restricted', result.httpCode);
+    case 'restricted': return result.httpCode === 405 ?
+      $r('app.string.dash_service_method_unsupported', result.httpCode) :
+      $r('app.string.dash_service_restricted', result.httpCode);
     case 'timeout': return $r('app.string.dash_service_timeout');
     case 'unreachable': return $r('app.string.dash_service_unreachable', result.httpCode);
     default: return $r('app.string.dash_service_failed');
@@ -50,6 +58,8 @@ export struct DashboardServiceRow {
   @Param saving: boolean = false;
   @Param canDisable: boolean = true;
   @Param shownOnDashboard: boolean = false;
+  @Param failed: boolean = false;
+  @Param canRun: boolean = true;
   @Event onToggle: (visible: boolean) => void = () => {};
   @Event onRun: () => void = () => {};
 
@@ -61,13 +71,30 @@ export struct DashboardServiceRow {
     }
   }
 
-  build() {
-    Row({ space: 10 }) {
+  private statusLabel(): ResourceStr {
+    return this.failed && this.result === undefined && !this.checking ?
+      $r('app.string.dash_probe_failed') : serviceConnectivityLabel(this.result, this.checking);
+  }
+
+  private statusColor(): ResourceColor {
+    if (this.result === undefined) {
+      return this.failed ? $r('app.color.status_error') : $r('sys.color.font_tertiary');
+    }
+    if (this.result.reachability === 'reachable') {
+      return $r('app.color.success_foreground');
+    }
+    return this.result.reachability === 'restricted' || this.result.failure === 'capacity' ?
+      $r('app.color.warning') : $r('app.color.status_error');
+  }
+
+  @Builder
+  Content() {
+    Row({ space: 12 }) {
       Stack() {
         if (serviceInfo(this.slot.id) !== undefined) {
           Image(serviceInfo(this.slot.id)?.icon)
-            .width(22)
-            .height(22)
+            .width(24)
+            .height(24)
             .objectFit(ImageFit.Contain)
         } else {
           Text(this.slot.id.slice(0, 1).toUpperCase()).fontSize(18)
@@ -77,78 +104,81 @@ export struct DashboardServiceRow {
       .height(40)
       .borderRadius(12)
       .backgroundColor($r('app.color.service_icon_background'))
-      Column({ space: 4 }) {
-        Row({ space: 8 }) {
-          Text(serviceInfo(this.slot.id)?.name ?? this.slot.id)
-            .fontSize(15)
-            .lineHeight(20)
-            .fontWeight(600)
+      Column({ space: 2 }) {
+        Text(serviceInfo(this.slot.id)?.name ?? this.slot.id)
+          .fontSize(16)
+          .lineHeight(22)
+          .fontWeight(500)
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+        if (this.managing) {
+          Text(this.shownOnDashboard ? $r('app.string.dash_service_shown') : '')
+            .fontSize(11)
+            .lineHeight(16)
+            .height(16)
+            .fontColor($r('sys.color.font_secondary'))
             .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-          if (!this.managing && this.result !== undefined && this.result.availability !== 'unknown') {
-            Text(serviceAvailabilityLabel(this.result.availability))
-              .fontSize(12)
-              .lineHeight(16)
-              .fontColor($r('sys.color.font_secondary'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-          }
-        }
-        .width('100%')
-        if (this.managing && this.shownOnDashboard) {
-          Text($r('app.string.dash_service_shown'))
+        } else if (this.result !== undefined && this.result.region !== '') {
+          Text(this.result.region)
             .fontSize(12)
             .lineHeight(16)
             .fontColor($r('sys.color.font_secondary'))
-        }
-        if (!this.managing) {
-          Row({ space: 8 }) {
-            Text(serviceConnectivityLabel(this.result, this.checking))
-              .fontSize(12)
-              .lineHeight(16)
-              .maxLines(2)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .fontColor($r('sys.color.font_secondary'))
-              .layoutWeight(1)
-            if (this.result !== undefined) {
-              Text(new Date(this.result.checkedAt).toLocaleTimeString())
-                .fontSize(11)
-                .fontColor($r('sys.color.font_tertiary'))
-                .lineHeight(14)
-                .maxLines(1)
-            }
-          }
-          .width('100%')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
       if (this.managing) {
         Toggle({ type: ToggleType.Switch, isOn: this.slot.visible })
           .enabled(!this.saving && (!this.slot.visible || this.canDisable))
           .accessibilityText(this.accessibleName())
           .onChange((visible: boolean): void => { this.onToggle(visible); })
+        AppGlyph({ name: 'sort', iconSize: 18, iconColor: $r('sys.color.font_tertiary') })
       } else {
-        Button({ type: ButtonType.Circle }) {
+        Stack({ alignContent: Alignment.End }) {
           if (this.checking) {
-            LoadingProgress().width(18).height(18)
+            LoadingProgress().width(20).height(20).color($r('app.color.brand'))
           } else {
-            AppGlyph({ name: 'sync', iconSize: 18, iconColor: $r('sys.color.font_secondary') })
+            Text(this.statusLabel())
+              .fontSize(12)
+              .lineHeight(16)
+              .fontWeight(500)
+              .fontFeature('"tnum" on')
+              .fontColor(this.statusColor())
+              .textAlign(TextAlign.End)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
           }
         }
-        .width(32)
+        .width(108)
         .height(32)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText(uiResourceText(this.getUIContext(), $r('app.string.dash_check')))
-        .enabled(!this.checking && serviceInfo(this.slot.id) !== undefined)
-        .onClick((): void => { this.onRun(); })
       }
     }
     .width('100%')
     .padding({ left: 12, right: 16, top: 12, bottom: 12 })
-    .borderRadius(22)
-    .backgroundColor($r('app.color.tile_background'))
+    .constraintSize({ minHeight: 64 })
+  }
+
+  build() {
+    if (this.managing) {
+      this.Content()
+    } else {
+      Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.TEXTUAL, stateEffect: true }) {
+        this.Content()
+      }
+      .width('100%')
+      .padding(0)
+      .borderRadius(16)
+      .stateStyles({ disabled: { .opacity(1) } })
+      .enabled(this.canRun && serviceInfo(this.slot.id) !== undefined)
+      .accessibilityText(this.accessibleName())
+      .accessibilityDescription(uiResourceText(this.getUIContext(), this.statusLabel()))
+      .onClick((): void => { this.onRun(); })
+    }
   }
 }

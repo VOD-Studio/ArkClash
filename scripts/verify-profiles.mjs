@@ -91,6 +91,24 @@ function exportedFunction(file, name, prelude) {
   return load(file, `${prelude}\n${declaration.getText(ast)}`)[name];
 }
 
+// 只提取实际组件的控制逻辑；原生布局与动效由真机验收。
+function componentControl(name, overrides = {}) {
+  const file = path.join(featureDir, `${name}.ets`);
+  const text = fs.readFileSync(file, 'utf8').replace(new RegExp(`\\bstruct\\s+${name}\\b`), `class ${name}`);
+  const ast = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const declaration = ast.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === name);
+  const members = declaration.members.filter(member => {
+    const decorators = ts.getDecorators(member) ?? [];
+    return member.name !== undefined && member.name.getText(ast) !== 'build' &&
+      (ts.isPropertyDeclaration(member) || ts.isMethodDeclaration(member)) &&
+      !decorators.some(decorator => decorator.expression.getText(ast) === 'Builder');
+  }).map(member => {
+    const decorators = ts.getDecorators(member) ?? [];
+    return text.slice(decorators.at(-1)?.end ?? member.getStart(ast), member.end);
+  }).join('\n');
+  return load(file, `export class ${name} {\n${members}\n}`, overrides)[name];
+}
+
 const store = load(path.join(etsDir, 'shared/profiles/Store.ets'));
 const download = load(path.join(etsDir, 'shared/profiles/Download.ets'));
 const parseLinks = exportedFunction(path.join(featureDir, 'ProfileActions.ets'), 'parseProfileLinks',
@@ -1006,3 +1024,123 @@ test('real acknowledged reload compensates a conflicting disk commit through HTT
       } finally { await fixture.close(); }
     });
   });
+
+const confirmEditorDismiss = exportedFunction(path.join(featureDir, 'ProfileEditor.ets'), 'confirmProfileEditorDismiss',
+  'const $r = (key: string): string => key; const DialogAlignment = { Bottom: 0 }; const sheetMaterial = (): undefined => undefined;');
+
+test('dirty editor dismissal keeps the draft on cancellation and discards only after the chosen sheet closes', () => {
+  let panel;
+  let dismissed = 0;
+  let saved = 0;
+  const context = { showActionSheet: (options) => { panel = options; } };
+  const draft = { saving: false, dirty: () => true, save: async () => { saved++; return true; } };
+  confirmEditorDismiss(context, draft, () => { dismissed++; });
+  panel.onWillDismiss({ dismiss() {} });
+  panel.onDidDisappear();
+  assert.equal(dismissed, 0);
+  assert.equal(saved, 0);
+  confirmEditorDismiss(context, draft, () => { dismissed++; });
+  panel.sheets.find((item) => item.title === 'app.string.profile_discard').action();
+  assert.equal(dismissed, 0);
+  panel.onDidDisappear();
+  assert.equal(dismissed, 1);
+  assert.equal(saved, 0);
+});
+
+test('saving from dirty editor dismissal keeps failed changes open and closes only after a successful save', async () => {
+  let panel;
+  let dismissed = 0;
+  let saved = 0;
+  let success = false;
+  const context = { showActionSheet: (options) => { panel = options; } };
+  const draft = { saving: false, dirty: () => true, save: async () => { saved++; return success; } };
+  const chooseSave = async () => {
+    confirmEditorDismiss(context, draft, () => { dismissed++; });
+    panel.sheets.find((item) => item.title === 'app.string.action_save').action();
+    panel.onDidDisappear();
+    await flushProfileCallbacks();
+  };
+  await chooseSave();
+  assert.equal(saved, 1);
+  assert.equal(dismissed, 0);
+  success = true;
+  await chooseSave();
+  assert.equal(saved, 2);
+  assert.equal(dismissed, 1);
+});
+
+test('配置批量失败在后台保留，恢复可见后只展示一次', async () => {
+  const { ListSource } = load(path.join(etsDir, 'components/ListSource.ets'));
+  const resources = (key) => key;
+  const { describeError } = load(path.join(featureDir, 'ProfileErrors.ets'), undefined, { $r: resources });
+  const Page = componentControl('ProfilesPage', {
+    ListSource, describeError, $r: resources, setInterval: () => 1, clearInterval: () => {}
+  });
+  for (const count of [1, 2]) {
+    let finish;
+    const result = { failures: Array.from({ length: count }, (_, index) =>
+      ({ id: `profile-${index}`, name: `Profile ${index}`, error: 'download' })) };
+    const toasts = [];
+    const page = new Page();
+    page.store = { applyError: 'download', updateAll: () => new Promise(resolve => { finish = resolve; }) };
+    page.getUIContext = () => ({ getPromptAction: () => ({ showToast: ({ message }) => toasts.push(message) }) });
+    page.clockVisible(true);
+    toasts.length = 0;
+    const updating = page.updateAll();
+    page.visible = false;
+    page.onVisibilityChange();
+    finish(result);
+    await updating;
+    assert.equal(page.resultShown, false);
+    assert.deepEqual(toasts, []);
+    page.visible = true;
+    page.onVisibilityChange();
+    assert.equal(page.resultShown, count > 1);
+    assert.equal(page.result, result);
+    assert.deepEqual(toasts, count === 1 ? ['app.string.profile_update_failed'] : []);
+    page.resultShown = false;
+    page.visible = false;
+    page.onVisibilityChange();
+    page.visible = true;
+    page.onVisibilityChange();
+    assert.equal(page.resultShown, false);
+    assert.equal(toasts.length, count === 1 ? 1 : 0);
+    page.aboutToDisappear();
+  }
+});
+
+test('编辑保存失败在后台不提前消费，返回前台只提示一次并保留草稿', async () => {
+  const resources = (key) => key;
+  const { describeError } = load(path.join(featureDir, 'ProfileErrors.ets'), undefined, { $r: resources });
+  const { errorString } = load(path.join(etsDir, 'shared/profiles/Errors.ets'));
+  const Editor = componentControl('ProfileEditor', { describeError, errorString, $r: resources });
+  await sandbox(async (dir) => {
+    const fixture = await actualProfileConsumer(dir);
+    const editor = new Editor();
+    const toasts = [];
+    try {
+      editor.store = fixture.view;
+      editor.draft = fixture.draft('p1');
+      editor.visible = true;
+      editor.getUIContext = () => ({ getPromptAction: () => ({ showToast: ({ message }) => toasts.push(message) }) });
+      editor.aboutToAppear();
+      editor.draft.name = '';
+      const saving = editor.save();
+      editor.visible = false;
+      assert.equal(await saving, false);
+      assert.deepEqual(toasts, []);
+      assert.notEqual(editor.draft.error, '');
+      assert.equal(editor.draft.saving, false);
+      assert.equal(editor.draft.name, '');
+      assert.equal(editor.draft.dirty(), true);
+      editor.visible = true;
+      editor.consumeFailure();
+      assert.deepEqual(toasts, [describeError(editor.draft.error)]);
+      editor.consumeFailure();
+      assert.equal(toasts.length, 1);
+    } finally {
+      editor.aboutToDisappear();
+      await fixture.close();
+    }
+  });
+});

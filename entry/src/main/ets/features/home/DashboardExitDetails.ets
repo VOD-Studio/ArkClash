@@ -1,6 +1,7 @@
 import { pasteboard } from '@kit.BasicServicesKit';
 import { i18n } from '@kit.LocalizationKit';
 import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
+import { uiResourceText } from '../../components/ResourceText';
 import { PAGE_GUTTER } from '../../components/Theme';
 import { dashboardSettings, DashboardSettings } from './DashboardSettings';
 import { exitIpQualityLabel, exitIpTypeLabel } from './DashboardIpQuality';
@@ -8,12 +9,29 @@ import { exitIpQualityLabel, exitIpTypeLabel } from './DashboardIpQuality';
 interface DashboardExitDetailField {
   label: ResourceStr;
   content: ResourceStr;
+  retry?: boolean;
 }
 
 @ComponentV2
 export struct DashboardExitDetails {
+  @Param visible: boolean = false;
+  @Event onRefresh: () => void = (): void => {};
   @Local probe: ExitIpProbe = exitIpProbe;
   @Local settings: DashboardSettings = dashboardSettings;
+  @Local copying: boolean = false;
+  private appeared: boolean = false;
+
+  aboutToAppear(): void { this.appeared = true; }
+  aboutToDisappear(): void { this.appeared = false; }
+
+  private toast(message: ResourceStr): void {
+    if (this.appeared && this.visible) { this.getUIContext().getPromptAction().showToast({ message: message }); }
+  }
+
+  private checkedAtLabel(): ResourceStr {
+    if (this.probe.failed) { return $r('app.string.dash_probe_checked_at_failed'); }
+    return this.probe.stale ? $r('app.string.dash_probe_checked_at_stale') : $r('app.string.dash_probe_checked_at');
+  }
 
   private address(): ResourceStr {
     return this.settings.hideIp ? '*****' : this.probe.result?.ip ??
@@ -31,22 +49,27 @@ export struct DashboardExitDetails {
     }
   }
 
-  private async toggleHide(hidden: boolean): Promise<void> {
+  private async toggleHide(hidden: boolean): Promise<boolean> {
+    if (!this.appeared || !this.visible || this.settings.saving || this.settings.hasDraft) { return false; }
     try {
       await this.settings.commit({ hideIp: hidden }, this.settings.revision);
+      return true;
     } catch (e) {
-      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.dash_save_failed') });
+      return false;
     }
   }
 
   private async copyExit(): Promise<void> {
     const result = this.probe.result;
-    if (this.settings.hideIp || result === undefined) { return; }
+    if (!this.appeared || !this.visible || this.copying || this.settings.hideIp || result === undefined) { return; }
+    this.copying = true;
     try {
       await pasteboard.getSystemPasteboard().setData(pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, result.ip));
-      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.copied') });
+      this.toast($r('app.string.copied'));
     } catch (e) {
-      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.dash_copy_failed') });
+      this.toast($r('app.string.dash_copy_failed'));
+    } finally {
+      this.copying = false;
     }
   }
 
@@ -57,6 +80,8 @@ export struct DashboardExitDetails {
         .fontSize(13)
         .lineHeight(18)
         .fontColor($r('sys.color.font_secondary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
         .constraintSize({ maxWidth: '38%' })
       Text(field.content)
         .fontSize(14)
@@ -68,27 +93,18 @@ export struct DashboardExitDetails {
     }
     .width('100%')
     .alignItems(VerticalAlign.Top)
+    .accessibilityDescription(field.retry ? uiResourceText(this.getUIContext(), $r('app.string.dash_retry_exit')) : '')
+    .onClick((): void => {
+      if (field.retry && this.appeared && this.visible && !this.probe.busy && !this.probe.qualityBusy) {
+        this.onRefresh();
+      }
+    })
   }
 
   build() {
     Column() {
       Scroll() {
         Column({ space: 16 }) {
-          if (this.probe.stale || this.probe.failed) {
-            Text(this.probe.failure === 'capacity' ? $r('app.string.dash_probe_busy') :
-              this.probe.failure === 'routeChanged' ? $r('app.string.dash_probe_changed') : $r('app.string.dash_stale_retry'))
-              .fontSize(13)
-              .lineHeight(18)
-              .fontColor($r('app.color.warning'))
-              .width('100%')
-              .padding({ left: 5, right: 5 })
-          }
-          if (this.probe.qualityFailed) {
-            Text($r('app.string.dash_ip_quality_failed'))
-              .fontSize(13)
-              .fontColor($r('app.color.warning'))
-              .onClick((): void => { this.probe.refresh(); })
-          }
           Column({ space: 16 }) {
             Column({ space: 6 }) {
               Text($r('app.string.exit_ip'))
@@ -112,7 +128,8 @@ export struct DashboardExitDetails {
             this.DetailField({ label: $r('app.string.dash_ip_type'),
               content: exitIpTypeLabel(this.probe.quality, this.probe.qualityBusy) })
             this.DetailField({ label: $r('app.string.dash_ip_quality'),
-              content: exitIpQualityLabel(this.probe.quality, this.probe.qualityBusy) })
+              content: this.probe.qualityFailed ? $r('app.string.dash_exit_failed') :
+                exitIpQualityLabel(this.probe.quality, this.probe.qualityBusy), retry: this.probe.qualityFailed })
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
@@ -122,7 +139,7 @@ export struct DashboardExitDetails {
           Column({ space: 16 }) {
             this.DetailField({ label: $r('app.string.dash_probe_source'), content: this.probe.result?.source || '—' })
             this.DetailField({ label: $r('app.string.dash_ip_quality_source'), content: this.probe.quality?.source || '—' })
-            this.DetailField({ label: $r('app.string.dash_probe_checked_at'), content: this.probe.result !== undefined ?
+            this.DetailField({ label: this.checkedAtLabel(), content: this.probe.result !== undefined ?
               new Date(this.probe.result.checkedAt).toLocaleString() : '—' })
             Row({ space: 16 }) {
               Text($r('app.string.dash_hide_ip'))
@@ -130,7 +147,7 @@ export struct DashboardExitDetails {
                 .lineHeight(20)
                 .layoutWeight(1)
               Toggle({ type: ToggleType.Switch, isOn: this.settings.hideIp })
-                .enabled(!this.settings.saving)
+                .enabled(this.visible && !this.settings.saving && !this.settings.hasDraft)
                 .onChange((hidden: boolean): void => { this.toggleHide(hidden); })
             }
             .width('100%')
@@ -152,7 +169,7 @@ export struct DashboardExitDetails {
       Button($r('app.string.dash_copy_ip'))
         .width('100%')
         .height(40)
-        .enabled(!this.settings.hideIp && this.probe.result !== undefined)
+        .enabled(this.visible && !this.copying && !this.settings.hideIp && this.probe.result !== undefined)
         .onClick((): void => { this.copyExit(); })
         .margin({ top: 8 })
     }

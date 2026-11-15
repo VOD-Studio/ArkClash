@@ -4,43 +4,36 @@ export struct DashboardEditMotion {
   @Param seed: number = 0;
   @Param reduceMotion: boolean = true;
   @BuilderParam @Require content: () => void;
-  @Local angle: number = 0;
-  @Local lift: number = 0;
+  @Local looping: boolean = false;
   private appeared: boolean = false;
-  private looping: boolean = false;
 
   @Monitor('active', 'reduceMotion')
   syncAnimation(): void {
-    const looping = this.active && !this.reduceMotion;
-    if (!this.appeared || looping === this.looping) {
-      return;
-    }
-    this.looping = looping;
-    // 用零时长闭包改回原位，终止已提交的无限动画，而不是只替换下一次动画参数。
-    this.getUIContext().animateToImmediately({
-      duration: looping ? 360 + this.seed % 3 * 60 : 0,
-      curve: Curve.EaseInOut,
-      iterations: looping ? -1 : 1,
-      playMode: looping ? PlayMode.Alternate : PlayMode.Normal
-    }, (): void => {
-      this.angle = looping ? (this.seed % 2 === 0 ? 0.7 : -0.7) : 0;
-      this.lift = looping ? 0.7 : 0;
-    });
+    // 监听阶段只同步目标；属性动画在原生节点更新时捕获变化，避免 V2 异步标脏落在显式动画闭包之外。
+    this.looping = this.appeared && this.active && !this.reduceMotion;
   }
 
   build() {
     Column() {
       this.content()
     }
+    .rotate({ angle: this.looping ? (this.seed % 2 === 0 ? 0.7 : -0.7) : 0 })
+    .translate({ y: this.looping ? 0.7 : 0 })
+    .animation({
+      duration: this.looping ? 360 + this.seed % 3 * 60 : 0,
+      curve: Curve.EaseInOut,
+      iterations: this.looping ? -1 : 1,
+      playMode: this.looping ? PlayMode.Alternate : PlayMode.Normal
+    })
     .width('100%')
-    .rotate({ angle: this.angle })
-    .translate({ y: this.lift })
-    .onAppear((): void => { this.appeared = true; this.syncAnimation(); })
+    .onAppear((): void => {
+      // 首次节点先以零变换出现，再切换播放目标，确保编辑态新加入的卡片也有动画起点。
+      this.appeared = true;
+      this.syncAnimation();
+    })
     .onDisAppear((): void => {
       this.appeared = false;
-      this.looping = false;
-      this.angle = 0;
-      this.lift = 0;
+      this.syncAnimation();
     })
   }
 }

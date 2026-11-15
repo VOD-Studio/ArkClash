@@ -3,7 +3,7 @@ import { accessibility } from '@kit.AccessibilityKit';
 import { curves, UIUtils } from '@kit.ArkUI';
 import { HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { TabPage } from '../../components/TabPage';
-import { CARD } from '../../components/Theme';
+import { sheetMaterial } from '../../components/Theme';
 import { uiResourceText } from '../../components/ResourceText';
 import { DashboardConnections } from './DashboardConnections';
 import { DashboardGroups } from './DashboardGroups';
@@ -55,6 +55,7 @@ export struct HomePage {
   @Local editing: boolean = false;
   @Local displayedCards: string[] = [];
   @Local reduceMotion: boolean = true;
+  @Local loadingSettings: boolean = false;
   private readonly cardTransition: TransitionEffect = TransitionEffect.opacity(0)
     .combine(TransitionEffect.translate({ y: 8 }))
     .animation({ curve: curves.springMotion(0.3, 0.9) });
@@ -67,6 +68,7 @@ export struct HomePage {
   private dragging: string = '';
   private appeared: boolean = false;
   private savingCards: boolean = false;
+  private recoveryShown: boolean = false;
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
 
   aboutToAppear(): void {
@@ -74,7 +76,7 @@ export struct HomePage {
     this.reduceMotion = accessibility.isAnimationReduceEnabledSync();
     accessibility.onAnimationReduceStateChange(this.reductionListener);
     this.displayedCards = this.settings.cards;
-    this.settings.load(this.context);
+    this.loadSettings();
   }
 
   aboutToDisappear(): void {
@@ -93,16 +95,6 @@ export struct HomePage {
     this.onEditingChanged(this.editing);
   }
 
-  private setEditing(editing: boolean): void {
-    if (!this.appeared || !this.visible || this.reduceMotion) {
-      this.editing = editing;
-      return;
-    }
-    this.getUIContext().animateTo({ curve: curves.springMotion(0.3, 0.9) }, (): void => {
-      this.editing = editing;
-      UIUtils.flushUIUpdates();
-    });
-  }
 
   @Monitor('settings.cards')
   updateDisplayedCards(): void {
@@ -124,28 +116,87 @@ export struct HomePage {
     });
   }
 
+  @Monitor('settings.failure')
+  settingsFailureChanged(): void {
+    if (!this.appeared || !this.visible || this.settings.failure === '') { return; }
+    this.getUIContext().getPromptAction().showToast({ message: this.settings.failure === 'conflict' ?
+      $r('app.string.dash_save_conflict') : this.settings.failure === 'lastService' ?
+      $r('app.string.dash_service_keep_one') : $r('app.string.dash_save_failed') });
+  }
+
+  private async loadSettings(): Promise<void> {
+    if (this.settings.ready || this.loadingSettings) { return; }
+    this.loadingSettings = true;
+    try {
+      await this.settings.load(this.context);
+    } finally {
+      this.loadingSettings = false;
+    }
+  }
+
+  private editCards(): void {
+    if (!this.appeared || !this.visible || this.settings.saving || this.loadingSettings) { return; }
+    if (!this.settings.ready) { this.loadSettings(); return; }
+    if (this.settings.hasDraft) { this.recoverDraft(); return; }
+    this.editing = !this.editing;
+  }
+
+  private recoverDraft(): void {
+    if (this.recoveryShown) { return; }
+    this.recoveryShown = true;
+    const nextEditing = !this.editing;
+    let choice: 'retry' | 'discard' | undefined = undefined;
+    this.getUIContext().showActionSheet({
+      title: $r('app.string.profile_unsaved_title'),
+      message: this.settings.failure === 'conflict' ? $r('app.string.dash_save_conflict') :
+        $r('app.string.profile_unsaved_message'),
+      alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+      sheets: [
+        { title: $r('app.string.dash_retry_save'), action: (): void => { choice = 'retry'; } },
+        { title: $r('app.string.profile_discard'), action: (): void => { choice = 'discard'; } }
+      ],
+      confirm: { value: $r('app.string.action_cancel'), defaultFocus: true, action: (): void => {} },
+      onWillDismiss: (action: DismissDialogAction): void => action.dismiss(),
+      onDidDisappear: (): void => {
+        this.recoveryShown = false;
+        if (!this.appeared || !this.visible || this.settings.saving) { return; }
+        if (choice === 'discard') {
+          this.settings.discardDraft();
+          this.editing = nextEditing;
+        } else if (choice === 'retry') {
+          this.retrySave().then((saved: boolean): void => {
+            if (saved && this.appeared && this.visible) { this.editing = nextEditing; }
+          });
+        }
+      }
+    });
+  }
+
   private menus(): HdsNavigationMenuItemOptions[] {
     return [{
       content: {
-        label: this.editing ? $r('app.string.dash_done') : $r('app.string.dash_edit_cards'),
+        label: this.settings.saving ? $r('app.string.dash_saving') : !this.settings.ready &&
+          this.settings.failure !== '' ? $r('app.string.dash_retry') :
+          this.editing ? $r('app.string.dash_done') : $r('app.string.dash_edit_cards'),
         icon: this.editing ? $r('sys.symbol.checkmark') : $r('sys.symbol.pencil_line'),
-        isEnabled: this.settings.ready,
-        action: (): void => { this.setEditing(!this.editing); }
+        isEnabled: !this.settings.saving && !this.loadingSettings &&
+          (this.settings.ready || this.settings.failure !== ''),
+        action: (): void => { this.editCards(); }
       }
     }];
   }
 
-  private async saveCards(cards: string[]): Promise<void> {
-    if (!this.editing || this.settings.saving || this.savingCards) {
-      return;
+  private async saveCards(cards: string[]): Promise<boolean> {
+    if (!this.appeared || !this.visible || !this.editing || this.settings.saving || this.savingCards ||
+      this.settings.hasDraft) {
+      return false;
     }
     this.savingCards = true;
     try {
       await this.settings.commit({ cards: cards }, this.settings.revision);
+      return true;
     } catch (e) {
-      if (this.appeared) {
-        this.getUIContext().getPromptAction().showToast({ message: $r('app.string.dash_save_failed') });
-      }
+      return false;
     } finally {
       this.savingCards = false;
       this.presentCards();
@@ -166,17 +217,16 @@ export struct HomePage {
     return DASHBOARD_CARDS.filter((id: string): boolean => !this.settings.cards.includes(id));
   }
 
-  private async retrySave(): Promise<void> {
-    if (this.settings.saving || this.savingCards) {
-      return;
+  private async retrySave(): Promise<boolean> {
+    if (!this.appeared || !this.visible || this.settings.saving || this.savingCards || !this.settings.hasDraft) {
+      return false;
     }
     this.savingCards = true;
     try {
       await this.settings.retryDraft();
+      return true;
     } catch (e) {
-      if (this.appeared) {
-        this.getUIContext().getPromptAction().showToast({ message: $r('app.string.dash_save_failed') });
-      }
+      return false;
     } finally {
       this.savingCards = false;
       this.presentCards();
@@ -226,7 +276,7 @@ export struct HomePage {
     .padding({ left: 12, right: 8 })
     .borderRadius(22)
     .backgroundColor($r('app.color.dash_addable_background'))
-    .enabled(!this.settings.saving)
+    .enabled(!this.settings.saving && !this.settings.hasDraft)
     .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.cardTransition)
   }
 
@@ -246,7 +296,7 @@ export struct HomePage {
           .height(28)
           .padding(0)
           .backgroundColor($r('app.color.dash_remove_background'))
-          .enabled(!this.settings.saving)
+          .enabled(!this.settings.saving && !this.settings.hasDraft)
           .accessibilityText($r('app.string.dash_remove'))
           .onClick((): void => {
             this.saveCards(this.settings.cards.filter((card: string): boolean => card !== id));
@@ -255,7 +305,7 @@ export struct HomePage {
         }
       }
       .width('100%')
-      .draggable(this.editing && !this.settings.saving)
+      .draggable(this.editing && !this.settings.saving && !this.settings.hasDraft)
       .onDragStart((): DragItemInfo => {
         this.dragging = id;
         return { extraInfo: id };
@@ -275,7 +325,8 @@ export struct HomePage {
     } else if (id === 'speed') {
       DashboardSpeed({ visible: this.visible })
     } else if (id === 'mode') {
-      DashboardMode({ interactive: !this.editing, motionEnabled: this.visible && !this.reduceMotion })
+      DashboardMode({ visible: this.visible, interactive: !this.editing,
+        motionEnabled: this.visible && !this.reduceMotion })
     } else if (id === 'profile') {
       DashboardProfile({
         visible: this.visible, interactive: !this.editing, profileReady: this.profileReady, profileName: this.profileName,
@@ -308,23 +359,6 @@ export struct HomePage {
 
   @Builder
   DashboardContent() {
-      if (this.settings.failure !== '') {
-        Column({ space: 8 }) {
-          Text(this.settings.failure === 'conflict' ? $r('app.string.dash_save_conflict') :
-            $r('app.string.dash_save_failed'))
-            .fontSize(13)
-            .fontColor($r('app.color.status_error'))
-          if (this.settings.hasDraft) {
-            Button($r('app.string.dash_retry_save'))
-              .enabled(!this.settings.saving)
-              .onClick((): void => { this.retrySave(); })
-          } else if (!this.settings.ready) {
-            Button($r('app.string.dash_retry'))
-              .onClick((): void => { this.settings.load(this.context); })
-          }
-        }
-        .attributeModifier(CARD)
-      }
       if (this.settings.ready) {
         Column({ space: 8 }) {
           ForEach(this.displayedCards, (id: string): void => {

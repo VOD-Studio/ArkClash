@@ -478,7 +478,7 @@
     },
     {
       "name": "profile_current",
-      "value": "Current"
+      "value": "Selected"
     },
     {
       "name": "profile_switching",
@@ -761,8 +761,8 @@
       "value": "Could not load or save dashboard settings. Existing data is retained."
     },
     {
-      "name": "dash_service_batch_failed",
-      "value": "Check incomplete. Try again."
+      "name": "action_close",
+      "value": "Close"
     },
     {
       "name": "dash_service_details",
@@ -770,7 +770,7 @@
     },
     {
       "name": "dash_service_failed",
-      "value": "Connectivity check failed"
+      "value": "Check failed"
     },
     {
       "name": "dash_service_keep_one",
@@ -782,19 +782,23 @@
     },
     {
       "name": "dash_service_reachable",
-      "value": "Reachable · %d ms"
+      "value": "%d ms"
     },
     {
       "name": "dash_service_restricted",
-      "value": "Access restricted · HTTP %d"
+      "value": "Restricted · %d"
+    },
+    {
+      "name": "dash_service_method_unsupported",
+      "value": "Unsupported · %d"
     },
     {
       "name": "dash_service_timeout",
-      "value": "Connectivity check timed out"
+      "value": "Timed out"
     },
     {
       "name": "dash_service_unreachable",
-      "value": "Unexpected response · HTTP %d"
+      "value": "HTTP %d"
     },
     {
       "name": "dash_service_untested",
@@ -921,10 +925,6 @@
       "value": "Unable to read profiles: %s"
     },
     {
-      "name": "profile_apply_error",
-      "value": "Target saved; the previous profile is still running: %s"
-    },
-    {
       "name": "profile_running",
       "value": "Running"
     },
@@ -995,6 +995,10 @@
     {
       "name": "profile_keep_editing",
       "value": "Keep editing"
+    },
+    {
+      "name": "profile_saved_toast",
+      "value": "Saved"
     },
     {
       "name": "profile_manual_auto_update",
@@ -1109,10 +1113,6 @@
       "value": "Direct mode is active. Change outbound mode on the dashboard."
     },
     {
-      "name": "proxy_dismiss",
-      "value": "Dismiss"
-    },
-    {
       "name": "proxy_dynamic_offline",
       "value": "Connect to load this group’s dynamic members."
     },
@@ -1206,7 +1206,7 @@
     },
     {
       "name": "proxy_preferences_failed",
-      "value": "View settings could not be saved or loaded. Your draft is retained."
+      "value": "View settings could not be loaded or saved."
     },
     {
       "name": "proxy_refresh",
@@ -1258,7 +1258,7 @@
     },
     {
       "name": "proxy_stale",
-      "value": "Refresh failed. Showing the last successful snapshot."
+      "value": "Proxy list refresh failed."
     },
     {
       "name": "proxy_style",
@@ -1266,7 +1266,7 @@
     },
     {
       "name": "proxy_test_capacity",
-      "value": "The test queue is full. Wait for current tests and retry."
+      "value": "Latency checks are busy. Try again shortly."
     },
     {
       "name": "proxy_test_current_group",
@@ -1278,7 +1278,7 @@
     },
     {
       "name": "proxy_test_no_conclusion",
-      "value": "Some tests returned no usable result. Retry them."
+      "value": "Some latency checks failed."
     },
     {
       "name": "proxy_test_node",
@@ -1306,19 +1306,19 @@
     },
     {
       "name": "dash_probe_busy",
-      "value": "Probe capacity is busy. No result was obtained; retry."
+      "value": "Checks are busy"
     },
     {
       "name": "dash_probe_changed",
-      "value": "The route changed. The old result was discarded; check again."
+      "value": "Exit changed"
     },
     {
       "name": "dash_probe_timeout",
-      "value": "The routed probe timed out. Try again."
+      "value": "Check timed out"
     },
     {
       "name": "dash_probe_failed",
-      "value": "The core probe did not complete. Try again."
+      "value": "Check failed"
     },
     {
       "name": "dash_stop_retry",
@@ -1599,6 +1599,18 @@
     {
       "name": "dash_ip_quality_failed",
       "value": "IP type and quality lookup failed"
+    },
+    {
+      "name": "dash_saving",
+      "value": "Saving"
+    },
+    {
+      "name": "dash_probe_checked_at_stale",
+      "value": "Previous check"
+    },
+    {
+      "name": "dash_probe_checked_at_failed",
+      "value": "Failed · Last OK"
     }
   ]
 }

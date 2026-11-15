@@ -54,7 +54,7 @@ func init() {
 			r.Get("/selections", getSelections)
 			r.Post("/selection", postSelection)
 			r.Get("/delay", getDelay)
-			r.Get("/probe", getProbe)
+			r.Post("/probe", postProbe)
 			r.Patch("/configs", patchRuntimeOptions)
 			r.Post("/reload", postReload)
 			r.Post("/prefetch", postPrefetch)

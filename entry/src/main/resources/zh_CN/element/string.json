@@ -458,7 +458,7 @@
     },
     {
       "name": "profile_current",
-      "value": "当前"
+      "value": "已选择"
     },
     {
       "name": "profile_switching",
@@ -741,8 +741,8 @@
       "value": "仪表盘设置未能读取或保存，原有数据已保留"
     },
     {
-      "name": "dash_service_batch_failed",
-      "value": "检测未完成，请重试"
+      "name": "action_close",
+      "value": "关闭"
     },
     {
       "name": "dash_service_details",
@@ -750,7 +750,7 @@
     },
     {
       "name": "dash_service_failed",
-      "value": "连通检测失败"
+      "value": "检测失败"
     },
     {
       "name": "dash_service_keep_one",
@@ -762,19 +762,23 @@
     },
     {
       "name": "dash_service_reachable",
-      "value": "可连通 · %d ms"
+      "value": "%d ms"
     },
     {
       "name": "dash_service_restricted",
-      "value": "访问受限 · HTTP %d"
+      "value": "访问受限 · %d"
+    },
+    {
+      "name": "dash_service_method_unsupported",
+      "value": "方法不支持 · %d"
     },
     {
       "name": "dash_service_timeout",
-      "value": "连通检测超时"
+      "value": "超时"
     },
     {
       "name": "dash_service_unreachable",
-      "value": "服务响应异常 · HTTP %d"
+      "value": "HTTP %d"
     },
     {
       "name": "dash_service_untested",
@@ -901,10 +905,6 @@
       "value": "配置读取失败：%s"
     },
     {
-      "name": "profile_apply_error",
-      "value": "目标已保存，仍在运行之前的配置：%s"
-    },
-    {
       "name": "profile_running",
       "value": "运行中"
     },
@@ -975,6 +975,10 @@
     {
       "name": "profile_keep_editing",
       "value": "继续编辑"
+    },
+    {
+      "name": "profile_saved_toast",
+      "value": "已保存"
     },
     {
       "name": "profile_manual_auto_update",
@@ -1089,10 +1093,6 @@
       "value": "当前为直连模式，可在仪表盘切换出站模式。"
     },
     {
-      "name": "proxy_dismiss",
-      "value": "关闭提示"
-    },
-    {
       "name": "proxy_dynamic_offline",
       "value": "此组包含动态成员，连接后可读取完整列表。"
     },
@@ -1186,7 +1186,7 @@
     },
     {
       "name": "proxy_preferences_failed",
-      "value": "视图设置未能保存或读取，草稿已保留。"
+      "value": "显示设置读取或保存失败"
     },
     {
       "name": "proxy_refresh",
@@ -1238,7 +1238,7 @@
     },
     {
       "name": "proxy_stale",
-      "value": "代理组读取失败，正在显示上次读取的内容。"
+      "value": "代理列表刷新失败"
     },
     {
       "name": "proxy_style",
@@ -1246,7 +1246,7 @@
     },
     {
       "name": "proxy_test_capacity",
-      "value": "测试队列已满，请等待当前测试完成后重试。"
+      "value": "测速繁忙，请稍后重试"
     },
     {
       "name": "proxy_test_current_group",
@@ -1258,7 +1258,7 @@
     },
     {
       "name": "proxy_test_no_conclusion",
-      "value": "部分测试未取得有效结果，请重试。"
+      "value": "部分测速失败"
     },
     {
       "name": "proxy_test_node",
@@ -1286,19 +1286,19 @@
     },
     {
       "name": "dash_probe_busy",
-      "value": "探测繁忙，尚未取得结果，请重试"
+      "value": "检测繁忙"
     },
     {
       "name": "dash_probe_changed",
-      "value": "路由已改变，旧结果已丢弃，请重新检测"
+      "value": "出口已变更"
     },
     {
       "name": "dash_probe_timeout",
-      "value": "路由探测超时，请重试"
+      "value": "检测超时"
     },
     {
       "name": "dash_probe_failed",
-      "value": "内核探测未完成，请重试"
+      "value": "检测失败"
     },
     {
       "name": "dash_stop_retry",
@@ -1579,6 +1579,18 @@
     {
       "name": "dash_ip_quality_failed",
       "value": "类型与质量查询失败"
+    },
+    {
+      "name": "dash_saving",
+      "value": "保存中"
+    },
+    {
+      "name": "dash_probe_checked_at_stale",
+      "value": "上次检测"
+    },
+    {
+      "name": "dash_probe_checked_at_failed",
+      "value": "失败 · 上次成功"
     }
   ]
 }

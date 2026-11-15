@@ -30,7 +30,7 @@ export struct DashboardIpQuality {
 
   private qualityColor(): ResourceColor {
     switch (this.quality?.level) {
-      case 'good': return $r('app.color.status_connected');
+      case 'good': return $r('app.color.success_foreground');
       case 'risky': return $r('app.color.status_error');
       default: return $r('sys.color.font_secondary');
     }
@@ -63,7 +63,7 @@ export struct DashboardIpQuality {
       .constraintSize({ maxWidth: '48%' })
       .borderRadius(7)
       .backgroundColor(this.quality?.level === 'good' ? $r('app.color.success_soft') :
-        this.quality?.level === 'risky' ? $r('app.color.warning_soft') : $r('app.color.tile_background'))
+        this.quality?.level === 'risky' ? $r('app.color.error_soft') : $r('app.color.tile_background'))
       .maxLines(1)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
     }

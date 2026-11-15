@@ -7,7 +7,6 @@ import { TabPage } from '../../components/TabPage';
 import { FLOATING_BAR_INSET, PAGE_GUTTER } from '../../components/Theme';
 import { ProfileSummary } from '../../shared/profiles/Summary';
 import { ProxyBrowser } from './Proxies';
-import { ProxyFeedback } from './ProxyFeedback';
 import { ProxyGroupList } from './ProxyGroupList';
 import { ProxyTabs } from './ProxyTabs';
 import { ProxyToolbar } from './ProxyToolbar';
@@ -69,6 +68,55 @@ export struct ProxiesPage {
     });
   }
 
+  private toast(message: Resource): void {
+    if (!this.visible || this.profileId === '') {
+      return;
+    }
+    const ui = this.getUIContext();
+    const context = ui.getHostContext();
+    if (context !== undefined) {
+      ui.getPromptAction().showToast({ message: context.resourceManager.getStringSync(message.id) });
+    }
+  }
+
+  @Monitor('browser.notice', 'browser.noticeVersion')
+  showNotice(): void {
+    if (this.browser.notice !== '') {
+      this.toast(this.noticeLabel());
+    }
+  }
+
+  @Monitor('browser.loadError')
+  showLoadError(): void {
+    if (this.browser.loadError && this.browser.stale) {
+      this.toast($r('app.string.proxy_stale'));
+    }
+  }
+
+  @Monitor('browser.appearance.error')
+  showPreferenceError(): void {
+    if (this.browser.preferenceError) {
+      this.toast($r('app.string.proxy_preferences_failed'));
+    }
+  }
+
+  private noticeLabel(): Resource {
+    switch (this.browser.notice) {
+      case 'offline': return $r('app.string.proxy_test_offline');
+      case 'unresolved': return $r('app.string.proxy_leaf_unresolved');
+      case 'unsupported': return $r('app.string.proxy_group_unselectable');
+      case 'notAddressable': return $r('app.string.proxy_node_not_addressable');
+      case 'hostUnknown': return $r('app.string.proxy_host_unknown');
+      case 'capacity': return $r('app.string.proxy_test_capacity');
+      case 'noConclusion': return $r('app.string.proxy_test_no_conclusion');
+      case 'cleanupFailed': return $r('app.string.proxy_cleanup_failed');
+      case 'inconsistent': return $r('app.string.proxy_selection_inconsistent');
+      case 'selectionFailed': return $r('app.string.proxy_selection_failed');
+      case 'filtered': return $r('app.string.proxy_locate_filtered');
+      default: return $r('app.string.proxy_not_ready');
+    }
+  }
+
   @Monitor('browser.appearance.style')
   resetBoundScroller(): void {
     if (!this.pickerMode) {
@@ -113,9 +161,9 @@ export struct ProxiesPage {
       return;
     }
     if (this.scroller instanceof ListScroller) {
-      this.scroller.scrollToItemInGroup(target.groupIndex + (this.hasFeedback() ? 1 : 0), target.rowIndex, false, ScrollAlign.CENTER);
+      this.scroller.scrollToItemInGroup(target.groupIndex, target.rowIndex, false, ScrollAlign.CENTER);
     } else {
-      this.scroller.scrollToIndex(target.groupIndex + (this.hasFeedback() ? 1 : 0), false, ScrollAlign.START);
+      this.scroller.scrollToIndex(target.groupIndex, false, ScrollAlign.START);
     }
   }
 
@@ -147,10 +195,6 @@ export struct ProxiesPage {
       this.browser.resize(this.availableWidth - PAGE_GUTTER * 2 -
         (this.pickerMode ? 0 : 20));
     }
-  }
-
-  private hasFeedback(): boolean {
-    return this.profileId !== '' && (this.browser.loadError || this.browser.preferenceError || this.browser.notice !== '');
   }
 
   private motionEnabled(): boolean {
@@ -210,11 +254,6 @@ export struct ProxiesPage {
       }
       if (this.browser.groups.length === 0) {
         List({ scroller: this.scroller }) {
-          if (this.hasFeedback()) {
-            ListItem() {
-              ProxyFeedback({ browser: this.browser })
-            }
-          }
           ListItem() {
             if (!this.browser.loadError && (this.browser.loading || !this.profileReady) && this.profileId !== '') {
               Column({ space: 12 }) {
@@ -261,7 +300,6 @@ export struct ProxiesPage {
           browser: this.browser, scroller: this.scroller, active: this.visible, pickerMode: this.pickerMode,
           contentInset: this.topInset + 72,
           motionEnabled: this.motionEnabled(),
-          feedbackVisible: this.hasFeedback(),
           onScrollerReady: (): void => this.listReady('groups'),
           onScrollerRelease: (): void => this.listRelease('groups'),
           onLocate: (group: string) => this.locate(group),

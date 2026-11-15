@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { curves } from '@kit.ArkUI';
 import { connection, Connection, ConnectionState } from '../../client/Connection';
 import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
 import { DASHBOARD_CARD, sheetMaterial } from '../../components/Theme';
@@ -10,6 +11,10 @@ import { DashboardCountryBadge } from './DashboardCountryBadge';
 import { DashboardExitDetails } from './DashboardExitDetails';
 import { DashboardIpQuality } from './DashboardIpQuality';
 import { DashboardRunButton } from './DashboardRunButton';
+import { DashboardLoadingRotation } from './DashboardLoadingRotation';
+
+const START_CURVE = curves.cubicBezierCurve(0.175, 0.885, 0.32, 1.275);
+const STOP_CURVE = curves.cubicBezierCurve(0.55, 0.055, 0.675, 0.19);
 
 function dashboardUptime(milliseconds: number): string {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -33,13 +38,18 @@ export struct DashboardStatus {
   @Local clock: number = Date.now();
   @Local details: boolean = false;
   private timer: number = -1;
+  private appeared: boolean = false;
+  private refreshGeneration: number = 0;
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
 
   aboutToAppear(): void {
+    this.appeared = true;
     this.sync();
   }
 
   aboutToDisappear(): void {
+    this.appeared = false;
+    this.refreshGeneration++;
     this.probe.cancel();
     this.stopTimer();
   }
@@ -47,6 +57,7 @@ export struct DashboardStatus {
   @Monitor('visible', 'profileId', 'routeRevision', 'conn.routeRevision', 'conn.forward', 'conn.mode', 'conn.sessionMode',
     'conn.state')
   sync(): void {
+    this.refreshGeneration++;
     const route = `${this.profileId}:${this.routeRevision}:${this.conn.routeRevision}:${this.conn.mode}:` +
       `${this.conn.sessionMode}:${this.conn.forward}`;
     this.probe.observe(this.context.filesDir, route, this.conn.connected, this.visible && !this.conn.busy);
@@ -105,11 +116,32 @@ export struct DashboardStatus {
   }
 
   private appearsStarted(): boolean {
-    return homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached);
+    return this.conn.state !== ConnectionState.Disconnecting &&
+      homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached);
   }
 
   private showRuntimeError(message: ResourceStr): void {
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 4000 });
+    if (this.appeared && this.visible) {
+      this.getUIContext().getPromptAction().showToast({ message: message, duration: 4000 });
+    }
+  }
+
+  private async refreshExit(): Promise<void> {
+    if (!this.appeared || !this.visible || !this.interactive || this.conn.busy || this.probe.busy) {
+      return;
+    }
+    const generation = ++this.refreshGeneration;
+    await this.probe.refresh();
+    if (generation !== this.refreshGeneration) {
+      return;
+    }
+    if (this.probe.failed) {
+      this.showRuntimeError(this.probe.failure === 'capacity' ? $r('app.string.dash_probe_busy') :
+        this.probe.failure === 'routeChanged' ? $r('app.string.dash_probe_changed') :
+        $r('app.string.dash_exit_failed'));
+    } else if (this.probe.qualityFailed) {
+      this.showRuntimeError($r('app.string.dash_ip_quality_failed'));
+    }
   }
 
   private async toggleRun(): Promise<void> {
@@ -129,34 +161,39 @@ export struct DashboardStatus {
 
   @Builder
   Details() {
-    DashboardExitDetails()
+    DashboardExitDetails({ visible: this.visible && this.details, onRefresh: (): void => { this.refreshExit(); } })
   }
 
   @Builder
   Decoration() {
-    Stack({ alignContent: Alignment.TopEnd }) {
-      Shape() {
-        Path().commands(DASHBOARD_COOKIE12)
-          .fill(this.conn.connected ? $r('app.color.dash_status_decoration') : $r('app.color.tile_background'))
-          .strokeWidth(0)
+    Stack() {
+      DashboardLoadingRotation({ active: this.conn.busy, visible: this.visible, motionEnabled: this.motionEnabled,
+        sideLength: 240, duration: 6000 }) {
+        Shape() {
+          Path().commands(DASHBOARD_COOKIE12)
+            .fill(this.conn.connected ? $r('app.color.dash_status_decoration') : $r('app.color.dash_status_idle_decoration'))
+            .strokeWidth(0)
+            .animation({ duration: this.motionEnabled && this.visible ? 450 : 0, curve: Curve.EaseOut })
+        }
+        .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
+        .width(240)
+        .height(240)
+        .rotate({ angle: this.appearsStarted() ? 30 : 0 })
+        .scale({ x: this.appearsStarted() ? 1.12 : 1, y: this.appearsStarted() ? 1.12 : 1 })
+        .animation({ duration: this.motionEnabled ? 450 : 0, curve: this.appearsStarted() ? START_CURVE : STOP_CURVE })
       }
-      .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
-      .width(240)
-      .height(240)
-      .rotate({ angle: this.conn.connected ? 30 : 0 })
-      .scale({ x: this.conn.connected ? 1.12 : 1, y: this.conn.connected ? 1.12 : 1 })
-      .animation({ duration: this.motionEnabled ? 450 : 0, curve: Curve.EaseInOut })
-      .offset({ x: 60, y: -66 })
     }
-    .width('100%')
-    .height('100%')
+    .width(240)
+    .height(240)
+    .position({ right: -60, top: -66 })
     .hitTestBehavior(HitTestMode.None)
     .accessibilityLevel('no')
   }
 
   build() {
     Column() {
-      Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        this.Decoration()
         Row({ space: 10 }) {
           Column() {
             Row({ space: 8 }) {
@@ -167,19 +204,19 @@ export struct DashboardStatus {
                 .fontWeight(600)
               Row({ space: 4 }) {
                 if (this.conn.connected) {
-                  Circle({ width: 5, height: 5 }).fill($r('app.color.status_connected')).strokeWidth(0)
+                  Circle({ width: 5, height: 5 }).fill($r('app.color.success_foreground')).strokeWidth(0)
                 }
                 Text(this.conn.connected ? $r('app.string.chip_running') : this.statusText())
                   .fontSize(11)
                   .lineHeight(13)
                   .fontWeight(600)
-                  .fontColor(this.conn.connected ? $r('app.color.status_connected') : $r('sys.color.font_secondary'))
+                  .fontColor(this.conn.connected ? $r('app.color.success_foreground') : $r('sys.color.font_secondary'))
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
               }
               .padding({ left: 7, right: 7, top: 3, bottom: 3 })
               .borderRadius(7)
-              .backgroundColor(this.conn.connected ? $r('app.color.dash_running_background') :
+              .backgroundColor(this.conn.connected ? $r('app.color.success_soft') :
                 $r('app.color.tile_background'))
               .accessibilityDescription(this.conn.error)
               .onClick((): void => {
@@ -191,7 +228,7 @@ export struct DashboardStatus {
             Row({ space: 12 }) {
               DashboardCountryBadge({ countryCode: this.probe.result?.countryCode ?? '', busy: this.probe.busy,
                 running: this.conn.connected, motionEnabled: this.motionEnabled, interactive: this.interactive,
-                onRefresh: (): void => { this.probe.refresh(); } })
+                onRefresh: (): void => { this.refreshExit(); } })
               Column({ space: 4 }) {
                 if (this.probe.result === undefined && !this.probe.failed && !this.settings.hideIp) {
                   Row()
@@ -265,6 +302,7 @@ export struct DashboardStatus {
           .layoutWeight(1)
           DashboardRunButton({
             running: this.appearsStarted(), busy: this.conn.busy, visible: this.visible,
+            available: this.profileReady || this.shouldStop(),
             motionEnabled: this.motionEnabled,
             interactive: this.interactive && (this.profileReady || this.shouldStop()) &&
               this.conn.state !== ConnectionState.Disconnecting,
@@ -277,7 +315,6 @@ export struct DashboardStatus {
         .padding({ left: 20, right: 16, top: 18, bottom: 18 })
       }
       .width('100%')
-      .background(this.Decoration)
       .borderRadius(34)
       .clip(true)
     }

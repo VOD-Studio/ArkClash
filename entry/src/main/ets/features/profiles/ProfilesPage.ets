@@ -1,5 +1,4 @@
 import { pasteboard } from '@kit.BasicServicesKit';
-import { promptAction } from '@kit.ArkUI';
 import { HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { EmptyState } from '../../components/EmptyState';
 import { ListSource } from '../../components/ListSource';
@@ -26,17 +25,26 @@ export struct ProfilesPage {
   @Local detailShown: boolean = false;
   @Local detailItem: ProfileItem | undefined = undefined;
   @Local addShown: boolean = false;
+  @Local addMenuShown: boolean = false;
   @Local adding: boolean = false;
   @Local editShown: boolean = false;
   @Local draft: ProfileDraft | undefined = undefined;
   @Local sortShown: boolean = false;
   @Local resultShown: boolean = false;
   @Local result: ProfileBatchResult | undefined = undefined;
+  @Local removeShown: boolean = false;
+  @Local removeItem: ProfileItem | undefined = undefined;
+  @Local removing: boolean = false;
   @Local profileColumns: number = 1;
   @Local currentTime: number = Date.now();
   private rows: ListSource<ProfileItem> = new ListSource<ProfileItem>();
   private clockTimer: number = -1;
   private clockInView: boolean = false;
+  private activeActions: number = 0;
+  private reportedApplyError: string = '';
+  private pendingResult: boolean = false;
+  private pendingResultError: string = '';
+  private addChoice: 'file' | 'link' | undefined = undefined;
 
   private clockVisible(visible: boolean): void {
     this.clockInView = visible;
@@ -45,6 +53,7 @@ export struct ProfilesPage {
       this.currentTime = Date.now();
       this.clockTimer = setInterval((): void => { this.currentTime = Date.now(); }, 60000);
     }
+    this.consumeApplyError();
   }
 
   aboutToDisappear(): void { this.clockVisible(false); }
@@ -59,7 +68,52 @@ export struct ProfilesPage {
   @Monitor('store.items')
   onItemsChanged(): void { this.rows.replace(this.store.items); }
 
-  private toast(message: ResourceStr): void { this.getUIContext().getPromptAction().showToast({ message: message }); }
+  @Monitor('store.applyError')
+  onApplyErrorChanged(): void {
+    if (this.store.applyError === '') { this.reportedApplyError = ''; }
+    this.consumeApplyError();
+  }
+
+  private consumeApplyError(): void {
+    if (this.consumeBatchResult()) { return; }
+    if (this.draft?.saving === true || (this.editShown && this.draft?.error === this.store.applyError)) {
+      this.reportedApplyError = this.store.applyError;
+      return;
+    }
+    if (this.activeActions === 0) { this.reportResult(undefined); }
+  }
+
+  private consumeBatchResult(): boolean {
+    const result = this.result;
+    if (!this.pendingResult || result === undefined) { return false; }
+    if (!this.visible || !this.clockInView) { return true; }
+    this.pendingResult = false;
+    this.reportedApplyError = this.pendingResultError;
+    if (result.failures.length === 1) {
+      const failure = result.failures[0];
+      this.toast($r('app.string.profile_update_failed', failure.name, describeError(failure.error)));
+    } else {
+      this.resultShown = true;
+    }
+    return true;
+  }
+
+  private reportResult(failure: string | undefined, success?: ResourceStr, errorMessage?: ResourceStr): void {
+    if (!this.visible || !this.clockInView) { return; }
+    const applyError = this.store.applyError;
+    const error = failure ?? (applyError !== '' && applyError !== this.reportedApplyError ? applyError : undefined);
+    if (error !== undefined) {
+      // 手动结果与状态监听共用消费记录，避免同次失败弹出两次提示。
+      this.reportedApplyError = applyError;
+      this.toast(failure !== undefined && errorMessage !== undefined ? errorMessage : describeError(error));
+    } else if (success !== undefined) {
+      this.toast(success);
+    }
+  }
+
+  private toast(message: ResourceStr): void {
+    if (this.visible && this.clockInView) { this.getUIContext().getPromptAction().showToast({ message: message }); }
+  }
   private openAdd(): void { this.addShown = true; }
   private openEdit(item: ProfileItem): void { this.draft = new ProfileDraft(item); this.editShown = true; }
 
@@ -79,37 +133,50 @@ export struct ProfilesPage {
   }
 
   private showAddMenu(): void {
-    this.getUIContext().getPromptAction().showActionMenu({ buttons: [
-      { text: $r('app.string.profile_import_file'), color: $r('sys.color.font_primary') },
-      { text: $r('app.string.subscription_link'), color: $r('sys.color.font_primary') }
-    ] }).then((result: promptAction.ActionMenuSuccessResponse): void => {
-      if (result.index === 0) { this.importLocal(); }
-      else if (result.index === 1) { this.openAdd(); }
-    }).catch((): void => {});
+    this.addChoice = undefined;
+    this.addMenuShown = true;
+  }
+
+  private finishAddMenu(): void {
+    const choice = this.addChoice;
+    this.addChoice = undefined;
+    if (!this.visible) { return; }
+    if (choice === 'file') { this.importLocal(); }
+    else if (choice === 'link') { this.openAdd(); }
   }
 
   private async importLocal(): Promise<void> {
-    const failure = await this.store.importLocal();
-    if (failure !== undefined) { this.toast($r('app.string.import_failed', describeError(failure))); }
+    this.activeActions++;
+    try {
+      const failure = await this.store.importLocal();
+      this.reportResult(failure, undefined,
+        failure === undefined ? undefined : $r('app.string.import_failed', describeError(failure)));
+    } finally { this.activeActions--; this.consumeApplyError(); }
   }
   private async select(item: ProfileItem): Promise<void> {
-    const failure = await this.store.select(item.id);
-    if (failure !== undefined) { this.toast($r('app.string.profile_switch_failed', describeError(failure))); }
+    this.activeActions++;
+    try {
+      const failure = await this.store.select(item.id);
+      this.reportResult(failure, undefined,
+        failure === undefined ? undefined : $r('app.string.profile_switch_failed', describeError(failure)));
+    } finally { this.activeActions--; this.consumeApplyError(); }
   }
   private async update(item: ProfileItem): Promise<void> {
-    const failure = await this.store.update(item.id);
-    this.toast(failure === undefined ? $r('app.string.profile_updated_toast') :
-      $r('app.string.download_failed', describeError(failure)));
+    this.activeActions++;
+    try {
+      const failure = await this.store.update(item.id);
+      this.reportResult(failure, $r('app.string.profile_updated_toast'),
+        failure === undefined ? undefined : $r('app.string.download_failed', describeError(failure)));
+    } finally { this.activeActions--; this.consumeApplyError(); }
   }
   private async updateAll(): Promise<void> {
-    const result: ProfileBatchResult = await this.store.updateAll();
-    this.result = result;
-    if (result.failures.length === 1) {
-      const failure = result.failures[0];
-      this.toast($r('app.string.profile_update_failed', failure.name, describeError(failure.error)));
-    } else if (result.failures.length > 1) {
-      this.resultShown = true;
-    }
+    this.activeActions++;
+    try {
+      const result: ProfileBatchResult = await this.store.updateAll();
+      this.result = result;
+      this.pendingResult = result.failures.length > 0;
+      this.pendingResultError = this.store.applyError;
+    } finally { this.activeActions--; this.consumeApplyError(); }
   }
   private async export(item: ProfileItem): Promise<void> {
     const failure = await this.store.export(item.id);
@@ -123,16 +190,59 @@ export struct ProfilesPage {
     } catch (e) { this.toast(describeError('io')); }
   }
   private confirmRemove(item: ProfileItem): void {
-    this.getUIContext().showAlertDialog({
-      title: $r('app.string.delete_confirm_title', item.name), message: $r('app.string.delete_confirm_message'),
-      primaryButton: { value: $r('app.string.action_cancel'), action: (): void => {} },
-      secondaryButton: { value: $r('app.string.action_delete'), fontColor: $r('app.color.status_error'),
-        action: (): void => {
-          this.store.remove(item.id).then((failure: string | undefined): void => {
-            if (failure !== undefined) { this.toast(describeError(failure)); }
-          });
-        } }
-    });
+    if (this.removing) { return; }
+    this.removeItem = item;
+    this.removeShown = true;
+  }
+
+  private async remove(): Promise<void> {
+    const item = this.removeItem;
+    if (item === undefined || this.removing) { return; }
+    this.removing = true;
+    this.activeActions++;
+    try {
+      const failure = await this.store.remove(item.id);
+      this.reportResult(failure);
+      this.removeShown = false;
+    } finally {
+      this.removing = false;
+      this.activeActions--;
+      this.consumeApplyError();
+    }
+  }
+
+  @Builder
+  RemoveSheet() {
+    if (this.removeItem !== undefined) {
+      Column({ space: 16 }) {
+        Text($r('app.string.delete_confirm_title', this.removeItem.name))
+          .fontSize(20).fontWeight(600).fontColor($r('sys.color.font_primary'))
+          .width('100%')
+        Text($r('app.string.delete_confirm_message'))
+          .fontSize(15).fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+        Button({ type: ButtonType.Normal, role: ButtonRole.ERROR, stateEffect: true }) {
+          Row({ space: 8 }) {
+            if (this.removing) {
+              LoadingProgress().width(20).height(20).color($r('app.color.status_error'))
+            }
+            Text($r('app.string.action_delete')).fontSize(17).fontColor($r('app.color.status_error'))
+          }
+          .justifyContent(FlexAlign.Center)
+        }
+        .buttonStyle(ButtonStyleMode.NORMAL)
+        .width('100%').height(48).borderRadius(24)
+        .enabled(!this.removing && this.store.canRemove(this.removeItem.id))
+        .onClick((): void => { this.remove(); })
+        Button($r('app.string.action_cancel'))
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .width('100%').height(48)
+          .enabled(!this.removing)
+          .onClick((): void => { this.removeShown = false; })
+      }
+      .width('100%')
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 20, bottom: 24 })
+    }
   }
 
   @Builder
@@ -177,14 +287,6 @@ export struct ProfilesPage {
           }.width('100%')
         }
       } else {
-        if (this.store.connected && this.store.applyError !== '') {
-          ListItem() {
-            Text(this.store.applyError === 'apply_failed' ? describeError(this.store.applyError) :
-              $r('app.string.profile_apply_error', describeError(this.store.applyError)))
-              .fontSize(13)
-              .fontColor($r('app.color.status_error'))
-          }
-        }
         LazyForEach(this.rows, (item: ProfileItem) => {
           ListItem() {
             ProfileCard({ item: item, selected: this.store.selectedId() === item.id, currentTime: this.currentTime,
@@ -202,13 +304,37 @@ export struct ProfilesPage {
   @Builder
   EditSheet() {
     if (this.draft !== undefined) {
-      ProfileEditor({ store: this.store, draft: this.draft, onSaved: (): void => {
+      ProfileEditor({ store: this.store, draft: this.draft, visible: this.visible && this.editShown, onSaved: (): void => {
         if (this.draft !== undefined) { this.draft.saving = false; }
         this.editShown = false;
       }, onClose: (): void => confirmProfileEditorDismiss(this.getUIContext(), this.draft,
         (): void => { this.editShown = false; }) })
     }
   }
+
+  @Builder
+  AddOption(label: Resource, icon: Resource, choice: 'file' | 'link') {
+    Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.NORMAL, stateEffect: true }) {
+      Row({ space: 12 }) {
+        SymbolGlyph(icon).fontSize(24).fontColor([$r('sys.color.font_primary')])
+        Text(label).fontSize(17).fontColor($r('sys.color.font_primary')).layoutWeight(1)
+      }
+      .width('100%')
+    }
+    .width('100%').height(56).padding({ left: 16, right: 16 })
+    .backgroundColor($r('app.color.card_background')).borderRadius(24)
+    .onClick((): void => { this.addChoice = choice; this.addMenuShown = false; })
+  }
+
+  @Builder
+  AddMenu() {
+    Column({ space: 8 }) {
+      this.AddOption($r('app.string.profile_import_file'), $r('sys.symbol.doc_text'), 'file')
+      this.AddOption($r('app.string.subscription_link'), $r('sys.symbol.link'), 'link')
+    }
+    .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 24 })
+  }
+
   @Builder
   AddSheet() {
     ProfileImportSheet({ store: this.store, onDone: (): void => {
@@ -238,7 +364,8 @@ export struct ProfilesPage {
     }
   }
 
-  build() {
+  @Builder
+  PageSheets() {
     Column() {
       Column() {
         Column() {
@@ -271,5 +398,25 @@ export struct ProfilesPage {
     .bindSheet($$this.addShown, this.AddSheet(), {
       height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
       onWillDismiss: (action: DismissSheetAction): void => { if (!this.adding) { action.dismiss(); } } })
+  }
+
+  build() {
+    Column() {
+      Column() { this.PageSheets() }
+      .width('100%').height('100%')
+      .bindSheet($$this.addMenuShown, this.AddMenu(), {
+        title: { title: $r('app.string.action_add') },
+        height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
+        systemMaterial: sheetMaterial(), showClose: true,
+        onDisappear: (): void => this.finishAddMenu()
+      })
+    }
+    .width('100%').height('100%')
+    .bindSheet($$this.removeShown, this.RemoveSheet(), {
+      height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
+      systemMaterial: sheetMaterial(), showClose: false, enableOutsideInteractive: false,
+      onWillDismiss: (action: DismissSheetAction): void => { if (!this.removing) { action.dismiss(); } },
+      onDisappear: (): void => { if (!this.removeShown) { this.removeItem = undefined; } }
+    })
   }
 }

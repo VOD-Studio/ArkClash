@@ -1,7 +1,6 @@
 import { EmptyState } from '../../components/EmptyState';
 import { FLOATING_BAR_INSET, PAGE_GUTTER } from '../../components/Theme';
 import { ProxyBrowser } from './Proxies';
-import { ProxyFeedback } from './ProxyFeedback';
 import { ProxyGroupTabs } from './ProxyGroupTabs';
 import { ProxyNodeLine } from './ProxyNodeLine';
 import { ProxyGroupView, ProxyNodeRow } from './ProxyView';
@@ -37,12 +36,6 @@ export struct ProxyTabGrid {
 
   build() {
     List({ scroller: this.scroller }) {
-      if (this.browser.loadError || this.browser.preferenceError || this.browser.notice !== '') {
-        ListItem() {
-          ProxyFeedback({ browser: this.browser })
-        }
-        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
-      }
       ListItemGroup({ header: (): void => this.groupTabs() }) {
         if (this.group.actualRetired) {
           ListItem() {

@@ -162,18 +162,20 @@ async function consumerHarness() {
   const preferencesUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyPreferences.ets',
     `import { preferences } from ${JSON.stringify(fixtureUrl)};\n` +
     `import { copyProxyStyle, defaultProxyStyle } from ${JSON.stringify(logicUrl)};\n`);
-  const selection = await import(await sourceModule('../entry/src/main/ets/features/proxies/ProxySelection.ets',
+  const selectionUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxySelection.ets',
     `import { observeProxySelections, submitProxySelection, proxyMemberNode, proxySelectionIdentity, matchesProxySelectionIdentity } from ${JSON.stringify(boundClientUrl)};\n` +
     `import { newId } from ${JSON.stringify(fixtureUrl)};\n` +
-    `import { proxySelectionIntent, selectableProxyGroup } from ${JSON.stringify(logicUrl)};\n`));
-  const appearance = await import(await sourceModule('../entry/src/main/ets/features/proxies/ProxyAppearance.ets',
+    `import { proxySelectionIntent, selectableProxyGroup } from ${JSON.stringify(logicUrl)};\n`);
+  const appearanceUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyAppearance.ets',
     `import { copyProxyStyle, defaultProxyStyle } from ${JSON.stringify(logicUrl)};\n` +
-    `import { loadProxyPreferences, saveProxyStyle, saveProxyView } from ${JSON.stringify(preferencesUrl)};\n`));
-  const probes = await import(await sourceModule('../entry/src/main/ets/features/proxies/ProxyTests.ets',
+    `import { loadProxyPreferences, saveProxyStyle, saveProxyView } from ${JSON.stringify(preferencesUrl)};\n`);
+  const probesUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyTests.ets',
     `import { cancelProxyDelayOwner, proxyMemberNode, testProxyDelays } from ${JSON.stringify(boundClientUrl)};\n` +
     `import { newId } from ${JSON.stringify(fixtureUrl)};\n` +
-    `import { canTestProxy, defaultProxyStyle, proxyDelayKey, proxyGroupNames, proxyMembers, resolveProxyLeaf } from ${JSON.stringify(logicUrl)};\n`));
-  return { fixtureUrl, native, client: await import(boundClientUrl), preferences: await import(preferencesUrl), ...selection, ...appearance, ...probes };
+    `import { canTestProxy, defaultProxyStyle, proxyDelayKey, proxyGroupNames, proxyMembers, resolveProxyLeaf } from ${JSON.stringify(logicUrl)};\n`);
+  return { fixtureUrl, native, client: await import(boundClientUrl), preferences: await import(preferencesUrl),
+    selectionUrl, appearanceUrl, probesUrl,
+    ...await import(selectionUrl), ...await import(appearanceUrl), ...await import(probesUrl) };
 }
 
 async function drainConsumers() {
@@ -203,6 +205,46 @@ function putDelay(state, group, name, delay, map) {
   const leaf = logic.resolveProxyLeaf(state, name, group.url);
   map.set(logic.proxyDelayKey(state, leaf), delay);
 }
+
+test('独立定位和测速操作保留重复失败通知', async () => {
+  const harness = await consumerHarness();
+  const socketUrl = await sourceModule('../entry/src/main/ets/client/ControllerSocket.ets');
+  const eventsUrl = await sourceModule('../entry/src/main/ets/client/ProfileCommands.ets',
+    `import { ControllerSocket } from ${JSON.stringify(socketUrl)};\n`);
+  const browserUrl = await sourceModule('../entry/src/main/ets/features/proxies/Proxies.ets',
+    `import { ProfileEvents } from ${JSON.stringify(eventsUrl)};\n` +
+    `import { ProxyListSource } from ${JSON.stringify(listUrl)};\n` +
+    `import { ProxyAppearance } from ${JSON.stringify(harness.appearanceUrl)};\n` +
+    `import { ProxySelectionSession } from ${JSON.stringify(harness.selectionUrl)};\n` +
+    `import { ProxyTestSession } from ${JSON.stringify(harness.probesUrl)};\n` +
+    `import { proxyColumnCount } from ${JSON.stringify(logicUrl)};\n`);
+  const { ProxyBrowser } = await import(browserUrl);
+  const browser = new ProxyBrowser();
+  browser.groups = view.buildProxyViews({
+    snapshot: snapshot(), style: browser.style, view: { expanded: ['Main'], currentGroup: 'Main' },
+    query: 'no-matching-node', columns: 2, latest: new Map(), completedForGroup: () => new Map(),
+    phases: new Map(), pending: new Map(), testingGroups: new Set(), previous: [], picker: false
+  });
+  const notifications = [];
+  let observedNotice = browser.notice;
+  let observedVersion = browser.noticeVersion;
+  const consume = () => {
+    if ((observedNotice !== browser.notice || observedVersion !== browser.noticeVersion) && browser.notice !== '') {
+      notifications.push(browser.notice);
+    }
+    observedNotice = browser.notice;
+    observedVersion = browser.noticeVersion;
+  };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.equal(browser.locate('Main'), undefined);
+    consume();
+  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    browser.test('Main');
+    consume();
+  }
+  assert.deepEqual(notifications, ['filtered', 'filtered', 'offline', 'offline']);
+});
 
 test('旧页签偏好恢复为可折叠列表，保留排序、尺寸和图标设置', async () => {
   const harness = await consumerHarness();

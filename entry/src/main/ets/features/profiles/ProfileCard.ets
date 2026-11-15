@@ -1,3 +1,4 @@
+import { SymbolGlyphModifier } from '@kit.ArkUI';
 import { formatBytes, formatDate } from '../../components/Format';
 import { hostOf } from '../../shared/profiles/Download';
 import { describeError } from './ProfileErrors';
@@ -20,6 +21,9 @@ export struct ProfileCard {
   @Event onExport: () => void = (): void => {};
   @Event onUpdate: () => void = (): void => {};
   @Event onDetails: () => void = (): void => {};
+  private editIcon: SymbolGlyphModifier = new SymbolGlyphModifier($r('sys.symbol.pencil_line'));
+  private updateIcon: SymbolGlyphModifier = new SymbolGlyphModifier($r('sys.symbol.arrow_clockwise'));
+  private contextMenuOpen: boolean = false;
 
   private used(): number { return (this.item.state.usage?.upload ?? 0) + (this.item.state.usage?.download ?? 0); }
   private expiry(): number { return (this.item.state.usage?.expire ?? 0) * 1000; }
@@ -70,25 +74,28 @@ export struct ProfileCard {
   }
 
   @Builder
+  DetailsMenu() {
+    Menu() {
+      MenuItem({ content: $r('app.string.profile_details_title') }).onClick((): void => this.onDetails())
+      if (this.item.isSubscription) {
+        MenuItem({ content: $r('app.string.action_copy_link') }).onClick((): void => this.onCopy())
+      }
+      MenuItem({ content: $r('app.string.profile_export') }).onClick((): void => this.onExport())
+    }
+  }
+
+  @Builder
   MoreMenu() {
     Menu() {
-      MenuItem({ content: $r('app.string.action_edit'), startIcon: $r('sys.symbol.pencil_line') })
+      MenuItem({ content: $r('app.string.action_edit'), symbolStartIcon: this.editIcon })
         .enabled(!this.item.updating)
         .onClick((): void => this.onEdit())
       if (this.item.isSubscription) {
-        MenuItem({ content: $r('app.string.action_update'), startIcon: $r('sys.symbol.arrow_clockwise') })
+        MenuItem({ content: $r('app.string.action_update'), symbolStartIcon: this.updateIcon })
           .enabled(!this.item.updating)
           .onClick((): void => this.onUpdate())
       }
-      MenuItem({ content: $r('app.string.action_more') }) {
-        Menu() {
-          MenuItem({ content: $r('app.string.profile_details_title') }).onClick((): void => this.onDetails())
-          if (this.item.isSubscription) {
-            MenuItem({ content: $r('app.string.action_copy_link') }).onClick((): void => this.onCopy())
-          }
-          MenuItem({ content: $r('app.string.profile_export') }).onClick((): void => this.onExport())
-        }
-      }
+      MenuItem({ content: $r('app.string.action_more'), builder: this.DetailsMenu })
       MenuItem({ content: $r('app.string.action_delete') })
         .contentFontColor($r('app.color.status_error'))
         .enabled(this.removable && !this.item.updating)
@@ -97,7 +104,8 @@ export struct ProfileCard {
     .enabled(!this.item.updating)
   }
 
-  build() {
+  @Builder
+  CardContent() {
     Row({ space: 8 }) {
       Column({ space: 4 }) {
         Row({ space: 8 }) {
@@ -158,12 +166,22 @@ export struct ProfileCard {
       }
     }
     .width('100%')
+  }
+
+  build() {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      this.CardContent()
+    }
+    .width('100%')
     .padding({ left: 16, right: 16, top: 10, bottom: 10 })
     .constraintSize({ minHeight: 64 })
     .backgroundColor($r('app.color.card_background'))
     .borderRadius(24)
     .accessibilitySelected(this.selected)
-    .onClick((): void => this.onSelect())
-    .bindContextMenu(this.MoreMenu(), ResponseType.LongPress)
+    .onClick((): void => { if (!this.contextMenuOpen) { this.onSelect(); } })
+    .bindContextMenu(this.MoreMenu(), ResponseType.LongPress, {
+      onWillAppear: (): void => { this.contextMenuOpen = true; },
+      onDidDisappear: (): void => { this.contextMenuOpen = false; }
+    })
   }
 }

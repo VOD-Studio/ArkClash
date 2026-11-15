@@ -12,15 +12,22 @@ export function confirmProfileEditorDismiss(context: UIContext, draft: ProfileDr
   if (draft === undefined) { dismiss(); return; }
   if (draft.saving) { return; }
   if (!draft.dirty()) { dismiss(); return; }
-  context.showAlertDialog({
-    title: $r('app.string.profile_unsaved_title'), message: $r('app.string.profile_unsaved_message'), autoCancel: false,
-    buttons: [
-      { value: $r('app.string.profile_discard'), action: (): void => dismiss() },
-      { value: $r('app.string.profile_keep_editing'), action: (): void => {} },
-      { value: $r('app.string.action_save'), action: (): void => {
+  let choice: 'save' | 'discard' | undefined = undefined;
+  context.showActionSheet({
+    title: $r('app.string.profile_unsaved_title'), message: $r('app.string.profile_unsaved_message'),
+    alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+    sheets: [
+      { title: $r('app.string.action_save'), action: (): void => { choice = 'save'; } },
+      { title: $r('app.string.profile_discard'), action: (): void => { choice = 'discard'; } }
+    ],
+    confirm: { value: $r('app.string.profile_keep_editing'), defaultFocus: true, action: (): void => {} },
+    onWillDismiss: (action: DismissDialogAction): void => action.dismiss(),
+    onDidDisappear: (): void => {
+      if (choice === 'discard') { dismiss(); }
+      if (choice === 'save') {
         draft.save?.().then((saved: boolean): void => { if (saved) { dismiss(); } });
-      } }
-    ]
+      }
+    }
   });
 }
 
@@ -28,41 +35,76 @@ export function confirmProfileEditorDismiss(context: UIContext, draft: ProfileDr
 export struct ProfileEditor {
   @Param @Require store: ProfileStore;
   @Param @Require draft: ProfileDraft;
+  @Param @Require visible: boolean;
   @Event onSaved: () => void = (): void => {};
   @Event onClose: () => void = (): void => {};
   @Local sourceShown: boolean = false;
   @Local sourceText: string = '';
   @Local sourceOriginal: string = '';
-  @Local sourceError: string = '';
   @Local loadingSource: boolean = false;
   @Local validating: boolean = false;
+  private cancelAutoUpdateChoice: (() => void) | undefined = undefined;
+  private appeared: boolean = false;
+  private pendingFailure: string | undefined = undefined;
 
-  aboutToAppear(): void { this.draft.save = (): Promise<boolean> => this.save(); }
-  aboutToDisappear(): void { this.draft.save = undefined; }
+  aboutToAppear(): void {
+    this.appeared = true;
+    this.draft.save = (): Promise<boolean> => this.save();
+    this.consumeFailure();
+  }
+  aboutToDisappear(): void {
+    this.appeared = false;
+    this.pendingFailure = undefined;
+    this.draft.save = undefined;
+    this.cancelAutoUpdateChoice?.();
+  }
+
+  private toast(message: ResourceStr): void {
+    if (this.appeared && this.visible) { this.getUIContext().getPromptAction().showToast({ message: message }); }
+  }
+
+  private reportFailure(failure: string): void {
+    this.draft.error = failure;
+    if (!this.appeared) { return; }
+    this.pendingFailure = failure;
+    this.consumeFailure();
+  }
+
+  @Monitor('visible')
+  consumeFailure(): void {
+    const failure = this.pendingFailure;
+    if (!this.appeared || !this.visible || failure === undefined) { return; }
+    this.toast(describeError(failure));
+    this.pendingFailure = undefined;
+  }
 
   private async openSource(): Promise<void> {
+    if (this.loadingSource) { return; }
     this.loadingSource = true;
     this.draft.error = '';
     try {
-      this.sourceText = this.draft.content ?? await this.store.source(this.draft.id);
+      const text = this.draft.content ?? await this.store.source(this.draft.id);
+      if (!this.appeared) { return; }
+      this.sourceText = text;
       this.sourceOriginal = this.sourceText;
-      this.sourceError = '';
       this.sourceShown = true;
-    } catch (e) { this.draft.error = errorString(e as Object); }
+    } catch (e) { this.reportFailure(errorString(e as Object)); }
     finally { this.loadingSource = false; }
   }
 
   private async pickSource(): Promise<void> {
+    if (this.loadingSource) { return; }
     this.loadingSource = true;
     try {
       const text = await this.store.pickSource();
       if (text !== undefined) {
-        this.sourceOriginal = this.draft.content ?? await this.store.source(this.draft.id);
+        const original = this.draft.content ?? await this.store.source(this.draft.id);
+        if (!this.appeared) { return; }
+        this.sourceOriginal = original;
         this.sourceText = text;
-        this.sourceError = '';
         this.sourceShown = true;
       }
-    } catch (e) { this.draft.error = errorString(e as Object); }
+    } catch (e) { this.reportFailure(errorString(e as Object)); }
     finally { this.loadingSource = false; }
   }
 
@@ -71,13 +113,14 @@ export struct ProfileEditor {
     this.validating = true;
     try {
       const failure = await this.store.validateSource(this.sourceText);
-      if (failure !== undefined) { this.sourceError = failure; return false; }
+      if (failure !== undefined) { this.reportFailure(failure); return false; }
+      if (!this.appeared) { return false; }
       if (this.sourceText !== this.sourceOriginal) { this.draft.content = this.sourceText; }
       this.sourceOriginal = this.sourceText;
       this.sourceShown = false;
       return true;
     } catch (e) {
-      this.sourceError = errorString(e as Object);
+      this.reportFailure(errorString(e as Object));
       return false;
     } finally {
       this.validating = false;
@@ -87,17 +130,22 @@ export struct ProfileEditor {
   private closeSource(dismiss: () => void): void {
     if (this.validating) { return; }
     if (this.sourceText === this.sourceOriginal) { dismiss(); return; }
-    this.getUIContext().showAlertDialog({
-      title: $r('app.string.profile_unsaved_title'),
-      message: $r('app.string.profile_unsaved_message'),
-      autoCancel: false,
-      buttons: [
-        { value: $r('app.string.profile_discard'), action: (): void => { dismiss(); } },
-        { value: $r('app.string.profile_keep_editing'), action: (): void => {} },
-        { value: $r('app.string.action_save'), action: (): void => {
+    let choice: 'save' | 'discard' | undefined = undefined;
+    this.getUIContext().showActionSheet({
+      title: $r('app.string.profile_unsaved_title'), message: $r('app.string.profile_unsaved_message'),
+      alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+      sheets: [
+        { title: $r('app.string.action_save'), action: (): void => { choice = 'save'; } },
+        { title: $r('app.string.profile_discard'), action: (): void => { choice = 'discard'; } }
+      ],
+      confirm: { value: $r('app.string.profile_keep_editing'), defaultFocus: true, action: (): void => {} },
+      onWillDismiss: (action: DismissDialogAction): void => action.dismiss(),
+      onDidDisappear: (): void => {
+        if (choice === 'discard') { dismiss(); }
+        if (choice === 'save') {
           this.saveSource().then((saved: boolean): void => { if (saved) { dismiss(); } });
-        } }
-      ]
+        }
+      }
     });
   }
 
@@ -107,7 +155,9 @@ export struct ProfileEditor {
     this.draft.error = '';
     try {
       if (this.draft.content !== undefined && this.draft.subscription && this.draft.autoUpdate) {
-        this.draft.autoUpdate = !(await this.askDisableAutoUpdate());
+        const disabled = await this.askDisableAutoUpdate();
+        if (disabled === undefined) { return false; }
+        this.draft.autoUpdate = !disabled;
       }
       const edit: ProfileEdit = { name: this.draft.name, url: this.draft.link,
         autoUpdate: this.draft.autoUpdate, intervalMinutes: Number(this.draft.interval),
@@ -115,25 +165,42 @@ export struct ProfileEditor {
         baseName: this.draft.baseName, baseUrl: this.draft.baseLink };
       const failure = await this.store.edit(this.draft.id, edit);
       if (failure !== undefined) {
-        this.draft.error = failure;
+        this.reportFailure(failure);
         if (failure === 'metadata_saved') { this.draft.saved(); }
         return false;
       }
       this.draft.saved();
-      this.onSaved();
+      this.toast($r('app.string.profile_saved_toast'));
+      if (this.appeared) { this.onSaved(); }
       return true;
     } catch (e) {
-      this.draft.error = errorString(e as Object);
+      this.reportFailure(errorString(e as Object));
       return false;
     } finally { this.draft.saving = false; }
   }
 
-  private askDisableAutoUpdate(): Promise<boolean> {
-    return new Promise<boolean>((resolve: (disabled: boolean) => void): void => {
-      this.getUIContext().showAlertDialog({
-        message: $r('app.string.profile_manual_auto_update'), autoCancel: false,
-        primaryButton: { value: $r('app.string.profile_keep_auto_update'), action: (): void => resolve(false) },
-        secondaryButton: { value: $r('app.string.profile_disable_auto_update'), action: (): void => resolve(true) }
+  private askDisableAutoUpdate(): Promise<boolean | undefined> {
+    return new Promise<boolean | undefined>((resolve: (disabled: boolean | undefined) => void): void => {
+      let settled = false;
+      const finish = (disabled: boolean | undefined): void => {
+        if (settled) { return; }
+        settled = true;
+        this.cancelAutoUpdateChoice = undefined;
+        resolve(disabled);
+      };
+      this.cancelAutoUpdateChoice = (): void => finish(undefined);
+      this.getUIContext().showActionSheet({
+        title: $r('app.string.profile_source_title'), message: $r('app.string.profile_manual_auto_update'),
+        alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+        sheets: [
+          { title: $r('app.string.profile_keep_auto_update'), action: (): void => finish(false) },
+          { title: $r('app.string.profile_disable_auto_update'), action: (): void => finish(true) }
+        ],
+        confirm: { value: $r('app.string.action_cancel'), defaultFocus: true,
+          action: (): void => finish(undefined) },
+        cancel: (): void => finish(undefined),
+        onWillDismiss: (action: DismissDialogAction): void => { finish(undefined); action.dismiss(); },
+        onDidDisappear: (): void => finish(undefined)
       });
     });
   }
@@ -144,13 +211,6 @@ export struct ProfileEditor {
       ProfileSheetHeader({ titleText: this.draft.name, saving: this.validating,
         onSave: (): void => { this.saveSource(); },
         onClose: (): void => this.closeSource((): void => { this.sourceShown = false; }) })
-      if (this.sourceError !== '') {
-        Text(describeError(this.sourceError))
-          .fontColor($r('app.color.status_error'))
-          .padding(12)
-          .backgroundColor($r('app.color.error_soft'))
-          .width('100%')
-      }
       TextArea({ text: this.sourceText })
         .fontFamily('monospace')
         .fontSize(14)
@@ -182,14 +242,6 @@ export struct ProfileEditor {
         canSave: !this.loadingSource, onSave: (): void => { this.save(); }, onClose: (): void => this.onClose() })
       Scroll() {
         Column({ space: 24 }) {
-          if (this.draft.error !== '') {
-            Text(describeError(this.draft.error))
-              .fontSize(13).lineHeight(18)
-              .fontColor($r('app.color.status_error'))
-              .padding(12)
-              .backgroundColor($r('app.color.error_soft'))
-              .width('100%')
-          }
           Column() {
             Row({ space: 16 }) {
               Text($r('app.string.field_name')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))

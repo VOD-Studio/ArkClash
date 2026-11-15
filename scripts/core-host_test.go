@@ -2,10 +2,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -236,7 +236,14 @@ func TestSelectionRejectsOldConfigurationWithSameProfileAndMembers(t *testing.T)
 }
 
 func probeRequest(ctx context.Context, target, method string) *http.Request {
-	return httptest.NewRequestWithContext(ctx, http.MethodGet, "/arkclash/probe?url="+url.QueryEscape(target)+"&method="+method, nil)
+	return probeRequestWithOptions(ctx, probeRequestBody{URL: target, Method: method, BodyMode: "json", Timeout: 5000})
+}
+
+func probeRequestWithOptions(ctx context.Context, options probeRequestBody) *http.Request {
+	body, _ := json.Marshal(options)
+	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "/arkclash/probe", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	return request
 }
 
 func TestRuleProbePreservesTargetStatusWithoutLocalProxyPort(t *testing.T) {
@@ -244,7 +251,7 @@ func TestRuleProbePreservesTargetStatusWithoutLocalProxyPort(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(403); io.WriteString(w, "fixture body") }))
 	defer server.Close()
 	recorder := httptest.NewRecorder()
-	getProbe(recorder, probeRequest(context.Background(), server.URL, http.MethodGet))
+	postProbe(recorder, probeRequest(context.Background(), server.URL, http.MethodGet))
 	var result struct {
 		Status   int
 		Body     string
@@ -272,7 +279,7 @@ func TestRuleProbeCancellationReleasesSlotAndConnection(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan struct{})
-	go func() { getProbe(httptest.NewRecorder(), probeRequest(ctx, server.URL, http.MethodGet)); close(done) }()
+	go func() { postProbe(httptest.NewRecorder(), probeRequest(ctx, server.URL, http.MethodGet)); close(done) }()
 	select {
 	case <-entered:
 	case <-time.After(3 * time.Second):
@@ -303,7 +310,7 @@ func TestRuleProbeDiscardsReplyFromPreviousRevision(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	done := make(chan struct{})
 	go func() {
-		getProbe(recorder, probeRequest(context.Background(), server.URL, http.MethodGet))
+		postProbe(recorder, probeRequest(context.Background(), server.URL, http.MethodGet))
 		close(done)
 	}()
 	select {
@@ -332,7 +339,7 @@ func TestProbeAndDelayCapacityAreNotNodeFailures(t *testing.T) {
 		probeSlots <- struct{}{}
 	}
 	recorder := httptest.NewRecorder()
-	getProbe(recorder, probeRequest(context.Background(), "http://127.0.0.1/", http.MethodHead))
+	postProbe(recorder, probeRequest(context.Background(), "http://127.0.0.1/", http.MethodHead))
 	for range cap(probeSlots) {
 		<-probeSlots
 	}

@@ -11,7 +11,6 @@ export struct ProfileDetails {
   @Param @Require item: ProfileItem;
   @Event onEdit: () => void = (): void => {};
   @Local details: ProfileSummary | undefined = undefined;
-  @Local failure: string = '';
   @Local sourceShown: boolean = false;
   @Local sourceText: string = '';
   @Local loadingSource: boolean = false;
@@ -21,9 +20,12 @@ export struct ProfileDetails {
     this.visible = true;
     this.store.profileSummary(this.item.id).then((summary: ProfileSummary | undefined): void => {
       if (this.visible) { this.details = summary; }
-    }).catch((error: Error): void => { if (this.visible) { this.failure = errorString(error); } });
+    }).catch((error: Error): void => this.toastFailure(errorString(error)));
   }
   aboutToDisappear(): void { this.visible = false; }
+  private toastFailure(failure: string): void {
+    if (this.visible) { this.getUIContext().getPromptAction().showToast({ message: describeError(failure) }); }
+  }
   private used(): number { return (this.item.state.usage?.upload ?? 0) + (this.item.state.usage?.download ?? 0); }
   private ratio(): number {
     const total = this.item.state.usage?.total ?? 0;
@@ -33,12 +35,11 @@ export struct ProfileDetails {
   private async openSource(): Promise<void> {
     if (this.loadingSource) { return; }
     this.loadingSource = true;
-    this.failure = '';
     try {
       const text = await this.store.source(this.item.id);
       if (this.visible) { this.sourceText = text; this.sourceShown = true; }
     } catch (e) {
-      if (this.visible) { this.failure = errorString(e as Object); }
+      this.toastFailure(errorString(e as Object));
     } finally {
       if (this.visible) { this.loadingSource = false; }
     }
@@ -109,8 +110,8 @@ export struct ProfileDetails {
             .fontColor($r('sys.color.font_secondary'))
             .width('100%')
         }
-        if (this.failure !== '' || this.item.state.error !== undefined) {
-          Text(describeError(this.failure || this.item.state.error || 'network'))
+        if (this.item.state.error !== undefined) {
+          Text(describeError(this.item.state.error))
             .fontColor($r('app.color.status_error'))
             .width('100%')
         }

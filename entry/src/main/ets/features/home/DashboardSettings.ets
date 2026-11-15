@@ -114,6 +114,15 @@ export class DashboardSettings {
     }
   }
 
+  discardDraft(): void {
+    if (this.saving || !this.hasDraft) {
+      return;
+    }
+    this.draft = undefined;
+    this.hasDraft = false;
+    this.failure = '';
+  }
+
   private decode(text: string): Record<string, Object> {
     const document = JSON.parse(text) as Record<string, Object>;
     if (document === null || Array.isArray(document) || document['version'] !== 1 ||
