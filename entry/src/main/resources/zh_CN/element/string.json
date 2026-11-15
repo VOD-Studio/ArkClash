@@ -1089,10 +1089,6 @@
       "value": "当前为直连模式，可在仪表盘切换出站模式。"
     },
     {
-      "name": "proxy_dismiss",
-      "value": "关闭提示"
-    },
-    {
       "name": "proxy_dynamic_offline",
       "value": "此组包含动态成员，连接后可读取完整列表。"
     },
@@ -1186,7 +1182,7 @@
     },
     {
       "name": "proxy_preferences_failed",
-      "value": "视图设置未能保存或读取，草稿已保留。"
+      "value": "显示设置读取或保存失败"
     },
     {
       "name": "proxy_refresh",
@@ -1238,7 +1234,7 @@
     },
     {
       "name": "proxy_stale",
-      "value": "代理组读取失败，正在显示上次读取的内容。"
+      "value": "代理列表刷新失败"
     },
     {
       "name": "proxy_style",
@@ -1246,7 +1242,7 @@
     },
     {
       "name": "proxy_test_capacity",
-      "value": "测试队列已满，请等待当前测试完成后重试。"
+      "value": "测速繁忙，请稍后重试"
     },
     {
       "name": "proxy_test_current_group",
@@ -1258,7 +1254,7 @@
     },
     {
       "name": "proxy_test_no_conclusion",
-      "value": "部分测试未取得有效结果，请重试。"
+      "value": "部分测速失败"
     },
     {
       "name": "proxy_test_node",

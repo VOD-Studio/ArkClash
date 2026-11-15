@@ -1109,10 +1109,6 @@
       "value": "Direct mode is active. Change outbound mode on the dashboard."
     },
     {
-      "name": "proxy_dismiss",
-      "value": "Dismiss"
-    },
-    {
       "name": "proxy_dynamic_offline",
       "value": "Connect to load this group’s dynamic members."
     },
@@ -1206,7 +1202,7 @@
     },
     {
       "name": "proxy_preferences_failed",
-      "value": "View settings could not be saved or loaded. Your draft is retained."
+      "value": "View settings could not be loaded or saved."
     },
     {
       "name": "proxy_refresh",
@@ -1258,7 +1254,7 @@
     },
     {
       "name": "proxy_stale",
-      "value": "Refresh failed. Showing the last successful snapshot."
+      "value": "Proxy list refresh failed."
     },
     {
       "name": "proxy_style",
@@ -1266,7 +1262,7 @@
     },
     {
       "name": "proxy_test_capacity",
-      "value": "The test queue is full. Wait for current tests and retry."
+      "value": "Latency checks are busy. Try again shortly."
     },
     {
       "name": "proxy_test_current_group",
@@ -1278,7 +1274,7 @@
     },
     {
       "name": "proxy_test_no_conclusion",
-      "value": "Some tests returned no usable result. Retry them."
+      "value": "Some latency checks failed."
     },
     {
       "name": "proxy_test_node",

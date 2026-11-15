@@ -2,7 +2,6 @@ import { curves, UIUtils } from '@kit.ArkUI';
 import { EmptyState } from '../../components/EmptyState';
 import { FLOATING_BAR_INSET, PAGE_GUTTER } from '../../components/Theme';
 import { ProxyBrowser } from './Proxies';
-import { ProxyFeedback } from './ProxyFeedback';
 import { ProxyGroupHeader } from './ProxyGroupHeader';
 import { proxyCardHeight, proxyTextScale } from './ProxyMetrics';
 import { ProxyNodeLine } from './ProxyNodeLine';
@@ -31,7 +30,6 @@ export struct ProxyGroupList {
   @Param pickerMode: boolean = false;
   @Param contentInset: number = 0;
   @Param motionEnabled: boolean = false;
-  @Param feedbackVisible: boolean = false;
   @Event onLocate: (group: string) => void = () => {};
   @Event onListScroll: (offset: number, source: ScrollSource) => void = () => {};
   @Event onScrollerReady: () => void = () => {};
@@ -248,11 +246,6 @@ export struct ProxyGroupList {
 
   build() {
     List({ scroller: this.scroller, space: 8 }) {
-      if (this.feedbackVisible) {
-        ListItem() {
-          ProxyFeedback({ browser: this.browser })
-        }
-      }
       LazyForEach(this.browser.source, (group: ProxyGroupView) => {
         // 标题始终属于同一个原生分组；切换动画窗口时只替换节点区，避免重建文字和图标。
         ListItemGroup({
