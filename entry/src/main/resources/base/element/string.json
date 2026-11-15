@@ -761,8 +761,8 @@
       "value": "Could not load or save dashboard settings. Existing data is retained."
     },
     {
-      "name": "dash_service_batch_failed",
-      "value": "Check incomplete. Try again."
+      "name": "action_close",
+      "value": "Close"
     },
     {
       "name": "dash_service_details",
@@ -770,7 +770,7 @@
     },
     {
       "name": "dash_service_failed",
-      "value": "Connectivity check failed"
+      "value": "Check failed"
     },
     {
       "name": "dash_service_keep_one",
@@ -782,19 +782,19 @@
     },
     {
       "name": "dash_service_reachable",
-      "value": "Reachable · %d ms"
+      "value": "%d ms"
     },
     {
       "name": "dash_service_restricted",
-      "value": "Access restricted · HTTP %d"
+      "value": "HTTP %d"
     },
     {
       "name": "dash_service_timeout",
-      "value": "Connectivity check timed out"
+      "value": "Timed out"
     },
     {
       "name": "dash_service_unreachable",
-      "value": "Unexpected response · HTTP %d"
+      "value": "HTTP %d"
     },
     {
       "name": "dash_service_untested",

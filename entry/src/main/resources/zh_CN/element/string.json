@@ -741,8 +741,8 @@
       "value": "仪表盘设置未能读取或保存，原有数据已保留"
     },
     {
-      "name": "dash_service_batch_failed",
-      "value": "检测未完成，请重试"
+      "name": "action_close",
+      "value": "关闭"
     },
     {
       "name": "dash_service_details",
@@ -750,7 +750,7 @@
     },
     {
       "name": "dash_service_failed",
-      "value": "连通检测失败"
+      "value": "检测失败"
     },
     {
       "name": "dash_service_keep_one",
@@ -762,19 +762,19 @@
     },
     {
       "name": "dash_service_reachable",
-      "value": "可连通 · %d ms"
+      "value": "%d ms"
     },
     {
       "name": "dash_service_restricted",
-      "value": "访问受限 · HTTP %d"
+      "value": "HTTP %d"
     },
     {
       "name": "dash_service_timeout",
-      "value": "连通检测超时"
+      "value": "超时"
     },
     {
       "name": "dash_service_unreachable",
-      "value": "服务响应异常 · HTTP %d"
+      "value": "HTTP %d"
     },
     {
       "name": "dash_service_untested",
