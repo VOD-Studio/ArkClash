@@ -40,40 +40,54 @@ export struct ProfileEditor {
   @Local sourceShown: boolean = false;
   @Local sourceText: string = '';
   @Local sourceOriginal: string = '';
-  @Local sourceError: string = '';
   @Local loadingSource: boolean = false;
   @Local validating: boolean = false;
   private cancelAutoUpdateChoice: (() => void) | undefined = undefined;
+  private visible: boolean = false;
 
-  aboutToAppear(): void { this.draft.save = (): Promise<boolean> => this.save(); }
+  aboutToAppear(): void { this.visible = true; this.draft.save = (): Promise<boolean> => this.save(); }
   aboutToDisappear(): void {
+    this.visible = false;
     this.draft.save = undefined;
     this.cancelAutoUpdateChoice?.();
   }
 
+  private toast(message: ResourceStr): void {
+    if (this.visible) { this.getUIContext().getPromptAction().showToast({ message: message }); }
+  }
+
+  private reportFailure(failure: string): void {
+    this.draft.error = failure;
+    this.toast(describeError(failure));
+  }
+
   private async openSource(): Promise<void> {
+    if (this.loadingSource) { return; }
     this.loadingSource = true;
     this.draft.error = '';
     try {
-      this.sourceText = this.draft.content ?? await this.store.source(this.draft.id);
+      const text = this.draft.content ?? await this.store.source(this.draft.id);
+      if (!this.visible) { return; }
+      this.sourceText = text;
       this.sourceOriginal = this.sourceText;
-      this.sourceError = '';
       this.sourceShown = true;
-    } catch (e) { this.draft.error = errorString(e as Object); }
+    } catch (e) { this.reportFailure(errorString(e as Object)); }
     finally { this.loadingSource = false; }
   }
 
   private async pickSource(): Promise<void> {
+    if (this.loadingSource) { return; }
     this.loadingSource = true;
     try {
       const text = await this.store.pickSource();
       if (text !== undefined) {
-        this.sourceOriginal = this.draft.content ?? await this.store.source(this.draft.id);
+        const original = this.draft.content ?? await this.store.source(this.draft.id);
+        if (!this.visible) { return; }
+        this.sourceOriginal = original;
         this.sourceText = text;
-        this.sourceError = '';
         this.sourceShown = true;
       }
-    } catch (e) { this.draft.error = errorString(e as Object); }
+    } catch (e) { this.reportFailure(errorString(e as Object)); }
     finally { this.loadingSource = false; }
   }
 
@@ -82,13 +96,14 @@ export struct ProfileEditor {
     this.validating = true;
     try {
       const failure = await this.store.validateSource(this.sourceText);
-      if (failure !== undefined) { this.sourceError = failure; return false; }
+      if (failure !== undefined) { this.reportFailure(failure); return false; }
+      if (!this.visible) { return false; }
       if (this.sourceText !== this.sourceOriginal) { this.draft.content = this.sourceText; }
       this.sourceOriginal = this.sourceText;
       this.sourceShown = false;
       return true;
     } catch (e) {
-      this.sourceError = errorString(e as Object);
+      this.reportFailure(errorString(e as Object));
       return false;
     } finally {
       this.validating = false;
@@ -133,16 +148,16 @@ export struct ProfileEditor {
         baseName: this.draft.baseName, baseUrl: this.draft.baseLink };
       const failure = await this.store.edit(this.draft.id, edit);
       if (failure !== undefined) {
-        this.draft.error = failure;
+        this.reportFailure(failure);
         if (failure === 'metadata_saved') { this.draft.saved(); }
         return false;
       }
       this.draft.saved();
-      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.profile_saved_toast') });
-      this.onSaved();
+      this.toast($r('app.string.profile_saved_toast'));
+      if (this.visible) { this.onSaved(); }
       return true;
     } catch (e) {
-      this.draft.error = errorString(e as Object);
+      this.reportFailure(errorString(e as Object));
       return false;
     } finally { this.draft.saving = false; }
   }
@@ -179,13 +194,6 @@ export struct ProfileEditor {
       ProfileSheetHeader({ titleText: this.draft.name, saving: this.validating,
         onSave: (): void => { this.saveSource(); },
         onClose: (): void => this.closeSource((): void => { this.sourceShown = false; }) })
-      if (this.sourceError !== '') {
-        Text(describeError(this.sourceError))
-          .fontColor($r('app.color.status_error'))
-          .padding(12)
-          .backgroundColor($r('app.color.error_soft'))
-          .width('100%')
-      }
       TextArea({ text: this.sourceText })
         .fontFamily('monospace')
         .fontSize(14)
@@ -217,14 +225,6 @@ export struct ProfileEditor {
         canSave: !this.loadingSource, onSave: (): void => { this.save(); }, onClose: (): void => this.onClose() })
       Scroll() {
         Column({ space: 24 }) {
-          if (this.draft.error !== '') {
-            Text(describeError(this.draft.error))
-              .fontSize(13).lineHeight(18)
-              .fontColor($r('app.color.status_error'))
-              .padding(12)
-              .backgroundColor($r('app.color.error_soft'))
-              .width('100%')
-          }
           Column() {
             Row({ space: 16 }) {
               Text($r('app.string.field_name')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))

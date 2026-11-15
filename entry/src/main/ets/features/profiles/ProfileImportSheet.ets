@@ -1,4 +1,4 @@
-import { PAGE_GUTTER } from '../../components/Theme';
+import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { errorString } from '../../shared/profiles/Errors';
 import { describeError } from './ProfileErrors';
 import { ProfileBatchResult } from './ProfileModels';
@@ -18,16 +18,21 @@ export struct ProfileImportSheet {
   @Local importingMany: boolean = false;
   @Local batchSource: string = '';
   @Local adding: boolean = false;
-  @Local failure: string = '';
   @Local result: ProfileBatchResult | undefined = undefined;
+  @Local resultShown: boolean = false;
+  private visible: boolean = false;
 
-  aboutToAppear(): void { this.importingMany = this.batch; }
+  aboutToAppear(): void { this.visible = true; this.importingMany = this.batch; }
+  aboutToDisappear(): void { this.visible = false; }
+
+  private toastFailure(failure: string): void {
+    if (this.visible) { this.getUIContext().getPromptAction().showToast({ message: describeError(failure) }); }
+  }
 
   private toggleBatch(): void {
     if (this.adding) { return; }
     this.importingMany = !this.importingMany;
     if (this.importingMany && this.batchSource === '') { this.batchSource = this.source; }
-    this.failure = '';
     this.result = undefined;
   }
 
@@ -39,18 +44,27 @@ export struct ProfileImportSheet {
     if (this.adding) { return; }
     this.adding = true;
     this.onBusy(true);
-    this.failure = '';
     this.result = undefined;
     try {
       if (this.importingMany) {
         const result = await this.store.importLinks(this.batchSource);
-        this.result = result;
+        if (this.visible) { this.result = result; this.resultShown = true; }
       } else {
         const failure = await this.store.addSubscription(this.source, this.label);
-        if (failure === undefined) { this.onDone(); } else { this.failure = failure; }
+        if (failure === undefined) { if (this.visible) { this.onDone(); } }
+        else { this.toastFailure(failure); }
       }
-    } catch (e) { this.failure = errorString(e as Object); }
+    } catch (e) { this.toastFailure(errorString(e as Object)); }
     finally { this.adding = false; this.onBusy(false); }
+  }
+
+  @Builder
+  BatchResults() {
+    Column() {
+      if (this.result !== undefined) { ProfileResults({ result: this.result }) }
+    }
+    .width('100%')
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8, bottom: 24 })
   }
 
   @Builder
@@ -73,14 +87,6 @@ export struct ProfileImportSheet {
         actions: (): void => this.ImportActions(), onSave: (): void => { this.save(); }, onClose: (): void => this.onClose() })
       Scroll() {
         Column({ space: 24 }) {
-          if (this.failure !== '') {
-            Text(describeError(this.failure))
-              .fontSize(13).lineHeight(18)
-              .fontColor($r('app.color.status_error'))
-              .padding(12)
-              .backgroundColor($r('app.color.error_soft'))
-              .width('100%')
-          }
           if (this.importingMany) {
             TextArea({ text: this.batchSource, placeholder: $r('app.string.profile_batch_hint') })
               .height(200)
@@ -129,7 +135,6 @@ export struct ProfileImportSheet {
             .backgroundColor($r('app.color.card_background'))
             .borderRadius(24).clip(true)
           }
-          if (this.result !== undefined) { ProfileResults({ result: this.result }) }
         }
         .enabled(!this.adding)
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 24, bottom: 20 })
@@ -142,5 +147,7 @@ export struct ProfileImportSheet {
     }
     .height('100%')
     .width('100%')
+    .bindSheet($$this.resultShown, this.BatchResults(), { title: { title: $r('app.string.profile_import_batch') },
+      preferType: SheetType.BOTTOM, height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true })
   }
 }

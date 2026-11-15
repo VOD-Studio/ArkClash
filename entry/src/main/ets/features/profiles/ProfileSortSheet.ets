@@ -9,15 +9,17 @@ export struct ProfileSortSheet {
   @Param @Require store: ProfileStore;
   @Event onSaved: () => void = (): void => {};
   @Event onClose: () => void = (): void => {};
-  @Local failure: string = '';
   @Local saving: boolean = false;
   private order: ProfileItem[] = [];
   private rows: ListSource<ProfileItem> = new ListSource<ProfileItem>();
+  private visible: boolean = false;
 
   aboutToAppear(): void {
+    this.visible = true;
     this.order = this.store.items.slice();
     this.rows.replace(this.order);
   }
+  aboutToDisappear(): void { this.visible = false; }
 
   private move(from: number, to: number): void {
     if (from < 0 || to < 0 || from >= this.order.length || to >= this.order.length || from === to) { return; }
@@ -27,23 +29,19 @@ export struct ProfileSortSheet {
   }
 
   private async save(): Promise<void> {
+    if (this.saving) { return; }
     this.saving = true;
     const failure = await this.store.reorder(this.order.map((item: ProfileItem): string => item.id));
     this.saving = false;
-    if (failure === undefined) { this.onSaved(); } else { this.failure = failure; }
+    if (!this.visible) { return; }
+    if (failure === undefined) { this.onSaved(); }
+    else { this.getUIContext().getPromptAction().showToast({ message: describeError(failure) }); }
   }
 
   build() {
     Column() {
       ProfileSheetHeader({ titleText: $r('app.string.profile_sort'), saving: this.saving,
         onSave: (): void => { this.save(); }, onClose: (): void => this.onClose() })
-      if (this.failure !== '') {
-        Text(describeError(this.failure))
-          .fontSize(13).lineHeight(18)
-          .fontColor($r('app.color.status_error'))
-          .padding(12).backgroundColor($r('app.color.error_soft')).width('100%')
-          .margin({ left: 16, right: 16, bottom: 24 })
-      }
       List({ space: 0 }) {
         LazyForEach(this.rows, (item: ProfileItem, index: number) => {
           ListItem() {

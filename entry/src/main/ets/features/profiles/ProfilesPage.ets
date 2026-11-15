@@ -72,6 +72,10 @@ export struct ProfilesPage {
   }
 
   private consumeApplyError(): void {
+    if (this.draft?.saving === true || (this.editShown && this.draft?.error === this.store.applyError)) {
+      this.reportedApplyError = this.store.applyError;
+      return;
+    }
     if (this.activeActions === 0) { this.reportResult(undefined); }
   }
 
