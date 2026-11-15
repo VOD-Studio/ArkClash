@@ -31,12 +31,15 @@ export struct DashboardServices {
     this.state.cancel();
   }
 
-  @Monitor('visible', 'profileId', 'routeRevision', 'conn.routeRevision', 'conn.mode', 'conn.sessionMode', 'conn.forward',
-    'conn.state')
+  @Monitor('visible', 'interactive', 'details', 'managing', 'settings.ready', 'settings.revision', 'profileId',
+    'routeRevision', 'conn.routeRevision', 'conn.mode', 'conn.modePending', 'conn.sessionMode', 'conn.forward', 'conn.state')
   sync(): void {
     const route = `${this.profileId}:${this.routeRevision}:${this.conn.routeRevision}:${this.conn.mode}:` +
       `${this.conn.sessionMode}:${this.conn.forward}`;
-    this.state.observe(this.context.filesDir, route, this.conn.connected, this.visible && !this.conn.busy);
+    const ids = this.enabledIds();
+    this.state.observe(this.context.filesDir, route, this.conn.connected,
+      this.visible && this.interactive && this.settings.ready && !this.conn.busy && !this.conn.modePending && !this.managing,
+      this.details ? ids : ids.slice(0, 4));
     if (!this.visible) {
       this.details = false;
       this.managing = false;
