@@ -1,5 +1,4 @@
 import { pasteboard } from '@kit.BasicServicesKit';
-import { promptAction } from '@kit.ArkUI';
 import { HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { EmptyState } from '../../components/EmptyState';
 import { ListSource } from '../../components/ListSource';
@@ -26,6 +25,7 @@ export struct ProfilesPage {
   @Local detailShown: boolean = false;
   @Local detailItem: ProfileItem | undefined = undefined;
   @Local addShown: boolean = false;
+  @Local addMenuShown: boolean = false;
   @Local adding: boolean = false;
   @Local editShown: boolean = false;
   @Local draft: ProfileDraft | undefined = undefined;
@@ -44,6 +44,7 @@ export struct ProfilesPage {
   private reportedApplyError: string = '';
   private pendingResult: boolean = false;
   private pendingResultError: string = '';
+  private addChoice: 'file' | 'link' | undefined = undefined;
 
   private clockVisible(visible: boolean): void {
     this.clockInView = visible;
@@ -132,13 +133,16 @@ export struct ProfilesPage {
   }
 
   private showAddMenu(): void {
-    this.getUIContext().getPromptAction().showActionMenu({ buttons: [
-      { text: $r('app.string.profile_import_file'), color: $r('sys.color.font_primary') },
-      { text: $r('app.string.subscription_link'), color: $r('sys.color.font_primary') }
-    ] }).then((result: promptAction.ActionMenuSuccessResponse): void => {
-      if (result.index === 0) { this.importLocal(); }
-      else if (result.index === 1) { this.openAdd(); }
-    }).catch((): void => {});
+    this.addChoice = undefined;
+    this.addMenuShown = true;
+  }
+
+  private finishAddMenu(): void {
+    const choice = this.addChoice;
+    this.addChoice = undefined;
+    if (!this.visible) { return; }
+    if (choice === 'file') { this.importLocal(); }
+    else if (choice === 'link') { this.openAdd(); }
   }
 
   private async importLocal(): Promise<void> {
@@ -307,6 +311,30 @@ export struct ProfilesPage {
         (): void => { this.editShown = false; }) })
     }
   }
+
+  @Builder
+  AddOption(label: Resource, icon: Resource, choice: 'file' | 'link') {
+    Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.NORMAL, stateEffect: true }) {
+      Row({ space: 12 }) {
+        SymbolGlyph(icon).fontSize(24).fontColor([$r('sys.color.font_primary')])
+        Text(label).fontSize(17).fontColor($r('sys.color.font_primary')).layoutWeight(1)
+      }
+      .width('100%')
+    }
+    .width('100%').height(56).padding({ left: 16, right: 16 })
+    .backgroundColor($r('app.color.card_background')).borderRadius(24)
+    .onClick((): void => { this.addChoice = choice; this.addMenuShown = false; })
+  }
+
+  @Builder
+  AddMenu() {
+    Column({ space: 8 }) {
+      this.AddOption($r('app.string.profile_import_file'), $r('sys.symbol.doc_text'), 'file')
+      this.AddOption($r('app.string.subscription_link'), $r('sys.symbol.link'), 'link')
+    }
+    .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 24 })
+  }
+
   @Builder
   AddSheet() {
     ProfileImportSheet({ store: this.store, onDone: (): void => {
@@ -373,7 +401,16 @@ export struct ProfilesPage {
   }
 
   build() {
-    Column() { this.PageSheets() }
+    Column() {
+      Column() { this.PageSheets() }
+      .width('100%').height('100%')
+      .bindSheet($$this.addMenuShown, this.AddMenu(), {
+        title: { title: $r('app.string.action_add') },
+        height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
+        systemMaterial: sheetMaterial(), showClose: true,
+        onDisappear: (): void => this.finishAddMenu()
+      })
+    }
     .width('100%').height('100%')
     .bindSheet($$this.removeShown, this.RemoveSheet(), {
       height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
