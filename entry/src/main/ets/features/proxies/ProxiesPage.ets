@@ -79,7 +79,7 @@ export struct ProxiesPage {
     }
   }
 
-  @Monitor('browser.notice')
+  @Monitor('browser.notice', 'browser.noticeVersion')
   showNotice(): void {
     if (this.browser.notice !== '') {
       this.toast(this.noticeLabel());

@@ -22,6 +22,7 @@ export class ProxyBrowser {
   @Trace loadError: boolean = false;
   @Trace stale: boolean = false;
   @Trace notice: string = '';
+  @Trace noticeVersion: number = 0;
   @Trace online: boolean = false;
   @Trace offlineWritable: boolean = false;
   @Trace totalGroups: number = 0;
@@ -245,7 +246,13 @@ export class ProxyBrowser {
     this.select(group, '', true);
   }
 
+  private beginAction(): void {
+    this.notice = '';
+    this.noticeVersion++;
+  }
+
   private select(group: string, node: string, clearPin: boolean): void {
+    this.beginAction();
     const snapshot = this.snapshot;
     const input = this.input;
     if (snapshot === undefined || input === undefined || !input.visible || connection.busy || this.loadError ||
@@ -254,7 +261,6 @@ export class ProxyBrowser {
       this.notice = 'notReady';
       return;
     }
-    this.notice = '';
     const epoch = this.contextEpoch;
     const stillCurrent = (): boolean => epoch === this.contextEpoch && this.input?.profile === snapshot.profile &&
       this.input?.online === snapshot.online && this.input?.offlineWritable === snapshot.offlineWritable &&
@@ -267,9 +273,9 @@ export class ProxyBrowser {
   }
 
   test(group: string, node: string = ''): void {
+    this.beginAction();
     if (this.input?.visible === true && this.snapshot?.online === true && connection.hostState === 'running' &&
       !connection.busy && !this.loadError && this.snapshotEpoch === this.contextEpoch) {
-      this.notice = '';
       this.tests.start(this.input.context.filesDir, this.snapshot, group, this.query, node);
     } else {
       this.notice = this.online ? 'notReady' : 'offline';
@@ -277,6 +283,7 @@ export class ProxyBrowser {
   }
 
   locate(groupName: string): ProxyLocateTarget | undefined {
+    this.beginAction();
     const groupIndex = this.groups.findIndex((group: ProxyGroupView): boolean => group.name === groupName);
     const group = this.groups[groupIndex];
     const index = group?.nodes.findIndex((card: ProxyNodeView): boolean => card.pinned || card.selected) ?? -1;
