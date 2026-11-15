@@ -66,60 +66,87 @@ export struct ProxyGroupHeader {
   }
 
   build() {
-    Row({ space: 6 }) {
+    Stack({ alignContent: Alignment.End }) {
       Button({ type: ButtonType.Normal }) {
-        Row() {
-          if (this.group.iconStyle !== 'hidden') {
-            Stack() {
-              if (this.group.icon !== '' && !this.iconFailed) {
-                Image(this.group.icon)
-                  .width(this.group.iconStyle === 'filled' ? this.iconExtent() - 12 : this.iconExtent())
-                  .height(this.group.iconStyle === 'filled' ? this.iconExtent() - 12 : this.iconExtent())
-                  .objectFit(ImageFit.Contain)
-                  .onError(() => { this.iconFailed = true; })
-              } else {
-                Text(this.monogram())
-                  .fontSize((this.group.iconStyle === 'filled' ? this.iconExtent() - 12 : this.iconExtent()) * 0.62)
-                  .fontWeight(600)
-                  .fontColor(this.group.iconStyle === 'filled' ? $r('sys.color.font_secondary') : $r('app.color.brand'))
-                  .maxFontScale(1)
+        Row({ space: 6 }) {
+          Row() {
+            if (this.group.iconStyle !== 'hidden') {
+              Stack() {
+                if (this.group.icon !== '' && !this.iconFailed) {
+                  Image(this.group.icon)
+                    .width(this.group.iconStyle === 'filled' ? this.iconExtent() - 12 : this.iconExtent())
+                    .height(this.group.iconStyle === 'filled' ? this.iconExtent() - 12 : this.iconExtent())
+                    .objectFit(ImageFit.Contain)
+                    .onError(() => { this.iconFailed = true; })
+                } else {
+                  Text(this.monogram())
+                    .fontSize((this.group.iconStyle === 'filled' ? this.iconExtent() - 12 : this.iconExtent()) * 0.62)
+                    .fontWeight(600)
+                    .fontColor(this.group.iconStyle === 'filled' ? $r('sys.color.font_secondary') : $r('app.color.brand'))
+                    .maxFontScale(1)
+                }
               }
+              .width(this.iconExtent())
+              .height(this.iconExtent())
+              .borderRadius(14)
+              .backgroundColor(this.group.iconStyle === 'filled' ? $r('app.color.surface_block') : Color.Transparent)
+              .margin({ left: this.group.iconStyle === 'icon' ? 2 : 0, right: this.group.iconStyle === 'icon' ? 10 : 12 })
+            } else {
+              Blank()
+                .width(4)
             }
-            .width(this.iconExtent())
-            .height(this.iconExtent())
-            .borderRadius(14)
-            .backgroundColor(this.group.iconStyle === 'filled' ? $r('app.color.surface_block') : Color.Transparent)
-            .margin({ left: this.group.iconStyle === 'icon' ? 2 : 0, right: this.group.iconStyle === 'icon' ? 10 : 12 })
-          } else {
-            Blank()
-              .width(4)
+            Column({ space: 2 }) {
+              Text(this.group.name)
+                .fontSize(16)
+                .lineHeight(21)
+                .fontWeight(600)
+                .fontColor($r('sys.color.font_primary'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .width('100%')
+              Text(this.group.now)
+                .fontSize(12)
+                .lineHeight(16)
+                .fontWeight(600)
+                .fontColor(this.group.actualRetired ? $r('app.color.warning') : $r('sys.color.font_secondary'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .width('100%')
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
           }
-          Column({ space: 2 }) {
-            Text(this.group.name)
-              .fontSize(16)
-              .lineHeight(21)
-              .fontWeight(600)
-              .fontColor($r('sys.color.font_primary'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
-            Text(this.group.now)
+          .layoutWeight(1)
+          if (this.group.expanded) {
+            Column()
+              .width(this.showLocate ? 64 : 32)
+              .height(32)
+          } else {
+            Text(this.group.type)
               .fontSize(12)
               .lineHeight(16)
               .fontWeight(600)
-              .fontColor(this.group.actualRetired ? $r('app.color.warning') : $r('sys.color.font_secondary'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
+              .fontColor($r('sys.color.font_secondary'))
           }
-          .layoutWeight(1)
-          .alignItems(HorizontalAlign.Start)
+          if (this.collapsible) {
+            Stack() {
+              AppGlyph({ name: 'chevronDown', iconSize: 20 })
+                .rotate({ angle: this.group.expanded ? 180 : 0 })
+                .animation(this.motionEnabled ? { curve: curves.springMotion(0.28, 1) } : { duration: 0 })
+            }
+            .width(32)
+            .height(32)
+            .borderRadius(16)
+            .backgroundColor($r('app.color.surface_block'))
+          }
         }
         .width('100%')
       }
-      .layoutWeight(1)
-      .height(this.iconExtent())
-      .padding(0)
+      .width('100%')
+      .height(22 + 37 * this.textScale)
+      .padding(10)
+      .borderRadius({ topLeft: 24, topRight: 24,
+        bottomLeft: this.bottomRadius(), bottomRight: this.bottomRadius() })
       .backgroundColor(Color.Transparent)
       .accessibilityText(this.group.name)
       .accessibilityDescription(uiResourceText(this.getUIContext(), this.group.actualRetired ? $r('app.string.proxy_actual_retired') : this.group.now))
@@ -160,32 +187,14 @@ export struct ProxyGroupHeader {
         }
         .borderRadius(16)
         .backgroundColor($r('app.color.surface_block'))
-        .transition(this.motionEnabled ? TransitionEffect.OPACITY : TransitionEffect.IDENTITY)
-      } else {
-        Text(this.group.type)
-          .fontSize(12)
-          .lineHeight(16)
-          .fontWeight(600)
-          .fontColor($r('sys.color.font_secondary'))
-      }
-      if (this.collapsible) {
-        Button({ type: ButtonType.Circle }) {
-          AppGlyph({ name: 'chevronDown', iconSize: 20 })
-            .rotate({ angle: this.group.expanded ? 180 : 0 })
-            .animation(this.motionEnabled ? { curve: curves.springMotion(0.28, 1) } : { duration: 0 })
-        }
-        .width(32)
-        .height(32)
-        .padding(0)
-        .backgroundColor($r('app.color.surface_block'))
-        .accessibilityText(this.group.expanded ? $r('app.string.proxy_collapse_group') : $r('app.string.proxy_expand_group'))
-        .enabled(this.active)
-        .onClick(() => this.onToggle())
+        // 工具与整行按钮互为兄弟；禁用工具也挡住下层折叠按钮的命中。
+        .hitTestBehavior(HitTestMode.Block)
+        .margin({ right: this.collapsible ? 48 : 10 })
+        .transition(TransitionEffect.IDENTITY)
       }
     }
     .width('100%')
     .height(22 + 37 * this.textScale)
-    .padding(10)
     .borderRadius({ topLeft: 24, topRight: 24,
       bottomLeft: this.bottomRadius(), bottomRight: this.bottomRadius() })
     .backgroundColor($r('app.color.card_background'))
