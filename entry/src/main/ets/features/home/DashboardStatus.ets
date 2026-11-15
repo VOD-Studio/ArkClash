@@ -165,29 +165,26 @@ export struct DashboardStatus {
 
   @Builder
   Decoration() {
-    Stack({ alignContent: Alignment.TopEnd }) {
-      Shape() {
-        Path().commands(DASHBOARD_COOKIE12)
-          .fill(this.appearsStarted() ? $r('app.color.dash_status_decoration') : $r('app.color.dash_status_idle_decoration'))
-          .strokeWidth(0)
-      }
-      .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
-      .width(240)
-      .height(240)
-      .rotate({ angle: this.appearsStarted() ? 30 : 0 })
-      .scale({ x: this.appearsStarted() ? 1.12 : 1, y: this.appearsStarted() ? 1.12 : 1 })
-      .animation({ duration: this.motionEnabled ? 450 : 0, curve: this.appearsStarted() ? START_CURVE : STOP_CURVE })
-      .offset({ x: 60, y: -66 })
+    Shape() {
+      Path().commands(DASHBOARD_COOKIE12)
+        .fill(this.appearsStarted() ? $r('app.color.dash_status_decoration') : $r('app.color.dash_status_idle_decoration'))
+        .strokeWidth(0)
     }
-    .width('100%')
-    .height('100%')
+    .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
+    .width(240)
+    .height(240)
+    .position({ right: -60, top: -66 })
+    .rotate({ angle: this.appearsStarted() ? 30 : 0 })
+    .scale({ x: this.appearsStarted() ? 1.12 : 1, y: this.appearsStarted() ? 1.12 : 1 })
+    .animation({ duration: this.motionEnabled ? 450 : 0, curve: this.appearsStarted() ? START_CURVE : STOP_CURVE })
     .hitTestBehavior(HitTestMode.None)
     .accessibilityLevel('no')
   }
 
   build() {
     Column() {
-      Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        this.Decoration()
         Row({ space: 10 }) {
           Column() {
             Row({ space: 8 }) {
@@ -309,7 +306,6 @@ export struct DashboardStatus {
         .padding({ left: 20, right: 16, top: 18, bottom: 18 })
       }
       .width('100%')
-      .background(this.Decoration)
       .borderRadius(34)
       .clip(true)
     }
