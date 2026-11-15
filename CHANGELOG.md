@@ -58,6 +58,40 @@
 
 * **ui:** 使用系统异步接口采集界面进程内存，避免在 ArkTS 主线程同步读取 smaps。
 
+## [0.5.1](https://github.com/VOD-Studio/ArkClash/compare/v0.5.0...v0.5.1) (2026-11-15)
+
+
+### 修复
+
+* **client:** 限制跨代出口与服务检测的实际并发 ([a124d80](https://github.com/VOD-Studio/ArkClash/commit/a124d8085b1cd3ba9cd9728db80ccb62e57194df))
+* **home:** 仅在启停处理中旋转拨片与背景 ([cf425a1](https://github.com/VOD-Studio/ArkClash/commit/cf425a1a62d69105959751a25ee98aff29b19a64))
+* **home:** 修复启停按钮变淡与背景快照停滞 ([d3349fa](https://github.com/VOD-Studio/ArkClash/commit/d3349fad6005a8b65ff3da9236728bcf6b61c57a))
+* **home:** 分离编辑标题与卡片动效事务 ([2d472fe](https://github.com/VOD-Studio/ArkClash/commit/2d472fe7888e46363cc128d9b47e14d546d2de0c)), closes [#90](https://github.com/VOD-Studio/ArkClash/issues/90)
+* **home:** 对齐运行拨片的主题与启停动效 ([8701631](https://github.com/VOD-Studio/ArkClash/commit/8701631d68fb3669d284a357bfa8b14f2bed7038))
+* **home:** 将操作反馈移出卡片布局 ([3c3efa6](https://github.com/VOD-Studio/ArkClash/commit/3c3efa6ca1b287d0c3dc846f8786e2019b67ab5e))
+* **home:** 按 FlClash 协议检测服务可用性 ([d202a18](https://github.com/VOD-Studio/ArkClash/commit/d202a18300cf1f661d6c316c430d73fb3448739b))
+* **home:** 改用连续反馈的拨片运行按钮 ([cffbbf3](https://github.com/VOD-Studio/ArkClash/commit/cffbbf3cd12cddbef20399083f6daf7ab57501fa)), closes [#90](https://github.com/VOD-Studio/ArkClash/issues/90)
+* **home:** 更新服务显隐后的管理行绑定 ([e2a9a3a](https://github.com/VOD-Studio/ArkClash/commit/e2a9a3afff3a9a63b27781d02b6a5deff8f6a29f))
+* **home:** 精简服务状态抽屉布局 ([15cf035](https://github.com/VOD-Studio/ArkClash/commit/15cf03587b26d3d22b5f2d2a3c0d0a2e64b7d1c4))
+* **home:** 统一正向状态标签配色 ([b94fbbb](https://github.com/VOD-Studio/ArkClash/commit/b94fbbb300337396849ad8f5d3cb6bc282c3a55e))
+* **home:** 自动检测可见服务并取消离页请求 ([fba7fe4](https://github.com/VOD-Studio/ArkClash/commit/fba7fe4ea89c43275109edf910eab91fba4b3aea))
+* **profiles:** 使用底部选择抽屉添加配置 ([c9fd995](https://github.com/VOD-Studio/ArkClash/commit/c9fd9950fa974239620646b971e35175ec447e08))
+* **profiles:** 保留后台完成的批量失败结果 ([5986f43](https://github.com/VOD-Studio/ArkClash/commit/5986f4364bfe01524b24cf9846d5e78d641c3d01))
+* **profiles:** 修复原生菜单结构和卡片按压 ([5b5cdd1](https://github.com/VOD-Studio/ArkClash/commit/5b5cdd1ac7b91796b6e202eb4bf3e194f4379b60))
+* **profiles:** 修正排序行圆角与拖动反馈 ([15a1a06](https://github.com/VOD-Studio/ArkClash/commit/15a1a0632c6e600bfff4c252f30008a338af8e42))
+* **profiles:** 将应用结果移出列表布局 ([1de974b](https://github.com/VOD-Studio/ArkClash/commit/1de974b970c2306a2e46b08dcf184469367ef138))
+* **profiles:** 将表单操作反馈改为原生轻提示 ([a326697](https://github.com/VOD-Studio/ArkClash/commit/a326697a9fcee45c0a80ea506da843c2f5a6cea7))
+* **profiles:** 延迟消费后台编辑失败提示 ([f71ca2c](https://github.com/VOD-Studio/ArkClash/commit/f71ca2c2464218ac94802745210eff1e708ff621))
+* **profiles:** 改用底部面板确认删除 ([f4305b5](https://github.com/VOD-Studio/ArkClash/commit/f4305b5bd1f5114b6a9eef7be5e33a4dba16d3f0))
+* **profiles:** 用原生底部面板保护编辑退出 ([8c66f54](https://github.com/VOD-Studio/ArkClash/commit/8c66f54b5288f68c036f43431b062730a72d6fba))
+* **proxies:** 保留折叠期间的分组标题实例 ([c1e7985](https://github.com/VOD-Studio/ArkClash/commit/c1e798546b8b6bb2446328e82efbd693cc284354)), closes [#89](https://github.com/VOD-Studio/ArkClash/issues/89)
+* **proxies:** 内缩分组标题的原生按压反馈 ([95e7a99](https://github.com/VOD-Studio/ArkClash/commit/95e7a997a3d923b141b751433ffe0f4a2e2d6934))
+* **proxies:** 将操作反馈移出列表布局 ([cea9987](https://github.com/VOD-Studio/ArkClash/commit/cea998703477283284ea0ae1e9bcb426f86d5110))
+* **proxies:** 恢复分组工具的子按钮命中 ([4e4756a](https://github.com/VOD-Studio/ArkClash/commit/4e4756ae0658931e3c329ecfad838e114811a45a))
+* **proxies:** 扩展分组标题的整行点击热区 ([d49d953](https://github.com/VOD-Studio/ArkClash/commit/d49d9530326d90742acf9c359e0329d6b3c552de)), closes [#89](https://github.com/VOD-Studio/ArkClash/issues/89)
+* **proxies:** 按独立操作触发失败轻提示 ([30e1437](https://github.com/VOD-Studio/ArkClash/commit/30e1437dd8c66b603d229181af194b1df2d5e7ea))
+* 修复日用界面交互与服务检测回归 ([b97c113](https://github.com/VOD-Studio/ArkClash/commit/b97c113d199fa1d8ec4200e9451b7586a9edb419))
+
 ## [0.5.0](https://github.com/VOD-Studio/ArkClash/compare/v0.4.0...v0.5.0) (2026-11-15)
 
 
