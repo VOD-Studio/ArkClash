@@ -188,8 +188,8 @@ export struct ProxyGroupHeader {
         }
         .borderRadius(16)
         .backgroundColor($r('app.color.surface_block'))
-        // 工具与整行按钮互为兄弟；禁用工具也挡住下层折叠按钮的命中。
-        .hitTestBehavior(HitTestMode.Block)
+        // Block 会连子按钮一起拦住；默认命中保留子按钮，并隔离下层的折叠按钮。
+        .hitTestBehavior(HitTestMode.Default)
         .margin({ right: this.collapsible ? 48 : 10 })
         .transition(TransitionEffect.IDENTITY)
       }

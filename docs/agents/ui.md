@@ -9,6 +9,7 @@
 - 退出编辑或停止持续动效时，用零时长动画修改同一组属性来终止旧无限动画；完成回调必须核对组件挂载状态和动画代次，不能覆盖反向操作的新状态。
 - 自定义 `HdsTabs` 构造参数使用 `index` 配合 `onChange`，不能照搬原生属性双向绑定语法；原生 `Swiper.index($$...)` 按 SDK 使用，不混为同一限制。
 - 仅在原生列表的 `onAppear` 后访问对应 Scroller；`onDisAppear` 先清绑定状态。滚动偏移从有效滚动事件记录，卸载与过期回调不再查询 Scroller，不用零时延定时器猜测布局就绪。注意原生属性 `onDisAppear` 与 Sheet 选项 `onDisappear` 的拼写不同。
+- 包装可交互子控件的容器不使用 `HitTestMode.Block`，它会阻断子节点；工具层用 `Default` 保留子按钮并隔离下层兄弟节点。ArkUI `ClickEvent` 没有 Web 的 `stopPropagation`，不要照搬事件 API。
 - 系统开启"减弱动态"时，所有非必要动效都停掉。
 - 动效验收必须观察真机中间帧、快速反向和结束状态，不能用编译通过或终态截图代替。
 
