@@ -1302,19 +1302,19 @@
     },
     {
       "name": "dash_probe_busy",
-      "value": "Probe capacity is busy. No result was obtained; retry."
+      "value": "Checks are busy"
     },
     {
       "name": "dash_probe_changed",
-      "value": "The route changed. The old result was discarded; check again."
+      "value": "Exit changed"
     },
     {
       "name": "dash_probe_timeout",
-      "value": "The routed probe timed out. Try again."
+      "value": "Check timed out"
     },
     {
       "name": "dash_probe_failed",
-      "value": "The core probe did not complete. Try again."
+      "value": "Check failed"
     },
     {
       "name": "dash_stop_retry",
@@ -1595,6 +1595,18 @@
     {
       "name": "dash_ip_quality_failed",
       "value": "IP type and quality lookup failed"
+    },
+    {
+      "name": "dash_saving",
+      "value": "Saving"
+    },
+    {
+      "name": "dash_probe_checked_at_stale",
+      "value": "Previous check"
+    },
+    {
+      "name": "dash_probe_checked_at_failed",
+      "value": "Failed · Last OK"
     }
   ]
 }

@@ -1282,19 +1282,19 @@
     },
     {
       "name": "dash_probe_busy",
-      "value": "探测繁忙，尚未取得结果，请重试"
+      "value": "检测繁忙"
     },
     {
       "name": "dash_probe_changed",
-      "value": "路由已改变，旧结果已丢弃，请重新检测"
+      "value": "出口已变更"
     },
     {
       "name": "dash_probe_timeout",
-      "value": "路由探测超时，请重试"
+      "value": "检测超时"
     },
     {
       "name": "dash_probe_failed",
-      "value": "内核探测未完成，请重试"
+      "value": "检测失败"
     },
     {
       "name": "dash_stop_retry",
@@ -1575,6 +1575,18 @@
     {
       "name": "dash_ip_quality_failed",
       "value": "类型与质量查询失败"
+    },
+    {
+      "name": "dash_saving",
+      "value": "保存中"
+    },
+    {
+      "name": "dash_probe_checked_at_stale",
+      "value": "上次检测"
+    },
+    {
+      "name": "dash_probe_checked_at_failed",
+      "value": "失败 · 上次成功"
     }
   ]
 }

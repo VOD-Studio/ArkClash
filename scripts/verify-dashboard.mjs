@@ -189,11 +189,26 @@ try {
   assert.deepEqual(plain(reopened.cards), ['status', 'memory']);
   failRename = false; await reopened.retryDraft();
   assert.deepEqual(plain(reopened.cards), ['status', 'services']);
+  const retained = await fs.readFile(documentPath, 'utf8');
+  failRename = true;
+  const unsaved = reopened.commit({ hideIp: false }, reopened.revision);
+  reopened.discardDraft();
+  await assert.rejects(unsaved);
+  assert.equal(reopened.hasDraft, true);
+  assert.equal(reopened.hideIp, true);
+  reopened.discardDraft();
+  assert.equal(reopened.hasDraft, false);
+  assert.equal(reopened.failure, '');
+  failRename = false;
+  await reopened.retryDraft();
+  assert.equal(await fs.readFile(documentPath, 'utf8'), retained);
   legacyPreferences = { serviceLayout: '{broken' };
   const corruptContext = await makeContext('corrupt'); const corrupt = new DashboardSettings();
   await corrupt.load(corruptContext); assert.equal(corrupt.ready, false);
   assert.equal(await io.access(path.join(corruptContext.filesDir, 'dashboard.json')), false);
   assert.equal(legacyPreferences.serviceLayout, '{broken');
+  corrupt.discardDraft();
+  assert.equal(corrupt.failure, 'read');
 
   const { Traffic, appendTrafficSample, HISTORY_SIZE } = load(path.join(ets, 'client/Traffic.ets'));
   const traffic = new Traffic(); traffic.start('/unused', 'shell'); traffic.start('/unused', 'card');

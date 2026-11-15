@@ -33,13 +33,18 @@ export struct DashboardStatus {
   @Local clock: number = Date.now();
   @Local details: boolean = false;
   private timer: number = -1;
+  private appeared: boolean = false;
+  private refreshGeneration: number = 0;
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
 
   aboutToAppear(): void {
+    this.appeared = true;
     this.sync();
   }
 
   aboutToDisappear(): void {
+    this.appeared = false;
+    this.refreshGeneration++;
     this.probe.cancel();
     this.stopTimer();
   }
@@ -47,6 +52,7 @@ export struct DashboardStatus {
   @Monitor('visible', 'profileId', 'routeRevision', 'conn.routeRevision', 'conn.forward', 'conn.mode', 'conn.sessionMode',
     'conn.state')
   sync(): void {
+    this.refreshGeneration++;
     const route = `${this.profileId}:${this.routeRevision}:${this.conn.routeRevision}:${this.conn.mode}:` +
       `${this.conn.sessionMode}:${this.conn.forward}`;
     this.probe.observe(this.context.filesDir, route, this.conn.connected, this.visible && !this.conn.busy);
@@ -109,7 +115,27 @@ export struct DashboardStatus {
   }
 
   private showRuntimeError(message: ResourceStr): void {
-    this.getUIContext().getPromptAction().showToast({ message: message, duration: 4000 });
+    if (this.appeared && this.visible) {
+      this.getUIContext().getPromptAction().showToast({ message: message, duration: 4000 });
+    }
+  }
+
+  private async refreshExit(): Promise<void> {
+    if (!this.appeared || !this.visible || !this.interactive || this.conn.busy || this.probe.busy) {
+      return;
+    }
+    const generation = ++this.refreshGeneration;
+    await this.probe.refresh();
+    if (generation !== this.refreshGeneration) {
+      return;
+    }
+    if (this.probe.failed) {
+      this.showRuntimeError(this.probe.failure === 'capacity' ? $r('app.string.dash_probe_busy') :
+        this.probe.failure === 'routeChanged' ? $r('app.string.dash_probe_changed') :
+        $r('app.string.dash_exit_failed'));
+    } else if (this.probe.qualityFailed) {
+      this.showRuntimeError($r('app.string.dash_ip_quality_failed'));
+    }
   }
 
   private async toggleRun(): Promise<void> {
@@ -129,7 +155,7 @@ export struct DashboardStatus {
 
   @Builder
   Details() {
-    DashboardExitDetails()
+    DashboardExitDetails({ visible: this.visible && this.details, onRefresh: (): void => { this.refreshExit(); } })
   }
 
   @Builder
@@ -191,7 +217,7 @@ export struct DashboardStatus {
             Row({ space: 12 }) {
               DashboardCountryBadge({ countryCode: this.probe.result?.countryCode ?? '', busy: this.probe.busy,
                 running: this.conn.connected, motionEnabled: this.motionEnabled, interactive: this.interactive,
-                onRefresh: (): void => { this.probe.refresh(); } })
+                onRefresh: (): void => { this.refreshExit(); } })
               Column({ space: 4 }) {
                 if (this.probe.result === undefined && !this.probe.failed && !this.settings.hideIp) {
                   Row()

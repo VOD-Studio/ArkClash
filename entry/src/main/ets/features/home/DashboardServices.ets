@@ -58,7 +58,7 @@ export struct DashboardServices {
     try {
       await this.settings.commit({ services: slots }, this.settings.revision);
     } catch (e) {
-      this.toastFailure();
+      // 首页统一消费 settings.failure，抽屉不重复提示。
     }
   }
 
@@ -72,13 +72,7 @@ export struct DashboardServices {
     try {
       await this.settings.commit({ services: slots }, this.settings.revision);
     } catch (e) {
-      this.toastFailure();
     }
-  }
-
-  private toastFailure(): void {
-    this.getUIContext().getPromptAction().showToast({ message: this.settings.failure === 'lastService' ?
-      $r('app.string.dash_service_keep_one') : $r('app.string.dash_save_failed') });
   }
 
   private run(ids: string[]): void {
