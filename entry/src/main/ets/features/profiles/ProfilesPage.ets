@@ -32,6 +32,9 @@ export struct ProfilesPage {
   @Local sortShown: boolean = false;
   @Local resultShown: boolean = false;
   @Local result: ProfileBatchResult | undefined = undefined;
+  @Local removeShown: boolean = false;
+  @Local removeItem: ProfileItem | undefined = undefined;
+  @Local removing: boolean = false;
   @Local profileColumns: number = 1;
   @Local currentTime: number = Date.now();
   private rows: ListSource<ProfileItem> = new ListSource<ProfileItem>();
@@ -167,16 +170,59 @@ export struct ProfilesPage {
     } catch (e) { this.toast(describeError('io')); }
   }
   private confirmRemove(item: ProfileItem): void {
-    this.getUIContext().showAlertDialog({
-      title: $r('app.string.delete_confirm_title', item.name), message: $r('app.string.delete_confirm_message'),
-      primaryButton: { value: $r('app.string.action_cancel'), action: (): void => {} },
-      secondaryButton: { value: $r('app.string.action_delete'), fontColor: $r('app.color.status_error'),
-        action: (): void => {
-          this.store.remove(item.id).then((failure: string | undefined): void => {
-            if (failure !== undefined) { this.toast(describeError(failure)); }
-          });
-        } }
-    });
+    if (this.removing) { return; }
+    this.removeItem = item;
+    this.removeShown = true;
+  }
+
+  private async remove(): Promise<void> {
+    const item = this.removeItem;
+    if (item === undefined || this.removing) { return; }
+    this.removing = true;
+    this.activeActions++;
+    try {
+      const failure = await this.store.remove(item.id);
+      this.reportResult(failure);
+      this.removeShown = false;
+    } finally {
+      this.removing = false;
+      this.activeActions--;
+      this.consumeApplyError();
+    }
+  }
+
+  @Builder
+  RemoveSheet() {
+    if (this.removeItem !== undefined) {
+      Column({ space: 16 }) {
+        Text($r('app.string.delete_confirm_title', this.removeItem.name))
+          .fontSize(20).fontWeight(600).fontColor($r('sys.color.font_primary'))
+          .width('100%')
+        Text($r('app.string.delete_confirm_message'))
+          .fontSize(15).fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+        Button({ type: ButtonType.Normal, role: ButtonRole.ERROR, stateEffect: true }) {
+          Row({ space: 8 }) {
+            if (this.removing) {
+              LoadingProgress().width(20).height(20).color($r('app.color.status_error'))
+            }
+            Text($r('app.string.action_delete')).fontSize(17).fontColor($r('app.color.status_error'))
+          }
+          .justifyContent(FlexAlign.Center)
+        }
+        .buttonStyle(ButtonStyleMode.NORMAL)
+        .width('100%').height(48).borderRadius(24)
+        .enabled(!this.removing && this.store.canRemove(this.removeItem.id))
+        .onClick((): void => { this.remove(); })
+        Button($r('app.string.action_cancel'))
+          .buttonStyle(ButtonStyleMode.NORMAL)
+          .width('100%').height(48)
+          .enabled(!this.removing)
+          .onClick((): void => { this.removeShown = false; })
+      }
+      .width('100%')
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 20, bottom: 24 })
+    }
   }
 
   @Builder
@@ -274,7 +320,8 @@ export struct ProfilesPage {
     }
   }
 
-  build() {
+  @Builder
+  PageSheets() {
     Column() {
       Column() {
         Column() {
@@ -307,5 +354,16 @@ export struct ProfilesPage {
     .bindSheet($$this.addShown, this.AddSheet(), {
       height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
       onWillDismiss: (action: DismissSheetAction): void => { if (!this.adding) { action.dismiss(); } } })
+  }
+
+  build() {
+    Column() { this.PageSheets() }
+    .width('100%').height('100%')
+    .bindSheet($$this.removeShown, this.RemoveSheet(), {
+      height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
+      systemMaterial: sheetMaterial(), showClose: false, enableOutsideInteractive: false,
+      onWillDismiss: (action: DismissSheetAction): void => { if (!this.removing) { action.dismiss(); } },
+      onDisappear: (): void => { if (!this.removeShown) { this.removeItem = undefined; } }
+    })
   }
 }
