@@ -11,6 +11,7 @@ import { DashboardCountryBadge } from './DashboardCountryBadge';
 import { DashboardExitDetails } from './DashboardExitDetails';
 import { DashboardIpQuality } from './DashboardIpQuality';
 import { DashboardRunButton } from './DashboardRunButton';
+import { DashboardLoadingRotation } from './DashboardLoadingRotation';
 
 const START_CURVE = curves.cubicBezierCurve(0.175, 0.885, 0.32, 1.275);
 const STOP_CURVE = curves.cubicBezierCurve(0.55, 0.055, 0.675, 0.19);
@@ -165,18 +166,26 @@ export struct DashboardStatus {
 
   @Builder
   Decoration() {
-    Shape() {
-      Path().commands(DASHBOARD_COOKIE12)
-        .fill(this.appearsStarted() ? $r('app.color.dash_status_decoration') : $r('app.color.dash_status_idle_decoration'))
-        .strokeWidth(0)
+    Stack() {
+      DashboardLoadingRotation({ active: this.conn.busy, visible: this.visible, motionEnabled: this.motionEnabled,
+        sideLength: 240, duration: 6000 }) {
+        Shape() {
+          Path().commands(DASHBOARD_COOKIE12)
+            .fill(this.conn.connected ? $r('app.color.dash_status_decoration') : $r('app.color.dash_status_idle_decoration'))
+            .strokeWidth(0)
+            .animation({ duration: this.motionEnabled && this.visible ? 450 : 0, curve: Curve.EaseOut })
+        }
+        .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
+        .width(240)
+        .height(240)
+        .rotate({ angle: this.appearsStarted() ? 30 : 0 })
+        .scale({ x: this.appearsStarted() ? 1.12 : 1, y: this.appearsStarted() ? 1.12 : 1 })
+        .animation({ duration: this.motionEnabled ? 450 : 0, curve: this.appearsStarted() ? START_CURVE : STOP_CURVE })
+      }
     }
-    .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
     .width(240)
     .height(240)
     .position({ right: -60, top: -66 })
-    .rotate({ angle: this.appearsStarted() ? 30 : 0 })
-    .scale({ x: this.appearsStarted() ? 1.12 : 1, y: this.appearsStarted() ? 1.12 : 1 })
-    .animation({ duration: this.motionEnabled ? 450 : 0, curve: this.appearsStarted() ? START_CURVE : STOP_CURVE })
     .hitTestBehavior(HitTestMode.None)
     .accessibilityLevel('no')
   }

@@ -1,5 +1,6 @@
 import { curves } from '@kit.ArkUI';
 import { uiResourceText } from '../../components/ResourceText';
+import { DashboardLoadingRotation } from './DashboardLoadingRotation';
 
 const START_CURVE = curves.cubicBezierCurve(0.175, 0.885, 0.32, 1.275);
 const STOP_CURVE = curves.cubicBezierCurve(0.55, 0.055, 0.675, 0.19);
@@ -49,18 +50,20 @@ struct RunButtonFace {
 
   build() {
     Stack() {
-      Shape() {
-        Path().commands(RUN_BUTTON_SHAPE)
-          .fill($r('app.color.brand'))
-          .strokeWidth(0)
+      DashboardLoadingRotation({ active: this.busy, visible: this.visible, motionEnabled: this.motionEnabled }) {
+        Shape() {
+          Path().commands(RUN_BUTTON_SHAPE)
+            .fill($r('app.color.brand'))
+            .strokeWidth(0)
+        }
+        .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
+        .width(84)
+        .height(84)
+        .rotate({ angle: this.running ? 40 : 0 })
+        .scale({ x: this.running ? 1.02 : 1, y: this.running ? 1.02 : 1 })
+        .animation({ duration: this.motionEnabled && this.visible ? 450 : 0,
+          curve: this.running ? START_CURVE : STOP_CURVE })
       }
-      .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
-      .width(84)
-      .height(84)
-      .rotate({ angle: this.running ? 40 : 0 })
-      .scale({ x: this.running ? 1.02 : 1, y: this.running ? 1.02 : 1 })
-      .animation({ duration: this.motionEnabled && this.visible ? 450 : 0,
-        curve: this.running ? START_CURVE : STOP_CURVE })
       SymbolGlyph(this.running ? $r('sys.symbol.pause_fill') : $r('sys.symbol.play_fill'))
         .fontSize(30)
         .fontColor([$r('app.color.on_brand')])
