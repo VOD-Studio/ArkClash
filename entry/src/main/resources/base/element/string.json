@@ -786,7 +786,11 @@
     },
     {
       "name": "dash_service_restricted",
-      "value": "HTTP %d"
+      "value": "Restricted · %d"
+    },
+    {
+      "name": "dash_service_method_unsupported",
+      "value": "Unsupported · %d"
     },
     {
       "name": "dash_service_timeout",

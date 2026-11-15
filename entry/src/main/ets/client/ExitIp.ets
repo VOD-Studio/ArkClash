@@ -1,4 +1,5 @@
-import { RoutedProbeError, RoutedProbeFailure, RoutedProbeRequest } from './RoutedProbe';
+import { RoutedProbeRequest } from './RoutedProbe';
+import { RoutedProbeError, RoutedProbeFailure } from './ProbeProtocol';
 import { EXIT_IP_QUALITY_SOURCES, ExitIpQuality, exitIpQualityUrl, parseExitIpQuality } from './ExitIpQuality';
 
 const LOOKUP_URLS: string[] = ['https://ipwho.is/', 'https://api.ip.sb/geoip'];
@@ -131,7 +132,8 @@ export class ExitIpProbe {
         const request = new RoutedProbeRequest();
         this.request = request;
         try {
-          const response = await request.run(this.filesDir, source, 'GET', TIMEOUT_MS, routed);
+          const response = await request.run(this.filesDir, { url: source, method: 'GET', bodyMode: 'json' },
+            TIMEOUT_MS, routed);
           if (generation !== this.generation) {
             return;
           }
@@ -213,7 +215,8 @@ export class ExitIpProbe {
         const request = new RoutedProbeRequest();
         this.request = request;
         try {
-          const response = await request.run(this.filesDir, exitIpQualityUrl(source, result.ip), 'GET',
+          const response = await request.run(this.filesDir,
+            { url: exitIpQualityUrl(source, result.ip), method: 'GET', bodyMode: 'json' },
             Math.min(TIMEOUT_MS, deadline - Date.now()), result.routed);
           if (generation !== this.generation || this.result !== result) {
             return;

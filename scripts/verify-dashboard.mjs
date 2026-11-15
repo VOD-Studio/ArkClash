@@ -44,10 +44,15 @@ const io = {
   unlink: (file) => fs.unlink(file)
 };
 const http = {
-  RequestMethod: { GET: 'GET', HEAD: 'HEAD' }, HttpDataType: { STRING: 0 },
+  RequestMethod: { GET: 'GET', HEAD: 'HEAD', POST: 'POST' }, HttpDataType: { STRING: 0 },
   createHttp: () => {
     const request = {
       destroyed: false, settled: false,
+      streaming: false, listeners: new Map(),
+      on(name, callback) { this.listeners.set(name, callback); },
+      off(name) { this.listeners.delete(name); },
+      emit(name, value) { this.listeners.get(name)?.(value); },
+      requestInStream(url, options) { this.streaming = true; return this.request(url, options); },
       request(url, options) {
         this.url = url; this.options = options;
         return new Promise((resolve, reject) => { this.resolve = resolve; this.reject = reject; });
@@ -61,10 +66,13 @@ const probeToken = 'probe-unit-fixture';
 const runtimeFixture = { CONTROLLER_ADDRESS: '127.0.0.1:19090', readRuntime: async () => ({ secret: probeToken }) };
 const modules = new Map();
 const context = vm.createContext({
-  console, Date: FixtureDate, Set, Map, JSON, Math, Number, String, Array, Object, Error,
+  console, Date: FixtureDate, Set, Map, JSON, Math, Number, String, Array, Object, Error, Uint8Array, ArrayBuffer,
+  RegExp, encodeURIComponent, decodeURIComponent,
   $r: (key) => key,
   setInterval: (callback) => { timers.set(++timerId, callback); return timerId; },
-  clearInterval: (id) => timers.delete(id)
+  clearInterval: (id) => timers.delete(id),
+  setTimeout: (callback) => { timers.set(++timerId, callback); return timerId; },
+  clearTimeout: (id) => timers.delete(id)
 });
 function load(file) {
   const absolute = path.resolve(file);
@@ -81,6 +89,13 @@ function load(file) {
       getPreferences: async () => ({ getAll: async () => structuredClone(legacyPreferences) })
     } }; }
     if (name === '@kit.NetworkKit') { return { http }; }
+    if (name === '@kit.ArkTS') { return {
+      url: { URL: { parseURL: (address, base) => new URL(address, base) } },
+      util: { TextDecoder: { create: () => {
+        const decoder = new TextDecoder();
+        return { decodeToString: (bytes, options) => decoder.decode(bytes, options) };
+      } } }
+    }; }
     if (name === '@kit.PerformanceAnalysisKit') { return { hidebug: {
       getAppNativeMemInfoAsync: async () => ({ pss: 11n, rss: 17n })
     } }; }
@@ -94,23 +109,37 @@ function load(file) {
   return record.exports;
 }
 const plain = (subject) => JSON.parse(JSON.stringify(subject));
-const flush = async () => { for (let index = 0; index < 20; index++) { await Promise.resolve(); } };
+const flush = () => new Promise((resolve) => setImmediate(resolve));
 function respond(request, payload, code = 200) {
   assert.ok(request && !request.settled, '预期存在一个待返回的请求');
-  request.settled = true; request.resolve({ responseCode: code, result: JSON.stringify(payload) });
+  request.settled = true;
+  if (request.streaming) {
+    request.emit('headersReceive', { 'status-line': `HTTP/1.1 ${code} Result` });
+    if (!request.destroyed) {
+      request.emit('dataReceive', new TextEncoder().encode(typeof payload === 'string' ? payload : JSON.stringify(payload)).buffer);
+      request.emit('dataEnd');
+    }
+    request.resolve(code);
+  } else {
+    request.resolve({ responseCode: code, result: JSON.stringify(payload) });
+  }
 }
 function respondProbe(request, payload = {}, status = 200, revision = 7, bootId = 'host-boot') {
-  const method = new URL(request.url).searchParams.get('method');
-  respond(request, { status, body: method === 'HEAD' ? '' : JSON.stringify(payload), bootId, revision });
+  const command = JSON.parse(request.options.extraData);
+  respond(request, { status,
+    body: command.bodyMode === 'none' ? '' : typeof payload === 'string' ? payload : JSON.stringify(payload),
+    url: command.url, location: '', delay: 37, bootId, revision });
 }
-function assertCoreRequest(request, target, method) {
+function assertCoreRequest(request, target, method, timeout = 5000) {
   const address = new URL(request.url);
   assert.equal(address.origin, 'http://127.0.0.1:19090');
   assert.equal(address.pathname, '/arkclash/probe');
-  assert.equal(address.searchParams.get('url'), target);
-  assert.equal(address.searchParams.get('method'), method);
-  assert.equal(address.searchParams.get('timeout'), '5000');
-  assert.equal(request.options.method, 'GET');
+  assert.equal(address.search, '');
+  const command = JSON.parse(request.options.extraData);
+  assert.equal(command.url, target);
+  assert.equal(command.method, method);
+  assert.equal(command.timeout, timeout);
+  assert.equal(request.options.method, 'POST');
   assert.equal(request.options.usingProxy, false);
   assert.equal(request.options.header.Authorization, `Bearer ${probeToken}`);
   assert.equal(request.options.maxRedirects, 0);
@@ -237,17 +266,27 @@ try {
   assert.equal(checks.serviceReachability(403), 'restricted');
   const task = new checks.ServiceCheckTask();
   const probeTarget = 'https://www.google.com/generate_204?first=one&second=two';
-  const run = task.run('/unused', [{ id: 'google', url: probeTarget }], 'route-a', true);
-  await flush(); assertCoreRequest(requests.at(-1), probeTarget, 'HEAD'); respondProbe(requests.at(-1), {}, 403);
+  const run = task.run('/unused', [{ id: 'legacy-test', url: probeTarget }], 'route-a', true);
+  await flush(); assertCoreRequest(requests.at(-1), probeTarget, 'GET', 10000); respondProbe(requests.at(-1), {}, 403);
   const checked = await run;
   assert.equal(checked[0].reachability, 'restricted'); assert.equal(checked[0].availability, 'unknown');
   assert.equal(checked[0].bootId, 'host-boot'); assert.equal(checked[0].revision, 7);
+  const methodRun = new checks.ServiceCheckTask().run('/unused', [{ id: 'legacy-test', url: probeTarget }], 'route-a', true);
+  await flush(); respondProbe(requests.at(-1), {}, 405);
+  const methodResult = (await methodRun)[0];
+  assert.equal(methodResult.httpCode, 405); assert.equal(methodResult.reachability, 'restricted');
+  assert.equal(methodResult.availability, 'unknown'); assert.equal(methodResult.failure, '');
   for (const code of [429, 504, 503, 403]) {
     const failedRun = new checks.ServiceCheckTask().run('/unused', [{ id: 'google', url: probeTarget }], 'route-a', true);
     await flush(); respond(requests.at(-1), { message: 'fixture-control-error' }, code);
+    if (code === 504) {
+      await flush();
+      respond(requests.at(-1), { message: 'fixture-control-error' }, code);
+    }
     const failed = (await failedRun)[0];
-    assert.equal(failed.httpCode, 0); assert.equal(failed.controlStatus, code);
-    assert.equal(failed.availability, 'unknown');
+    assert.equal(failed.httpCode, 0);
+    assert.equal(failed.controlStatus, code === 504 || code === 503 ? 0 : code);
+    assert.equal(failed.availability, code === 504 ? 'timeout' : code === 503 ? 'failed' : 'unknown');
     assert.equal(failed.failure, code === 429 ? 'capacity' : code === 504 ? 'timeout' : code === 503 ? 'transport' : 'controller');
     if (code === 429) { assert.equal(failed.reachability, 'notChecked'); }
   }
@@ -259,12 +298,44 @@ try {
   ], 'route-a', true);
   const mixedFailure = assert.rejects(mixedRun, (error) => error.reason === 'routeChanged');
   await flush(); respondProbe(requests.at(-2), {}, 200, 7); respondProbe(requests.at(-1), {}, 200, 8); await mixedFailure;
-  const directRun = new checks.ServiceCheckTask().run('/unused', [{ id: 'google', url: probeTarget }], 'direct', false);
+  const directRun = new checks.ServiceCheckTask().run('/unused', [{ id: 'legacy-test', url: probeTarget }], 'direct', false);
   await flush(); const directRequest = requests.at(-1);
-  assert.equal(directRequest.url, probeTarget); assert.equal(directRequest.options.method, 'HEAD');
+  assert.equal(directRequest.url, probeTarget); assert.equal(directRequest.options.method, 'GET');
   assert.equal(directRequest.options.header.Authorization, undefined); assert.equal(directRequest.options.usingProxy, false);
-  respond(directRequest, {}, 403); const directResult = (await directRun)[0];
-  assert.equal(directResult.httpCode, 403); assert.equal(directResult.routed, false); assert.equal(directResult.bootId, '');
+  respond(directRequest, {}, 405); const directResult = (await directRun)[0];
+  assert.equal(directResult.httpCode, 405); assert.equal(directResult.reachability, 'restricted');
+  assert.equal(directResult.availability, 'unknown');
+  assert.equal(directResult.routed, false); assert.equal(directResult.bootId, '');
+
+  const claudeRun = new checks.ServiceCheckTask().run('/unused',
+    [{ id: 'claude', url: 'https://claude.ai/' }], 'route-a', true);
+  await flush();
+  const claudeRequest = requests.at(-1);
+  assertCoreRequest(claudeRequest, 'https://claude.ai/cdn-cgi/trace', 'GET', 10000);
+  assert.match(JSON.parse(claudeRequest.options.extraData).headers['User-Agent'], /Chrome\/120/);
+  respondProbe(claudeRequest, 'loc=JP\n');
+  const claudeResult = (await claudeRun)[0];
+  assert.equal(claudeResult.availability, 'available'); assert.equal(claudeResult.region, 'JP');
+  assert.equal(claudeResult.reachability, 'reachable'); assert.equal(claudeResult.delay, 37);
+
+  const chatRun = new checks.ServiceCheckTask().run('/unused',
+    [{ id: 'chatgpt', url: 'https://chatgpt.com/' }], 'route-a', true);
+  await flush(); respondProbe(requests.at(-1), 'Request is not allowed. Please try again later.', 403);
+  await flush(); respondProbe(requests.at(-1), 'loc=JP\n');
+  await flush(); respondProbe(requests.at(-1), '{}');
+  const chatResult = (await chatRun)[0];
+  assert.equal(chatResult.httpCode, 403); assert.equal(chatResult.availability, 'available');
+  assert.equal(chatResult.reachability, 'reachable'); assert.equal(chatResult.region, 'JP');
+
+  const changingChat = new checks.ServiceCheckTask().run('/unused',
+    [{ id: 'chatgpt', url: 'https://chatgpt.com/' }], 'route-a', true);
+  const changingChatRejected = assert.rejects(changingChat, (error) => error.reason === 'routeChanged');
+  await flush(); respondProbe(requests.at(-1), 'Request is not allowed. Please try again later.', 403);
+  await flush(); const traceBeforeChange = requests.at(-1);
+  respondProbe(traceBeforeChange, 'loc=JP\n', 200, 8);
+  await changingChatRejected; await flush();
+  assert.equal(requests.at(-1), traceBeforeChange, '多步检测切换路由后不能继续或发布混合出口结果');
+
   const { DashboardServiceState } = load(path.join(homeSource, 'DashboardServiceState.ets'));
   const state = new DashboardServiceState(); state.observe('/unused', 'route-a', true, true, []);
   const oldRun = state.run(['google']); await flush(); const oldRequest = requests.at(-1);
@@ -285,12 +356,12 @@ try {
   await flush(); assert.equal(requests.length, beforeAutomatic);
   automatic.observe('/unused', 'auto-a', true, true, ['google']);
   await flush(); const automaticGoogle = requests.at(-1);
-  assertCoreRequest(automaticGoogle, 'https://www.google.com/generate_204', 'HEAD');
+  assertCoreRequest(automaticGoogle, 'https://www.google.com/generate_204', 'GET', 10000);
   automatic.observe('/unused', 'auto-a', true, true, ['google', 'github']);
   await flush(); assert.equal(requests.at(-1), automaticGoogle);
   respondProbe(automaticGoogle, {}, 204); await flush();
   const automaticGithub = requests.at(-1);
-  assertCoreRequest(automaticGithub, 'https://github.com/', 'HEAD');
+  assertCoreRequest(automaticGithub, 'https://github.com/', 'GET', 10000);
   assert.equal(automatic.results.google.httpCode, 204);
   automatic.observe('/unused', 'auto-a', true, true, ['google']);
   assert.equal(automaticGithub.destroyed, true);
@@ -304,8 +375,8 @@ try {
   automatic.observe('/unused', 'auto-a', true, true, ['google', 'github']);
   await flush();
   const expiredGoogle = requests.at(-2); const expiredGithub = requests.at(-1);
-  assertCoreRequest(expiredGoogle, 'https://www.google.com/generate_204', 'HEAD');
-  assertCoreRequest(expiredGithub, 'https://github.com/', 'HEAD');
+  assertCoreRequest(expiredGoogle, 'https://www.google.com/generate_204', 'GET', 10000);
+  assertCoreRequest(expiredGithub, 'https://github.com/', 'GET', 10000);
   respondProbe(expiredGoogle, {}, 204); respond(expiredGithub, {}, 429); await flush();
   assert.equal(automatic.results.github.reachability, 'notChecked');
   assert.equal(automatic.results.github.failure, 'capacity');
@@ -329,7 +400,7 @@ try {
   assert.equal(routeBRequest.destroyed, true);
   assert.equal(automatic.results.google.route, 'auto-c');
   assert.equal(automatic.results.google.httpCode, 403);
-  assert.equal(automatic.results.google.availability, 'unknown');
+  assert.equal(automatic.results.google.availability, 'restricted');
   automatic.observe('/unused', 'auto-d', true, true, ['google', 'github']);
   await flush(); const rejectedBatch = requests.slice(-2);
   respond(rejectedBatch[0], {}, 409); await flush();
@@ -426,7 +497,7 @@ try {
   coordinatedServices.observe('/unused', 'after-switch', true, true, coordinatedIds);
   await flush();
   const bypass = new checks.ServiceCheckTask().run('/unused',
-    [{ id: 'google', url: probeTarget }], 'stopped', false);
+    [{ id: 'legacy-test', url: probeTarget }], 'stopped', false);
   await flush();
   const bypassRequest = requests.at(-1);
   assert.equal(bypassRequest.url, probeTarget);

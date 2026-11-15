@@ -1,5 +1,5 @@
 import { ServiceCheckTask, ServiceResult, ServiceTarget } from '../../client/ServiceCheck';
-import { RoutedProbeError } from '../../client/RoutedProbe';
+import { RoutedProbeError } from '../../client/ProbeProtocol';
 import { serviceInfo } from './Services';
 
 const RESULT_TTL_MS = 60000;

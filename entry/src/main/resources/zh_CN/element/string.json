@@ -766,7 +766,11 @@
     },
     {
       "name": "dash_service_restricted",
-      "value": "HTTP %d"
+      "value": "访问受限 · %d"
+    },
+    {
+      "name": "dash_service_method_unsupported",
+      "value": "方法不支持 · %d"
     },
     {
       "name": "dash_service_timeout",

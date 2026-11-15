@@ -1,4 +1,5 @@
-import { ServiceAvailability, ServiceResult } from '../../client/ServiceCheck';
+import { ServiceResult } from '../../client/ServiceCheck';
+import { ServiceAvailability } from '../../client/ServiceRuleTypes';
 import { uiResourceText } from '../../components/ResourceText';
 import { ServiceSlot, serviceInfo } from './Services';
 import { AppGlyph } from '../../components/AppGlyph';
@@ -26,6 +27,11 @@ export function serviceConnectivityLabel(result: ServiceResult | undefined, chec
   if (result === undefined) {
     return $r('app.string.dash_service_untested');
   }
+  if (result.availability === 'available') {
+    return result.delay > 0 ? $r('app.string.dash_service_reachable', result.delay) :
+      serviceAvailabilityLabel(result.availability);
+  }
+  if (result.availability !== 'unknown') { return serviceAvailabilityLabel(result.availability); }
   if (result.failure === 'capacity') {
     return $r('app.string.dash_probe_busy');
   }
@@ -34,7 +40,9 @@ export function serviceConnectivityLabel(result: ServiceResult | undefined, chec
   }
   switch (result.reachability) {
     case 'reachable': return $r('app.string.dash_service_reachable', result.delay);
-    case 'restricted': return $r('app.string.dash_service_restricted', result.httpCode);
+    case 'restricted': return result.httpCode === 405 ?
+      $r('app.string.dash_service_method_unsupported', result.httpCode) :
+      $r('app.string.dash_service_restricted', result.httpCode);
     case 'timeout': return $r('app.string.dash_service_timeout');
     case 'unreachable': return $r('app.string.dash_service_unreachable', result.httpCode);
     default: return $r('app.string.dash_service_failed');
@@ -112,8 +120,8 @@ export struct DashboardServiceRow {
             .height(16)
             .fontColor($r('sys.color.font_secondary'))
             .maxLines(1)
-        } else if (this.result !== undefined && this.result.availability !== 'unknown') {
-          Text(serviceAvailabilityLabel(this.result.availability))
+        } else if (this.result !== undefined && this.result.region !== '') {
+          Text(this.result.region)
             .fontSize(12)
             .lineHeight(16)
             .fontColor($r('sys.color.font_secondary'))

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
 	"net/url"
-	"strconv"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,7 +20,28 @@ import (
 	"github.com/metacubex/mihomo/tunnel"
 )
 
-const probeLimit = 64 << 10
+const probeRequestLimit = 16 << 10
+
+type probeRequestBody struct {
+	URL         string            `json:"url"`
+	Method      string            `json:"method"`
+	BodyMode    string            `json:"bodyMode"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Body        string            `json:"body,omitempty"`
+	NoRedirect  bool              `json:"noRedirect,omitempty"`
+	ScanPattern string            `json:"scanPattern,omitempty"`
+	Timeout     int               `json:"timeout"`
+}
+
+type probeResponse struct {
+	Status   int    `json:"status"`
+	Body     string `json:"body"`
+	URL      string `json:"url"`
+	Location string `json:"location"`
+	Delay    int64  `json:"delay"`
+	BootID   string `json:"bootId"`
+	Revision uint64 `json:"revision"`
+}
 
 var probeSlots = make(chan struct{}, 4)
 
@@ -82,30 +106,89 @@ func newRuleTransport() (*http.Transport, error) {
 	}, nil
 }
 
-func getProbe(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	target, err := url.Parse(query.Get("url"))
-	if err != nil || target.Hostname() == "" || target.User != nil || len(query.Get("url")) > 2048 ||
+func readProbeRequest(r *http.Request) (probeRequestBody, *regexp.Regexp, error) {
+	var options probeRequestBody
+	body, err := io.ReadAll(io.LimitReader(r.Body, probeRequestLimit+1))
+	if err != nil || len(body) > probeRequestLimit {
+		return options, nil, errors.New("invalid_probe_request")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&options); err != nil {
+		return options, nil, errors.New("invalid_probe_request")
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return options, nil, errors.New("invalid_probe_request")
+	}
+	target, err := url.Parse(options.URL)
+	if err != nil || target.Hostname() == "" || target.User != nil || len(options.URL) > 2048 ||
 		(target.Scheme != "http" && target.Scheme != "https") {
-		writeError(w, r, http.StatusBadRequest, errors.New("invalid_probe_url"))
-		return
+		return options, nil, errors.New("invalid_probe_url")
 	}
-	method := query.Get("method")
-	if method == "" {
-		method = http.MethodGet
+	if options.Method != http.MethodGet && options.Method != http.MethodHead && options.Method != http.MethodPost {
+		return options, nil, errors.New("invalid_probe_method")
 	}
-	if method != http.MethodGet && method != http.MethodHead {
-		writeError(w, r, http.StatusBadRequest, errors.New("invalid_probe_method"))
-		return
+	if options.Timeout < 1 || options.Timeout > 10000 {
+		return options, nil, errors.New("invalid_probe_timeout")
 	}
-	timeout := 5000
-	if text := query.Get("timeout"); text != "" {
-		value, err := strconv.Atoi(text)
-		if err != nil || value < 1 || value > 5000 {
-			writeError(w, r, http.StatusBadRequest, errors.New("invalid_probe_timeout"))
-			return
+	if len(options.Body) > 8192 {
+		return options, nil, errors.New("invalid_probe_body")
+	}
+	for name, value := range options.Headers {
+		switch http.CanonicalHeaderKey(name) {
+		case "User-Agent", "Accept", "Content-Type", "Authorization":
+		default:
+			return options, nil, errors.New("invalid_probe_headers")
 		}
-		timeout = value
+		for i := range len(value) {
+			if (value[i] < ' ' && value[i] != '\t') || value[i] == 127 {
+				return options, nil, errors.New("invalid_probe_headers")
+			}
+		}
+	}
+	switch options.BodyMode {
+	case "none", "small", "html", "json":
+		if options.ScanPattern != "" {
+			return options, nil, errors.New("invalid_probe_scan_pattern")
+		}
+		return options, nil, nil
+	case "scan":
+		if options.ScanPattern == "" || len(options.ScanPattern) > 512 {
+			return options, nil, errors.New("invalid_probe_scan_pattern")
+		}
+		pattern, err := regexp.Compile(options.ScanPattern)
+		if err != nil {
+			return options, nil, errors.New("invalid_probe_scan_pattern")
+		}
+		return options, pattern, nil
+	default:
+		return options, nil, errors.New("invalid_probe_body_mode")
+	}
+}
+
+func probeURLPort(target *url.URL) string {
+	if port := target.Port(); port != "" {
+		return port
+	}
+	if target.Scheme == "https" {
+		return "443"
+	}
+	return "80"
+}
+
+func sameProbeOrigin(a, b *url.URL) bool {
+	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Hostname(), b.Hostname()) && probeURLPort(a) == probeURLPort(b)
+}
+
+func postProbe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, r, http.StatusMethodNotAllowed, errors.New("invalid_probe_method"))
+		return
+	}
+	options, pattern, err := readProbeRequest(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
 	}
 	snapshot := runtimeSnapshot.Load()
 	routes := runtimeRoutes.Load()
@@ -124,14 +207,21 @@ func getProbe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusTooManyRequests, errors.New("probe_capacity"))
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(timeout)*time.Millisecond)
+	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(options.Timeout)*time.Millisecond)
 	defer cancel()
 	ctx, finishRuleRequest := ruleRequestContext(ctx)
 	defer finishRuleRequest()
-	request, err := http.NewRequestWithContext(ctx, method, target.String(), nil)
+	var targetBody io.Reader
+	if options.Body != "" {
+		targetBody = strings.NewReader(options.Body)
+	}
+	request, err := http.NewRequestWithContext(ctx, options.Method, options.URL, targetBody)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, errors.New("invalid_probe_url"))
 		return
+	}
+	for name, value := range options.Headers {
+		request.Header.Set(name, value)
 	}
 	transport, err := newRuleTransport()
 	if err != nil {
@@ -139,14 +229,40 @@ func getProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport}
+	forwardAuthorization := true
+	client := &http.Client{Transport: transport, CheckRedirect: func(next *http.Request, via []*http.Request) error {
+		if options.NoRedirect {
+			return http.ErrUseLastResponse
+		}
+		if len(via) >= 10 {
+			return errors.New("probe_redirect_limit")
+		}
+		if next.URL.User != nil || next.URL.Hostname() == "" || len(next.URL.String()) > 2048 ||
+			(next.URL.Scheme != "http" && next.URL.Scheme != "https") {
+			return errors.New("invalid_probe_redirect")
+		}
+		if !sameProbeOrigin(via[len(via)-1].URL, next.URL) {
+			// POST 正文也可能携带临时令牌，不能在跨源的 307/308 中重放。
+			if next.Body != nil && next.Body != http.NoBody {
+				return http.ErrUseLastResponse
+			}
+			forwardAuthorization = false
+		}
+		// http.Client 会从首个请求重新复制头；跨源后所有后续跳转都必须保持移除。
+		if !forwardAuthorization {
+			next.Header.Del("Authorization")
+		}
+		return nil
+	}}
+	started := time.Now()
 	response, err := client.Do(request)
-	var body []byte
+	delay := time.Since(started).Milliseconds()
+	var body string
 	if response != nil {
 		defer response.Body.Close()
 	}
-	if err == nil && method != http.MethodHead {
-		body, err = io.ReadAll(io.LimitReader(response.Body, probeLimit+1))
+	if err == nil && options.Method != http.MethodHead {
+		body, err = readProbeBody(response.Body, options.BodyMode, pattern)
 	}
 	if r.Context().Err() != nil {
 		return
@@ -161,14 +277,12 @@ func getProbe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusGatewayTimeout, errors.New("probe_timeout"))
 		return
 	}
-	if err != nil || len(body) > probeLimit {
+	if err != nil {
 		writeError(w, r, http.StatusServiceUnavailable, errors.New("probe_failed"))
 		return
 	}
-	render.JSON(w, r, struct {
-		Status   int    `json:"status"`
-		Body     string `json:"body"`
-		BootID   string `json:"bootId"`
-		Revision uint64 `json:"revision"`
-	}{Status: response.StatusCode, Body: string(body), BootID: snapshot.BootID, Revision: snapshot.Revision})
+	render.JSON(w, r, probeResponse{
+		Status: response.StatusCode, Body: body, URL: response.Request.URL.String(),
+		Location: response.Header.Get("Location"), Delay: delay, BootID: snapshot.BootID, Revision: snapshot.Revision,
+	})
 }
