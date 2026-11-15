@@ -170,7 +170,7 @@ export struct DashboardServices {
         if (this.managing) {
           ForEach(this.settings.services, (slot: ServiceSlot): void => {
             ListItem() { this.ServiceItem(slot) }
-          }, (slot: ServiceSlot): string => slot.id)
+          }, (slot: ServiceSlot): string => `${slot.id}:${slot.visible}`)
             .onMove((from: number, to: number): void => { this.move(from, to); })
         } else {
           ForEach(this.enabledSlots(), (slot: ServiceSlot): void => {
