@@ -265,6 +265,7 @@ export struct DashboardStatus {
           .layoutWeight(1)
           DashboardRunButton({
             running: this.appearsStarted(), busy: this.conn.busy, visible: this.visible,
+            available: this.profileReady || this.shouldStop(),
             motionEnabled: this.motionEnabled,
             interactive: this.interactive && (this.profileReady || this.shouldStop()) &&
               this.conn.state !== ConnectionState.Disconnecting,

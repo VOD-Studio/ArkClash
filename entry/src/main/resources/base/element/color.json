@@ -133,6 +133,14 @@
       "value": "#EAF0FF"
     },
     {
+      "name": "dash_run_background",
+      "value": "#3A3332"
+    },
+    {
+      "name": "dash_run_foreground",
+      "value": "#FFFFFF"
+    },
+    {
       "name": "dash_running_background",
       "value": "#94F990"
     },

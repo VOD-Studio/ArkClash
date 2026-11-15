@@ -1,48 +1,87 @@
 import { curves } from '@kit.ArkUI';
 import { uiResourceText } from '../../components/ResourceText';
-import { DASHBOARD_COOKIE9 } from './DashboardShapePaths';
 
 const START_CURVE = curves.cubicBezierCurve(0.34, 1.56, 0.64, 1);
+const RUN_BUTTON_SHAPE = 'M54 4 C71 2 86 4 92 14 C102 31 93 58 84 77 C78 90 69 100 58 99 ' +
+  'C42 97 23 84 12 70 C-1 55 -1 37 9 24 C19 10 35 5 54 4 Z';
 
 @ComponentV2
 export struct DashboardRunButton {
   @Param running: boolean = false;
   @Param busy: boolean = false;
+  @Param available: boolean = false;
   @Param interactive: boolean = false;
   @Param motionEnabled: boolean = false;
   @Param visible: boolean = false;
   @Param label: ResourceStr = '';
   @Event onToggle: () => void = () => {};
 
+  @Local loadingShown: boolean = false;
+  private loadingGeneration: number = 0;
+
+  aboutToAppear(): void {
+    this.syncLoading();
+  }
+
+  aboutToDisappear(): void {
+    this.loadingGeneration++;
+    this.loadingShown = false;
+  }
+
+  @Monitor('busy', 'visible', 'motionEnabled')
+  syncLoading(): void {
+    this.loadingGeneration++;
+    if (this.busy || !this.visible || !this.motionEnabled) {
+      this.loadingShown = this.visible && this.busy;
+    }
+  }
+
+  private loadingAnimation(): AnimateParam {
+    const generation = this.loadingGeneration;
+    return {
+      duration: this.motionEnabled && this.visible ? 140 : 0,
+      curve: Curve.EaseOut,
+      onFinish: (): void => {
+        // enableLoading(false) 会隐藏图形，淡出结束后再停，旧回调不能截断新一轮反馈。
+        if (!this.busy && generation === this.loadingGeneration) {
+          this.loadingShown = false;
+        }
+      }
+    };
+  }
+
   build() {
-    Button({ type: ButtonType.Circle }) {
+    Button({ type: ButtonType.Normal }) {
       Stack() {
         Shape() {
-          Path().commands(DASHBOARD_COOKIE9)
-            .fill(this.interactive || this.running ? $r('app.color.brand') : $r('app.color.tile_background'))
+          Path().commands(RUN_BUTTON_SHAPE)
+            .fill($r('app.color.dash_run_background'))
             .strokeWidth(0)
         }
         .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
-        .width(88)
-        .height(88)
-        .rotate({ angle: this.running ? 40 : 0 })
-        .animation({ duration: this.motionEnabled ? 450 : 0, curve: this.running ? START_CURVE : Curve.EaseIn })
-        Circle({ width: 88, height: 88 })
-          .fill(this.interactive || this.running ? $r('app.color.brand') : $r('app.color.tile_background'))
-          .strokeWidth(0)
-          .scale({ x: this.running ? 0.84 : 1, y: this.running ? 0.84 : 1 })
-          .animation({ duration: this.motionEnabled ? 450 : 0, curve: this.running ? START_CURVE : Curve.EaseIn })
-        if (this.busy) {
-          LoadingProgress().width(30).height(30).color(Color.White).enableLoading(this.visible)
-        } else {
-          SymbolGlyph(this.running ? $r('sys.symbol.pause') : $r('sys.symbol.play'))
-            .fontSize(30)
-            .fontColor([this.interactive || this.running ? Color.White : $r('sys.color.font_secondary')])
-            .width(30)
-            .height(30)
-            .symbolEffect(new ReplaceSymbolEffect(EffectScope.WHOLE), this.motionEnabled)
-            .hitTestBehavior(HitTestMode.None)
-        }
+        .width(84)
+        .height(84)
+        .rotate({ angle: this.running ? 16 : 0 })
+        .animation({ duration: this.motionEnabled && this.visible ? 450 : 0, curve: START_CURVE })
+        SymbolGlyph(this.running ? $r('sys.symbol.pause_fill') : $r('sys.symbol.play_fill'))
+          .fontSize(30)
+          .fontColor([$r('app.color.dash_run_foreground')])
+          .width(30)
+          .height(30)
+          .symbolEffect(new ReplaceSymbolEffect(EffectScope.WHOLE), this.motionEnabled && this.visible)
+          .opacity(this.busy ? 0 : 1)
+          .animation({ duration: this.motionEnabled && this.visible ? 140 : 0, curve: Curve.EaseOut })
+          .hitTestBehavior(HitTestMode.None)
+          .accessibilityLevel('no')
+        LoadingProgress()
+          .width(30)
+          .height(30)
+          .color($r('app.color.dash_run_foreground'))
+          .enableLoading(this.loadingShown)
+          .opacity(this.busy ? 1 : 0)
+          .animation(this.loadingAnimation())
+          .hitTestBehavior(HitTestMode.None)
+          .accessibilityLevel('no')
       }
       .width(88)
       .height(88)
@@ -51,6 +90,23 @@ export struct DashboardRunButton {
     .height(88)
     .padding(0)
     .backgroundColor(Color.Transparent)
+    .borderRadius(0)
+    .stateEffect(false)
+    .stateStyles({
+      normal: {
+        .scale({ x: 1, y: 1 })
+        .opacity(this.available || this.running || this.busy ? 1 : 0.45)
+      },
+      pressed: {
+        .scale({ x: this.motionEnabled ? 0.94 : 1, y: this.motionEnabled ? 0.94 : 1 })
+        .opacity(0.88)
+      },
+      disabled: {
+        .scale({ x: 1, y: 1 })
+        .opacity(this.available || this.running || this.busy ? 1 : 0.45)
+      }
+    })
+    .animation({ duration: this.motionEnabled && this.visible ? 180 : 0, curve: Curve.EaseOut })
     .enabled(this.interactive)
     .accessibilityText(uiResourceText(this.getUIContext(), this.label))
     .onClick((): void => { this.onToggle(); })
