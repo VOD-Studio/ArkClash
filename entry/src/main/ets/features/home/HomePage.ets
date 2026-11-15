@@ -93,16 +93,6 @@ export struct HomePage {
     this.onEditingChanged(this.editing);
   }
 
-  private setEditing(editing: boolean): void {
-    if (!this.appeared || !this.visible || this.reduceMotion) {
-      this.editing = editing;
-      return;
-    }
-    this.getUIContext().animateTo({ curve: curves.springMotion(0.3, 0.9) }, (): void => {
-      this.editing = editing;
-      UIUtils.flushUIUpdates();
-    });
-  }
 
   @Monitor('settings.cards')
   updateDisplayedCards(): void {
@@ -130,7 +120,7 @@ export struct HomePage {
         label: this.editing ? $r('app.string.dash_done') : $r('app.string.dash_edit_cards'),
         icon: this.editing ? $r('sys.symbol.checkmark') : $r('sys.symbol.pencil_line'),
         isEnabled: this.settings.ready,
-        action: (): void => { this.setEditing(!this.editing); }
+        action: (): void => { this.editing = !this.editing; }
       }
     }];
   }
