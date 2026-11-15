@@ -15,4 +15,6 @@
 | [0007](0007-min-harmonyos-7.md) | 最低支持 HarmonyOS 7（API 26），界面以 UI Design Kit 为准 | 已采纳 |
 | [0008](0008-bind-core-sockets-to-physical-network.md) | Go 出站逐 socket 绑定当前物理网络 | 已采纳 |
 | [0009](0009-arkclash-commands-on-controller.md) | ArkClash 自有命令挂在 controller 上 | 已采纳 |
-| [0010](0010-hot-switch-reload-in-vpn.md) | 热切换由 VPN 进程重载配置 | 已采纳 |
+| [0010](0010-hot-switch-reload-in-vpn.md) | 热切换由 VPN 进程重载配置 | 已采纳，目标与节点恢复由 0012 补充 |
+| [0012](0012-profile-state-and-runtime-separation.md) | 配置持久状态与实际运行状态分离 | 已采纳，待统一真机验收 |
+| [0013](0013-runtime-host-process-evidence.md) | 用系统进程事实恢复异常终止的运行宿主 | 已采纳，宿主回归与 API 26 真机启停、转发通过 |

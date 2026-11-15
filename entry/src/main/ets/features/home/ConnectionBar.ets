@@ -3,6 +3,9 @@ import { connection, Connection, ConnectionState } from '../../client/Connection
 import { getMainGroup, GroupSummary } from '../../client/Controller';
 import { traffic, Traffic } from '../../client/Traffic';
 import { formatSpeed } from '../../components/Format';
+import {
+  homeHasPendingCleanup, homeRunActionLabel, homeRuntimeAppearsStarted, homeShouldStopRuntime
+} from './HomeRunControls';
 
 const BUTTON_SIZE = 40;
 
@@ -19,16 +22,17 @@ export struct ConnectionBar {
   @Local group: GroupSummary | undefined = undefined;
   @Local barHeight: number = 0;
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+  private generation: number = 0;
 
-  @Monitor('expanded', 'conn.state')
+  @Monitor('expanded', 'conn.state', 'conn.routeRevision', 'conn.mode')
   refresh(): void {
-    if (!this.conn.connected) {
-      this.group = undefined;
-      return;
-    }
-    if (this.expanded) {
-      getMainGroup(this.context.filesDir).then((g: GroupSummary | undefined) => {
-        this.group = g;
+    const generation = ++this.generation;
+    this.group = undefined;
+    if (this.expanded && this.conn.connected) {
+      getMainGroup(this.context.filesDir).then((group: GroupSummary | undefined): void => {
+        if (generation === this.generation && this.expanded && this.conn.connected) {
+          this.group = group;
+        }
       }).catch(() => {});
     }
   }
@@ -50,13 +54,16 @@ export struct ConnectionBar {
       .width(BUTTON_SIZE)
       .height(BUTTON_SIZE)
       .backgroundColor(this.connectedLike() ? $r('app.color.brand') : $r('app.color.brand_soft'))
-      .enabled(!this.conn.busy)
-      .onClick(() => {
-        if (this.connectedLike()) {
-          this.conn.disconnect(this.context);
-        } else {
-          this.conn.connect(this.context);
-        }
+      .enabled(this.conn.state !== ConnectionState.Disconnecting)
+      .accessibilityText(homeRunActionLabel(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
+        this.conn.tunAttached, this.conn.hostState))
+      .onClick((): void => {
+        const shouldStop = homeShouldStopRuntime(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
+          this.conn.tunAttached, this.conn.hostState);
+        const operation = shouldStop ? this.conn.disconnect(this.context) : this.conn.connect(this.context);
+        operation.catch((error: Error): void => {
+          this.getUIContext().getPromptAction().showToast({ message: this.conn.error || error.message });
+        });
       })
 
       if (this.expanded) {
@@ -87,10 +94,18 @@ export struct ConnectionBar {
   }
 
   private connectedLike(): boolean {
-    return this.conn.state === ConnectionState.Connected || this.conn.state === ConnectionState.Disconnecting;
+    return homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached) ||
+      this.conn.state === ConnectionState.Disconnecting;
   }
 
   private primaryText(): ResourceStr {
+    if (this.conn.hostState === 'unknown' && !this.conn.busy) {
+      return $r('app.string.dash_runtime_unknown');
+    }
+    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached) &&
+      this.conn.state !== ConnectionState.Disconnecting) {
+      return $r('app.string.dash_cleanup_required');
+    }
     if (this.conn.connected && this.group !== undefined) {
       return this.group.node;
     }
@@ -107,9 +122,16 @@ export struct ConnectionBar {
   }
 
   private secondaryText(): ResourceStr {
+    if (this.conn.hostState === 'unknown' && !this.conn.busy) {
+      return $r('app.string.dash_runtime_tap_to_confirm');
+    }
+    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached)) {
+      return $r('app.string.dash_stop_retry');
+    }
     if (!this.conn.connected) {
       return $r('app.string.bar_tap_to_connect');
     }
-    return `↓ ${formatSpeed(this.stats.down)}  ↑ ${formatSpeed(this.stats.up)}`;
+    return this.stats.stale ? $r('app.string.dash_traffic_stale') :
+      `↓ ${formatSpeed(this.stats.down)}  ↑ ${formatSpeed(this.stats.up)}`;
   }
 }

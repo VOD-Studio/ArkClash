@@ -22,7 +22,7 @@
     },
     {
       "name": "tab_home",
-      "value": "Home"
+      "value": "Dashboard"
     },
     {
       "name": "tab_proxies",
@@ -598,7 +598,1007 @@
     },
     {
       "name": "err_interval",
-      "value": "The interval must be at least 1 hour"
+      "value": "The interval must be a positive whole number of minutes"
+    },
+    {
+      "name": "dash_add_cards",
+      "value": "Add cards"
+    },
+    {
+      "name": "dash_check",
+      "value": "Check"
+    },
+    {
+      "name": "dash_check_all",
+      "value": "Check all"
+    },
+    {
+      "name": "dash_copy_address",
+      "value": "Copy address"
+    },
+    {
+      "name": "dash_copy_failed",
+      "value": "Could not copy. Try again."
+    },
+    {
+      "name": "dash_copy_ip",
+      "value": "Copy IP"
+    },
+    {
+      "name": "dash_delay_timeout",
+      "value": "Node check timed out"
+    },
+    {
+      "name": "dash_done",
+      "value": "Done"
+    },
+    {
+      "name": "dash_drag_hint",
+      "value": "Drag to reorder, or use the Move up and Move down buttons"
+    },
+    {
+      "name": "dash_edit_cards",
+      "value": "Edit cards"
+    },
+    {
+      "name": "dash_edit_hint",
+      "value": "Adding, removing and reordering save immediately. Done exits editing. The status card cannot be removed."
+    },
+    {
+      "name": "dash_exit_details",
+      "value": "Exit information"
+    },
+    {
+      "name": "dash_exit_failed",
+      "value": "Check failed"
+    },
+    {
+      "name": "dash_groups_empty",
+      "value": "No proxy groups in the current mode"
+    },
+    {
+      "name": "dash_groups_failed",
+      "value": "Could not load proxy groups. Try again."
+    },
+    {
+      "name": "dash_groups_loading",
+      "value": "Loading…"
+    },
+    {
+      "name": "dash_hide_ip",
+      "value": "Hide exit IP"
+    },
+    {
+      "name": "dash_lan_failed",
+      "value": "Could not read or apply network settings. Try again."
+    },
+    {
+      "name": "dash_memory_stale",
+      "value": "Memory sample is stale or could not be read"
+    },
+    {
+      "name": "dash_mode_failed",
+      "value": "Mode change failed. The last confirmed mode is shown."
+    },
+    {
+      "name": "dash_mode_pending",
+      "value": "Applying mode…"
+    },
+    {
+      "name": "dash_move_down",
+      "value": "Move down"
+    },
+    {
+      "name": "dash_move_up",
+      "value": "Move up"
+    },
+    {
+      "name": "dash_paused",
+      "value": "Paused"
+    },
+    {
+      "name": "dash_profile_counts",
+      "value": "%s groups · %s proxies · %s rules"
+    },
+    {
+      "name": "dash_profile_custom",
+      "value": "Custom profile"
+    },
+    {
+      "name": "dash_profile_details",
+      "value": "Details"
+    },
+    {
+      "name": "dash_profile_subscription",
+      "value": "Subscription profile"
+    },
+    {
+      "name": "dash_profile_switch",
+      "value": "Switch"
+    },
+    {
+      "name": "dash_profile_updated",
+      "value": "Updated %s"
+    },
+    {
+      "name": "dash_profile_usage",
+      "value": "%d%% used"
+    },
+    {
+      "name": "dash_proxy_running",
+      "value": "Local proxy running"
+    },
+    {
+      "name": "dash_remove",
+      "value": "Remove"
+    },
+    {
+      "name": "dash_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "dash_retry_exit",
+      "value": "Check exit IP again"
+    },
+    {
+      "name": "dash_retry_save",
+      "value": "Retry saving draft"
+    },
+    {
+      "name": "dash_routed_exit",
+      "value": "Current routed exit"
+    },
+    {
+      "name": "dash_runtime_error",
+      "value": "The operation did not complete. Retry or check the profile."
+    },
+    {
+      "name": "dash_save_conflict",
+      "value": "Settings changed. The latest version is loaded and your draft is retained for retry."
+    },
+    {
+      "name": "dash_save_failed",
+      "value": "Could not load or save dashboard settings. Existing data is retained."
+    },
+    {
+      "name": "dash_service_batch_failed",
+      "value": "Check incomplete. Try again."
+    },
+    {
+      "name": "dash_service_details",
+      "value": "All services"
+    },
+    {
+      "name": "dash_service_failed",
+      "value": "Connectivity check failed"
+    },
+    {
+      "name": "dash_service_keep_one",
+      "value": "Keep at least one service enabled"
+    },
+    {
+      "name": "dash_service_manage",
+      "value": "Manage"
+    },
+    {
+      "name": "dash_service_reachable",
+      "value": "Reachable · %d ms"
+    },
+    {
+      "name": "dash_service_restricted",
+      "value": "Access restricted · HTTP %d"
+    },
+    {
+      "name": "dash_service_timeout",
+      "value": "Connectivity check timed out"
+    },
+    {
+      "name": "dash_service_unreachable",
+      "value": "Unexpected response · HTTP %d"
+    },
+    {
+      "name": "dash_service_untested",
+      "value": "Not checked"
+    },
+    {
+      "name": "dash_stale_retry",
+      "value": "The result is not current. Tap the badge to retry."
+    },
+    {
+      "name": "dash_start_failed",
+      "value": "Start failed"
+    },
+    {
+      "name": "dash_stats_stale",
+      "value": "Statistics are stale. Check the sample time."
+    },
+    {
+      "name": "dash_traffic_stale",
+      "value": "Traffic is stale; the chart shows the last valid samples"
+    },
+    {
+      "name": "dash_traffic_window",
+      "value": "Last 30 seconds · blank sections were not sampled"
+    },
+    {
+      "name": "dash_tun_running",
+      "value": "VPN running"
+    },
+    {
+      "name": "dash_ui_pss_swap",
+      "value": "UI PSS + SwapPss"
+    },
+    {
+      "name": "dash_ui_rss",
+      "value": "UI RSS"
+    },
+    {
+      "name": "dash_unlock_available",
+      "value": "Service available"
+    },
+    {
+      "name": "dash_unlock_blocked",
+      "value": "Service blocked"
+    },
+    {
+      "name": "dash_unlock_failed",
+      "value": "Availability check failed"
+    },
+    {
+      "name": "dash_unlock_isp",
+      "value": "ISP not allowed"
+    },
+    {
+      "name": "dash_unlock_originals",
+      "value": "Original content only"
+    },
+    {
+      "name": "dash_unlock_region",
+      "value": "Region unsupported"
+    },
+    {
+      "name": "dash_unlock_restricted",
+      "value": "Service access restricted"
+    },
+    {
+      "name": "dash_unlock_soon",
+      "value": "Coming soon"
+    },
+    {
+      "name": "dash_unlock_timeout",
+      "value": "Availability check timed out"
+    },
+    {
+      "name": "dash_unlock_unavailable",
+      "value": "Service unavailable"
+    },
+    {
+      "name": "dash_vpn",
+      "value": "VPN"
+    },
+    {
+      "name": "dash_vpn_attached",
+      "value": "Attached"
+    },
+    {
+      "name": "dash_vpn_capability",
+      "value": "VPN mode cannot be changed"
+    },
+    {
+      "name": "dash_vpn_closed",
+      "value": "Closed"
+    },
+    {
+      "name": "dash_vpn_detached",
+      "value": "Not attached"
+    },
+    {
+      "name": "dash_vpn_listeners",
+      "value": "Core listeners"
+    },
+    {
+      "name": "dash_vpn_mode_proxy",
+      "value": "Local proxy mode"
+    },
+    {
+      "name": "dash_vpn_mode_tun",
+      "value": "VPN mode"
+    },
+    {
+      "name": "dash_vpn_open",
+      "value": "Open"
+    },
+    {
+      "name": "dash_vpn_rss",
+      "value": "VPN process RSS"
+    },
+    {
+      "name": "dash_vpn_tun",
+      "value": "System tunnel"
+    },
+    {
+      "name": "profile_load_error",
+      "value": "Unable to read profiles: %s"
+    },
+    {
+      "name": "profile_apply_error",
+      "value": "Target saved; the previous profile is still running: %s"
+    },
+    {
+      "name": "profile_running",
+      "value": "Running"
+    },
+    {
+      "name": "profile_batch_links",
+      "value": "Multiple links"
+    },
+    {
+      "name": "profile_batch_hint",
+      "value": "Enter one subscription URL per line to import multiple profiles"
+    },
+    {
+      "name": "profile_batch_result",
+      "value": "%d succeeded, %d skipped, %d failed"
+    },
+    {
+      "name": "profile_batch_line",
+      "value": "Line %d: %s"
+    },
+    {
+      "name": "profile_sort",
+      "value": "Sort profiles"
+    },
+    {
+      "name": "profile_sort_hint",
+      "value": "Touch and hold to reorder, then save"
+    },
+    {
+      "name": "profile_export",
+      "value": "Export source file"
+    },
+    {
+      "name": "profile_edit_source",
+      "value": "Edit source file"
+    },
+    {
+      "name": "profile_upload_source",
+      "value": "Choose source file"
+    },
+    {
+      "name": "profile_source_title",
+      "value": "Source file"
+    },
+    {
+      "name": "profile_source_draft",
+      "value": "Source file has unsaved changes"
+    },
+    {
+      "name": "profile_interval_minutes",
+      "value": "Update interval (minutes)"
+    },
+    {
+      "name": "profile_optional_name",
+      "value": "Name (optional)"
+    },
+    {
+      "name": "profile_unsaved_title",
+      "value": "Save changes?"
+    },
+    {
+      "name": "profile_unsaved_message",
+      "value": "You have unsaved changes."
+    },
+    {
+      "name": "profile_discard",
+      "value": "Discard"
+    },
+    {
+      "name": "profile_keep_editing",
+      "value": "Keep editing"
+    },
+    {
+      "name": "profile_manual_auto_update",
+      "value": "The source file was edited. Turn off automatic updates?"
+    },
+    {
+      "name": "profile_disable_auto_update",
+      "value": "Turn off automatic updates"
+    },
+    {
+      "name": "profile_keep_auto_update",
+      "value": "Keep enabled"
+    },
+    {
+      "name": "profile_err_conflict",
+      "value": "The profile changed. Reopen or retry; your draft is preserved."
+    },
+    {
+      "name": "profile_err_corrupt",
+      "value": "Saved data is invalid. The original file has been preserved."
+    },
+    {
+      "name": "profile_err_url",
+      "value": "Enter a valid http, https or ftp URL (up to 2048 characters)."
+    },
+    {
+      "name": "profile_err_name_long",
+      "value": "Names must be 64 characters or fewer."
+    },
+    {
+      "name": "profile_err_canceled",
+      "value": "The connection or profile changed. Please retry."
+    },
+    {
+      "name": "profile_err_timeout",
+      "value": "The download did not finish within 20 seconds."
+    },
+    {
+      "name": "profile_err_dns",
+      "value": "Unable to resolve the server address."
+    },
+    {
+      "name": "profile_err_tls",
+      "value": "Server certificate or secure connection validation failed."
+    },
+    {
+      "name": "profile_err_apply",
+      "value": "Unable to apply the profile or stop forwarding. Check the connection state and retry."
+    },
+    {
+      "name": "profile_metadata_saved",
+      "value": "The new URL and settings were saved, but the download failed. The previous content and successful update time are preserved."
+    },
+    {
+      "name": "profile_err_unsupported_input",
+      "value": "This import method is not available. Use a subscription URL or YAML file."
+    },
+    {
+      "name": "profile_details_title",
+      "value": "Profile details"
+    },
+    {
+      "name": "profile_details_counts",
+      "value": "%d proxies · %d proxy groups"
+    },
+    {
+      "name": "proxy_actual",
+      "value": "Actual outbound"
+    },
+    {
+      "name": "proxy_selected",
+      "value": "Current selection"
+    },
+    {
+      "name": "proxy_card_density",
+      "value": "Node cards"
+    },
+    {
+      "name": "proxy_choose_node",
+      "value": "Select node"
+    },
+    {
+      "name": "proxy_cleanup_failed",
+      "value": "The node changed, but connection cleanup failed. Existing connections may still use the previous node."
+    },
+    {
+      "name": "proxy_clear_search",
+      "value": "Clear search"
+    },
+    {
+      "name": "proxy_collapse_group",
+      "value": "Collapse group"
+    },
+    {
+      "name": "proxy_delay_ms",
+      "value": "%d ms"
+    },
+    {
+      "name": "proxy_density_compact",
+      "value": "Compact"
+    },
+    {
+      "name": "proxy_density_loose",
+      "value": "Loose"
+    },
+    {
+      "name": "proxy_density_standard",
+      "value": "Standard"
+    },
+    {
+      "name": "proxy_direct_empty",
+      "value": "Direct mode is active. Change outbound mode on the dashboard."
+    },
+    {
+      "name": "proxy_dismiss",
+      "value": "Dismiss"
+    },
+    {
+      "name": "proxy_dynamic_offline",
+      "value": "Connect to load this group’s dynamic members."
+    },
+    {
+      "name": "proxy_expand_group",
+      "value": "Expand group"
+    },
+    {
+      "name": "proxy_group_empty",
+      "value": "No nodes in this group"
+    },
+    {
+      "name": "proxy_group_empty_hint",
+      "value": "Refresh the profile to load its nodes."
+    },
+    {
+      "name": "proxy_group_icons",
+      "value": "Group icons"
+    },
+    {
+      "name": "proxy_group_unselectable",
+      "value": "Nodes cannot be selected in this group."
+    },
+    {
+      "name": "proxy_hide_timeout",
+      "value": "Hide timed out and failed nodes"
+    },
+    {
+      "name": "proxy_icon_filled",
+      "value": "Filled"
+    },
+    {
+      "name": "proxy_icon_hidden",
+      "value": "Hidden"
+    },
+    {
+      "name": "proxy_icon_only",
+      "value": "Icon only"
+    },
+    {
+      "name": "proxy_jump_group",
+      "value": "Jump to group"
+    },
+    {
+      "name": "proxy_layout_density",
+      "value": "Grid layout"
+    },
+    {
+      "name": "proxy_leaf_unresolved",
+      "value": "The outbound node could not be resolved. Connect and refresh, or check the group."
+    },
+    {
+      "name": "proxy_load_failed",
+      "value": "Could not load proxy groups"
+    },
+    {
+      "name": "proxy_load_failed_hint",
+      "value": "Check the connection or profile and retry."
+    },
+    {
+      "name": "proxy_loading",
+      "value": "Loading proxy groups"
+    },
+    {
+      "name": "proxy_locate_filtered",
+      "value": "The current selection is filtered out. Clear the search to locate it."
+    },
+    {
+      "name": "proxy_locate_selected",
+      "value": "Locate selection"
+    },
+    {
+      "name": "proxy_not_ready",
+      "value": "The profile or core is not ready. Retry shortly."
+    },
+    {
+      "name": "proxy_offline_saved",
+      "value": "Offline: selections are saved to this profile. Connect to test latency."
+    },
+    {
+      "name": "proxy_open_profiles",
+      "value": "Manage profiles"
+    },
+    {
+      "name": "proxy_pinned",
+      "value": "Pinned preference"
+    },
+    {
+      "name": "proxy_pinned_name",
+      "value": "Pinned: %s"
+    },
+    {
+      "name": "proxy_preferences_failed",
+      "value": "View settings could not be saved or loaded. Your draft is retained."
+    },
+    {
+      "name": "proxy_refresh",
+      "value": "Refresh groups"
+    },
+    {
+      "name": "proxy_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "proxy_search",
+      "value": "Search node names or types"
+    },
+    {
+      "name": "proxy_search_empty",
+      "value": "No matching nodes"
+    },
+    {
+      "name": "proxy_search_empty_hint",
+      "value": "Search by name and type; all words must match."
+    },
+    {
+      "name": "proxy_selection_failed",
+      "value": "The selection could not be saved. Reloading its actual state."
+    },
+    {
+      "name": "proxy_selection_inconsistent",
+      "value": "The running selection and saved state differ. Refresh and retry."
+    },
+    {
+      "name": "proxy_selection_pending",
+      "value": "Saving selection"
+    },
+    {
+      "name": "proxy_sort",
+      "value": "Sort"
+    },
+    {
+      "name": "proxy_sort_delay",
+      "value": "Latency"
+    },
+    {
+      "name": "proxy_sort_name",
+      "value": "Name"
+    },
+    {
+      "name": "proxy_sort_none",
+      "value": "Default"
+    },
+    {
+      "name": "proxy_stale",
+      "value": "Refresh failed. Showing the last successful snapshot."
+    },
+    {
+      "name": "proxy_style",
+      "value": "Display options"
+    },
+    {
+      "name": "proxy_test_capacity",
+      "value": "The test queue is full. Wait for current tests and retry."
+    },
+    {
+      "name": "proxy_test_current_group",
+      "value": "Test current group"
+    },
+    {
+      "name": "proxy_test_failed",
+      "value": "Failed"
+    },
+    {
+      "name": "proxy_test_no_conclusion",
+      "value": "Some tests returned no usable result. Retry them."
+    },
+    {
+      "name": "proxy_test_node",
+      "value": "Test node latency"
+    },
+    {
+      "name": "proxy_test_offline",
+      "value": "Connect to test node latency."
+    },
+    {
+      "name": "proxy_test_queued",
+      "value": "Queued"
+    },
+    {
+      "name": "proxy_test_running",
+      "value": "Testing"
+    },
+    {
+      "name": "proxy_test_timeout",
+      "value": "Timeout"
+    },
+    {
+      "name": "proxy_type_unknown",
+      "value": "Unknown type"
+    },
+    {
+      "name": "dash_probe_busy",
+      "value": "Probe capacity is busy. No result was obtained; retry."
+    },
+    {
+      "name": "dash_probe_changed",
+      "value": "The route changed. The old result was discarded; check again."
+    },
+    {
+      "name": "dash_probe_timeout",
+      "value": "The routed probe timed out. Try again."
+    },
+    {
+      "name": "dash_probe_failed",
+      "value": "The core probe did not complete. Try again."
+    },
+    {
+      "name": "dash_stop_retry",
+      "value": "Retry stop"
+    },
+    {
+      "name": "dash_cleanup_required",
+      "value": "The tunnel or listeners remain active. Retry stopping."
+    },
+    {
+      "name": "proxy_node_not_addressable",
+      "value": "This duplicate name cannot be selected individually"
+    },
+    {
+      "name": "proxy_host_unknown",
+      "value": "Core state is unconfirmed. Node selection is unavailable."
+    },
+    {
+      "name": "profile_err_host_unknown",
+      "value": "Proxy status is unconfirmed. Retry before saving changes."
+    },
+    {
+      "name": "proxy_clear_pin",
+      "value": "Clear preference"
+    },
+    {
+      "name": "proxy_actual_retired",
+      "value": "The active outbound was removed from its provider; waiting for the core cache to refresh."
+    },
+    {
+      "name": "profile_import_link",
+      "value": "Import from link"
+    },
+    {
+      "name": "profile_import_file",
+      "value": "File"
+    },
+    {
+      "name": "profile_import_single",
+      "value": "Single link"
+    },
+    {
+      "name": "profile_import_batch",
+      "value": "Batch import"
+    },
+    {
+      "name": "profile_field_optional",
+      "value": "Optional"
+    },
+    {
+      "name": "profile_field_required",
+      "value": "Required"
+    },
+    {
+      "name": "profile_update_interval",
+      "value": "Update interval"
+    },
+    {
+      "name": "profile_minutes",
+      "value": "min"
+    },
+    {
+      "name": "profile_source_remote",
+      "value": "Remote"
+    },
+    {
+      "name": "profile_source_preview",
+      "value": "View source file"
+    },
+    {
+      "name": "profile_updated_now",
+      "value": "Just now"
+    },
+    {
+      "name": "profile_updated_minutes",
+      "value": "%dm ago"
+    },
+    {
+      "name": "profile_updated_hours",
+      "value": "%dh ago"
+    },
+    {
+      "name": "profile_updated_days",
+      "value": "%dd ago"
+    },
+    {
+      "name": "profile_updated_months",
+      "value": "%dmo ago"
+    },
+    {
+      "name": "profile_updated_years",
+      "value": "%dy ago"
+    },
+    {
+      "name": "dash_ip_organization",
+      "value": "IP organization"
+    },
+    {
+      "name": "dash_card_description_status",
+      "value": "Outbound IP and runtime status"
+    },
+    {
+      "name": "dash_card_description_connections",
+      "value": "Current connections and routing statistics"
+    },
+    {
+      "name": "dash_card_description_memory",
+      "value": "UI and core memory measurements"
+    },
+    {
+      "name": "proxy_menu_size",
+      "value": "Size"
+    },
+    {
+      "name": "proxy_menu_layout",
+      "value": "Layout"
+    },
+    {
+      "name": "proxy_menu_icon_style",
+      "value": "Icon style"
+    },
+    {
+      "name": "proxy_layout_tight",
+      "value": "Tight"
+    },
+    {
+      "name": "proxy_groups",
+      "value": "Proxy group"
+    },
+    {
+      "name": "proxy_search_close",
+      "value": "Cancel search"
+    },
+    {
+      "name": "dash_rules",
+      "value": "Rules"
+    },
+    {
+      "name": "dash_total_rss",
+      "value": "Total RSS"
+    },
+    {
+      "name": "dash_memory_app",
+      "value": "App"
+    },
+    {
+      "name": "dash_memory_core",
+      "value": "Core"
+    },
+    {
+      "name": "proxy_select",
+      "value": "Select"
+    },
+    {
+      "name": "proxy_preferred",
+      "value": "Preferred"
+    },
+    {
+      "name": "dash_updated_just_now",
+      "value": "Just now"
+    },
+    {
+      "name": "dash_updated_minutes",
+      "value": "%d minutes ago"
+    },
+    {
+      "name": "dash_updated_hours",
+      "value": "%d hours ago"
+    },
+    {
+      "name": "dash_updated_days",
+      "value": "%d days ago"
+    },
+    {
+      "name": "dash_updated_months",
+      "value": "%d months ago"
+    },
+    {
+      "name": "dash_updated_years",
+      "value": "%d years ago"
+    },
+    {
+      "name": "dash_profile_remote",
+      "value": "Remote"
+    },
+    {
+      "name": "dash_profile_custom_type",
+      "value": "Custom"
+    },
+    {
+      "name": "dash_used_short",
+      "value": "used"
+    },
+    {
+      "name": "dash_profile_updated_prefix",
+      "value": "Updated "
+    },
+    {
+      "name": "dash_service_shown",
+      "value": "Shown on dashboard"
+    },
+    {
+      "name": "dash_runtime_unknown",
+      "value": "Proxy state unconfirmed"
+    },
+    {
+      "name": "dash_runtime_stop_confirm",
+      "value": "Stop and confirm proxy"
+    },
+    {
+      "name": "dash_runtime_tap_to_confirm",
+      "value": "Tap to stop and confirm the proxy state"
+    },
+    {
+      "name": "dash_ip_asn",
+      "value": "ASN"
+    },
+    {
+      "name": "dash_probe_source",
+      "value": "Lookup source"
+    },
+    {
+      "name": "dash_probe_checked_at",
+      "value": "Checked at"
+    },
+    {
+      "name": "dash_ip_type",
+      "value": "IP type"
+    },
+    {
+      "name": "dash_ip_residential",
+      "value": "Residential"
+    },
+    {
+      "name": "dash_ip_mobile",
+      "value": "Mobile"
+    },
+    {
+      "name": "dash_ip_business",
+      "value": "Business"
+    },
+    {
+      "name": "dash_ip_hosting",
+      "value": "Hosting"
+    },
+    {
+      "name": "dash_ip_type_unknown",
+      "value": "Unknown type"
+    },
+    {
+      "name": "dash_ip_quality",
+      "value": "Quality"
+    },
+    {
+      "name": "dash_ip_quality_unknown",
+      "value": "Unknown"
+    },
+    {
+      "name": "dash_ip_quality_good",
+      "value": "Good"
+    },
+    {
+      "name": "dash_ip_quality_normal",
+      "value": "Normal"
+    },
+    {
+      "name": "dash_ip_quality_risky",
+      "value": "Risky"
+    },
+    {
+      "name": "dash_ip_checking",
+      "value": "Checking"
+    },
+    {
+      "name": "dash_ip_quality_source",
+      "value": "Quality source"
+    },
+    {
+      "name": "dash_ip_quality_failed",
+      "value": "IP type and quality lookup failed"
     }
   ]
 }

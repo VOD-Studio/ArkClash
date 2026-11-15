@@ -56,6 +56,8 @@ patch -s -p1 -d "$PATCHED_DIR/gvisor" < "$ROOT/scripts/gvisor-fdbased.patch"
 cp go.mod "$PATCHED_DIR/go.mod"
 cp go.sum "$PATCHED_DIR/go.sum"
 echo "replace github.com/metacubex/gvisor => $PATCHED_DIR/gvisor" >> "$PATCHED_DIR/go.mod"
+bash "$ROOT/scripts/prepare-mihomo.sh" "$PATCHED_DIR/mihomo"
+"$GO" mod edit -modfile "$PATCHED_DIR/go.mod" "-replace=github.com/metacubex/mihomo=$PATCHED_DIR/mihomo"
 
 # HarmonyOS uses musl, so this is a GOOS=linux build linked by the OHOS clang.
 CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \

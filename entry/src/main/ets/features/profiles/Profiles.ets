@@ -1,735 +1,506 @@
-// 配置管理的界面状态（#35）。未连接时订阅由本进程更新；连接中交给 VPN 进程，本进程只写列表（ADR-0009）。
 import { common } from '@kit.AbilityKit';
-import { preferences } from '@kit.ArkData';
-import { hilog } from '@kit.PerformanceAnalysisKit';
-import { fileIo as fs, picker } from '@kit.CoreFileKit';
-import { getRunningProfile, prefetchProfile, reloadProfile } from '../../client/Controller';
+import { getRuntimeStatus, prefetchProfile, reloadProfile, RuntimeStatus } from '../../client/Controller';
 import { connection } from '../../client/Connection';
 import { addViaVpn, notifyListChanged, ProfileEvent, ProfileEvents, updateViaVpn } from '../../client/ProfileCommands';
-import { ensureDir, hasFile, listDir, removeFile, writeText } from '../../shared/Files';
-import { DirectDownloader, hostOf } from '../../shared/profiles/Download';
+import { DirectDownloader, hostOf, validSubscriptionUrl } from '../../shared/profiles/Download';
 import { errorString, ProfileError } from '../../shared/profiles/Errors';
 import {
-  candidatePath,
-  DEFAULT_INTERVAL_HOURS,
-  emptyList,
-  findProfile,
-  findSubscription,
-  LIST_VERSION,
-  listPath,
-  newId,
-  ProfileList,
-  ProfileRecord,
-  profilesDir,
-  readList,
-  readState,
-  statePath,
-  SubscriptionRecord,
-  SubscriptionState,
-  SubscriptionUsage,
-  summaryPath,
-  writeList,
-  yamlPath
+  candidatePath, checkProfileCommit, ensureProfilesDir, findProfile, newId,
+  ProfileRecord, readListAsync, removeProfileFile, SubscriptionRecord, withProfileStorage,
+  withProfileTask, writeList, writeProfileText, yamlPath
 } from '../../shared/profiles/Store';
-import { AnalyzeResult } from '../../shared/profiles/Analyze';
-import { analyze, ProfileSummary, readSummary, writeSummary } from '../../shared/profiles/Summary';
-import {
-  commitCandidate,
-  downloadNewSubscription,
-  UpdateEnv,
-  UpdateOutcome,
-  UpdateScheduler
-} from '../../shared/profiles/Updater';
+import { analyze, ProfileSummary, readSummary } from '../../shared/profiles/Summary';
+import { commitCandidate, downloadNewSubscription, ProfileCandidateChange, UpdateEnv, UpdateOutcome,
+  UpdateScheduler } from '../../shared/profiles/Updater';
+import { parseProfileLinks, readSourceText, removeSavedProfile, saveProfileEdit, saveProfileOrder } from './ProfileActions';
+import { ProfileBatchJob, runProfileBatch } from './ProfileBatch';
+import { exportProfileSource, migrateProfileLegacy, pickProfileFile, profileFileName, readProfileFile,
+  stageProfileUri } from './ProfileFiles';
+import { mergeProfileItem, ProfileBatchFailure, ProfileBatchResult, ProfileEdit, ProfileItem, ProfileLinkEntry } from './ProfileModels';
+import { ProfileLibrarySnapshot, readProfileSnapshot } from './ProfileSnapshot';
 
+export { ProfileEdit, ProfileItem, ProfileBatchResult } from './ProfileModels';
 export { SubscriptionUsage } from '../../shared/profiles/Store';
-
-// 0.3.0 只有一份来自订阅的配置，元数据在 preferences 里，首次启动新版本时迁移（#35）。
-const LEGACY_PREF_URL = 'subscriptionUrl';
-const LEGACY_PREF_NAME = 'profileName';
-const LEGACY_PREF_UPDATED_AT = 'profileUpdatedAt';
-const LEGACY_PREF_USAGE = 'profileUsage';
-const LEGACY_PROFILE = 'default.yaml';
-
-/** 一份配置在界面上的样子：列表里的记录，加上它的订阅和订阅状态。 */
-@ObservedV2
-export class ProfileItem {
-  @Trace id: string = '';
-  @Trace name: string = '';
-  @Trace nameEdited: boolean = false;
-  @Trace subscription: string = ''; // 空串 = 本地配置
-  @Trace url: string = '';
-  @Trace autoUpdate: boolean = true;
-  @Trace intervalHours: number = DEFAULT_INTERVAL_HOURS;
-  @Trace state: SubscriptionState = { updatedAt: 0, failures: 0 };
-  @Trace updating: boolean = false;
-
-  get isSubscription(): boolean {
-    return this.subscription !== '';
-  }
-}
-
-/** 编辑面板提交的内容；本地配置只用 name。 */
-export interface ProfileEdit {
-  name: string;
-  url: string;
-  autoUpdate: boolean;
-  intervalHours: number;
-}
-
-/** 界面自己的校验错误，和 Errors.ets 的格式一样由 ProfileErrors.ets 翻译。 */
 export const ERR_NAME_TAKEN = 'name_taken';
 export const ERR_NAME_EMPTY = 'name_empty';
 export const ERR_LINK_EXISTS = 'link_exists';
 export const ERR_INTERVAL = 'interval_invalid';
 export const ERR_IN_USE = 'in_use';
 
-// 就地更新已有的对象：进行中的标记和界面上的引用都保留。
-function fillItem(item: ProfileItem, record: ProfileRecord, list: ProfileList, filesDir: string): ProfileItem {
-  item.id = record.id;
-  item.name = record.name;
-  item.nameEdited = record.nameEdited;
-  item.subscription = record.subscription;
-  const sub = record.subscription !== '' ? findSubscription(list, record.subscription) : undefined;
-  if (sub !== undefined) {
-    item.url = sub.url;
-    item.autoUpdate = sub.autoUpdate;
-    item.intervalHours = sub.intervalHours;
-    item.state = readState(filesDir, sub.id);
-  } else {
-    item.url = '';
-    item.state = { updatedAt: 0, failures: 0 };
-  }
-  return item;
-}
-
-// 本地文件名去掉目录和扩展名，作为本地配置的默认名称。
-function fileNameOf(uri: string): string {
-  const last = uri.split('/').pop() ?? uri;
-  let name = last;
-  try {
-    name = decodeURIComponent(last);
-  } catch (e) {
-    name = last;
-  }
-  return name.replace(/\.(ya?ml)$/i, '');
-}
-
 @ObservedV2
 export class ProfileStore {
   @Trace items: ProfileItem[] = [];
-  @Trace current: string = ''; // 列表里的当前配置
-  @Trace running: string = ''; // 连接中内核正在运行的配置；未连接时为空串
+  @Trace current: string = '';
+  @Trace running: string = '';
   @Trace connected: boolean = false;
-  @Trace summary: ProfileSummary | undefined = undefined; // 生效那份配置的摘要
+  @Trace offlineWritable: boolean = false;
+  @Trace summary: ProfileSummary | undefined = undefined;
   @Trace updatingAll: boolean = false;
-  // 正在热切换过去的配置。界面先把选中标记移过去，切换在后台进行，失败再退回（FlClash 的做法）。
   @Trace pending: string = '';
-  private list: ProfileList = emptyList();
+  @Trace loaded: boolean = false;
+  @Trace loadError: string = '';
+  @Trace applyError: string = '';
   private filesDir: string = '';
   private context?: common.UIAbilityContext;
   private foreground: boolean = true;
-  private orphansCleaned: boolean = false;
-  // 未连接且应用在前台时，由这个进程按到期时间更新订阅。
+  private connectionKnown: boolean = false;
+  private legacyMigrated: boolean = false;
+  private routeGeneration: number = 0;
+  private refreshGeneration: number = 0;
+  private summaryGeneration: number = 0;
+  private runningQueryGeneration: number = 0;
+  private runtimeBootId: string = '';
+  private runtimeConfigRevision: number = -1;
+  private runtimeRevision: number = -1;
+  private retiredRuntimeBoots: Set<string> = new Set<string>();
+  private initialized?: Promise<void>;
   private scheduler?: UpdateScheduler;
-  private events: ProfileEvents = new ProfileEvents((event: ProfileEvent) => this.onEvent(event));
+  private events: ProfileEvents = new ProfileEvents((event: ProfileEvent): void => this.onEvent(event));
 
-  /** 首帧前同步调用：只读几个小文件，摘要异步读。 */
   load(context: common.UIAbilityContext): void {
+    if (this.initialized !== undefined) { return; }
     this.context = context;
     this.filesDir = context.filesDir;
+    this.initialized = this.initialize();
+  }
+
+  private async initialize(): Promise<void> {
     try {
-      this.migrateLegacy(context);
+      await this.refresh();
+      this.scheduler = new UpdateScheduler(this.localEnv(), (outcome: UpdateOutcome): void => {
+        if (this.localWritable()) { this.applyOutcome(outcome); }
+      });
+      if (!this.connectionKnown && this.context !== undefined) {
+        try { await this.recheckRoute(); } catch (e) { this.applyError = errorString(e as Object); }
+        await this.refresh();
+      }
+      this.syncLifecycle();
     } catch (e) {
-      // 迁移失败不能挡住启动：旧文件还在，下次启动再试；这次按没有配置显示。
-      hilog.error(0x0A11, 'ProfileStore', 'migrate 0.3.0 profile failed: %{public}s', (e as Error).message);
-    }
-    this.list = readList(this.filesDir);
-    this.rebuild();
-    this.scheduler = new UpdateScheduler(this.localEnv(), (outcome: UpdateOutcome) => this.applyOutcome(outcome));
-    this.refreshSummary();
-  }
-
-  get ready(): boolean {
-    return this.active() !== undefined;
-  }
-
-  /** 生效的配置：连接中是内核正在运行的，否则是当前配置。 */
-  active(): ProfileItem | undefined {
-    const id = this.connected && this.running !== '' ? this.running : this.current;
-    return this.items.find((item: ProfileItem) => item.id === id);
-  }
-
-  /** 界面上标为选中的配置：热切换进行中时已经是目标配置。 */
-  selectedId(): string {
-    if (this.pending !== '') {
-      return this.pending;
-    }
-    return this.connected && this.running !== '' ? this.running : this.current;
-  }
-
-  find(id: string): ProfileItem | undefined {
-    return this.items.find((item: ProfileItem) => item.id === id);
-  }
-
-  /** 连接状态确定下来后由页面层调用（不含正在连接、正在断开）。 */
-  setConnected(connected: boolean): void {
-    if (connected === this.connected && (connected || this.orphansCleaned)) {
-      return;
-    }
-    this.connected = connected;
-    if (connected) {
-      // 交接：不再发起新的更新，进行中的照常完成（ADR-0009）。
-      this.scheduler?.stop(false);
-      getRunningProfile(this.filesDir).then((profile: string) => {
-        this.running = profile;
-        this.refreshSummary();
-      }).catch(() => {});
-    } else {
-      this.running = '';
-      this.reloadFromDisk();
-      this.cleanOrphans().then(() => this.syncScheduler());
-    }
-    this.syncEvents();
-    this.refreshSummary();
-  }
-
-  /** 应用进入前台或后台。后台不更新、不订阅推送。 */
-  setForeground(foreground: boolean): void {
-    this.foreground = foreground;
-    if (foreground) {
-      // 连接期间 VPN 进程可能更新过订阅，回到前台时重读一遍。
-      this.reloadFromDisk();
-    }
-    this.syncScheduler();
-    this.syncEvents();
-  }
-
-  // ---- 添加 ----
-
-  /** 添加订阅；成功返回 undefined，失败返回错误（ProfileErrors.ets 翻译）。 */
-  async addSubscription(rawUrl: string): Promise<string | undefined> {
-    const url = rawUrl.trim();
-    if (this.list.subscriptions.some((s: SubscriptionRecord) => s.url === url)) {
-      return ERR_LINK_EXISTS;
-    }
-    const profile = newId('p');
-    const subscription = newId('s');
-    ensureDir(profilesDir(this.filesDir));
-    let outcome: UpdateOutcome;
-    try {
-      outcome = await this.viaVpnOrLocal(
-        () => addViaVpn(this.filesDir, profile, subscription, url),
-        () => downloadNewSubscription(this.localEnv(), profile, subscription, url));
-    } catch (e) {
-      return errorString(e as Error);
-    }
-    if (!outcome.ok) {
-      return outcome.error ?? 'network';
-    }
-    const record: ProfileRecord = {
-      id: profile,
-      name: this.uniqueName(outcome.state.name ?? hostOf(url), ''),
-      nameEdited: false,
-      subscription: subscription
-    };
-    const sub: SubscriptionRecord = {
-      id: subscription,
-      url: url,
-      autoUpdate: true,
-      intervalHours: DEFAULT_INTERVAL_HOURS
-    };
-    this.list.subscriptions.push(sub);
-    await this.addRecord(record);
-    return undefined;
-  }
-
-  /** 从系统文件选择器导入本地 YAML。用户取消时返回 undefined。 */
-  async importLocal(): Promise<string | undefined> {
-    const uri = await this.pickFile();
-    if (uri === undefined) {
-      return undefined;
-    }
-    const profile = newId('p');
-    ensureDir(profilesDir(this.filesDir));
-    try {
-      await this.copyIntoCandidate(uri, profile);
-    } catch (e) {
-      return errorString(e as Error);
-    }
-    const record: ProfileRecord = {
-      id: profile,
-      name: this.uniqueName(fileNameOf(uri), ''),
-      nameEdited: false,
-      subscription: ''
-    };
-    await this.addRecord(record);
-    return undefined;
-  }
-
-  /** 替换本地配置的内容；正在运行的先让内核解析并切换（ADR-0010）。 */
-  async replaceLocal(id: string): Promise<string | undefined> {
-    const item = this.find(id);
-    if (item === undefined || item.isSubscription) {
-      return 'not_found';
-    }
-    const uri = await this.pickFile();
-    if (uri === undefined) {
-      return undefined;
-    }
-    item.updating = true;
-    try {
-      await this.copyIntoCandidate(uri, id);
-    } catch (e) {
-      return errorString(e as Error);
+      this.loadError = errorString(e as Object);
     } finally {
-      item.updating = false;
+      this.loaded = true;
+      this.syncLifecycle();
     }
-    if (this.active()?.id === id) {
-      this.refreshSummary();
-    }
-    return undefined;
   }
 
-  // ---- 更新 ----
+  get ready(): boolean { return this.loaded && this.loadError === '' && this.active() !== undefined; }
+  active(): ProfileItem | undefined { return this.find(this.connected ? this.running : this.current); }
+  selectedId(): string { return this.current; }
+  find(id: string): ProfileItem | undefined {
+    return this.items.find((item: ProfileItem): boolean => item.id === id);
+  }
 
-  /** 手动更新一个订阅。失败原因同时记在卡片上（状态文件）。 */
+  retryLoad(): void {
+    if (!this.loaded) { return; }
+    this.scheduler?.stop(true);
+    this.loadError = '';
+    this.loaded = false;
+    this.initialized = this.initialize();
+  }
+
+  setConnected(connected: boolean, offlineWritable: boolean = false): void {
+    const writable = !connected && offlineWritable;
+    const changed = this.connected !== connected || this.offlineWritable !== writable || !this.connectionKnown;
+    this.connectionKnown = true;
+    this.connected = connected;
+    this.offlineWritable = writable;
+    if (changed) {
+      this.routeGeneration++;
+      this.runningQueryGeneration++;
+      this.scheduler?.stop(true);
+      if (!connected) { this.running = ''; }
+      if (connected) { this.refreshRunning(); }
+      this.refresh().catch((error: Error): void => { this.loadError = errorString(error); });
+    }
+    this.syncLifecycle();
+  }
+
+  setForeground(foreground: boolean): void {
+    const changed = this.foreground !== foreground;
+    if (changed) { this.runningQueryGeneration++; }
+    this.foreground = foreground;
+    if (foreground && this.filesDir !== '') {
+      this.refresh().catch((error: Error): void => { this.loadError = errorString(error); });
+      if (changed && this.connected) { this.refreshRunning(); }
+    }
+    this.syncLifecycle();
+  }
+
+  async addSubscription(rawUrl: string, label: string = ''): Promise<string | undefined> {
+    try {
+      await this.ensureLoaded();
+      const source = rawUrl.trim();
+      if (!validSubscriptionUrl(source)) { return 'url_invalid'; }
+      if (label.trim().length > 64) { return 'name_long'; }
+      const latest = await readListAsync(this.filesDir);
+      if (latest.subscriptions.some((sub: SubscriptionRecord): boolean => sub.url === source)) { return ERR_LINK_EXISTS; }
+      const profile = newId('p');
+      const subscription = newId('s');
+      const outcome = await this.remoteOrLocal(
+        (): Promise<UpdateOutcome> => addViaVpn(this.filesDir, profile, subscription, source, label.trim()),
+        async (): Promise<UpdateOutcome> => {
+          const generation = this.routeGeneration;
+          return await downloadNewSubscription(this.localEnv(), profile, subscription, source, label.trim(),
+            (): boolean => this.localWritable(generation));
+        });
+      await this.refresh();
+      this.notifyChanged();
+      return outcome.ok ? undefined : outcome.error ?? 'network';
+    } catch (e) { return errorString(e as Object); }
+  }
+
+  async importLocal(): Promise<string | undefined> {
+    try {
+      await this.ensureLoaded();
+      if (this.context === undefined) { return 'io'; }
+      const uri = await pickProfileFile(this.context);
+      if (uri === undefined) { return undefined; }
+      await this.recheckRoute();
+      const generation = this.routeGeneration;
+      const env = this.importEnv(generation);
+      const profile = newId('p');
+      const candidate = await stageProfileUri(this.filesDir, profile, uri);
+      const record: ProfileRecord = { id: profile, name: profileFileName(uri) || profile, nameEdited: false,
+        subscription: '', type: 'file' };
+      const change: ProfileCandidateChange = { create: record };
+      try {
+        await withProfileTask<void>(this.filesDir, profile, async (): Promise<void> => {
+          await commitCandidate(env, profile, candidate, (): boolean => this.businessWritable(generation), change);
+        });
+      } finally { await removeProfileFile(candidate); }
+      await this.refresh();
+      return undefined;
+    } catch (e) { return errorString(e as Object); }
+  }
+
+  async importLinks(text: string): Promise<ProfileBatchResult> {
+    await this.ensureLoaded();
+    const latest = await readListAsync(this.filesDir);
+    const parsed = parseProfileLinks(text, latest.subscriptions.map((sub: SubscriptionRecord): string => sub.url));
+    if (parsed.errors.length > 0) {
+      return { total: parsed.entries.length, succeeded: 0, skipped: parsed.skipped,
+        failures: parsed.errors.map((line: number): ProfileBatchFailure =>
+          ({ id: '', name: '', error: 'url_invalid', line: line })) };
+    }
+    const jobs = parsed.entries.map((entry: ProfileLinkEntry): ProfileBatchJob =>
+      ({ id: '', name: hostOf(entry.source), line: entry.line, run: (): Promise<string | undefined> => this.addSubscription(entry.source) }));
+    return await runProfileBatch(jobs, parsed.skipped);
+  }
+
   async update(id: string): Promise<string | undefined> {
     const item = this.find(id);
-    if (item === undefined || !item.isSubscription || item.updating) {
-      return undefined;
-    }
+    if (item === undefined || !item.isSubscription) { return 'not_found'; }
     item.updating = true;
     try {
-      const subscription = item.subscription;
-      const outcome = await this.viaVpnOrLocal(
-        () => updateViaVpn(this.filesDir, subscription),
-        () => this.scheduler!.update(subscription));
-      this.applyOutcome(outcome);
-      return outcome.ok ? undefined : outcome.error;
-    } catch (e) {
-      return errorString(e as Error);
-    } finally {
-      item.updating = false;
-    }
+      await this.ensureLoaded();
+      const outcome = await this.remoteOrLocal(
+        (): Promise<UpdateOutcome> => updateViaVpn(this.filesDir, item.subscription, item.url),
+        (): Promise<UpdateOutcome> => this.scheduler !== undefined ? this.scheduler.update(item.subscription, item.url) :
+          Promise.reject(new ProfileError('busy')));
+      await this.refresh();
+      return outcome.ok ? undefined : outcome.error ?? 'network';
+    } catch (e) { return errorString(e as Object); }
+    finally { item.updating = false; }
   }
 
-  /** 更新所有订阅，不论是否开着自动更新。逐个进行，每张卡片各自显示结果。 */
-  async updateAll(): Promise<void> {
+  async updateAll(): Promise<ProfileBatchResult> {
     if (this.updatingAll) {
-      return;
+      return { total: 0, succeeded: 0, skipped: 0, failures: [{ id: '', name: '', error: 'busy' }] };
     }
     this.updatingAll = true;
+    const jobs = this.items.filter((item: ProfileItem): boolean => item.isSubscription)
+      .map((item: ProfileItem): ProfileBatchJob => ({ id: item.id, name: item.name,
+        run: (): Promise<string | undefined> => this.update(item.id) }));
     try {
-      for (const item of this.items.filter((i: ProfileItem) => i.isSubscription)) {
-        await this.update(item.id);
-      }
-    } finally {
-      this.updatingAll = false;
-    }
+      return await runProfileBatch(jobs, 0);
+    } finally { this.updatingAll = false; }
   }
 
-  // ---- 切换 ----
-
-  /**
-   * 设为当前配置。连接中就是热切换：成功才改列表，失败留在原配置并返回原因（ADR-0010）。
-   * 同一时间只切换一次，切换中再点别的卡片会被忽略。
-   */
   async select(id: string): Promise<string | undefined> {
-    const item = this.find(id);
-    if (item === undefined || this.pending !== '') {
-      return undefined;
-    }
-    if (!this.connected) {
-      if (this.current !== id) {
-        // 先同步改界面状态，调用方放在 animateTo 里时能渐变过去。
-        this.current = id;
-        this.list.current = id;
-        await this.saveList(false);
-        this.refreshSummary();
-      }
-      return undefined;
-    }
-    if (this.running === id) {
-      return undefined;
-    }
-    this.pending = id;
+    let ownsPending = false;
     try {
-      await reloadProfile(this.filesDir, id, yamlPath(this.filesDir, id));
-      this.running = id;
-      this.list.current = id;
-      await this.saveList(false);
-      this.refreshSummary();
+      await this.ensureLoaded();
+      if (this.pending !== '' || connection.busy) { return 'busy'; }
+      if (this.find(id) === undefined) { return 'not_found'; }
+      this.pending = id;
+      ownsPending = true;
+      await this.recheckRoute();
+      const generation = this.routeGeneration;
+      this.applyError = '';
+      this.runningQueryGeneration++;
+      await withProfileStorage<void>(this.filesDir, async (): Promise<void> => {
+        const latest = await readListAsync(this.filesDir);
+        checkProfileCommit((): boolean => this.businessWritable(generation));
+        if (findProfile(latest, id) === undefined) { throw new ProfileError('not_found'); }
+        latest.current = id;
+        await writeList(this.filesDir, latest, (): boolean => this.businessWritable(generation));
+      });
+      this.current = id;
+      checkProfileCommit((): boolean => this.businessWritable(generation));
+      if (this.connected) {
+        await withProfileTask<void>(this.filesDir, id, async (): Promise<void> => {
+          checkProfileCommit((): boolean => this.businessWritable(generation));
+          await reloadProfile(this.filesDir, id, yamlPath(this.filesDir, id));
+        });
+        if (generation !== this.routeGeneration || !this.connected) { return 'canceled'; }
+        await this.refreshRunning();
+      }
+      await this.refresh();
       return undefined;
     } catch (e) {
-      return new ProfileError('rejected', (e as Error).message).message;
-    } finally {
-      this.pending = '';
-    }
+      const failure = errorString(e as Object);
+      if (ownsPending) { this.applyError = failure; }
+      return failure;
+    } finally { if (ownsPending) { this.pending = ''; } }
   }
-
-  // ---- 编辑和删除 ----
 
   async edit(id: string, edit: ProfileEdit): Promise<string | undefined> {
-    const item = this.find(id);
-    const record = findProfile(this.list, id);
-    if (item === undefined || record === undefined) {
-      return 'not_found';
-    }
-    const name = edit.name.trim();
-    if (name.length === 0) {
-      return ERR_NAME_EMPTY;
-    }
-    if (name !== record.name && this.items.some((i: ProfileItem) => i.id !== id && i.name === name)) {
-      return ERR_NAME_TAKEN;
-    }
-    const sub = item.isSubscription ? findSubscription(this.list, item.subscription) : undefined;
-    if (sub !== undefined) {
-      const interval = Math.floor(edit.intervalHours);
-      if (!Number.isFinite(interval) || interval < 1) {
-        return ERR_INTERVAL;
+    try {
+      await this.ensureLoaded();
+      await this.recheckRoute();
+      const generation = this.routeGeneration;
+      const sourceChanged = await saveProfileEdit(this.importEnv(generation), id, edit,
+        (): boolean => this.businessWritable(generation));
+      await this.refresh();
+      this.notifyChanged();
+      if (sourceChanged) {
+        const failure = await this.update(id);
+        if (failure !== undefined) { return 'metadata_saved'; }
       }
-      const url = edit.url.trim();
-      if (url !== sub.url) {
-        if (this.list.subscriptions.some((s: SubscriptionRecord) => s.id !== sub.id && s.url === url)) {
-          return ERR_LINK_EXISTS;
-        }
-        // 改链接后立即用新链接更新，成功才保存新链接（#35）。
-        item.updating = true;
-        try {
-          const subscription = sub.id;
-          const outcome = await this.viaVpnOrLocal(
-            () => updateViaVpn(this.filesDir, subscription, url),
-            () => this.scheduler!.update(subscription, url));
-          if (!outcome.ok) {
-            return outcome.error ?? 'network';
-          }
-          this.applyOutcome(outcome);
-        } catch (e) {
-          return errorString(e as Error);
-        } finally {
-          item.updating = false;
-        }
-        sub.url = url;
-      }
-      sub.autoUpdate = edit.autoUpdate;
-      sub.intervalHours = interval;
+      return undefined;
+    } catch (e) {
+      const failure = errorString(e as Object);
+      if (failure === 'apply_failed') { this.applyError = failure; this.summary = undefined; }
+      return failure;
     }
-    if (name !== record.name) {
-      record.name = name;
-      record.nameEdited = true;
-    }
-    await this.saveList(sub !== undefined);
-    return undefined;
   }
 
-  /** 连接中不能删正在运行的配置（#35）。 */
   canRemove(id: string): boolean {
-    return !(this.connected && this.running === id);
+    return this.businessWritable() && this.pending === '' && this.find(id) !== undefined;
   }
-
   async remove(id: string): Promise<string | undefined> {
-    const record = findProfile(this.list, id);
-    if (record === undefined) {
+    try {
+      await this.ensureLoaded();
+      await this.recheckRoute();
+      if (!this.canRemove(id)) { return 'busy'; }
+      if (this.connected && (this.running === id || this.current === id)) {
+        const desired = this.find(this.current);
+        const next = desired !== undefined && desired.id !== id ? desired :
+          this.items.find((item: ProfileItem): boolean => item.id !== id);
+        if (next !== undefined) {
+          const failure = await this.select(next.id);
+          if (failure !== undefined) { return failure; }
+        } else if (this.context !== undefined) {
+          await connection.disconnect(this.context);
+          if (connection.error !== '') { return 'apply_failed'; }
+          await this.recheckRoute();
+          if (!this.localWritable()) { return 'apply_failed'; }
+        } else { return 'io'; }
+      }
+      const generation = this.routeGeneration;
+      await removeSavedProfile(this.filesDir, id, (): boolean => this.businessWritable(generation));
+      await this.refresh();
+      this.notifyChanged();
       return undefined;
+    } catch (e) {
+      const failure = errorString(e as Object);
+      await this.refresh().catch((): void => {});
+      return failure;
     }
-    if (!this.canRemove(id)) {
-      return ERR_IN_USE;
-    }
-    this.list.profiles = this.list.profiles.filter((p: ProfileRecord) => p.id !== id);
-    if (record.subscription !== '') {
-      this.list.subscriptions = this.list.subscriptions.filter((s: SubscriptionRecord) => s.id !== record.subscription);
-    }
-    if (this.list.current === id) {
-      this.list.current = this.list.profiles.length > 0 ? this.list.profiles[0].id : '';
-    }
-    await this.saveList(record.subscription !== '');
-    await removeFile(yamlPath(this.filesDir, id));
-    await removeFile(summaryPath(this.filesDir, id));
-    if (record.subscription !== '') {
-      await removeFile(statePath(this.filesDir, record.subscription));
-    }
-    this.refreshSummary();
-    return undefined;
   }
 
-  // ---- 内部 ----
+  async reorder(ids: string[]): Promise<string | undefined> {
+    try {
+      await this.ensureLoaded();
+      await this.recheckRoute();
+      const generation = this.routeGeneration;
+      await saveProfileOrder(this.filesDir, ids, (): boolean => this.businessWritable(generation));
+      await this.refresh();
+      return undefined;
+    }
+    catch (e) { return errorString(e as Object); }
+  }
+  async source(id: string): Promise<string> { await this.ensureLoaded(); return await readSourceText(this.filesDir, id); }
+  async pickSource(): Promise<string | undefined> {
+    return this.context === undefined ? undefined : await readProfileFile(this.context);
+  }
+  async validateSource(text: string): Promise<string | undefined> {
+    const candidate = candidatePath(this.filesDir, 'draft');
+    try {
+      await ensureProfilesDir(this.filesDir);
+      await writeProfileText(candidate, text);
+      const result = await analyze(candidate);
+      return result.error === '' ? undefined : result.error;
+    } catch (e) { return errorString(e as Object); }
+    finally { await removeProfileFile(candidate); }
+  }
+  async export(id: string): Promise<string | undefined> {
+    try {
+      if (this.context === undefined) { return 'io'; }
+      await exportProfileSource(this.context, id, this.find(id)?.name ?? id);
+      return undefined;
+    } catch (e) { return errorString(e as Object); }
+  }
 
+  async profileSummary(id: string): Promise<ProfileSummary | undefined> {
+    await this.ensureLoaded();
+    return await readSummary(this.filesDir, id);
+  }
+
+  private async ensureLoaded(): Promise<void> {
+    await this.initialized;
+    if (!this.loaded || this.loadError !== '') { throw new ProfileError(this.loadError || 'busy'); }
+  }
+  private businessWritable(generation: number = this.routeGeneration): boolean {
+    return generation === this.routeGeneration && (this.connected || this.offlineWritable) && !connection.busy;
+  }
+  private localWritable(generation: number = this.routeGeneration): boolean {
+    return generation === this.routeGeneration && this.offlineWritable && !this.connected && !connection.busy;
+  }
+  private async recheckRoute(): Promise<void> {
+    if (connection.busy) { throw new ProfileError('busy'); }
+    if (this.context === undefined) { throw new ProfileError('io'); }
+    const generation = this.routeGeneration;
+    let connected: boolean;
+    try { connected = await connection.recheck(this.context); }
+    catch (e) {
+      if (generation === this.routeGeneration) { this.setConnected(false, false); }
+      throw new ProfileError('host_unknown');
+    }
+    if (connection.busy) { throw new ProfileError('busy'); }
+    if (generation !== this.routeGeneration) {
+      if (connected ? !this.connected : !this.localWritable()) { throw new ProfileError('canceled'); }
+    } else { this.setConnected(connected, !connected); }
+    if (!this.businessWritable()) { throw new ProfileError('host_unknown'); }
+  }
   private localEnv(): UpdateEnv {
-    return {
-      filesDir: this.filesDir,
-      downloader: new DirectDownloader(),
-      running: () => '',
-      reload: undefined
-    };
+    return { filesDir: this.filesDir, downloader: new DirectDownloader(), running: (): string => '',
+      eligible: (): boolean => this.localWritable() };
   }
-
-  // 本地配置的导入和替换：连接中正在运行的那份要先过内核，其余的让内核预下载 rule-provider。
-  private importEnv(): UpdateEnv {
-    if (!this.connected) {
-      return this.localEnv();
-    }
-    return {
-      filesDir: this.filesDir,
-      downloader: new DirectDownloader(),
-      running: () => this.running,
-      reload: (path: string, profile: string) => reloadProfile(this.filesDir, profile, path),
-      prefetch: (path: string) => {
-        prefetchProfile(this.filesDir, path).catch(() => {});
-      }
-    };
+  private importEnv(generation: number): UpdateEnv {
+    return { filesDir: this.filesDir, downloader: new DirectDownloader(), running: (): string => this.connected ? this.running : '',
+      eligible: (): boolean => this.businessWritable(generation),
+      reload: async (path: string, profile: string, expectedProfile?: string): Promise<void> => {
+        if (!this.connected || !this.businessWritable(generation)) { throw new ProfileError('canceled'); }
+        await reloadProfile(this.filesDir, profile, path, expectedProfile);
+      }, prefetch: (path: string): void => {
+        if (this.connected && this.businessWritable(generation)) { prefetchProfile(this.filesDir, path).catch((): void => {}); }
+      } };
   }
-
-  /**
-   * 连接中交给 VPN 进程，未连接时自己做。命令连不上 controller 时重新探测：确认已断开就自己做，
-   * 其他错误照常抛出（ADR-0009）。
-   */
-  private async viaVpnOrLocal(remote: () => Promise<UpdateOutcome>,
-    local: () => Promise<UpdateOutcome>): Promise<UpdateOutcome> {
-    if (!this.connected) {
-      return await local();
-    }
+  private async remoteOrLocal(remote: () => Promise<UpdateOutcome>, local: () => Promise<UpdateOutcome>): Promise<UpdateOutcome> {
+    await this.recheckRoute();
+    if (!this.connected) { return await local(); }
+    const generation = this.routeGeneration;
     try {
-      return await remote();
+      const outcome = await remote();
+      checkProfileCommit((): boolean => this.businessWritable(generation));
+      return outcome;
     } catch (e) {
-      const stillConnected = this.context !== undefined ? await connection.recheck(this.context) : true;
-      if (stillConnected) {
-        throw e as Error;
-      }
-      this.setConnected(false);
+      await this.recheckRoute();
+      if (this.connected) { throw e as Error; }
       return await local();
     }
   }
-
-  private async pickFile(): Promise<string | undefined> {
-    if (this.context === undefined) {
-      return undefined;
-    }
-    const documentPicker = new picker.DocumentViewPicker(this.context);
-    const options = new picker.DocumentSelectOptions();
-    options.maxSelectNumber = 1;
-    options.fileSuffixFilters = ['YAML|.yaml,.yml'];
-    const uris = await documentPicker.select(options);
-    return uris.length > 0 ? uris[0] : undefined;
+  private notifyChanged(): void {
+    if (this.connected) { notifyListChanged(this.filesDir).catch((): void => {}); }
+    else if (this.localWritable()) { this.scheduler?.reschedule(); }
+  }
+  private syncLifecycle(): void {
+    if (this.foreground && this.connected) { this.events.start(this.filesDir); } else { this.events.stop(); }
+    if (this.localWritable() && this.foreground && this.loaded) { this.scheduler?.start(); }
+    else { this.scheduler?.stop(true); }
+  }
+  private applyOutcome(outcome: UpdateOutcome): void {
+    if (outcome.error === 'apply_failed') { this.applyError = 'apply_failed'; }
+    this.refresh().catch((error: Error): void => { this.loadError = errorString(error); });
+  }
+  private onEvent(event: ProfileEvent): void {
+    if (!this.connected || !this.foreground || connection.busy) { return; }
+    const status = event.status;
+    if (event.type === 'runtime' && status !== undefined) {
+      if (this.retiredRuntimeBoots.has(status.bootId)) { return; }
+      if (status.bootId === this.runtimeBootId && connection.bootId !== '' &&
+        connection.bootId !== status.bootId && !this.retiredRuntimeBoots.has(connection.bootId)) {
+        this.refreshRunning();
+      } else if (this.applyRunningStatus(status)) { this.runningQueryGeneration++; }
+    } else if (event.type === 'reloaded') { this.refreshRunning(); }
+    this.refresh().catch((error: Error): void => { this.loadError = errorString(error); });
   }
 
-  // 选中的文件复制进沙箱，之后和原文件无关（#35）。
-  private async copyIntoCandidate(uri: string, profile: string): Promise<void> {
-    const candidate = candidatePath(this.filesDir, profile);
+  private runningQueryCurrent(query: number, route: number): boolean {
+    return query === this.runningQueryGeneration && route === this.routeGeneration &&
+      this.connected && this.foreground && !connection.busy;
+  }
+
+  private async refreshRunning(): Promise<void> {
+    if (!this.connected || !this.foreground || connection.busy || this.filesDir === '') { return; }
+    const query = ++this.runningQueryGeneration;
+    const route = this.routeGeneration;
+    const boot = connection.bootId;
     try {
-      const source = await fs.open(uri, fs.OpenMode.READ_ONLY);
+      const status = await getRuntimeStatus(this.filesDir);
+      if (!this.runningQueryCurrent(query, route)) { return; }
+      if (boot !== connection.bootId) { await this.refreshRunning(); return; }
+      this.applyRunningStatus(status);
+    } catch (error) {
+      if (!this.runningQueryCurrent(query, route)) { return; }
+      if (boot !== connection.bootId) { await this.refreshRunning(); return; }
+      this.applyError = errorString(error as Object);
+    }
+  }
+
+  private applyRunningStatus(status: RuntimeStatus): boolean {
+    if (typeof status.bootId !== 'string' || status.bootId === '' || typeof status.profile !== 'string' ||
+      typeof status.running !== 'boolean' || !Number.isSafeInteger(status.configRevision) || status.configRevision < 0 ||
+      !Number.isSafeInteger(status.revision) || status.revision < 0 || this.retiredRuntimeBoots.has(status.bootId)) {
+      return false;
+    }
+    const sameBoot = status.bootId === this.runtimeBootId;
+    if (sameBoot && (status.configRevision < this.runtimeConfigRevision || status.revision < this.runtimeRevision)) { return false; }
+    const profile = status.running ? status.profile : '';
+    const changed = !sameBoot || status.configRevision !== this.runtimeConfigRevision || profile !== this.running;
+    const advanced = status.revision !== this.runtimeRevision;
+    if (!sameBoot && this.runtimeBootId !== '') { this.retiredRuntimeBoots.add(this.runtimeBootId); }
+    this.runtimeBootId = status.bootId;
+    this.runtimeConfigRevision = status.configRevision;
+    this.runtimeRevision = status.revision;
+    this.running = profile;
+    if (changed) {
+      if (profile === this.current && this.applyError !== 'apply_failed') { this.applyError = ''; }
+      this.refreshSummary();
+    }
+    return changed || advanced;
+  }
+  private async refresh(): Promise<void> {
+    if (this.filesDir === '') { return; }
+    const generation = ++this.refreshGeneration;
+    if (!this.legacyMigrated && this.localWritable() && this.context !== undefined) {
+      const route = this.routeGeneration;
       try {
-        await fs.copyFile(source.fd, candidate);
-      } finally {
-        await fs.close(source);
+        await migrateProfileLegacy(this.context, (): boolean => this.localWritable(route));
+        if (this.localWritable(route)) { this.legacyMigrated = true; }
+      } catch (e) {
+        if (errorString(e as Object) !== 'canceled') { throw e as Error; }
       }
-    } catch (e) {
-      await removeFile(candidate);
-      throw new ProfileError('io', (e as Error).message);
     }
-    await commitCandidate(this.importEnv(), profile, candidate);
-  }
-
-  private async addRecord(record: ProfileRecord): Promise<void> {
-    this.list.profiles.push(record);
-    if (this.list.current === '' || findProfile(this.list, this.list.current) === undefined) {
-      this.list.current = record.id;
-    }
-    await this.saveList(record.subscription !== '');
+    let snapshot: ProfileLibrarySnapshot;
+    try { snapshot = await readProfileSnapshot(this.filesDir); }
+    catch (e) { if (generation !== this.refreshGeneration) { return; } throw e as Error; }
+    if (generation !== this.refreshGeneration) { return; }
+    this.items = snapshot.items.map((fresh: ProfileItem): ProfileItem => mergeProfileItem(this.find(fresh.id), fresh));
+    this.current = snapshot.list.current;
+    if (this.connected && this.active()?.state.error === 'apply_failed') { this.applyError = 'apply_failed'; }
+    this.loadError = '';
     this.refreshSummary();
   }
-
-  /** 名称不重复：重复时自动加序号。exclude 是正在改名的配置自己。 */
-  private uniqueName(base: string, exclude: string): string {
-    const taken = (name: string) => this.list.profiles.some((p: ProfileRecord) => p.id !== exclude && p.name === name);
-    if (!taken(base)) {
-      return base;
-    }
-    let n = 2;
-    while (taken(`${base} ${n}`)) {
-      n++;
-    }
-    return `${base} ${n}`;
-  }
-
-  /** 写列表并刷新界面；subscriptionsChanged 时让负责更新的一方重新安排。 */
-  private async saveList(subscriptionsChanged: boolean): Promise<void> {
-    await writeList(this.filesDir, this.list);
-    this.rebuild();
-    if (!subscriptionsChanged) {
-      return;
-    }
-    if (this.connected) {
-      notifyListChanged(this.filesDir).catch(() => {});
-    } else {
-      this.scheduler?.reschedule();
-    }
-  }
-
-  // 列表或状态文件变了之后同步界面状态。
-  private rebuild(): void {
-    const previous = this.items;
-    this.items = this.list.profiles.map((record: ProfileRecord) => {
-      const old = previous.find((p: ProfileItem) => p.id === record.id);
-      return fillItem(old ?? new ProfileItem(), record, this.list, this.filesDir);
-    });
-    this.current = this.list.current;
-  }
-
-  private reloadFromDisk(): void {
-    if (this.filesDir === '') {
-      return;
-    }
-    this.list = readList(this.filesDir);
-    this.rebuild();
-    this.syncNames();
-  }
-
-  /** 一次更新的结果：刷新那张卡片，生效的配置还要刷新摘要。 */
-  private applyOutcome(outcome: UpdateOutcome): void {
-    const item = this.items.find((i: ProfileItem) => i.subscription === outcome.subscription);
-    if (item === undefined) {
-      return;
-    }
-    item.state = outcome.state;
-    this.syncNames();
-    if (outcome.ok && this.active()?.id === item.id) {
-      this.refreshSummary();
-    }
-  }
-
-  // 没改过名的配置跟随机场给的名字。列表只有界面写，VPN 进程的更新结果在这里同步（#35）。
-  private syncNames(): void {
-    let changed = false;
-    for (const record of this.list.profiles) {
-      if (record.nameEdited || record.subscription === '') {
-        continue;
-      }
-      const name = readState(this.filesDir, record.subscription).name;
-      if (name === undefined) {
-        continue;
-      }
-      const wanted = this.uniqueName(name, record.id);
-      if (wanted !== record.name) {
-        record.name = wanted;
-        changed = true;
-      }
-    }
-    if (changed) {
-      this.saveList(false).catch(() => {});
-    }
-  }
-
-  private onEvent(event: ProfileEvent): void {
-    if (event.type === 'reloaded' && event.profile !== undefined) {
-      this.running = event.profile;
-      this.refreshSummary();
-    } else if (event.type === 'updated' && event.subscription !== undefined) {
-      const subscription = event.subscription;
-      this.applyOutcome({
-        subscription: subscription,
-        ok: event.ok === true,
-        state: readState(this.filesDir, subscription)
-      });
-    }
-  }
-
   private refreshSummary(): void {
-    const item = this.active();
-    if (item === undefined) {
-      this.summary = undefined;
-      return;
-    }
-    const id = item.id;
-    readSummary(this.filesDir, id).then((summary: ProfileSummary | undefined) => {
-      if (this.active()?.id === id) {
-        this.summary = summary;
-      }
+    const generation = ++this.summaryGeneration;
+    const id = this.connected ? this.running : this.current;
+    if (id === '' || (this.connected && this.applyError === 'apply_failed')) { this.summary = undefined; return; }
+    readSummary(this.filesDir, id).then((summary: ProfileSummary | undefined): void => {
+      if (generation === this.summaryGeneration && id === (this.connected ? this.running : this.current)) { this.summary = summary; }
+    }).catch((error: Error): void => {
+      if (generation === this.summaryGeneration) { this.loadError = errorString(error); }
     });
-  }
-
-  private syncScheduler(): void {
-    if (!this.connected && this.foreground && this.orphansCleaned) {
-      this.scheduler?.start();
-    } else {
-      this.scheduler?.stop(false);
-    }
-  }
-
-  private syncEvents(): void {
-    if (this.connected && this.foreground) {
-      this.events.start(this.filesDir);
-    } else {
-      this.events.stop();
-    }
-  }
-
-  // 列表里没有的文件：添加订阅时界面在 VPN 进程回复前被杀留下的，或者没提交的候选文件（ADR-0009）。
-  // 只在未连接时清理，这时没有别的进程在写这个目录。
-  private async cleanOrphans(): Promise<void> {
-    if (this.orphansCleaned) {
-      return;
-    }
-    this.orphansCleaned = true;
-    const keep = new Set<string>(['list.json']);
-    for (const p of this.list.profiles) {
-      keep.add(`${p.id}.yaml`);
-      keep.add(`${p.id}.summary.json`);
-    }
-    for (const s of this.list.subscriptions) {
-      keep.add(`${s.id}.state.json`);
-    }
-    const dir = profilesDir(this.filesDir);
-    for (const name of await listDir(dir)) {
-      if (!keep.has(name)) {
-        await removeFile(`${dir}/${name}`);
-      }
-    }
-  }
-
-  private migrateLegacy(context: common.UIAbilityContext): void {
-    const legacy = `${profilesDir(this.filesDir)}/${LEGACY_PROFILE}`;
-    if (hasFile(listPath(this.filesDir)) || !hasFile(legacy)) {
-      return;
-    }
-    const prefs = preferences.getPreferencesSync(context, { name: 'settings' });
-    const url = prefs.getSync(LEGACY_PREF_URL, '') as string;
-    const profile = newId('p');
-    const record: ProfileRecord = {
-      id: profile,
-      name: (prefs.getSync(LEGACY_PREF_NAME, '') as string) || (url !== '' ? hostOf(url) : 'default'),
-      nameEdited: false,
-      subscription: ''
-    };
-    const list: ProfileList = { version: LIST_VERSION, current: profile, profiles: [record], subscriptions: [] };
-    if (url !== '') {
-      const subscription = newId('s');
-      record.subscription = subscription;
-      list.subscriptions.push({
-        id: subscription,
-        url: url,
-        autoUpdate: true,
-        intervalHours: DEFAULT_INTERVAL_HOURS
-      });
-      const usage = prefs.getSync(LEGACY_PREF_USAGE, '') as string;
-      const state: SubscriptionState = {
-        updatedAt: prefs.getSync(LEGACY_PREF_UPDATED_AT, 0) as number,
-        usage: usage.length > 0 ? JSON.parse(usage) as SubscriptionUsage : undefined,
-        failures: 0
-      };
-      writeText(statePath(this.filesDir, subscription), JSON.stringify(state));
-    }
-    fs.renameSync(legacy, yamlPath(this.filesDir, profile));
-    writeText(listPath(this.filesDir), JSON.stringify(list));
-    // 摘要在后台生成，生成好之前首页按「连接后显示」处理。
-    analyze(yamlPath(this.filesDir, profile)).then((result: AnalyzeResult) => {
-      if (result.error === '') {
-        writeSummary(this.filesDir, profile, result.summary).then(() => this.refreshSummary());
-      }
-    });
-    prefs.deleteSync(LEGACY_PREF_URL);
-    prefs.deleteSync(LEGACY_PREF_NAME);
-    prefs.deleteSync(LEGACY_PREF_UPDATED_AT);
-    prefs.deleteSync(LEGACY_PREF_USAGE);
-    prefs.flush();
   }
 }

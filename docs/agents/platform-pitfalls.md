@@ -40,3 +40,12 @@
 
 - `VpnConfig.mtu` 的范围是 576–1500。TUN 地址在 `ClashVpnAbility.ets` 和 `core/tun.go` 两处，要一起改。
 - 内核重启后，其他 App 还缓存着上一轮的 fake-ip，会出现 `fake DNS record ... missing`，等它们的 DNS 缓存过期就好了。要根治，得打开 fake-ip 持久化（还没做）。
+
+## 6. 内嵌请求的取消、DNS 池与自动选路
+
+- `inner.HandleTcp` 会在内部另建后台拨号上下文，关闭本地 pipe 不能证明实际拨号已经停止。内嵌请求要把取消传入规则解析、DNS 和出站拨号，并等待自己创建的工作结束后再释放执行名额。
+- `scripts/mihomo-rule-dial.patch` 提供该调用链；`scripts/mihomo-urltest-cancel.patch` 使用户取消不写入节点失败健康或测速历史，真实失败和超时保持原语义。`scripts/prepare-mihomo.sh` 为手机构建、宿主回归与 vet 准备同一份模块副本，不改 Go 模块缓存或 `core/go.mod`。
+- DoH/H2/H3 和 DoQ 会缓存连接。单次请求若拥有连接关闭权，就必须使用自己的 transport、连接与 TokenStore；不能把普通 DNS 正在共享的连接登记到单次请求的清理列表。
+- 自动组的通知回调只做有界原子标记和入队，不取得核心锁、不重入组方法。不能用通用异步分发器冒充同步标记，也不能在每个健康结果完成时重置 URLTest 原有缓存、提前改变真实选择。
+- provider 的后台 Fetcher 不能强引用带 finalizer 的包装器，否则热切换后旧下载、健康检查和文件监听无法回收。更新通知使用弱引用，配置退休后同时解除本应用的订阅与定时任务。
+- 升级 mihomo 后先确认两个补丁能应用并通过 `make core`，再复查真实拨号取消、普通 DNS 与探测并发、provider 退休、缓存到期选路及同名成员身份。真机转发与长时间待机仍按独立门禁验证。

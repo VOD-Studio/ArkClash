@@ -1,0 +1,251 @@
+package main
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"sync/atomic"
+	"time"
+
+	"github.com/metacubex/mihomo/adapter"
+	"github.com/metacubex/mihomo/adapter/outboundgroup"
+	"github.com/metacubex/mihomo/adapter/provider"
+	"github.com/metacubex/mihomo/config"
+	"github.com/metacubex/mihomo/constant"
+	P "github.com/metacubex/mihomo/constant/provider"
+	"github.com/metacubex/mihomo/listener"
+	"github.com/metacubex/mihomo/tunnel"
+)
+
+// 快照只在持有 mu 的提交点替换，controller 查询不等待配置解析或资源关闭。
+type statusResponse struct {
+	Profile        string `json:"profile"`
+	Running        bool   `json:"running"`
+	Intent         string `json:"intent"`
+	Forward        string `json:"forward"`
+	SessionMode    string `json:"sessionMode"`
+	ListenersOpen  bool   `json:"listenersOpen"`
+	TunAttached    bool   `json:"tunAttached"`
+	StartedAt      int64  `json:"startedAt"`
+	BootID         string `json:"bootId"`
+	Revision       uint64 `json:"revision"`
+	ConfigRevision uint64 `json:"configRevision"`
+	Version        string `json:"version"`
+	Mode           string `json:"mode"`
+}
+
+var runtimeSnapshot atomic.Pointer[statusResponse]
+var runtimeBootID string
+var runtimeStartedAt int64
+var runtimeRevision uint64
+var runtimeConfigRevision uint64
+
+func beginRuntime() {
+	stopRuntimeRoutes()
+	now := time.Now()
+	runtimeBootID = fmt.Sprintf("%x-%x", os.Getpid(), now.UnixNano())
+	runtimeStartedAt = now.UnixMilli()
+	runtimeRevision = 0
+	runtimeConfigRevision = 1
+	selectionOperations = make(map[string]selectionOperation)
+	selectionOrder = nil
+}
+
+func publishRuntime() {
+	runtimeRevision++
+	ports := listener.GetPorts()
+	next := &statusResponse{
+		Profile: current.Profile, Running: running, Intent: "stopped", Forward: "stopped", SessionMode: "tun",
+		ListenersOpen: ports.Port > 0 || ports.SocksPort > 0 || ports.MixedPort > 0 || ports.RedirPort > 0 || ports.TProxyPort > 0,
+		TunAttached:   tunListener != nil, StartedAt: runtimeStartedAt,
+		BootID: runtimeBootID, Revision: runtimeRevision, Version: constant.Version, Mode: tunnel.Mode().String(),
+		ConfigRevision: runtimeConfigRevision,
+	}
+	if running {
+		next.Intent = "started"
+		if next.TunAttached {
+			next.Forward = "running"
+		}
+	} else {
+		next.StartedAt = 0
+	}
+	runtimeSnapshot.Store(next)
+	emit(struct {
+		Type   string          `json:"type"`
+		Status *statusResponse `json:"status"`
+	}{Type: "runtime", Status: next})
+}
+
+type automaticRuntimeGroup interface {
+	Now() string
+	Proxies() []constant.Proxy
+	Refresh(time.Time) time.Duration
+}
+
+type runtimeRouteWatch struct {
+	bootID         string
+	configRevision uint64
+	groups         map[constant.ProxyAdapter]automaticRuntimeGroup
+	providers      map[P.ProxyProvider]struct{}
+	members        atomic.Pointer[map[constant.Proxy]struct{}]
+	changes        atomic.Uint64
+	refresh        atomic.Bool
+	published      uint64
+	wake           chan struct{}
+	done           chan struct{}
+	subscriptions  []io.Closer
+}
+
+var runtimeRoutes atomic.Pointer[runtimeRouteWatch]
+
+func (watch *runtimeRouteWatch) notify() {
+	select {
+	case watch.wake <- struct{}{}:
+	default:
+	}
+}
+
+// 这些回调由 mihomo 的健康检查和真实选路触发，只入队，不反向取得核心 mu。
+func watchRuntimeRoutes(cfg *config.Config) {
+	stopRuntimeRoutes()
+	watch := &runtimeRouteWatch{
+		bootID: runtimeBootID, configRevision: runtimeConfigRevision,
+		groups:    make(map[constant.ProxyAdapter]automaticRuntimeGroup),
+		providers: make(map[P.ProxyProvider]struct{}),
+		wake:      make(chan struct{}, 1), done: make(chan struct{}),
+	}
+	for _, proxy := range cfg.Proxies {
+		if proxy.Type() != constant.URLTest && proxy.Type() != constant.Fallback {
+			continue
+		}
+		group := proxy.Adapter().(automaticRuntimeGroup)
+		group.Now()
+		watch.groups[proxy.Adapter()] = group
+	}
+	for _, item := range cfg.Providers {
+		if item.VehicleType() == P.HTTP || item.VehicleType() == P.File {
+			watch.providers[item] = struct{}{}
+		}
+	}
+	if len(watch.groups) == 0 && len(watch.providers) == 0 {
+		return
+	}
+	watch.updateMembers()
+	runtimeRoutes.Store(watch)
+	watch.subscriptions = []io.Closer{
+		outboundgroup.RouteChangeCallback().Register(func(group constant.ProxyAdapter) {
+			if runtimeRoutes.Load() != watch {
+				return
+			}
+			if _, ok := watch.groups[group]; !ok {
+				return
+			}
+			watch.changes.Add(1)
+			watch.notify()
+		}),
+		adapter.HealthCheckCallback().Register(func(proxy constant.Proxy) {
+			if runtimeRoutes.Load() != watch {
+				return
+			}
+			if _, ok := (*watch.members.Load())[proxy]; !ok {
+				return
+			}
+			watch.refresh.Store(true)
+			watch.notify()
+		}),
+		provider.ProxyUpdateCallback().Register(func(item P.ProxyProvider) {
+			if runtimeRoutes.Load() != watch {
+				return
+			}
+			if _, ok := watch.providers[item]; !ok {
+				return
+			}
+			watch.changes.Add(1)
+			watch.refresh.Store(true)
+			watch.notify()
+		}),
+	}
+	go watch.run()
+}
+
+func (watch *runtimeRouteWatch) updateMembers() {
+	members := make(map[constant.Proxy]struct{})
+	for _, group := range watch.groups {
+		for _, proxy := range group.Proxies() {
+			members[proxy] = struct{}{}
+		}
+	}
+	watch.members.Store(&members)
+}
+
+func (watch *runtimeRouteWatch) run() {
+	pending := make(map[constant.ProxyAdapter]time.Time)
+	var timer *time.Timer
+	var expiry <-chan time.Time
+	defer func() {
+		if timer != nil {
+			timer.Stop()
+		}
+	}()
+	for {
+		select {
+		case <-watch.done:
+			return
+		case <-watch.wake:
+		case <-expiry:
+		}
+		mu.Lock()
+		if runtimeRoutes.Load() != watch || !running || runtimeBootID != watch.bootID || runtimeConfigRevision != watch.configRevision {
+			mu.Unlock()
+			return
+		}
+		if watch.refresh.Swap(false) {
+			watch.updateMembers()
+			now := time.Now()
+			for adapter := range watch.groups {
+				pending[adapter] = now
+			}
+		}
+		var next time.Duration
+		for adapter, since := range pending {
+			wait := watch.groups[adapter].Refresh(since)
+			if wait <= 0 {
+				delete(pending, adapter)
+			} else if next == 0 || wait < next {
+				next = wait
+			}
+		}
+		if changes := watch.changes.Load(); changes != watch.published {
+			watch.published = changes
+			publishRuntime()
+		}
+		mu.Unlock()
+		// 每个健康批次只等真实缓存到期；没有待处理变化时不保留周期任务。
+		expiry = nil
+		if timer != nil && !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		if next > 0 {
+			if timer == nil {
+				timer = time.NewTimer(next)
+			} else {
+				timer.Reset(next)
+			}
+			expiry = timer.C
+		}
+	}
+}
+
+func stopRuntimeRoutes() {
+	watch := runtimeRoutes.Swap(nil)
+	if watch == nil {
+		return
+	}
+	close(watch.done)
+	for _, subscription := range watch.subscriptions {
+		_ = subscription.Close()
+	}
+}

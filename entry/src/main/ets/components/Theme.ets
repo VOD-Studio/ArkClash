@@ -9,19 +9,53 @@ export const CARD_PADDING = 16;
 // 悬浮页签栏盖在内容上，可滚动内容的底部要让出它的高度（栏高 + 离底距离 + 手势条）。
 export const FLOATING_BAR_INSET = 112;
 
-/** 普通卡片：不透明底色加一层轻阴影，材质只留给页签栏、标题栏和弹层。 */
+/** 阴影使用原生绘制边界；内容圆角裁剪只放在卡片内部，不能包住阴影层。 */
 export class CardModifier implements AttributeModifier<ColumnAttribute> {
+  private readonly radius: number;
+  private readonly horizontalPadding: number;
+  private readonly verticalPadding: number;
+  private readonly shadowColor: ResourceColor;
+
+  constructor(radius: number = CARD_RADIUS, horizontalPadding: number = CARD_PADDING,
+    verticalPadding: number = CARD_PADDING, shadowColor: ResourceColor = '#0D000000') {
+    this.radius = radius;
+    this.horizontalPadding = horizontalPadding;
+    this.verticalPadding = verticalPadding;
+    this.shadowColor = shadowColor;
+  }
+
   applyNormalAttribute(instance: ColumnAttribute): void {
     instance
       .width('100%')
-      .padding(CARD_PADDING)
-      .borderRadius(CARD_RADIUS)
+      .padding({ left: this.horizontalPadding, right: this.horizontalPadding,
+        top: this.verticalPadding, bottom: this.verticalPadding })
+      .borderRadius(this.radius)
       .backgroundColor($r('app.color.card_background'))
-      .shadow({ radius: 24, offsetY: 4, color: '#0D000000' });
+      .shadow({ radius: 24, offsetY: 4, color: this.shadowColor });
+  }
+}
+
+export class HeaderActionModifier implements AttributeModifier<ButtonAttribute> {
+  private readonly material: uiMaterial.ImmersiveMaterial = new uiMaterial.ImmersiveMaterial({
+    style: uiMaterial.ImmersiveStyle.THIN,
+    interactive: true,
+    lightEffect: {}
+  });
+
+  applyNormalAttribute(instance: ButtonAttribute): void {
+    instance
+      .width(40)
+      .height(40)
+      .padding(0)
+      .borderRadius(20)
+      .buttonStyle(ButtonStyleMode.NORMAL)
+      .systemMaterial(this.material);
   }
 }
 
 export const CARD: CardModifier = new CardModifier();
+export const DASHBOARD_CARD: CardModifier = new CardModifier(34, 20, 18, $r('app.color.dashboard_shadow'));
+export const HEADER_ACTION: HeaderActionModifier = new HeaderActionModifier();
 
 /** 沉浸光感材质。设备不支持时系统自动退化成背景色、描边和阴影的组合。 */
 export function sheetMaterial(): uiMaterial.ImmersiveMaterial {

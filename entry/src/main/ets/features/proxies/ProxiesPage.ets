@@ -1,29 +1,302 @@
+import { accessibility } from '@kit.AccessibilityKit';
+import { UIUtils } from '@kit.ArkUI';
+import { common } from '@kit.AbilityKit';
+import { Connection, connection } from '../../client/Connection';
 import { EmptyState } from '../../components/EmptyState';
 import { TabPage } from '../../components/TabPage';
-import { CARD } from '../../components/Theme';
+import { FLOATING_BAR_INSET, PAGE_GUTTER } from '../../components/Theme';
+import { ProfileSummary } from '../../shared/profiles/Summary';
+import { ProxyBrowser } from './Proxies';
+import { ProxyFeedback } from './ProxyFeedback';
+import { ProxyGroupList } from './ProxyGroupList';
+import { ProxyTabs } from './ProxyTabs';
+import { ProxyToolbar } from './ProxyToolbar';
+import { ProxyLocateTarget } from './ProxyView';
 
-// 代理组页由 #22 实现，这里先占住导航里的位置。
 @ComponentV2
 export struct ProxiesPage {
   @Param @Require scroller: Scroller;
-  @Event onScrollDirection: (down: boolean) => void = () => {};
   @Param topInset: number = 0;
+  @Param visible: boolean = false;
+  @Param profileId: string = '';
+  @Param summary: ProfileSummary | undefined = undefined;
+  @Param profileReady: boolean = false;
+  @Param online: boolean = false;
+  @Param offlineWritable: boolean = false;
+  @Param pickerMode: boolean = false;
+  @Param initialGroup: string = '';
+  @Event onScrollDirection: (down: boolean) => void = () => {};
+  @Event onOpenProfiles: () => void = () => {};
+  @Local browser: ProxyBrowser = new ProxyBrowser();
+  @Local link: Connection = connection;
+  @Local boundScroller: Scroller = new Scroller();
+  @Local reduceMotion: boolean = true;
+  private reductionListener: (enabled: boolean) => void = (enabled: boolean): void => {
+    this.reduceMotion = enabled;
+  };
+  private availableWidth: number = 0;
+  private scrollingDown: boolean = false;
+  private savedProfile: string = '';
+  private restoreListPending: boolean = true;
+  private listOwner: string = '';
+
+  aboutToAppear(): void {
+    this.boundScroller = this.scroller;
+    this.reduceMotion = accessibility.isAnimationReduceEnabledSync();
+    accessibility.onAnimationReduceStateChange(this.reductionListener);
+    this.configureBrowser();
+  }
+
+  aboutToDisappear(): void {
+    accessibility.offAnimationReduceStateChange(this.reductionListener);
+    this.listOwner = '';
+    this.browser.suspend();
+  }
+
+  @Monitor('visible', 'profileId', 'summary', 'profileReady', 'initialGroup', 'online', 'offlineWritable',
+    'link.mode', 'link.bootId')
+  configureBrowser(): void {
+    if (this.savedProfile !== this.profileId) {
+      this.savedProfile = this.profileId;
+      this.restoreListPending = true;
+    }
+    this.browser.configure({
+      context: this.getUIContext().getHostContext() as common.UIAbilityContext,
+      profile: this.profileId, summary: this.summary, ready: this.profileReady, visible: this.visible,
+      online: this.online, offlineWritable: this.offlineWritable,
+      bootId: this.link.bootId, mode: this.link.mode === '' ? 'rule' : this.link.mode,
+      picker: this.pickerMode, initialGroup: this.initialGroup
+    });
+  }
+
+  @Monitor('browser.appearance.style')
+  resetBoundScroller(): void {
+    if (!this.pickerMode) {
+      this.boundScroller = this.scroller;
+      this.restoreListPending = true;
+      this.restoreListScroll();
+    }
+    this.resizeNodes();
+  }
+
+  @Monitor('browser.groups')
+  restoreListScroll(): void {
+    if (this.restoreListPending && this.visible && !this.pickerMode &&
+      this.browser.groups.length > 0 && this.listOwner === 'groups') {
+      this.restoreListPending = false;
+      this.scroller.scrollTo({ xOffset: 0, yOffset: this.browser.listOffsets.get(this.profileId) ?? 0, animation: false });
+    }
+  }
+
+  private listReady(owner: string): void {
+    this.listOwner = owner;
+    this.boundScroller = this.scroller;
+    this.restoreListScroll();
+  }
+
+  private listRelease(owner: string): void {
+    if (this.listOwner === owner) {
+      this.listOwner = '';
+      this.restoreListPending = true;
+    }
+  }
+
+  private locate(groupName: string): void {
+    if (!this.visible) {
+      return;
+    }
+    if (this.listOwner !== 'groups') {
+      return;
+    }
+    const target = UIUtils.applySync<ProxyLocateTarget | undefined>((): ProxyLocateTarget | undefined => this.browser.locate(groupName));
+    if (target === undefined || !this.visible || this.listOwner !== 'groups') {
+      return;
+    }
+    if (this.scroller instanceof ListScroller) {
+      this.scroller.scrollToItemInGroup(target.groupIndex + (this.hasFeedback() ? 1 : 0), target.rowIndex, false, ScrollAlign.CENTER);
+    } else {
+      this.scroller.scrollToIndex(target.groupIndex + (this.hasFeedback() ? 1 : 0), false, ScrollAlign.START);
+    }
+  }
+
+  private didScroll(offset: number, source: ScrollSource, scroller: Scroller): void {
+    if (scroller !== this.boundScroller ||
+      (!this.pickerMode && this.listOwner === '')) {
+      return;
+    }
+    if (this.listOwner === 'groups' && scroller === this.scroller) {
+      this.browser.listOffsets.set(this.profileId, Math.max(0, scroller.currentOffset().yOffset + offset));
+    }
+    if (!this.visible || this.pickerMode || source === ScrollSource.EDGE_EFFECT) {
+      return;
+    }
+    let down = this.scrollingDown;
+    if (scroller.currentOffset().yOffset <= 0 && offset <= 0) {
+      down = false;
+    } else if ((source === ScrollSource.DRAG || source === ScrollSource.FLING) && Math.abs(offset) >= 2) {
+      down = offset > 0;
+    }
+    if (down !== this.scrollingDown) {
+      this.scrollingDown = down;
+      this.onScrollDirection(down);
+    }
+  }
+
+  private resizeNodes(): void {
+    if (this.availableWidth > 0) {
+      this.browser.resize(this.availableWidth - PAGE_GUTTER * 2 -
+        (this.pickerMode ? 0 : 20));
+    }
+  }
+
+  private hasFeedback(): boolean {
+    return this.profileId !== '' && (this.browser.loadError || this.browser.preferenceError || this.browser.notice !== '');
+  }
+
+  private motionEnabled(): boolean {
+    return this.visible && !this.reduceMotion;
+  }
+
+  @Builder
+  private titleToolbar() {
+    ProxyToolbar({
+      browser: this.browser,
+      active: this.visible,
+      motionEnabled: this.motionEnabled()
+    })
+  }
+
+  @Builder
+  private emptyContent() {
+    if (this.profileId === '') {
+      EmptyState({
+        icon: $r('sys.symbol.paperplane'),
+        title: $r('app.string.home_no_profile'),
+        hint: $r('app.string.home_no_profile_hint'),
+        actionLabel: $r('app.string.proxy_open_profiles'),
+        onAction: () => this.onOpenProfiles()
+      })
+    } else if (this.browser.query.trim() !== '') {
+      EmptyState({
+        title: $r('app.string.proxy_search_empty'),
+        hint: $r('app.string.proxy_search_empty_hint'),
+        actionLabel: $r('app.string.proxy_clear_search'),
+        onAction: () => this.browser.setQuery('')
+      })
+    } else if (this.link.mode === 'direct') {
+      EmptyState({ title: $r('app.string.mode_direct'), hint: $r('app.string.proxy_direct_empty') })
+    } else if (this.browser.loadError) {
+      EmptyState({
+        title: $r('app.string.proxy_load_failed'), hint: $r('app.string.proxy_load_failed_hint'),
+        actionLabel: $r('app.string.proxy_retry'), onAction: () => this.browser.refresh()
+      })
+    } else {
+      EmptyState({
+        icon: $r('sys.symbol.paperplane'),
+        title: $r('app.string.proxies_empty'),
+        hint: $r('app.string.proxies_empty_hint'),
+        actionLabel: $r('app.string.proxy_open_profiles'),
+        onAction: () => this.onOpenProfiles()
+      })
+    }
+  }
+
+  @Builder
+  private pageContent() {
+    Column() {
+      if (this.pickerMode) {
+        ProxyToolbar({ browser: this.browser, pickerMode: true, active: this.visible,
+          motionEnabled: this.motionEnabled() })
+      }
+      if (this.browser.groups.length === 0) {
+        List({ scroller: this.scroller }) {
+          if (this.hasFeedback()) {
+            ListItem() {
+              ProxyFeedback({ browser: this.browser })
+            }
+          }
+          ListItem() {
+            if (!this.browser.loadError && (this.browser.loading || !this.profileReady) && this.profileId !== '') {
+              Column({ space: 12 }) {
+                LoadingProgress()
+                  .width(32)
+                  .height(32)
+                  .color($r('app.color.brand'))
+                  .enableLoading(this.visible)
+                Text($r('app.string.proxy_loading'))
+                  .fontSize(14)
+                  .fontColor($r('sys.color.font_secondary'))
+              }
+              .width('100%')
+              .justifyContent(FlexAlign.Center)
+            } else {
+              this.emptyContent()
+            }
+          }
+        }
+        .layoutWeight(1)
+        .width('100%')
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+        .safeAreaPadding({ top: this.pickerMode ? 0 : this.topInset + 72 })
+        .contentStartOffset(12)
+        .contentEndOffset(FLOATING_BAR_INSET)
+        .clipContent(ContentClipMode.BOUNDARY)
+        .edgeEffect(EdgeEffect.Spring)
+        .onWillScroll((offset: number, _state: ScrollState, source: ScrollSource): void => {
+          if (this.listOwner === 'empty') { this.didScroll(offset, source, this.scroller); }
+        })
+        .onAppear((): void => this.listReady('empty'))
+        .onDisAppear((): void => this.listRelease('empty'))
+      } else if (this.pickerMode) {
+        ProxyTabs({
+          browser: this.browser, active: this.visible, profileId: this.profileId,
+          contentInset: 0,
+          motionEnabled: this.motionEnabled(),
+          onScrollerReady: (scroller: Scroller) => { this.listOwner = ''; this.boundScroller = scroller; },
+          onListScroll: (offset: number, source: ScrollSource, scroller: Scroller) => this.didScroll(offset, source, scroller)
+        })
+          .layoutWeight(1)
+      } else {
+        ProxyGroupList({
+          browser: this.browser, scroller: this.scroller, active: this.visible, pickerMode: this.pickerMode,
+          contentInset: this.topInset + 72,
+          motionEnabled: this.motionEnabled(),
+          feedbackVisible: this.hasFeedback(),
+          onScrollerReady: (): void => this.listReady('groups'),
+          onScrollerRelease: (): void => this.listRelease('groups'),
+          onLocate: (group: string) => this.locate(group),
+          onListScroll: (offset: number, source: ScrollSource) => this.didScroll(offset, source, this.scroller)
+        })
+          .layoutWeight(1)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ top: this.pickerMode ? 8 : 0 })
+    .onSizeChange((_before: SizeOptions, after: SizeOptions): void => {
+      this.availableWidth = Number(after.width);
+      this.resizeNodes();
+    })
+  }
 
   build() {
-    TabPage({
-      title: $r('app.string.tab_proxies'),
-      topInset: this.topInset,
-      scroller: this.scroller,
-      onScrollDirection: (down: boolean) => this.onScrollDirection(down)
-    }) {
-      Column() {
-        EmptyState({
-          icon: $r('sys.symbol.paperplane'),
-          title: $r('app.string.proxies_empty'),
-          hint: $r('app.string.proxies_empty_hint')
+    Column() {
+      if (this.pickerMode) {
+        this.pageContent()
+      } else {
+        TabPage({
+          title: $r('app.string.tab_proxies'),
+          scroller: this.boundScroller,
+          topInset: this.topInset,
+          contentOwnsScroll: true,
+          customTitle: true,
+          titleContent: (): void => this.titleToolbar(),
+          content: (): void => this.pageContent()
         })
       }
-      .attributeModifier(CARD)
     }
+    .width('100%')
+    .height('100%')
+    .backgroundColor($r('app.color.page_background'))
   }
 }

@@ -28,7 +28,15 @@ lint_go() {
   # 内核用 cgo 引用 OHOS NDK 的头文件，vet 也要用 NDK 的编译器。
   local clang="$OHOS_SDK/native/llvm/bin/aarch64-unknown-linux-ohos-clang"
   if [[ -x "$clang" ]]; then
-    (cd core && CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" go vet -tags with_gvisor ./...) || failed=1
+    (
+      lint_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-lint.XXXXXX")" || exit 1
+      trap 'rm -rf "$lint_deps"' EXIT
+      bash "$ROOT/scripts/prepare-mihomo.sh" "$lint_deps/mihomo" || exit 1
+      cp core/go.mod core/go.sum "$lint_deps/"
+      cd core
+      go mod edit -modfile "$lint_deps/go.mod" "-replace=github.com/metacubex/mihomo=$lint_deps/mihomo"
+      CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" go vet -modfile "$lint_deps/go.mod" -tags with_gvisor ./...
+    ) || failed=1
   else
     echo "跳过：找不到 OHOS NDK（${clang}）"
   fi

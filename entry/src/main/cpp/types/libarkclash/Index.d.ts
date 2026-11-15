@@ -2,7 +2,7 @@
 export const start: (optionsJson: string) => Promise<void>;
 export const stop: () => Promise<void>;
 /** 热切换到 path（必须在 filesDir/profiles/ 下）；解析失败时 reject，内核保持原样。 */
-export const reload: (path: string, profile: string) => Promise<void>;
+export const reload: (path: string, profile: string, expectedProfile?: string) => Promise<void>;
 /** 经内核下载，请求和结果 JSON 见 core/api.go 的 fetchRequest、fetchResult。 */
 export const fetch: (requestJson: string) => Promise<string>;
 /** 预先下载 path 里本地还没有的 rule-provider，结果 JSON 见 core/api.go 的 prefetchResult。 */

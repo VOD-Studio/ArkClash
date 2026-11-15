@@ -1,59 +1,140 @@
-// 服务状态：经内核的 HTTP 代理端口逐个请求服务，记从发出到收到响应的耗时。
-// UI 进程不走 VPN（ADR-0004），只能经代理端口，见 docs/architecture.md。
-import { http } from '@kit.NetworkKit';
-import { getProxyPort } from './Controller';
+import { RoutedProbeError, RoutedProbeFailure, RoutedProbeRequest } from './RoutedProbe';
 
 const TIMEOUT_MS = 5000;
-// 同时在途的请求数上限；服务多的时候不一次全发出去。
-const CONCURRENCY = 6;
+// 给出口查询保留一个执行槽，服务批次与出口合计不超过核心的四槽预算。
+const CONCURRENCY = 3;
+
+export type ServiceAvailability = 'unknown' | 'available' | 'restricted' | 'unavailable' | 'disallowed-isp' |
+  'blocked' | 'unsupported-region' | 'originals-only' | 'coming-soon' | 'timeout' | 'failed';
+export type ServiceReachability = 'reachable' | 'restricted' | 'unreachable' | 'timeout' | 'failed' | 'notChecked';
 
 export interface ServiceTarget {
   id: string;
-  url: string; // 用 HEAD 请求，收到任何 HTTP 响应都算可达
+  url: string;
 }
 
-/** delay 单位 ms；-1 = 不可达或超时。 */
 export interface ServiceResult {
   id: string;
   delay: number;
+  httpCode: number;
+  reachability: ServiceReachability;
+  availability: ServiceAvailability;
+  checkedAt: number;
+  route: string;
+  routed: boolean;
+  bootId: string;
+  revision: number;
+  failure: RoutedProbeFailure | '';
+  controlStatus: number;
 }
 
-async function probe(target: ServiceTarget, port: number): Promise<ServiceResult> {
-  const request = http.createHttp();
-  const begin = Date.now();
-  try {
-    await request.request(target.url, {
-      method: http.RequestMethod.HEAD,
-      usingProxy: { host: '127.0.0.1', port: port, exclusionList: [] },
-      connectTimeout: TIMEOUT_MS,
-      readTimeout: TIMEOUT_MS
-    });
-    return { id: target.id, delay: Date.now() - begin };
-  } catch (e) {
-    return { id: target.id, delay: -1 };
-  } finally {
-    request.destroy();
+export function serviceReachability(httpCode: number): ServiceReachability {
+  if (httpCode >= 200 && httpCode < 400) {
+    return 'reachable';
   }
+  if (httpCode === 401 || httpCode === 403 || httpCode === 429 || httpCode === 451) {
+    return 'restricted';
+  }
+  return 'unreachable';
 }
 
-/** 检测给定的服务；配置里没开代理端口时全部记为不可达。结果顺序不保证。 */
-export async function checkServices(filesDir: string, targets: ServiceTarget[]): Promise<ServiceResult[]> {
-  const port = await getProxyPort(filesDir);
-  if (port <= 0) {
-    return targets.map((t: ServiceTarget): ServiceResult => ({ id: t.id, delay: -1 }));
-  }
-  const results: ServiceResult[] = [];
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (next < targets.length) {
-      const target = targets[next++];
-      results.push(await probe(target, port));
+/** HTTP 连通性与服务解锁是不同事实；没有服务专用判据时 availability 必须为 unknown。 */
+export class ServiceCheckTask {
+  private cancelled: boolean = false;
+  private requests: Set<RoutedProbeRequest> = new Set<RoutedProbeRequest>();
+
+  cancel(): void {
+    this.cancelled = true;
+    for (const request of this.requests) {
+      request.cancel();
     }
-  };
-  const workers: Promise<void>[] = [];
-  for (let i = 0; i < Math.min(CONCURRENCY, targets.length); i++) {
-    workers.push(worker());
+    this.requests.clear();
   }
-  await Promise.all(workers);
-  return results;
+
+  async run(filesDir: string, targets: ServiceTarget[], route: string, routed: boolean): Promise<ServiceResult[]> {
+    if (this.cancelled) {
+      throw new RoutedProbeError('cancelled');
+    }
+    const results: ServiceResult[] = [];
+    let next = 0;
+    let bootId = '';
+    let revision = -1;
+    const worker = async (): Promise<void> => {
+      while (!this.cancelled && next < targets.length) {
+        const target = targets[next++];
+        const result = await this.probe(filesDir, target, route, routed);
+        if (routed && result.failure === '') {
+          if (bootId !== '' && (bootId !== result.bootId || revision !== result.revision)) {
+            throw new RoutedProbeError('routeChanged');
+          }
+          bootId = result.bootId;
+          revision = result.revision;
+        }
+        if (!this.cancelled) {
+          results.push(result);
+        }
+      }
+    };
+    const workers: Promise<void>[] = [];
+    for (let index = 0; index < Math.min(CONCURRENCY, targets.length); index++) {
+      workers.push(worker());
+    }
+    try {
+      await Promise.all(workers);
+    } catch (e) {
+      this.cancel();
+      if (e instanceof RoutedProbeError) {
+        throw e;
+      }
+      throw new RoutedProbeError('transport');
+    }
+    if (this.cancelled) {
+      throw new RoutedProbeError('cancelled');
+    }
+    return results;
+  }
+
+  private async probe(filesDir: string, target: ServiceTarget, route: string, routed: boolean): Promise<ServiceResult> {
+    const request = new RoutedProbeRequest();
+    this.requests.add(request);
+    const begin = Date.now();
+    try {
+      const response = await request.run(filesDir, target.url, 'HEAD', TIMEOUT_MS, routed);
+      return {
+        id: target.id,
+        delay: Date.now() - begin,
+        httpCode: response.status,
+        reachability: serviceReachability(response.status),
+        availability: 'unknown',
+        checkedAt: Date.now(),
+        route: route,
+        routed: routed,
+        bootId: response.bootId,
+        revision: response.revision,
+        failure: '',
+        controlStatus: 0
+      };
+    } catch (e) {
+      if (e instanceof RoutedProbeError && (e.reason === 'routeChanged' || e.reason === 'cancelled')) {
+        throw e;
+      }
+      const reason: RoutedProbeFailure = e instanceof RoutedProbeError ? e.reason : 'transport';
+      return {
+        id: target.id,
+        delay: -1,
+        httpCode: 0,
+        reachability: reason === 'capacity' ? 'notChecked' : reason === 'timeout' ? 'timeout' : 'failed',
+        availability: 'unknown',
+        checkedAt: Date.now(),
+        route: route,
+        routed: routed,
+        bootId: '',
+        revision: 0,
+        failure: reason,
+        controlStatus: e instanceof RoutedProbeError ? e.controlStatus : 0
+      };
+    } finally {
+      this.requests.delete(request);
+    }
+  }
 }

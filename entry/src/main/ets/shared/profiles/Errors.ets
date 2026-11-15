@@ -1,26 +1,34 @@
-// 写进状态文件和命令回复的错误：`代码` 或 `代码:说明`。状态文件可能由 VPN 进程写，
-// 不放本地化文字，界面按代码显示（features/profiles/ProfileErrors.ets）。
-//   http          服务器返回非 200，说明是状态码
-//   not_clash     不是 Clash 配置：顶层没有 proxies 和 proxy-providers
-//   invalid_yaml  YAML 解析失败，说明是解析器给的第一行
-//   rejected      内核解析失败（只在正在运行的配置上检查），说明是内核的错误信息
-//   network       网络错误，说明是系统给的信息
-//   io            读写文件失败
-//   not_found     订阅或配置不在列表里
-//   busy          这个订阅正在更新
+// 状态与命令只保存脱敏错误码；解析器、网络和内核的原始消息可能含订阅凭据。
 export class ProfileError extends Error {
   constructor(code: string, detail?: string) {
-    super(detail !== undefined && detail.length > 0 ? `${code}:${detail}` : code);
+    const safeDetail = code === 'http' && detail !== undefined && new RegExp('^[1-5][0-9]{2}$').test(detail) ?
+      `:${detail}` : '';
+    super(`${code}${safeDetail}`);
   }
 }
 
-const CODES: string[] = ['http', 'not_clash', 'invalid_yaml', 'rejected', 'network', 'io', 'not_found', 'busy'];
+const CODES: string[] = ['http', 'not_clash', 'invalid_yaml', 'rejected', 'network', 'io', 'not_found', 'busy',
+  'conflict', 'canceled', 'timeout', 'dns', 'tls', 'corrupt', 'url_invalid', 'name_empty', 'name_taken',
+  'name_long', 'link_exists', 'interval_invalid', 'in_use', 'unsupported_input', 'age_required', 'apply_failed',
+  'metadata_saved', 'host_unknown'];
 
-/** 已经带代码的原样返回，其余的当网络错误。 */
-export function errorString(e: Object): string {
-  const message = (e as Error).message ?? `${e}`;
-  const code = message.split(':')[0];
-  return CODES.includes(code) ? message : `network:${message}`;
+export function errorString(error: Object): string {
+  const message = (error as Error).message ?? '';
+  const code = errorCode(message);
+  if (CODES.includes(code)) {
+    return new ProfileError(code, errorDetail(message)).message;
+  }
+  const lower = message.toLowerCase();
+  if (lower.includes('timeout') || lower.includes('timed out')) {
+    return 'timeout';
+  }
+  if (lower.includes('certificate') || lower.includes('ssl') || lower.includes('tls')) {
+    return 'tls';
+  }
+  if (lower.includes('resolve') || lower.includes('dns')) {
+    return 'dns';
+  }
+  return 'network';
 }
 
 export function errorCode(error: string): string {
@@ -28,6 +36,6 @@ export function errorCode(error: string): string {
 }
 
 export function errorDetail(error: string): string {
-  const i = error.indexOf(':');
-  return i < 0 ? '' : error.substring(i + 1);
+  const separator = error.indexOf(':');
+  return separator < 0 ? '' : error.substring(separator + 1);
 }

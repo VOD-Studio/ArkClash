@@ -1,31 +1,33 @@
+import { util, url as urlKit } from '@kit.ArkTS';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { http } from '@kit.NetworkKit';
-import { ProfileError } from './Errors';
+import { errorString, ProfileError } from './Errors';
 import { SubscriptionUsage } from './Store';
 
-// 机场只给认得的客户端返回 Clash YAML。
-export const USER_AGENT = 'clash.meta';
-export const CONNECT_TIMEOUT_MS = 15000;
-export const READ_TIMEOUT_MS = 30000;
+export const USER_AGENT = 'ArkClash clash.meta';
+export const DOWNLOAD_TIMEOUT_MS = 20000;
+export const CONNECT_TIMEOUT_MS = DOWNLOAD_TIMEOUT_MS;
+export const READ_TIMEOUT_MS = DOWNLOAD_TIMEOUT_MS;
 
-/** 响应头里的订阅信息。 */
 export interface DownloadInfo {
-  name?: string; // Content-Disposition 给的文件名，没有时为 undefined
+  name?: string;
   usage?: SubscriptionUsage;
 }
 
-/** 把订阅下载到 path；失败时抛出 ProfileError。界面进程直连，VPN 进程先经内核（vpn/KernelDownloader.ets）。 */
-export interface Downloader {
-  download(url: string, path: string): Promise<DownloadInfo>;
+export interface DownloadRequestIdentity {
+  canceled: () => boolean;
 }
 
-// 机场常在 Content-Disposition 里给订阅名：filename*=UTF-8''<百分号编码> 或 filename="..."。
-function nameFromDisposition(value: string | undefined): string | undefined {
-  if (value === undefined) {
+export interface Downloader {
+  download(url: string, path: string, identity?: DownloadRequestIdentity): Promise<DownloadInfo>;
+}
+
+export function nameFromDisposition(header: string | undefined): string | undefined {
+  if (header === undefined) {
     return undefined;
   }
-  const encoded = /filename\*\s*=\s*[^']*''([^;]+)/i.exec(value);
-  let name: string | undefined;
+  const encoded = new RegExp("filename\\*\\s*=\\s*[^']*''([^;]+)", 'i').exec(header);
+  let name: string | undefined = undefined;
   if (encoded !== null) {
     try {
       name = decodeURIComponent(encoded[1].trim());
@@ -34,66 +36,115 @@ function nameFromDisposition(value: string | undefined): string | undefined {
     }
   }
   if (name === undefined) {
-    const plain = /filename\s*=\s*"?([^";]+)"?/i.exec(value);
-    name = plain !== null ? plain[1].trim() : undefined;
+    const plain = new RegExp('filename\\s*=\\s*(?:"([^"\\r\\n]+)"|([^;\\r\\n]+))', 'i').exec(header);
+    name = plain !== null ? (plain[1] ?? plain[2]).trim() : undefined;
   }
-  const trimmed = name?.replace(/\.(ya?ml|txt)$/i, '').trim();
+  const trimmed = name?.trim();
   return trimmed !== undefined && trimmed.length > 0 ? trimmed : undefined;
 }
 
-function parseUsage(value: string | undefined): SubscriptionUsage | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
+export function parseUsage(header: string | undefined): SubscriptionUsage {
   const usage: SubscriptionUsage = { upload: 0, download: 0, total: 0, expire: 0 };
-  for (const part of value.split(';')) {
-    const pair = part.split('=');
-    if (pair.length !== 2) {
+  for (const part of (header ?? '').split(';')) {
+    const separator = part.indexOf('=');
+    if (separator < 0) {
       continue;
     }
-    const n = Number(pair[1].trim());
-    if (!Number.isFinite(n)) {
+    const raw = part.substring(separator + 1).trim();
+    if (raw === '') {
       continue;
     }
-    switch (pair[0].trim()) {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+      continue;
+    }
+    const amount = Math.max(0, Math.trunc(parsed));
+    switch (part.substring(0, separator).trim().toLowerCase()) {
       case 'upload':
-        usage.upload = n;
+        usage.upload = amount;
         break;
       case 'download':
-        usage.download = n;
+        usage.download = amount;
         break;
       case 'total':
-        usage.total = n;
+        usage.total = amount;
         break;
       case 'expire':
-        usage.expire = n;
+        usage.expire = amount;
         break;
       default:
         break;
     }
   }
-  return usage.total > 0 ? usage : undefined;
+  return usage;
 }
 
-/** header 的键必须是小写。 */
 export function infoFromHeaders(header: Record<string, string>): DownloadInfo {
+  const normalized: Record<string, string> = {};
+  for (const key of Object.keys(header)) {
+    normalized[key.toLowerCase()] = header[key];
+  }
   return {
-    name: nameFromDisposition(header['content-disposition']),
-    usage: parseUsage(header['subscription-userinfo'])
+    name: nameFromDisposition(normalized['content-disposition']),
+    usage: parseUsage(normalized['subscription-userinfo'])
   };
 }
 
-export function hostOf(url: string): string {
-  const match = /^[a-z]+:\/\/(?:[^@/?#]*@)?([^/:?#]+)/i.exec(url);
-  return match !== null ? match[1] : url;
+export function validSubscriptionUrl(raw: string): boolean {
+  if (raw.length === 0 || raw.length > 2048 || new RegExp('\\s').test(raw)) {
+    return false;
+  }
+  try {
+    const parsed = new urlKit.URL(raw);
+    return ['http:', 'https:', 'ftp:'].includes(parsed.protocol.toLowerCase()) && parsed.hostname.length > 0;
+  } catch (e) {
+    return false;
+  }
+}
+
+export function hostOf(raw: string): string {
+  try {
+    return new urlKit.URL(raw).hostname;
+  } catch (e) {
+    return '';
+  }
+}
+
+export interface ProfileDownloadAddress {
+  address: string;
+  headers: Record<string, string>;
+}
+
+export async function prepareDownloadAddress(raw: string, userAgent: string = USER_AGENT):
+  Promise<ProfileDownloadAddress> {
+  if (!validSubscriptionUrl(raw)) {
+    throw new ProfileError('url_invalid');
+  }
+  const headers: Record<string, string> = { 'User-Agent': userAgent };
+  const authority = new RegExp('^([a-z]+://)([^/?#]*)', 'i').exec(raw);
+  const separator = authority?.[2].lastIndexOf('@') ?? -1;
+  if (authority !== null && separator >= 0) {
+    const userinfo = authority[2].substring(0, separator);
+    let credentials: string;
+    try {
+      credentials = decodeURIComponent(userinfo);
+    } catch (e) {
+      throw new ProfileError('url_invalid');
+    }
+    const encoded = await new util.Base64Helper().encodeToString(new util.TextEncoder().encodeInto(credentials));
+    headers['Authorization'] = `Basic ${encoded}`;
+    return { address: `${authority[1]}${authority[2].substring(separator + 1)}${raw.substring(authority[0].length)}`,
+      headers: headers };
+  }
+  return { address: raw, headers: headers };
 }
 
 function lowerCaseHeaders(headers: Object): Record<string, string> {
   const record = headers as Record<string, string | string[]>;
   const result: Record<string, string> = {};
   for (const key of Object.keys(record)) {
-    const value = record[key];
-    result[key.toLowerCase()] = typeof value === 'string' ? value : value[0];
+    const header = record[key];
+    result[key.toLowerCase()] = typeof header === 'string' ? header : header[0];
   }
   return result;
 }
@@ -101,41 +152,61 @@ function lowerCaseHeaders(headers: Object): Record<string, string> {
 async function writeBuffer(path: string, data: ArrayBuffer): Promise<void> {
   const file = await fs.open(path, fs.OpenMode.CREATE | fs.OpenMode.WRITE_ONLY | fs.OpenMode.TRUNC);
   try {
-    await fs.write(file.fd, data);
+    if (await fs.write(file.fd, data) !== data.byteLength) {
+      throw new ProfileError('io');
+    }
+    await fs.fsync(file.fd);
   } finally {
     await fs.close(file);
   }
 }
 
-/** 直连下载。界面进程不走 VPN；VPN 进程开了 protectProcessNet，这里发出的请求也是直连。 */
 export class DirectDownloader implements Downloader {
-  async download(url: string, path: string): Promise<DownloadInfo> {
+  async download(raw: string, path: string, identity?: DownloadRequestIdentity): Promise<DownloadInfo> {
+    const address = await prepareDownloadAddress(raw);
     const request = http.createHttp();
+    let expired = false;
+    let rejectTimeout: ((error: Error) => void) | undefined = undefined;
+    const deadline = new Promise<http.HttpResponse>((_resolve: (response: http.HttpResponse) => void,
+      reject: (error: Error) => void): void => { rejectTimeout = reject; });
+    const timer = setTimeout((): void => {
+      expired = true;
+      request.destroy();
+      rejectTimeout?.(new ProfileError('timeout') as Error);
+    }, DOWNLOAD_TIMEOUT_MS);
     try {
-      const header: Record<string, string> = { 'User-Agent': USER_AGENT };
+      if (identity?.canceled() === true) {
+        throw new ProfileError('canceled');
+      }
       let response: http.HttpResponse;
       try {
-        response = await request.request(url, {
+        const pending: Promise<http.HttpResponse> = request.request(address.address, {
           method: http.RequestMethod.GET,
-          header: header,
-          connectTimeout: CONNECT_TIMEOUT_MS,
-          readTimeout: READ_TIMEOUT_MS,
+          header: address.headers,
+          connectTimeout: DOWNLOAD_TIMEOUT_MS,
+          readTimeout: DOWNLOAD_TIMEOUT_MS,
           expectDataType: http.HttpDataType.ARRAY_BUFFER
         });
+        response = await Promise.race<http.HttpResponse>([pending, deadline]);
+        clearTimeout(timer);
       } catch (e) {
-        throw new ProfileError('network', (e as Error).message);
+        throw new ProfileError(expired ? 'timeout' : errorString(e as Object));
+      }
+      if (expired) {
+        throw new ProfileError('timeout');
+      }
+      if (identity?.canceled() === true) {
+        throw new ProfileError('canceled');
       }
       if (response.responseCode !== 200) {
         throw new ProfileError('http', `${response.responseCode}`);
       }
-      try {
-        await writeBuffer(path, response.result as ArrayBuffer);
-      } catch (e) {
-        throw new ProfileError('io', (e as Error).message);
-      }
+      try { await writeBuffer(path, response.result as ArrayBuffer); }
+      catch (e) { throw new ProfileError('io'); }
       return infoFromHeaders(lowerCaseHeaders(response.header));
     } finally {
-      request.destroy();
+      clearTimeout(timer);
+      if (!expired) { request.destroy(); }
     }
   }
 }

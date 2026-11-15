@@ -9,6 +9,10 @@ on:
     paths:
       - core/**
       - scripts/build-core.sh
+      - scripts/ci/build-codeql.sh
+      - scripts/prepare-mihomo.sh
+      - scripts/env.sh
+      - Makefile
       - scripts/*.patch
       - .go-version
       - .github/workflows/codeql.yml
@@ -40,18 +44,10 @@ jobs:
           languages: go
           # 内核要用 OHOS NDK 交叉编译 cgo，只能手动构建。
           build-mode: manual
-      # CodeQL 靠跟踪编译过程提取代码，认不出 make core 复制出来的补丁版 Go，所以用 setup-go 装的
-      # 标准 Go 编同一份代码：补丁只影响运行时，不影响分析。-a 强制重新编译，缓存命中时编译器不会运行。
+      # 保留标准 Go 供 CodeQL 跟踪，但业务依赖必须包含与 make core 相同的补丁。
+      # 专用入口强制重新编译，分析产物不用于装机或分发。
       - name: 构建（供 CodeQL 提取）
-        working-directory: core
-        env:
-          CGO_ENABLED: "1"
-          GOOS: linux
-          GOARCH: arm64
-          GOFLAGS: -a
-        run: |
-          CC="$OHOS_SDK/native/llvm/bin/aarch64-unknown-linux-ohos-clang" \
-            go build -tags with_gvisor -buildmode=c-shared -o "$RUNNER_TEMP/libclash.so" .
+        run: make core-codeql
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: /language:go

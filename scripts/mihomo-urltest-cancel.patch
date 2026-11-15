@@ -1,0 +1,14 @@
+--- a/adapter/adapter.go
++++ b/adapter/adapter.go
+@@ -167,6 +167,11 @@
+ 	var satisfied bool
+ 
+ 	defer func() {
++		// ArkClash：离页或换配置只取消本次测量，不能改写共享节点的健康与历史。
++		// DeadlineExceeded 仍是实际超时，保留原来的失败记录与自动选路语义。
++		if ctx.Err() == context.Canceled {
++			return
++		}
+ 		alive := err == nil
+ 		record := C.DelayHistory{Time: time.Now()}
+ 		if alive {

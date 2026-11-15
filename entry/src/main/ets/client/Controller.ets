@@ -16,13 +16,26 @@ interface ErrorBody {
   message?: string;
 }
 
-interface StatusBody {
+export interface RuntimeStatus {
   profile: string;
+  running: boolean;
+  intent: 'started' | 'stopped';
+  forward: 'stopped' | 'preparing' | 'running' | 'paused' | 'failed';
+  sessionMode: 'tun' | 'proxyOnly';
+  listenersOpen: boolean;
+  tunAttached: boolean;
+  startedAt: number;
+  bootId: string;
+  revision: number;
+  configRevision: number;
+  version: string;
+  mode: OutboundMode;
 }
 
 interface ReloadBody {
   profile: string;
   path: string;
+  expectedProfile?: string;
 }
 
 interface DelayHistory {
@@ -30,14 +43,26 @@ interface DelayHistory {
 }
 
 interface ProxyInfo {
+  name: string;
   type: string;
-  now?: string;
-  all?: string[];
+  testUrl?: string;
+  url?: string;
   history?: DelayHistory[];
+  hidden?: boolean;
+  icon?: string;
+}
+
+interface ProxySummaryReference {
+  id: string;
+  name: string;
 }
 
 interface ProxiesResponse {
-  proxies: Record<string, ProxyInfo>;
+  proxies: Record<string, ProxySummaryReference>;
+  nodes: Record<string, ProxyInfo>;
+  members: Record<string, ProxySummaryReference[]>;
+  actual: Record<string, string>;
+  retired?: Record<string, boolean>;
 }
 
 /** 代理组概况：主代理组（配置里排第一的组）当前选中的节点，以及全部组名。delay 为 0 表示还没测过或超时。 */
@@ -45,13 +70,15 @@ export interface GroupSummary {
   group: string;
   node: string;
   delay: number;
+  retired: boolean;
   groups: string[]; // 按配置顺序
+  groupIcons?: Record<string, string>;
 }
 
 /** 非 2xx 时抛出 Error，message 优先用响应里的 message（ArkClash 自有接口的错误格式）。 */
 export async function call(filesDir: string, method: http.RequestMethod, path: string, body?: string,
   timeoutMs: number = TIMEOUT_MS): Promise<string> {
-  const runtime = readRuntime(filesDir);
+  const runtime = await readRuntime(filesDir);
   if (runtime === undefined) {
     throw new Error('core is not running');
   }
@@ -111,7 +138,11 @@ export async function setAllowLan(filesDir: string, allow: boolean): Promise<voi
 
 /** 正在运行的配置编号（ADR-0010）。 */
 export async function getRunningProfile(filesDir: string): Promise<string> {
-  return (JSON.parse(await call(filesDir, http.RequestMethod.GET, '/arkclash/status')) as StatusBody).profile;
+  return (await getRuntimeStatus(filesDir)).profile;
+}
+
+export async function getRuntimeStatus(filesDir: string): Promise<RuntimeStatus> {
+  return JSON.parse(await call(filesDir, http.RequestMethod.GET, '/arkclash/status')) as RuntimeStatus;
 }
 
 /** 在后台预先下载 path 里的 rule-provider（core/prefetch.go）。 */
@@ -121,13 +152,14 @@ export async function prefetchProfile(filesDir: string, path: string): Promise<v
 }
 
 /** 热切换到 path（配置目录下的文件）；内核解析失败时抛出它的错误信息，原配置不变。 */
-export async function reloadProfile(filesDir: string, profile: string, path: string): Promise<void> {
-  const body: ReloadBody = { profile: profile, path: path };
+export async function reloadProfile(filesDir: string, profile: string, path: string,
+  expectedProfile?: string): Promise<void> {
+  const body: ReloadBody = { profile: profile, path: path, expectedProfile: expectedProfile };
   // 新配置里有没下载过的 proxy-provider 时，内核要等它下载完。
   await call(filesDir, http.RequestMethod.POST, '/arkclash/reload', JSON.stringify(body), 60000);
 }
 
-/** 内核的 HTTP 代理端口，0 = 配置里没开。UI 进程不走 VPN，要经过代理时只能用这个端口。 */
+/** 局域网共享所用的 HTTP 代理端口，0 表示未开放；出口与服务探测使用 /arkclash/probe。 */
 export async function getProxyPort(filesDir: string): Promise<number> {
   const c = await configs(filesDir);
   const mixed = (c['mixed-port'] as number | undefined) ?? 0;
@@ -135,24 +167,48 @@ export async function getProxyPort(filesDir: string): Promise<number> {
 }
 
 export async function getMainGroup(filesDir: string): Promise<GroupSummary | undefined> {
-  const proxies = (JSON.parse(await call(filesDir, http.RequestMethod.GET, '/proxies')) as ProxiesResponse).proxies;
+  const mode = await getMode(filesDir);
+  if (mode === 'direct') {
+    return undefined;
+  }
+  const graph = JSON.parse(await call(filesDir, http.RequestMethod.GET, '/arkclash/proxies')) as ProxiesResponse;
   const isGroup = (name: string): boolean => {
-    const p = proxies[name];
-    return p !== undefined && GROUP_TYPES.includes(p.type);
+    const ref = graph.proxies[name];
+    return ref !== undefined && GROUP_TYPES.includes(graph.nodes[ref.id]?.type ?? '');
   };
-  // GLOBAL 的 all 按配置文件里的顺序列出所有组和节点。
-  const order = proxies['GLOBAL']?.all ?? Object.keys(proxies);
-  const groups = order.filter((name: string) => name !== 'GLOBAL' && isGroup(name));
+  const order = graph.members['GLOBAL']?.map((ref: ProxySummaryReference): string => ref.name) ?? Object.keys(graph.proxies);
+  const visible = order.filter((name: string): boolean => name !== 'GLOBAL' && isGroup(name) &&
+    graph.nodes[graph.proxies[name].id].hidden !== true);
+  const groups = mode === 'global' && isGroup('GLOBAL') ? ['GLOBAL', ...visible] : visible;
   if (groups.length === 0) {
     return undefined;
   }
-  const group = groups[0];
-  // 组里选的可能还是组，一直跟到实际节点。
-  let node = proxies[group].now ?? '';
-  for (let depth = 0; depth < 8 && isGroup(node); depth++) {
-    node = proxies[node].now ?? '';
+  let groupIcons: Record<string, string> | undefined;
+  for (const name of groups) {
+    const icon = graph.nodes[graph.proxies[name].id].icon;
+    if (icon !== undefined && icon !== '') {
+      if (groupIcons === undefined) { groupIcons = {}; }
+      groupIcons[name] = icon;
+    }
   }
-  const history = proxies[node]?.history ?? [];
+  const group = groups[0];
+  let actualId = graph.actual[group] ?? '';
+  let node: ProxyInfo | undefined = graph.nodes[actualId];
+  let retired = graph.retired?.[actualId] === true;
+  const seen: Set<string> = new Set<string>([group]);
+  while (node !== undefined && GROUP_TYPES.includes(node.type)) {
+    if (seen.has(node.name)) {
+      node = undefined;
+      break;
+    }
+    seen.add(node.name);
+    actualId = graph.actual[node.name] ?? '';
+    retired = retired || graph.retired?.[actualId] === true;
+    node = graph.nodes[actualId];
+  }
+  const history = node?.history ?? [];
   const delay = history.length > 0 ? history[history.length - 1].delay : 0;
-  return { group: group, node: node, delay: delay, groups: groups };
+  const summary: GroupSummary = { group: group, node: node?.name ?? '', delay: delay, retired: retired, groups: groups };
+  if (groupIcons !== undefined) { summary.groupIcons = groupIcons; }
+  return summary;
 }

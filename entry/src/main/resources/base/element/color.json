@@ -6,19 +6,11 @@
     },
     {
       "name": "page_background",
-      "value": "#F2F4F8"
-    },
-    {
-      "name": "page_glow_idle",
-      "value": "#DCE3F0"
-    },
-    {
-      "name": "page_glow_connected",
-      "value": "#C9D9FF"
+      "value": "#EFEDEE"
     },
     {
       "name": "card_background",
-      "value": "#FFFFFF"
+      "value": "#FAF7F8"
     },
     {
       "name": "brand",
@@ -107,6 +99,54 @@
     {
       "name": "memory_ui",
       "value": "#8FB0FF"
+    },
+    {
+      "name": "dash_series_secondary",
+      "value": "#A1BCFF"
+    },
+    {
+      "name": "dash_addable_background",
+      "value": "#F9FAFC"
+    },
+    {
+      "name": "dash_remove_background",
+      "value": "#FFDAD6"
+    },
+    {
+      "name": "surface_block",
+      "value": "#F2F4F8"
+    },
+    {
+      "name": "proxy_node_background",
+      "value": "#F5F2F3"
+    },
+    {
+      "name": "proxy_press_feedback",
+      "value": "#18000000"
+    },
+    {
+      "name": "selection_tonal",
+      "value": "#242E6BFF"
+    },
+    {
+      "name": "dash_status_decoration",
+      "value": "#EAF0FF"
+    },
+    {
+      "name": "dash_running_background",
+      "value": "#94F990"
+    },
+    {
+      "name": "profile_expiry_tonal",
+      "value": "#262E6BFF"
+    },
+    {
+      "name": "profile_expiry_error_tonal",
+      "value": "#26E5484D"
+    },
+    {
+      "name": "dashboard_shadow",
+      "value": "#0D000000"
     }
   ]
 }
