@@ -7,7 +7,7 @@
 | 编号 | 标题 | 状态 |
 |---|---|---|
 | [0001](0001-core-in-vpn-extension.md) | 内核以 c-shared 库运行在 VPN 扩展进程 | 已采纳 |
-| [0002](0002-patched-go-toolchain.md) | 用打补丁的 Go 工具链编译内核 | 已采纳 |
+| [0002](0002-patched-go-toolchain.md) | 用打补丁的 Go 工具链编译内核 | 已采纳，由 0014 扩展 x86_64 |
 | [0003](0003-ui-core-via-external-controller.md) | UI 通过 external-controller 和文件通道与内核通信 | 已采纳，由 0009 扩展 |
 | [0004](0004-exclude-self-by-uid.md) | 按 UID 把本应用排除在 VPN 之外 | 已被 0008 取代 |
 | [0005](0005-gvisor-default-stack.md) | TUN 默认使用 gVisor 协议栈 | 已采纳，待真机数据复核 |
@@ -18,3 +18,4 @@
 | [0010](0010-hot-switch-reload-in-vpn.md) | 热切换由 VPN 进程重载配置 | 已采纳，目标与节点恢复由 0012 补充 |
 | [0012](0012-profile-state-and-runtime-separation.md) | 配置持久状态与实际运行状态分离 | 已采纳，待统一真机验收 |
 | [0013](0013-runtime-host-process-evidence.md) | 用系统进程事实恢复异常终止的运行宿主 | 已采纳，宿主回归与 API 26 真机启停、转发通过 |
+| [0014](0014-x86-emulator-toolchain.md) | 为 x86_64 模拟器单独适配 Go 工具链 | 原生加载与双 ABI 构建通过，待签名后应用/VPN 验收 |
