@@ -19,6 +19,12 @@
 
 外部贡献者第一次提 PR 时，CI 需要维护者批准后才会运行。维护者按 PR 的内容选择合并方式；squash 合并时，PR 标题会成为 main 上的提交信息和发版说明里的一条，所以 PR 标题也要符合提交信息格式。
 
+## 宿主回归
+
+运行 `make test` 执行宿主业务回归，或用 `make test TESTS="profiles runtime"` 只运行指定分组。使用 Command Line Tools 时先设置 `HARMONYOS_TOOLS_HOME`，脚本会定位 TypeScript 编译器并安装 OHPM 依赖，不必先打包 HAP。
+
+Go 宿主用例使用 `.go-version` 固定的工具链；依赖下载和编译在准备阶段完成，不占用用例执行时限。首次运行需要联网。宿主测试不加载手机共享库，不能替代上述真机验证。
+
 ## 行为准则
 
 参与本项目即表示同意遵守[行为准则](CODE_OF_CONDUCT.md)。

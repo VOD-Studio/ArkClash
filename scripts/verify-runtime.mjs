@@ -79,9 +79,12 @@ const realm = vm.createContext({
 vm.runInContext(compiled, realm);
 const core = module.exports;
 
-function loadConsumer(relative, bindings) {
+function loadConsumer(relative, bindings, modules = new Map()) {
+  const file = new URL(relative, import.meta.url);
+  if (modules.has(file.href)) { return modules.get(file.href).exports; }
   const consumer = { exports: {} };
-  const source = readFileSync(new URL(relative, import.meta.url), 'utf8')
+  modules.set(file.href, consumer);
+  const source = readFileSync(file, 'utf8')
     .replace(/^\s*@ObservedV2\s*$/gm, '').replace(/@Trace\s+/g, '');
   const code = ts.transpileModule(source, {
     fileName: 'consumer.ts', compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
@@ -90,7 +93,11 @@ function loadConsumer(relative, bindings) {
     Date: Clock, Promise, Error, JSON, Number, Math, Set, Map,
     $r: key => key,
     setTimeout(callback, milliseconds) { state.now += milliseconds; queueMicrotask(callback); },
-    require(name) { assert.ok(name in bindings, `unexpected consumer module ${name}`); return bindings[name]; },
+    require(name) {
+      if (name in bindings) { return bindings[name]; }
+      assert.ok(name.startsWith('.'), `unexpected consumer module ${name}`);
+      return loadConsumer(new URL(`${name}.ets`, file), bindings, modules);
+    },
     module: consumer, exports: consumer.exports
   });
   return consumer.exports;
@@ -266,17 +273,25 @@ test('订阅在异步读盘期间停止后不会打开迟到WebSocket', async ()
   assert.equal(socket.active, false);
 });
 
-test('探测在异步读盘期间取消后不创建网络请求', async () => {
+test('探测在异步读盘期间取消后不创建网络请求', { timeout: 5000 }, async () => {
   let release;
   const storage = new Promise(resolve => { release = resolve; });
+  let entered;
+  const reading = new Promise(resolve => { entered = resolve; });
   let opened = 0;
   const { RoutedProbeRequest } = loadConsumer('../entry/src/main/ets/client/RoutedProbe.ets', {
-    '@kit.BasicServicesKit': {},
+    '@kit.BasicServicesKit': {}, '@kit.ArkTS': {},
     '@kit.NetworkKit': { http: { createHttp() { opened++; return {}; } } },
-    '../shared/Runtime': { readRuntime: async () => { await storage; return state.runtime; } }
+    '../shared/Runtime': {
+      CONTROLLER_ADDRESS: '127.0.0.1:19090',
+      readRuntime: async () => { entered(); await storage; return state.runtime; }
+    }
   });
   const request = new RoutedProbeRequest();
-  const pending = request.run(context.filesDir, 'https://example.invalid/', 'GET', 1000, true);
+  const pending = request.run(context.filesDir,
+    { url: 'https://example.invalid/', method: 'GET', bodyMode: 'none' }, 1000, true);
+  await reading;
+  assert.equal(opened, 0);
   request.cancel();
   release();
   await assert.rejects(pending, error => error.reason === 'cancelled');
