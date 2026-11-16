@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, copyFile, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, copyFile, cp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +8,8 @@ import test, { before, after } from 'node:test';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const goVersion = (await readFile(join(root, '.go-version'), 'utf8')).trim();
-const goEnv = { ...process.env, CGO_ENABLED: '0', GOTOOLCHAIN: `go${goVersion}` };
+const race = process.env.CORE_RACE === '1';
+const goEnv = { ...process.env, CGO_ENABLED: race ? '1' : '0', GOTOOLCHAIN: `go${goVersion}` };
 const sandbox = await mkdtemp(join(tmpdir(), 'arkclash-core-host-'));
 const executable = join(sandbox, 'core.test');
 after(() => rm(sandbox, { recursive: true, force: true }));
@@ -18,9 +19,10 @@ before(async () => {
   for (const file of ['go.mod', 'go.sum', 'runtime.go', 'selection.go', 'delay.go', 'probe.go', 'probe_body.go', 'proxies.go']) {
     await copyFile(join(root, 'core', file), join(sandbox, file));
   }
-  for (const file of ['core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go']) {
+  for (const file of ['core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go', 'geo-reader-host_test.go']) {
     await copyFile(new URL(`./${file}`, import.meta.url), join(sandbox, file));
   }
+  await cp(join(root, 'scripts/testdata/geo'), join(sandbox, 'testdata/geo'), { recursive: true });
   const prepare = spawnSync('bash', [join(root, 'scripts/prepare-mihomo.sh'), join(sandbox, 'mihomo')], {
     encoding: 'utf8', timeout: 300000, env: goEnv
   });
@@ -55,7 +57,7 @@ before(async () => {
   await writeFile(join(sandbox, 'overrides.go'), `package main\nimport (\n"strings"\n"fmt"\n"path/filepath"\n` +
     `"github.com/metacubex/mihomo/component/process"\n"github.com/metacubex/mihomo/config"\n` +
     `"github.com/metacubex/mihomo/constant"\n"github.com/metacubex/mihomo/tunnel"\n)\n${options}\n${overrides}\n${lifecycle}\n`);
-  const build = spawnSync('go', ['test', '-mod=readonly', '-c', '-o', executable, '.'], {
+  const build = spawnSync('go', ['test', '-mod=readonly', ...(race ? ['-race'] : []), '-c', '-o', executable, '.'], {
     cwd: sandbox, encoding: 'utf8', timeout: 600000, env: goEnv
   });
   assert.equal(build.status, 0, `${build.error ?? ''}\n${build.stdout}\n${build.stderr}`);

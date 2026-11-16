@@ -1,0 +1,12 @@
+MaxMind-DB test databases, Copyright MaxMind, Inc.
+Upstream: https://github.com/maxmind/MaxMind-DB
+Commit: 3e225a82e492a58eef738ef2b6e94aa4f50ef932
+License: Creative Commons Attribution-ShareAlike 3.0 Unported (CC-BY-SA-3.0).
+The accompanying LICENSE is copied unchanged from that commit's root LICENSE.
+These unmodified fixtures are used only by host tests, not bundled in the HAP.
+
+https://raw.githubusercontent.com/maxmind/MaxMind-DB/3e225a82e492a58eef738ef2b6e94aa4f50ef932/test-data/GeoIP2-Country-Test.mmdb
+Git blob SHA-1: 9e0a58e6df30dd8d279c9ede70bcb1f19e1bf72f
+
+https://raw.githubusercontent.com/maxmind/MaxMind-DB/3e225a82e492a58eef738ef2b6e94aa4f50ef932/test-data/GeoLite2-ASN-Test.mmdb
+Git blob SHA-1: 16f4b201d9069fd0999bf4988ef3e8977fc4ed8e
