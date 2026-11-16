@@ -64,6 +64,19 @@
 
 * **ui:** 使用系统异步接口采集界面进程内存，避免在 ArkTS 主线程同步读取 smaps。
 
+## [0.6.0](https://github.com/VOD-Studio/ArkClash/compare/v0.5.1...v0.6.0) (2026-11-16)
+
+
+### 新增
+
+* **toolchain:** 支持 x86_64 模拟器原生构建 ([7d51d5a](https://github.com/VOD-Studio/ArkClash/commit/7d51d5a38671482b3a8239dcbea6a1ef8cfecb69))
+
+
+### 修复
+
+* **profiles:** 显式保留批量任务的异步返回类型 ([0a5bff5](https://github.com/VOD-Studio/ArkClash/commit/0a5bff53f20f45bdb65c9c78395a6bf51555ac5d))
+* **toolchain:** 修复宿主回归与异步类型检查 ([358face](https://github.com/VOD-Studio/ArkClash/commit/358face99763488c4b20a5b46d29fbdeeeb21e07))
+
 ## [0.5.1](https://github.com/VOD-Studio/ArkClash/compare/v0.5.0...v0.5.1) (2026-11-15)
 
 
