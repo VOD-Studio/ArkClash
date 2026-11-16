@@ -121,10 +121,12 @@ TUN 由 `tun.go` 单独持有，不走配置文件，所以重新加载或切换
 ## 构建产物
 
 ```
-core/ ── scripts/build-core.sh（补丁版 Go + OHOS NDK）──► entry/libs/arm64-v8a/libclash.so
+core/ ── scripts/build-core.sh（补丁版 Go + OHOS NDK）──► entry/libs/<ABI>/libclash.so
 Geo 数据 ── scripts/fetch-geodata.sh ──► entry/src/main/resources/rawfile/geo/
 entry/ ── hvigor（CMake 编 NAPI 桥 + ArkTS）──► HAP
 ```
+
+`ABI` 默认为 `arm64-v8a`，可选 `x86_64`。私有工具链和补丁依赖按 ABI 隔离；HAP 只包含所选架构的内核与 NAPI 桥。ARM64 包名保持不变，x86_64 包名增加 `-x86_64`；两种 dist 产物共存，但共享 Hvigor 中间目录，不能并发打包。签名前可用 `make core-smoke ABI=x86_64` 在已连接的模拟器验证动态加载与多线程 C API；这不替代应用内 VPN 验收。原理与验证边界见 [ADR-0014](adr/0014-x86-emulator-toolchain.md)。
 
 ## 后续演进的约束
 

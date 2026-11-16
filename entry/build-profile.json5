@@ -5,7 +5,7 @@
       "path": "./src/main/cpp/CMakeLists.txt",
       "arguments": "",
       "cppFlags": "-std=c++17",
-      // libclash.so (scripts/build-core.sh) is only built for arm64.
+      // 默认 ARM64；entry/hvigorfile.ts 按 ABI 环境变量覆盖编译与打包选项。
       "abiFilters": [
         "arm64-v8a"
       ]

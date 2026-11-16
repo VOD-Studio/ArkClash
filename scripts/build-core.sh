@@ -1,28 +1,41 @@
 #!/usr/bin/env bash
-# Cross-compiles core/ (mihomo) into entry/libs/arm64-v8a/libclash.so.
+# 交叉编译 core/（mihomo）到所选 ABI 的 libclash.so。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OHOS_SDK="${OHOS_SDK:-/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony}"
 LLVM="$OHOS_SDK/native/llvm/bin"
-OUT="$ROOT/entry/libs/arm64-v8a"
+ABI="${ABI:-arm64-v8a}"
+case "$ABI" in
+  arm64-v8a)
+    ARCH=arm64
+    TRIPLE=aarch64-unknown-linux-ohos
+    PATCH="$ROOT/scripts/go-ohos.patch"
+    TLS_RELOC=R_AARCH64_TLS_TPREL
+    ;;
+  x86_64)
+    ARCH=amd64
+    TRIPLE=x86_64-unknown-linux-ohos
+    PATCH="$ROOT/scripts/go-ohos-amd64.patch"
+    TLS_RELOC='R_X86_64_(TPOFF|GOTTPOFF)'
+    ;;
+  *) echo "不支持的 ABI：${ABI}（仅支持 arm64-v8a、x86_64）" >&2; exit 2 ;;
+esac
+OUT="$ROOT/entry/libs/$ABI"
 
-if [[ ! -x "$LLVM/aarch64-unknown-linux-ohos-clang" ]]; then
+if [[ ! -x "$LLVM/$TRIPLE-clang" ]]; then
   echo "OHOS NDK not found at $OHOS_SDK; set OHOS_SDK" >&2
   exit 1
 fi
 
-# 补丁按 .go-version 里的 Go 版本制作，版本不同时补丁可能打不上。
+# 编译器补丁绑定项目版本，不能借用 PATH 上另一版 Go 的编译器。
 WANT_GO="$(cat "$ROOT/.go-version")"
-if [[ "$(go env GOVERSION)" != "go$WANT_GO" ]]; then
-  echo "警告：本机是 $(go env GOVERSION)，项目固定 go${WANT_GO}（.go-version）" >&2
-fi
+export GOTOOLCHAIN="go$WANT_GO"
 
 # Stock Go cannot produce a c-shared library that musl can dlopen (golang/go#54805).
-# Build with a private copy of the local Go toolchain carrying go-ohos.patch.
+# 按 ABI 应用补丁，保留系统 Go 不变。
 GO_VERSION="$(go env GOVERSION)"
-TOOLCHAIN="$ROOT/.toolchain/$GO_VERSION-ohos"
-PATCH="$ROOT/scripts/go-ohos.patch"
+TOOLCHAIN="$ROOT/.toolchain/$GO_VERSION-ohos-$ABI"
 STAMP="$TOOLCHAIN/.arkclash-patch"
 if [[ ! -f "$STAMP" ]] || ! cmp -s "$PATCH" "$STAMP"; then
   echo "preparing patched $GO_VERSION in $TOOLCHAIN"
@@ -31,6 +44,12 @@ if [[ ! -f "$STAMP" ]] || ! cmp -s "$PATCH" "$STAMP"; then
   cp -R "$(go env GOROOT)" "$TOOLCHAIN.tmp"
   chmod -R u+w "$TOOLCHAIN.tmp"
   patch -s -p1 -d "$TOOLCHAIN.tmp" < "$PATCH"
+  if [[ "$ABI" == x86_64 ]]; then
+    # x86 的 TLS 指令由汇编器生成，必须同时重建共享该后端的三个工具。
+    GOROOT="$TOOLCHAIN.tmp" GOTOOLCHAIN=local CGO_ENABLED=0 \
+      GOOS="$(go env GOHOSTOS)" GOARCH="$(go env GOHOSTARCH)" \
+      "$TOOLCHAIN.tmp/bin/go" install cmd/asm cmd/compile cmd/link
+  fi
   cp "$PATCH" "$TOOLCHAIN.tmp/.arkclash-patch"
   mv "$TOOLCHAIN.tmp" "$TOOLCHAIN"
 fi
@@ -44,7 +63,7 @@ mkdir -p "$OUT"
 # 需要打补丁的依赖：复制到 .toolchain 打补丁，再用临时 go.mod（-modfile）
 # replace 过去，core/go.mod 保持原样。
 # gvisor-fdbased.patch：SELinux 不允许对 TUN fd 做 fstat，见补丁里的注释。
-PATCHED_DIR="$ROOT/.toolchain/patched"
+PATCHED_DIR="$ROOT/.toolchain/patched-$ABI"
 rm -rf "$PATCHED_DIR"
 mkdir -p "$PATCHED_DIR"
 # go list -m 只在模块已下载时才返回目录，全新环境（CI）要先下载。
@@ -60,9 +79,9 @@ bash "$ROOT/scripts/prepare-mihomo.sh" "$PATCHED_DIR/mihomo"
 "$GO" mod edit -modfile "$PATCHED_DIR/go.mod" "-replace=github.com/metacubex/mihomo=$PATCHED_DIR/mihomo"
 
 # HarmonyOS uses musl, so this is a GOOS=linux build linked by the OHOS clang.
-CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
-  CC="$LLVM/aarch64-unknown-linux-ohos-clang" \
-  CXX="$LLVM/aarch64-unknown-linux-ohos-clang++" \
+CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH" \
+  CC="$LLVM/$TRIPLE-clang" \
+  CXX="$LLVM/$TRIPLE-clang++" \
   "$GO" build -buildmode=c-shared -tags with_gvisor -trimpath -modfile "$PATCHED_DIR/go.mod" \
     -ldflags "-s -w -extldflags=-Wl,-soname,libclash.so -X github.com/metacubex/mihomo/constant.Version=$MIHOMO_VERSION" \
     -o "$OUT/libclash.so" .
@@ -71,12 +90,12 @@ CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
 rm -f "$OUT/libclash.h"
 
 # musl rejects initial-exec TLS relocations in dlopen'ed libraries.
-# 允许 TLSDESC（general-dynamic），只拦 initial-exec 用的 TPREL。
+# 允许 TLSDESC，禁止需要预留静态 TLS 的 TPREL/TPOFF。
 # 先把输出完整读进变量再查：直接接管道时 grep -q 命中就退出，readelf 写不进去而失败，
 # pipefail 下整条管道算失败，if 反而放行。
 RELOCS="$("$LLVM/llvm-readelf" -r "$OUT/libclash.so")"
-if grep -q "R_AARCH64_TLS_TPREL" <<<"$RELOCS"; then
-  echo "libclash.so still has TLS relocations; is go-ohos.patch applied?" >&2
+if grep -Eq "$TLS_RELOC" <<<"$RELOCS"; then
+  echo "libclash.so still has initial-exec TLS relocations; is $PATCH applied?" >&2
   exit 1
 fi
 echo "built $OUT/libclash.so (mihomo $MIHOMO_VERSION)"

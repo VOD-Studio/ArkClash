@@ -1,0 +1,204 @@
+--- a/src/cmd/internal/obj/x86/asm6.go
++++ b/src/cmd/internal/obj/x86/asm6.go
+@@ -2237,10 +2237,10 @@
+ 	// a different thread, the TLS address may become invalid.
+ 	if !CanUse1InsnTLS(ctxt) {
+ 		useTLS := func(p *obj.Prog) bool {
+-			// Only need to mark the second instruction, which has
+-			// REG_TLS as Index. (It is okay to interrupt and restart
+-			// the first instruction.)
+-			return p.From.Index == REG_TLS
++			// OHOS 动态 TLS 偏移只属于当前线程；解析、读取和写入均不能异步抢占。
++			return p.From.Index == REG_TLS || p.To.Index == REG_TLS ||
++				(ctxt.Arch.Family == sys.AMD64 && ctxt.Headtype == objabi.Hlinux &&
++					ctxt.Flag_shared && p.From.Type == obj.TYPE_REG && p.From.Reg == REG_TLS)
+ 		}
+ 		obj.MarkUnsafePoints(ctxt, s.Func().Text, newprog, useTLS, nil)
+ 	}
+@@ -5140,6 +5140,22 @@
+ 						log.Fatalf("unknown TLS base location for %v", ctxt.Headtype)
+ 
+ 					case objabi.Hlinux, objabi.Hfreebsd:
++						if ctxt.Headtype == objabi.Hlinux && ctxt.Flag_shared {
++							// 辅助函数只修改目标寄存器，保留标志位与其它寄存器。
++							// 不使用固定 TCB 槽位，也不把 C 调用约定泄漏给 Go 指令。
++							if p.To.Reg == REG_SP {
++								ctxt.Diag("OHOS TLS offset cannot replace SP")
++							}
++							ab.Put1(0xe8)
++							cursym.AddRel(ctxt, obj.Reloc{
++								Type: objabi.R_CALL,
++								Off:  int32(p.Pc + int64(ab.Len())),
++								Siz:  4,
++								Sym:  ctxt.Lookup("x_cgo_tls_" + strings.ToLower(rconv(int(p.To.Reg)))),
++							})
++							ab.PutInt32(0)
++							break
++						}
+ 						if !ctxt.Flag_shared {
+ 							log.Fatalf("unknown TLS base location for linux/freebsd without -shared")
+ 						}
+--- a/src/runtime/asm_amd64.s
++++ b/src/runtime/asm_amd64.s
+@@ -33,8 +33,15 @@
+ 	// Transition from C ABI to Go ABI.
+ 	PUSH_REGS_HOST_TO_ABI0()
+ 
++#ifdef GOOS_linux
++	// OHOS musl 不向 DT_INIT_ARRAY 传 argc/argv，auxv 由 /proc/self/auxv 补全。
++	MOVQ	$0, _rt0_amd64_lib_argc<>(SB)
++	LEAQ	_rt0_amd64_lib_emptyargv<>(SB), AX
++	MOVQ	AX, _rt0_amd64_lib_argv<>(SB)
++#else
+ 	MOVQ	DI, _rt0_amd64_lib_argc<>(SB)
+ 	MOVQ	SI, _rt0_amd64_lib_argv<>(SB)
++#endif
+ 
+ 	// Synchronous initialization.
+ #ifndef GOOS_windows
+@@ -93,6 +100,12 @@
+ GLOBL _rt0_amd64_lib_argc<>(SB),NOPTR, $8
+ DATA _rt0_amd64_lib_argv<>(SB)/8, $0
+ GLOBL _rt0_amd64_lib_argv<>(SB),NOPTR, $8
++// argv、envp 与 auxv 的终止项。
++DATA _rt0_amd64_lib_emptyargv<>+0(SB)/8, $0
++DATA _rt0_amd64_lib_emptyargv<>+8(SB)/8, $0
++DATA _rt0_amd64_lib_emptyargv<>+16(SB)/8, $0
++DATA _rt0_amd64_lib_emptyargv<>+24(SB)/8, $0
++GLOBL _rt0_amd64_lib_emptyargv<>(SB),NOPTR, $32
+ 
+ #ifdef GOAMD64_v2
+ DATA bad_cpu_msg<>+0x00(SB)/84, $"This program can only be run on AMD64 processors with v2 microarchitecture support.\n"
+--- a/src/runtime/cgo/gcc_tls_linux_amd64.S
++++ b/src/runtime/cgo/gcc_tls_linux_amd64.S
+@@ -0,0 +1,62 @@
++// ArkClash OHOS：MOVQ TLS 的动态偏移解析，不依赖 musl 的静态 TLS 预留。
++// 每个入口只修改指定寄存器；TLSDESC 会改标志位，因此必须独立保存。
++	.section .tbss,"awT",@nobits
++	.p2align 3
++	.type arkclash_tls_g, @object
++	.size arkclash_tls_g, 8
++arkclash_tls_g:
++	.zero 8
++
++	.text
++	.macro TLS_OFFSET name, output, scratch
++	.p2align 4
++	.globl x_cgo_tls_\name
++	.hidden x_cgo_tls_\name
++	.type x_cgo_tls_\name, @function
++x_cgo_tls_\name:
++	.cfi_startproc
++	pushfq
++	.cfi_adjust_cfa_offset 8
++	push %\scratch
++	.cfi_adjust_cfa_offset 8
++	.cfi_offset %\scratch, -24
++	mov %rsp, %\scratch
++	.cfi_def_cfa %\scratch, 24
++	and $-16, %rsp
++	.ifnc \output,rax
++	xchg %rax, %\output
++	.endif
++	lea arkclash_tls_g@TLSDESC(%rip), %rax
++	call *arkclash_tls_g@TLSCALL(%rax)
++	.ifnc \output,rax
++	xchg %rax, %\output
++	.endif
++	mov %\scratch, %rsp
++	.cfi_def_cfa %rsp, 24
++	pop %\scratch
++	.cfi_restore %\scratch
++	.cfi_adjust_cfa_offset -8
++	popfq
++	.cfi_adjust_cfa_offset -8
++	ret
++	.cfi_endproc
++	.size x_cgo_tls_\name, .-x_cgo_tls_\name
++	.endm
++
++	TLS_OFFSET ax, rax, r11
++	TLS_OFFSET cx, rcx, r11
++	TLS_OFFSET dx, rdx, r11
++	TLS_OFFSET bx, rbx, r11
++	TLS_OFFSET bp, rbp, r11
++	TLS_OFFSET si, rsi, r11
++	TLS_OFFSET di, rdi, r11
++	TLS_OFFSET r8, r8, r11
++	TLS_OFFSET r9, r9, r11
++	TLS_OFFSET r10, r10, r11
++	TLS_OFFSET r11, r11, r10
++	TLS_OFFSET r12, r12, r11
++	TLS_OFFSET r13, r13, r11
++	TLS_OFFSET r14, r14, r11
++	TLS_OFFSET r15, r15, r11
++
++	.section .note.GNU-stack,"",@progbits
+--- a/src/runtime/cgo/tls_linux_amd64.go
++++ b/src/runtime/cgo/tls_linux_amd64.go
+@@ -0,0 +1,65 @@
++// ArkClash OHOS：为汇编器生成的 TLS 偏移调用保留原生入口。
++package cgo
++
++import _ "unsafe"
++
++//go:cgo_import_static x_cgo_tls_ax
++//go:linkname x_cgo_tls_ax x_cgo_tls_ax
++var x_cgo_tls_ax byte
++
++//go:cgo_import_static x_cgo_tls_cx
++//go:linkname x_cgo_tls_cx x_cgo_tls_cx
++var x_cgo_tls_cx byte
++
++//go:cgo_import_static x_cgo_tls_dx
++//go:linkname x_cgo_tls_dx x_cgo_tls_dx
++var x_cgo_tls_dx byte
++
++//go:cgo_import_static x_cgo_tls_bx
++//go:linkname x_cgo_tls_bx x_cgo_tls_bx
++var x_cgo_tls_bx byte
++
++//go:cgo_import_static x_cgo_tls_bp
++//go:linkname x_cgo_tls_bp x_cgo_tls_bp
++var x_cgo_tls_bp byte
++
++//go:cgo_import_static x_cgo_tls_si
++//go:linkname x_cgo_tls_si x_cgo_tls_si
++var x_cgo_tls_si byte
++
++//go:cgo_import_static x_cgo_tls_di
++//go:linkname x_cgo_tls_di x_cgo_tls_di
++var x_cgo_tls_di byte
++
++//go:cgo_import_static x_cgo_tls_r8
++//go:linkname x_cgo_tls_r8 x_cgo_tls_r8
++var x_cgo_tls_r8 byte
++
++//go:cgo_import_static x_cgo_tls_r9
++//go:linkname x_cgo_tls_r9 x_cgo_tls_r9
++var x_cgo_tls_r9 byte
++
++//go:cgo_import_static x_cgo_tls_r10
++//go:linkname x_cgo_tls_r10 x_cgo_tls_r10
++var x_cgo_tls_r10 byte
++
++//go:cgo_import_static x_cgo_tls_r11
++//go:linkname x_cgo_tls_r11 x_cgo_tls_r11
++var x_cgo_tls_r11 byte
++
++//go:cgo_import_static x_cgo_tls_r12
++//go:linkname x_cgo_tls_r12 x_cgo_tls_r12
++var x_cgo_tls_r12 byte
++
++//go:cgo_import_static x_cgo_tls_r13
++//go:linkname x_cgo_tls_r13 x_cgo_tls_r13
++var x_cgo_tls_r13 byte
++
++//go:cgo_import_static x_cgo_tls_r14
++//go:linkname x_cgo_tls_r14 x_cgo_tls_r14
++var x_cgo_tls_r14 byte
++
++//go:cgo_import_static x_cgo_tls_r15
++//go:linkname x_cgo_tls_r15 x_cgo_tls_r15
++var x_cgo_tls_r15 byte
++

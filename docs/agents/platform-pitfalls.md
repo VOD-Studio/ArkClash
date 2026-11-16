@@ -1,6 +1,6 @@
 # 平台陷阱
 
-这些坑都是在真机（Pura 70 Ultra，API 26）上踩过并修好的。每一条都写了：日志里长什么样、原因、补丁在哪、升级依赖时怎么复查。
+ARM64 的运行问题已在真机（Pura 70 Ultra，API 26）上验证；x86_64 的动态加载补丁另在 API 26 模拟器做原生冒烟，不代表完成应用/VPN 验收。每一条都写了现象、原因、补丁位置和升级复查方法。
 
 ## 1. 内核加载失败：initial-exec TLS
 
@@ -12,6 +12,13 @@
 - **试过但不可行**：把 g 放在线程指针后面的固定槽位（Android 的做法）。在 ffrt 等系统线程上 TP+8 已经是 -1，不是空槽位。
 - **写汇编时注意**：共享库模式下，Go 汇编读全局变量（`MOVD sym(SB), Rx`）会借用 R27 中转。R27 里存着东西时，先取地址再读：`MOVD $sym(SB), R0; MOVD (R0), R0`。
 - **复查**：升级 Go 时补丁必须能打上（打不上脚本会失败）；`llvm-readelf -r libclash.so` 里只能有 `R_AARCH64_TLSDESC`，不能有 `TLS_TPREL`；真机上内核能启动。Go 官方支持 general-dynamic TLS 之后删掉这个补丁。
+
+### x86_64 模拟器
+
+- `scripts/go-ohos-amd64.patch` 修改 linux/amd64 共享模式的 TLS 指令展开，由原生辅助函数通过 TLSDESC 返回线程局部 `g` 的偏移。辅助函数必须保留非目标寄存器与标志位；解析和后续 TLS 读写不能被异步抢占。初始化同样使用空参数表。
+- `make core ABI=x86_64` 会重建该私有工具链的 `asm`、`compile`、`link`，只复制源码而沿用旧编译器不生效。产物不能出现 `R_X86_64_TPOFF*` 或 `R_X86_64_GOTTPOFF`。
+- `make core-smoke ABI=x86_64` 在已连接模拟器上验证动态加载前已有线程、加载后新线程及 C→Go→C 调用，完成后清理临时文件。不使用 `LD_PRELOAD`，不卸载 Go 共享库。
+- Go 升级后两种架构都要重新构建、检查 TLS 和运行冒烟；x86 额外复查编译器生成的辅助调用。详细决定见 [ADR-0014](../adr/0014-x86-emulator-toolchain.md)。
 
 ## 2. 内核自己的流量绕回 VPN
 

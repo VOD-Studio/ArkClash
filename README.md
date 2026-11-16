@@ -51,7 +51,7 @@ HarmonyOS 只能安装签过名的应用，目前还没有面向普通用户的�
 
 ## 从源码构建
 
-需要 DevEco Studio（带 HarmonyOS SDK API 26）、Go（版本见 `.go-version`）和 Python 3。
+需要 DevEco Studio 或 Command Line Tools（带 HarmonyOS SDK API 26）、Go（版本见 `.go-version`）和 Python 3。使用 Command Line Tools 时设置 `HARMONYOS_TOOLS_HOME`；纯命令行编译内核还需设置 `OHOS_SDK` 指向其 OpenHarmony SDK 目录。
 
 ```sh
 make geodata   # 下载 Geo 数据，打包进 HAP
@@ -61,6 +61,18 @@ make run       # 安装到连着的手机并启动
 ```
 
 安装到手机前需要签名：用 DevEco Studio 打开项目，在 File → Project Structure → Signing Configs 里用华为账号自动签名。`make help` 列出全部命令。第一次搭环境时，按 [docs/agents/fork-setup.md](docs/agents/fork-setup.md) 逐步完成。
+
+默认构建 ARM64。开发用 x86_64 模拟器可显式选择 ABI：
+
+```sh
+make core ABI=x86_64
+make core-smoke ABI=x86_64  # 已连接的模拟器；仅验证原生加载和多线程 C API
+make hap ABI=x86_64
+# 配置签名后：
+make run ABI=x86_64
+```
+
+x86_64 包为 `dist/ArkClash-<版本>-debug-x86_64-unsigned.hap`，不会覆盖 ARM64 包。不同 ABI 的 HAP 不要并发构建。模拟器原生加载已验证，签名后的应用/VPN 验收仍待完成；模拟器结果不能替代 ARM 真机性能和稳定性验证。
 
 ## 文档
 
