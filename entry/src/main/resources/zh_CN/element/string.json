@@ -1,6 +1,178 @@
 {
   "string": [
     {
+      "name": "tools_resources",
+      "value": "资源"
+    },
+    {
+      "name": "geo_not_downloaded",
+      "value": "未下载"
+    },
+    {
+      "name": "geo_loading",
+      "value": "正在读取资源"
+    },
+    {
+      "name": "geo_queued",
+      "value": "排队中"
+    },
+    {
+      "name": "geo_updating",
+      "value": "更新中"
+    },
+    {
+      "name": "geo_row_actions",
+      "value": "点按编辑链接，长按打开资源操作。"
+    },
+    {
+      "name": "geo_connect_to_update",
+      "value": "连接后可更新"
+    },
+    {
+      "name": "geo_edit_url",
+      "value": "%s 链接"
+    },
+    {
+      "name": "geo_url",
+      "value": "下载链接"
+    },
+    {
+      "name": "geo_url_hint",
+      "value": "仅支持 HTTP 或 HTTPS 链接，不含用户名和密码，最长 2048 字符。保存不会下载资源。"
+    },
+    {
+      "name": "geo_interval",
+      "value": "更新间隔"
+    },
+    {
+      "name": "geo_interval_hours",
+      "value": "间隔（小时）"
+    },
+    {
+      "name": "geo_interval_hint",
+      "value": "请输入 1–8760 的整数小时。自动更新仅在已连接时运行。"
+    },
+    {
+      "name": "geo_restore_default",
+      "value": "恢复默认链接"
+    },
+    {
+      "name": "geo_unsaved_title",
+      "value": "尚未保存修改"
+    },
+    {
+      "name": "geo_unsaved_message",
+      "value": "继续编辑，还是放弃本次修改？"
+    },
+    {
+      "name": "geo_discard",
+      "value": "放弃修改"
+    },
+    {
+      "name": "geo_keep_editing",
+      "value": "继续编辑"
+    },
+    {
+      "name": "geo_saved",
+      "value": "设置已保存"
+    },
+    {
+      "name": "geo_saved_pending",
+      "value": "已保存，待应用到内核"
+    },
+    {
+      "name": "geo_updated",
+      "value": "%s 已更新"
+    },
+    {
+      "name": "geo_unchanged",
+      "value": "%s 已是最新"
+    },
+    {
+      "name": "geo_batch_result",
+      "value": "资源更新：%1$d 项完成，%2$d 项未成功"
+    },
+    {
+      "name": "geo_failures",
+      "value": "未成功的更新"
+    },
+    {
+      "name": "geo_link_copied",
+      "value": "链接已复制"
+    },
+    {
+      "name": "geo_copy_failed",
+      "value": "复制链接失败"
+    },
+    {
+      "name": "geo_enable_auto",
+      "value": "开启自动更新"
+    },
+    {
+      "name": "geo_disable_auto",
+      "value": "关闭自动更新"
+    },
+    {
+      "name": "geo_auto_status",
+      "value": "更新间隔：%d 小时。下载由已连接内核按当前规则路由。"
+    },
+    {
+      "name": "geo_reset_settings",
+      "value": "恢复默认设置"
+    },
+    {
+      "name": "geo_reset_message",
+      "value": "将四项链接恢复默认、关闭自动更新并将间隔恢复为 24 小时？已下载的数据库不会删除。"
+    },
+    {
+      "name": "geo_invalid_settings",
+      "value": "资源设置无效，请主动恢复默认设置以修复。"
+    },
+    {
+      "name": "geo_invalid_url",
+      "value": "请输入有效的 HTTP 或 HTTPS 链接，须有主机名、不含用户名密码且不超过 2048 字符。"
+    },
+    {
+      "name": "geo_invalid_interval",
+      "value": "请输入 1–8760 的整数小时。"
+    },
+    {
+      "name": "geo_settings_conflict",
+      "value": "设置已变化，请重新确认"
+    },
+    {
+      "name": "geo_invalid_data",
+      "value": "资源数据无效"
+    },
+    {
+      "name": "geo_metadata_invalid",
+      "value": "资源元数据损坏，请手动更新此项以修复。"
+    },
+    {
+      "name": "geo_timeout",
+      "value": "资源下载超时"
+    },
+    {
+      "name": "geo_download_failed",
+      "value": "资源下载失败"
+    },
+    {
+      "name": "geo_canceled",
+      "value": "资源更新已取消"
+    },
+    {
+      "name": "geo_stale_boot",
+      "value": "内核连接已变化，请重新连接后重试。"
+    },
+    {
+      "name": "geo_http_error",
+      "value": "下载服务器返回 HTTP %s"
+    },
+    {
+      "name": "geo_io",
+      "value": "资源文件读取或保存失败"
+    },
+    {
       "name": "tab_home",
       "value": "仪表盘"
     },

@@ -52,15 +52,3 @@ export function dashboardCount(count: number): string {
   if (fixed.endsWith('.')) { fixed = fixed.substring(0, fixed.length - 1); }
   return `${fixed}${DASHBOARD_COUNT_UNITS[unit]}`;
 }
-
-export function dashboardUpdatedAgo(updatedAt: number, clock: number): ResourceStr {
-  if (updatedAt <= 0) { return '—'; }
-  const minutes = Math.floor((clock - updatedAt) / 60000);
-  const days = Math.floor(minutes / 1440);
-  if (days >= 365) { return $r('app.string.dash_updated_years', Math.floor(days / 365)); }
-  if (days >= 30) { return $r('app.string.dash_updated_months', Math.floor(days / 30)); }
-  if (days >= 1) { return $r('app.string.dash_updated_days', days); }
-  if (minutes >= 60) { return $r('app.string.dash_updated_hours', Math.floor(minutes / 60)); }
-  if (minutes >= 1) { return $r('app.string.dash_updated_minutes', minutes); }
-  return $r('app.string.dash_updated_just_now');
-}

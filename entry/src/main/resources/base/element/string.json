@@ -1,6 +1,178 @@
 {
   "string": [
     {
+      "name": "tools_resources",
+      "value": "Resources"
+    },
+    {
+      "name": "geo_not_downloaded",
+      "value": "Not downloaded"
+    },
+    {
+      "name": "geo_loading",
+      "value": "Loading resources"
+    },
+    {
+      "name": "geo_queued",
+      "value": "Queued"
+    },
+    {
+      "name": "geo_updating",
+      "value": "Updating"
+    },
+    {
+      "name": "geo_row_actions",
+      "value": "Tap to edit the URL; long press for resource actions."
+    },
+    {
+      "name": "geo_connect_to_update",
+      "value": "Connect to update"
+    },
+    {
+      "name": "geo_edit_url",
+      "value": "%s URL"
+    },
+    {
+      "name": "geo_url",
+      "value": "Download URL"
+    },
+    {
+      "name": "geo_url_hint",
+      "value": "Use an HTTP or HTTPS URL without a username or password, up to 2048 characters. Saving does not download the resource."
+    },
+    {
+      "name": "geo_interval",
+      "value": "Update interval"
+    },
+    {
+      "name": "geo_interval_hours",
+      "value": "Interval in hours"
+    },
+    {
+      "name": "geo_interval_hint",
+      "value": "Enter a whole number from 1 to 8760 hours. Automatic updates only run while connected."
+    },
+    {
+      "name": "geo_restore_default",
+      "value": "Restore default URL"
+    },
+    {
+      "name": "geo_unsaved_title",
+      "value": "Unsaved changes"
+    },
+    {
+      "name": "geo_unsaved_message",
+      "value": "Keep editing or discard your changes?"
+    },
+    {
+      "name": "geo_discard",
+      "value": "Discard changes"
+    },
+    {
+      "name": "geo_keep_editing",
+      "value": "Keep editing"
+    },
+    {
+      "name": "geo_saved",
+      "value": "Settings saved"
+    },
+    {
+      "name": "geo_saved_pending",
+      "value": "Saved; waiting to apply to the core"
+    },
+    {
+      "name": "geo_updated",
+      "value": "%s updated"
+    },
+    {
+      "name": "geo_unchanged",
+      "value": "%s is already up to date"
+    },
+    {
+      "name": "geo_batch_result",
+      "value": "Resources: %1$d completed, %2$d unsuccessful"
+    },
+    {
+      "name": "geo_failures",
+      "value": "Unsuccessful updates"
+    },
+    {
+      "name": "geo_link_copied",
+      "value": "Link copied"
+    },
+    {
+      "name": "geo_copy_failed",
+      "value": "Could not copy the link"
+    },
+    {
+      "name": "geo_enable_auto",
+      "value": "Enable automatic updates"
+    },
+    {
+      "name": "geo_disable_auto",
+      "value": "Disable automatic updates"
+    },
+    {
+      "name": "geo_auto_status",
+      "value": "Update interval: %d hours. Downloads use the connected core and current routing rules."
+    },
+    {
+      "name": "geo_reset_settings",
+      "value": "Restore default settings"
+    },
+    {
+      "name": "geo_reset_message",
+      "value": "Reset all four URLs, turn off automatic updates and restore the 24-hour interval? Downloaded databases will not be deleted."
+    },
+    {
+      "name": "geo_invalid_settings",
+      "value": "Resource settings are invalid. Restore defaults to repair them."
+    },
+    {
+      "name": "geo_invalid_url",
+      "value": "Enter a valid HTTP or HTTPS URL with a host, no username or password, and no more than 2048 characters."
+    },
+    {
+      "name": "geo_invalid_interval",
+      "value": "Enter a whole number from 1 to 8760 hours."
+    },
+    {
+      "name": "geo_settings_conflict",
+      "value": "Settings changed. Please review and confirm again."
+    },
+    {
+      "name": "geo_invalid_data",
+      "value": "Invalid resource data"
+    },
+    {
+      "name": "geo_metadata_invalid",
+      "value": "Resource metadata is damaged. Update this resource manually to repair it."
+    },
+    {
+      "name": "geo_timeout",
+      "value": "Resource download timed out"
+    },
+    {
+      "name": "geo_download_failed",
+      "value": "Resource download failed"
+    },
+    {
+      "name": "geo_canceled",
+      "value": "Resource update canceled"
+    },
+    {
+      "name": "geo_stale_boot",
+      "value": "The core connection changed. Please try again after reconnecting."
+    },
+    {
+      "name": "geo_http_error",
+      "value": "Download server returned HTTP %s"
+    },
+    {
+      "name": "geo_io",
+      "value": "Could not read or save resource files"
+    },
+    {
       "name": "module_desc",
       "value": "ArkClash"
     },

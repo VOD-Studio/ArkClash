@@ -12,6 +12,7 @@ import { ProxiesPage } from '../features/proxies/ProxiesPage';
 import { ToolPage } from '../features/tools/ToolPages';
 import { ToolRoute } from '../features/tools/ToolRoutes';
 import { ToolsPage } from '../features/tools/ToolsPage';
+import { ResourcesPage } from '../features/resources/ResourcesPage';
 import { WindowInsets } from './WindowInsets';
 import { DashboardTab } from './DashboardTab';
 
@@ -137,7 +138,11 @@ struct Index {
 
   @Builder
   Routes(name: string) {
-    ToolPage({ route: name })
+    if (name === ToolRoute.Resources) {
+      ResourcesPage({ foreground: this.foreground })
+    } else {
+      ToolPage({ route: name })
+    }
   }
 
   build() {

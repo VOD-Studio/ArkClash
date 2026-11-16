@@ -31,8 +31,10 @@ MMDB/ASN reader 使用原子指针发布，初始化与替换只在慢路径加�
 
 宿主用例执行产品实现，固定 MMDB 夹具仅用于测试、不打入 HAP。覆盖 reader 并发存活、格式验证、失败保留原文件、取消、调度、设置冲突与 UI 状态恢复。宿主 race 和 ARM64 构建不能替代设备转发。
 
-数据层已执行 `make test TESTS="resources runtime core" CORE_RACE=1`；修正 MMDB 测试候选生成和重复 ID 夹具后，`make test TESTS=core CORE_RACE=1` 全部通过。`make core ABI=arm64-v8a && make hap ABI=arm64-v8a` 通过，产物未签名；构建保留已有 ArkTS 异常处理警告。
+数据层已执行 `make test TESTS="resources runtime core" CORE_RACE=1`；修正 MMDB 测试候选生成和重复 ID 夹具后，`make test TESTS=core CORE_RACE=1` 全部通过。`make lint CHECKS=go`（gofmt、go vet）与 `make core ABI=arm64-v8a && make hap ABI=arm64-v8a` 通过，产物未签名；构建保留已有 ArkTS 异常处理警告。
+
+客户端与页面阶段执行 `make test TESTS="resources runtime dashboard"`，64/64 通过，涵盖真实 Controller/ControllerSocket、乱序与极快完成、重连消除 busy、隐藏/boot 换代、旧 Sheet 冲突和待应用 gate。其余 lint 检查通过，ArkTS codelinter 为 0 errors；shellcheck、actionlint 未安装而跳过，zizmor 使用离线模式。修正无障碍描述的 SDK 重载调用后，最终 ARM64 HAP 构建通过：`dist/ArkClash-0.5.1-debug-unsigned.hap`。
 
 同一 ARM64 真机、配置、网络下，分别记录修改前后冷启动 10 次中位数、新连接 20 次中位数、自动更新默认 24h 时开/关各 8h 待机耗电、24h bootId 是否变化。没有测量就不填估计值；设备或签名不可用时保留门禁，不自动签名或以模拟器通过代替。
 
-本轮环境检查：`hdc list targets` 仅有 `127.0.0.1:10026`，客体 ABI 为 `x86_64`；项目没有签名配置，现有 HAP 为 unsigned。不能执行 ARM64 真机应用/VPN 验收，四项性能数字均未测；不以模拟器、宿主或构建结果填充这些数字。
+本轮环境检查：`hdc list targets` 仅有 `127.0.0.1:10026`，客体 ABI 为 `x86_64`；项目没有签名配置。实际执行 `make run ABI=arm64-v8a`，因缺少 `dist/ArkClash-0.5.1-debug-signed.hap` 在安装前退出。ARM64 真机深浅色/交互、VPN 转发与四项性能数字均未测；不以模拟器、宿主或构建结果填充这些数字。

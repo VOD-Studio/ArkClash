@@ -19,10 +19,10 @@ function platformError(error) {
 }
 
 // 后续 Store 用例可复用 load、controls、geo 和真实临时目录，不替换产品存储函数。
-function createResourcesHarness(dir) {
+function createResourcesHarness(dir, timers = {}) {
   const modules = new Map();
   const descriptors = new Map();
-  const controls = { fail: undefined, shortWrite: false, writeGate: undefined, writing: false };
+  const controls = { fail: undefined, shortWrite: false, writeGate: undefined, writing: false, readGate: undefined };
   function check(operation, file) {
     if (controls.fail?.(operation, file)) throw Object.assign(new Error('fixture I/O failure'), { code: 13900012 });
   }
@@ -30,7 +30,11 @@ function createResourcesHarness(dir) {
     OpenMode: { CREATE: fs.constants.O_CREAT, WRITE_ONLY: fs.constants.O_WRONLY, TRUNC: fs.constants.O_TRUNC },
     async readText(file) {
       check('read', file);
-      try { return await fsp.readFile(file, 'utf8'); } catch (error) { platformError(error); }
+      try {
+        const text = await fsp.readFile(file, 'utf8');
+        await controls.readGate?.(file);
+        return text;
+      } catch (error) { platformError(error); }
     },
     async listFile(file) { check('list', file); return (await fsp.readdir(file)).reverse(); },
     async stat(file) {
@@ -85,7 +89,7 @@ function createResourcesHarness(dir) {
     const module = { exports: {} };
     modules.set(absolute, module);
     vm.runInNewContext(compiled, { module, exports: module.exports, console, setTimeout, clearTimeout,
-      setInterval, clearInterval, require(name) {
+      setInterval, clearInterval, ...timers, require(name) {
         if (name in bindings) return bindings[name];
         if (name in kits) return kits[name];
         assert.ok(name.startsWith('.'), `unexpected module ${name}`);
@@ -318,4 +322,560 @@ test('未包含bundle资产的开发包不创建数据库或版本标记', async
   h.resources.delete('geo/VERSION');
   assert.equal(await h.installer.installGeoData(h.context, dir), 0);
   assert.deepEqual(await fsp.readdir(dir), []);
+}));
+
+// 平台 HTTP/WebSocket 替身执行真实 Controller、ControllerSocket、客户端与 Store。
+function resourceClock() {
+  let now = 1000000;
+  let next = 0;
+  const timers = new Map();
+  const schedule = (run, delay, repeat) => {
+    const id = ++next;
+    timers.set(id, { run, delay, repeat, at: now + delay });
+    return id;
+  };
+  return {
+    timers,
+    bindings: {
+      Date: class extends Date { static now() { return now; } },
+      setTimeout: (run, delay) => schedule(run, delay, false),
+      clearTimeout: id => timers.delete(id),
+      setInterval: (run, delay) => schedule(run, delay, true),
+      clearInterval: id => timers.delete(id)
+    },
+    advance(milliseconds) {
+      now += milliseconds;
+      for (const [id, timer] of [...timers]) {
+        if (timer.at > now) continue;
+        if (timer.repeat) timer.at = now + timer.delay;
+        else timers.delete(id);
+        timer.run();
+      }
+    }
+  };
+}
+
+function deferredResource() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+async function untilResource(predicate) {
+  const deadline = Date.now() + 3000;
+  while (!predicate()) {
+    assert.ok(Date.now() < deadline, 'resource fixture did not settle');
+    await new Promise(resolve => setImmediate(resolve));
+  }
+}
+
+function resourceSnapshot(revision = 1, settingsRevision = 'default', bootId = 'boot-a') {
+  return { bootId, revision, settingsRevision, items: ['mmdb', 'asn', 'geoip', 'geosite'].map(id => ({
+    id, fileName: `${id}.fixture`, exists: false, size: 0, modifiedAt: 0,
+    phase: 'idle', operationId: '', outcome: 'none', error: ''
+  })) };
+}
+
+function resourceOperation(snapshot, id, operationId, phase = 'updating', outcome = 'none', error = '') {
+  Object.assign(snapshot.items.find(item => item.id === id), { operationId, phase, outcome, error });
+  return snapshot;
+}
+
+async function resourceStoreCase(run) {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'arkclash-geo-store-'));
+  const clock = resourceClock();
+  const h = createResourcesHarness(dir, clock.bindings);
+  const sockets = [];
+  const requests = [];
+  const server = {
+    snapshot: resourceSnapshot(), applyError: undefined, getGate: undefined, getStarted: false,
+    applyGate: undefined, applyStarted: false, update: undefined, destroyed: 0
+  };
+  const response = (snapshot, responseCode = 200) => ({ responseCode, result: JSON.stringify(snapshot) });
+  const network = {
+    http: {
+      RequestMethod: { GET: 'GET', POST: 'POST' }, HttpDataType: { STRING: 0 },
+      createHttp: () => ({
+        async request(address, options) {
+          assert.equal(options.header.Authorization, 'Bearer fixture-controller-secret');
+          const route = new URL(address).pathname;
+          const body = options.extraData === undefined ? undefined : JSON.parse(options.extraData);
+          requests.push({ route, method: options.method, body });
+          if (route === '/arkclash/geo') {
+            assert.equal(options.method, 'GET');
+            const initial = plain(server.snapshot);
+            server.getStarted = true;
+            await server.getGate;
+            return response(initial);
+          }
+          assert.equal(options.method, 'POST');
+          assert.equal(body.expectedBootId, server.snapshot.bootId);
+          if (route === '/arkclash/geo/settings') {
+            server.applyStarted = true;
+            await server.applyGate;
+            if (server.applyError) return response({ message: server.applyError }, 503);
+            const settings = JSON.parse(await fsp.readFile(path.join(dir, 'geo-settings.json'), 'utf8'));
+            assert.equal(body.revision, settings.revision);
+            server.snapshot = { ...plain(server.snapshot), revision: server.snapshot.revision + 1,
+              settingsRevision: body.revision };
+            return response(server.snapshot);
+          }
+          assert.equal(route, '/arkclash/geo/update');
+          assert.ok(server.update, 'unexpected update request');
+          return server.update(body, response);
+        },
+        destroy() { ++server.destroyed; }
+      })
+    },
+    webSocket: {
+      createWebSocket() {
+        const callbacks = new Map();
+        const socket = {
+          closed: false,
+          on(name, callback) { callbacks.set(name, callback); },
+          off(name) { callbacks.delete(name); },
+          async connect(address, options) {
+            assert.equal(address, 'ws://127.0.0.1:19090/arkclash/geo/events');
+            assert.equal(options.header.Authorization, 'Bearer fixture-controller-secret');
+            socket.address = address;
+          },
+          async close() { socket.closed = true; },
+          emit(snapshot) { callbacks.get('message')?.(undefined, JSON.stringify({ type: 'geo', snapshot })); },
+          disconnect() { callbacks.get('close')?.(); }
+        };
+        sockets.push(socket);
+        return socket;
+      }
+    }
+  };
+  await fsp.writeFile(path.join(dir, 'runtime.json'), JSON.stringify({
+    secret: 'fixture-controller-secret', stack: 'mixed', mode: 'rule'
+  }));
+  const { ResourcesStore } = h.load('features/resources/Resources.ets', { '@kit.NetworkKit': network });
+  const store = new ResourcesStore();
+  const fixture = {
+    ...h, dir, store, server, sockets, requests, clock,
+    emit(snapshot) {
+      server.snapshot = plain(snapshot);
+      sockets.at(-1).emit(snapshot);
+    },
+    async online() {
+      store.setConnection(true, server.snapshot.bootId);
+      store.setVisible(true);
+      await store.load(h.context);
+      await untilResource(() => sockets.length > 0 && store.canSync);
+    }
+  };
+  try { await run(fixture); }
+  finally {
+    store.setVisible(false);
+    assert.equal(clock.timers.size, 0, 'hidden Store/socket must release all timers');
+    assert.ok(sockets.every(socket => socket.closed), 'hidden Store must close each platform socket');
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+}
+
+test('Store离线读取和编辑真实文件，四项对象稳定且隐藏无订阅和时钟', async () => resourceStoreCase(async h => {
+  await fsp.writeFile(path.join(h.dir, 'ASN.mmdb'), 'offline-asn');
+  await h.store.load(h.context);
+  const items = [...h.store.items];
+  assert.equal(h.store.items[1].exists, true);
+  assert.equal(h.store.items[0].exists, false);
+  assert.equal(h.store.canSync, false);
+  assert.equal(h.clock.timers.size, 0);
+  h.store.setVisible(true);
+  await h.store.load(h.context);
+  assert.equal(h.clock.timers.size, 1);
+  const before = h.store.now;
+  h.clock.advance(60000);
+  assert.equal(h.store.now, before + 60000);
+  await h.store.saveUrl('asn', 'https://offline.example/asn.mmdb');
+  assert.equal(h.store.notice.kind, 'saved');
+  h.store.clearNotice();
+  await h.store.saveInterval(48);
+  const disk = await h.geo.readGeoSettings(h.dir);
+  assert.equal(disk.urls.asn, 'https://offline.example/asn.mmdb');
+  assert.equal(disk.intervalHours, 48);
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.sockets.length, 0);
+  assert.ok(h.store.items.every((item, index) => item === items[index]));
+  h.store.setVisible(false);
+  const hiddenNow = h.store.now;
+  h.clock.advance(120000);
+  assert.equal(h.store.now, hiddenNow);
+  assert.equal(h.store.notice, undefined);
+}));
+
+test('保存RPC失败仅待应用，恢复页面尝试一次，成功快照才允许更新且错误不泄密', async () => resourceStoreCase(async h => {
+  await h.online();
+  h.server.applyError = 'network https://private.example/?token=secret fixture-controller-secret';
+  await h.store.saveAutoUpdate(true);
+  assert.equal(h.store.settings.autoUpdate, true);
+  assert.equal((await h.geo.readGeoSettings(h.dir)).autoUpdate, true);
+  assert.equal(h.store.pendingApply, true);
+  assert.equal(h.store.canSync, false);
+  assert.equal(h.store.error, 'geo_download_failed');
+  assert.equal(h.store.notice.kind, 'pending');
+  const applied = () => h.requests.filter(request => request.route.endsWith('/settings')).length;
+  const count = applied();
+  h.clock.advance(120000);
+  assert.equal(applied(), count);
+  await assert.rejects(h.store.sync(['mmdb']), /geo_stale_boot/);
+  h.store.setVisible(false);
+  h.store.setVisible(true);
+  await h.store.load(h.context);
+  assert.equal(applied(), count + 1);
+  assert.equal(h.store.notice, undefined);
+  assert.equal(h.store.pendingApply, true);
+  h.store.setVisible(false);
+  h.server.applyError = undefined;
+  const gate = deferredResource();
+  h.server.applyGate = gate.promise;
+  h.server.applyStarted = false;
+  h.store.setVisible(true);
+  const load = h.store.load(h.context);
+  await untilResource(() => h.server.applyStarted);
+  assert.equal(h.store.canSync, false);
+  gate.resolve();
+  await load;
+  assert.equal(h.store.canSync, true);
+  assert.equal(h.store.pendingApply, false);
+  assert.equal(h.server.destroyed, h.requests.length);
+}));
+
+test('旧Sheet revision拒绝覆盖并重读已提交值，失败只抛表单错误且保存互斥', async () => resourceStoreCase(async h => {
+  h.store.setVisible(true);
+  await h.store.load(h.context);
+  const oldRevision = h.store.settings.revision;
+  await h.store.saveUrl('mmdb', 'https://first.example/mmdb');
+  h.store.clearNotice();
+  const revision = h.store.settings.revision;
+  await assert.rejects(h.store.saveUrl('mmdb', 'https://stale.example/mmdb', oldRevision), /geo_settings_conflict/);
+  assert.equal(h.store.notice, undefined);
+  assert.equal(h.store.settings.revision, revision);
+  assert.equal(h.store.settings.urls.mmdb, 'https://first.example/mmdb');
+  await assert.rejects(h.store.saveInterval(72, oldRevision), /geo_settings_conflict/);
+  const external = await h.geo.readGeoSettings(h.dir);
+  external.urls.asn = 'https://external.example/asn';
+  const committed = await h.geo.saveGeoSettings(h.dir, external);
+  await assert.rejects(h.store.saveInterval(72), /geo_settings_conflict/);
+  assert.equal(h.store.settings.revision, committed.revision);
+  assert.equal(h.store.settings.urls.asn, 'https://external.example/asn');
+  const gate = deferredResource();
+  h.controls.writeGate = gate.promise;
+  const save = h.store.saveInterval(36);
+  await untilResource(() => h.controls.writing);
+  await assert.rejects(h.store.saveAutoUpdate(true), /geo_invalid_settings/);
+  gate.resolve();
+  await save;
+  assert.equal(h.store.settings.intervalHours, 36);
+  assert.equal(h.store.settings.autoUpdate, false);
+  h.store.clearNotice();
+  await assert.rejects(h.store.saveUrl('asn', 'ftp://invalid.example/asn'), /geo_invalid_url/);
+  assert.equal(h.store.notice, undefined);
+}));
+
+test('乱序GET、推送和受理不能回退；极快完成在受理前被下一任务替换仍反馈原操作', async () => resourceStoreCase(async h => {
+  const get = deferredResource();
+  h.server.getGate = get.promise;
+  h.store.setConnection(true, 'boot-a');
+  h.store.setVisible(true);
+  const load = h.store.load(h.context);
+  await untilResource(() => h.server.getStarted && h.sockets.length === 1);
+  h.emit(resourceSnapshot(8));
+  assert.equal(h.store.canSync, true);
+  h.emit(resourceOperation(resourceSnapshot(7), 'mmdb', 'old', 'updating'));
+  h.sockets[0].emit(resourceOperation(resourceSnapshot(90, 'default', 'wrong-boot'), 'mmdb', 'wrong', 'updating'));
+  get.resolve();
+  await load;
+  assert.equal(h.store.items[0].phase, 'idle');
+  const admission = deferredResource();
+  const accepted = resourceOperation(resourceSnapshot(9), 'mmdb', 'fast', 'queued');
+  h.server.update = async (_body, response) => { await admission.promise; return response(accepted, 202); };
+  const sync = h.store.sync(['mmdb']);
+  await untilResource(() => h.requests.some(request => request.route.endsWith('/update')));
+  h.emit(resourceOperation(resourceSnapshot(10), 'mmdb', 'fast', 'idle', 'updated'));
+  h.emit(resourceOperation(resourceSnapshot(11), 'mmdb', 'automatic-later', 'updating'));
+  admission.resolve();
+  await sync;
+  assert.equal(h.store.items[0].operationId, 'automatic-later');
+  assert.equal(h.store.items[0].phase, 'updating');
+  assert.equal(h.store.notice.kind, 'single');
+  assert.equal(h.store.notice.items[0].operationId, 'fast');
+  assert.equal(h.store.notice.items[0].outcome, 'updated');
+  const serial = h.store.noticeSerial;
+  h.store.clearNotice();
+  h.emit(resourceOperation(resourceSnapshot(12), 'mmdb', 'automatic-later', 'idle', 'unchanged'));
+  h.emit(resourceOperation(resourceSnapshot(12), 'mmdb', 'duplicate', 'updating'));
+  assert.equal(h.store.noticeSerial, serial);
+  assert.equal(h.store.notice, undefined);
+  assert.equal(h.store.items[0].phase, 'idle');
+}));
+
+test('批量保留各项首次终态，不混入自动任务，单批只有一次通知', async () => resourceStoreCase(async h => {
+  await h.online();
+  let admitted = resourceOperation(resourceSnapshot(2), 'mmdb', 'batch-mmdb', 'queued');
+  admitted = resourceOperation(admitted, 'asn', 'batch-asn', 'queued');
+  h.server.update = async (body, response) => {
+    assert.deepEqual(body.ids, ['mmdb', 'asn']);
+    return response(admitted, 202);
+  };
+  await h.store.sync(['mmdb', 'asn', 'asn']);
+  assert.equal(h.store.notice, undefined);
+  let partial = resourceOperation(resourceSnapshot(3), 'mmdb', 'batch-mmdb', 'idle', 'failed', 'geo_http_503');
+  partial = resourceOperation(partial, 'asn', 'batch-asn');
+  h.emit(partial);
+  assert.equal(h.store.notice, undefined);
+  let later = resourceOperation(resourceSnapshot(4), 'mmdb', 'auto-mmdb', 'idle', 'updated');
+  later = resourceOperation(later, 'asn', 'batch-asn', 'idle', 'unchanged');
+  h.emit(later);
+  assert.equal(h.store.notice.kind, 'batch');
+  assert.deepEqual(plain(h.store.notice.items).map(item => [item.id, item.operationId, item.outcome, item.error]),
+    [['mmdb', 'batch-mmdb', 'failed', 'geo_http_503'], ['asn', 'batch-asn', 'unchanged', '']]);
+  const serial = h.store.noticeSerial;
+  h.store.clearNotice();
+  h.emit({ ...later, revision: 5 });
+  assert.equal(h.store.noticeSerial, serial);
+  assert.equal(h.store.notice, undefined);
+}));
+
+test('真实ControllerSocket断线重连初始快照消除spinner，隐藏无重连与旧反馈', async () => resourceStoreCase(async h => {
+  await h.online();
+  const accepted = resourceOperation(resourceSnapshot(2), 'geosite', 'reconnect-op', 'queued');
+  h.server.update = async (_body, response) => response(accepted, 202);
+  await h.store.sync(['geosite']);
+  assert.equal(h.store.items[3].phase, 'queued');
+  h.sockets[0].disconnect();
+  assert.equal(h.sockets[0].closed, true);
+  assert.equal(h.clock.timers.size, 2);
+  h.clock.advance(1999);
+  assert.equal(h.sockets.length, 1);
+  h.clock.advance(1);
+  await untilResource(() => h.sockets.length === 2);
+  h.emit(resourceOperation(resourceSnapshot(3), 'geosite', 'reconnect-op', 'idle', 'updated'));
+  assert.equal(h.store.items[3].phase, 'idle');
+  assert.equal(h.store.notice.items[0].operationId, 'reconnect-op');
+  const serial = h.store.noticeSerial;
+  h.store.setVisible(false);
+  h.clock.advance(60000);
+  assert.equal(h.sockets.length, 2);
+  h.store.setVisible(true);
+  await h.store.load(h.context);
+  await untilResource(() => h.sockets.length === 3);
+  h.emit(resourceOperation(resourceSnapshot(4), 'geosite', 'reconnect-op', 'idle', 'updated'));
+  assert.equal(h.store.noticeSerial, serial);
+  assert.equal(h.store.notice, undefined);
+  assert.equal(h.requests.filter(request => request.route === '/arkclash/geo').length, 2);
+}));
+
+test('隐藏、boot变化与晚到受理丢弃旧批次，旧异步load不覆盖新设置或状态', async () => resourceStoreCase(async h => {
+  await h.online();
+  const gate = deferredResource();
+  h.server.update = async (_body, response) => {
+    await gate.promise;
+    return response(resourceOperation(resourceSnapshot(2), 'mmdb', 'hidden-op', 'queued'), 202);
+  };
+  const sync = h.store.sync(['mmdb']);
+  await untilResource(() => h.requests.some(request => request.route.endsWith('/update')));
+  h.store.setVisible(false);
+  gate.resolve();
+  await sync;
+  assert.equal(h.store.notice, undefined);
+  h.server.snapshot = resourceSnapshot(1, 'default', 'boot-b');
+  h.store.setConnection(true, 'boot-b');
+  h.store.setVisible(true);
+  await h.store.load(h.context);
+  assert.equal(h.store.canSync, true);
+  const socket = h.sockets.at(-1);
+  socket.emit(resourceOperation(resourceSnapshot(999), 'mmdb', 'hidden-op', 'idle', 'updated'));
+  assert.equal(h.store.notice, undefined);
+  assert.equal(h.store.items[0].operationId, '');
+  const get = deferredResource();
+  h.store.setVisible(false);
+  h.server.getGate = get.promise;
+  h.server.getStarted = false;
+  h.store.setVisible(true);
+  const oldLoad = h.store.load(h.context);
+  await untilResource(() => h.server.getStarted);
+  h.store.setVisible(false);
+  h.server.getGate = undefined;
+  h.server.snapshot = resourceSnapshot(1, 'default', 'boot-c');
+  h.store.setConnection(true, 'boot-c');
+  h.store.setVisible(true);
+  await h.store.load(h.context);
+  const revision = h.store.settings.revision;
+  get.resolve();
+  await oldLoad;
+  assert.equal(h.store.settings.revision, revision);
+  assert.equal(h.store.canSync, true);
+  assert.equal(h.store.notice, undefined);
+}));
+
+test('load等真实保存屏障，隐藏期间完成保存不写旧生命周期设置和notice', async () => resourceStoreCase(async h => {
+  h.store.setVisible(true);
+  await h.store.load(h.context);
+  const gate = deferredResource();
+  h.controls.writeGate = gate.promise;
+  const save = h.store.saveUrl('geoip', 'https://barrier.example/geoip.dat');
+  await untilResource(() => h.controls.writing);
+  h.store.setVisible(false);
+  h.store.setVisible(true);
+  const load = h.store.load(h.context);
+  assert.equal(h.store.settings.urls.geoip, h.geo.GEO_DEFAULT_URLS.geoip);
+  gate.resolve();
+  await Promise.all([save, load]);
+  await untilResource(() => h.store.settings.urls.geoip === 'https://barrier.example/geoip.dat');
+  assert.equal(h.store.saving, false);
+  assert.equal(h.store.notice, undefined);
+  assert.equal(h.requests.length, 0);
+}));
+
+test('多个本页批次共享operation时保留每批通知队列，隐藏清空所有未消费通知', async () => resourceStoreCase(async h => {
+  await h.online();
+  const single = resourceOperation(resourceSnapshot(2), 'mmdb', 'shared-op', 'queued');
+  const all = resourceOperation(resourceOperation(resourceSnapshot(3), 'mmdb', 'shared-op', 'queued'),
+    'asn', 'second-op', 'queued');
+  let calls = 0;
+  h.server.update = async (_body, response) => response(++calls === 1 ? single : all, 202);
+  await h.store.sync(['mmdb']);
+  await h.store.sync(['mmdb', 'asn']);
+  const done = resourceOperation(resourceOperation(resourceSnapshot(4), 'mmdb', 'shared-op', 'idle', 'updated'),
+    'asn', 'second-op', 'idle', 'unchanged');
+  h.emit(done);
+  assert.equal(h.store.notice.kind, 'single');
+  const serial = h.store.noticeSerial;
+  h.store.clearNotice();
+  assert.equal(h.store.notice.kind, 'batch');
+  assert.equal(h.store.noticeSerial, serial + 1);
+  h.store.clearNotice();
+  assert.equal(h.store.notice, undefined);
+  h.emit({ ...done, revision: 5 });
+  assert.equal(h.store.noticeSerial, serial + 1);
+  h.store.setVisible(false);
+  h.store.setVisible(true);
+  await h.store.load(h.context);
+  assert.equal(h.store.notice, undefined);
+}));
+
+test('保存应用响应晚于新boot不改变新生命周期应用gate，也不回放保存通知', async () => resourceStoreCase(async h => {
+  await h.online();
+  const gate = deferredResource();
+  h.server.applyGate = gate.promise;
+  const save = h.store.saveAutoUpdate(true);
+  await untilResource(() => h.server.applyStarted);
+  const disk = await h.geo.readGeoSettings(h.dir);
+  h.server.snapshot = resourceSnapshot(1, disk.revision, 'boot-b');
+  h.server.applyGate = undefined;
+  h.store.setConnection(true, 'boot-b');
+  await h.store.load(h.context);
+  gate.resolve();
+  await save;
+  await untilResource(() => !h.store.saving);
+  assert.equal(h.store.settings.revision, disk.revision);
+  assert.equal(h.store.settings.autoUpdate, true);
+  assert.equal(h.store.canSync, true);
+  assert.equal(h.store.notice, undefined);
+}));
+
+test('旧load读出的设置与文件错误不能覆盖隐藏后新一代已加载状态', async () => resourceStoreCase(async h => {
+  await h.online();
+  h.store.setVisible(false);
+  let old = await h.geo.readGeoSettings(h.dir);
+  old.urls.mmdb = 'https://old.example/mmdb';
+  await h.geo.saveGeoSettings(h.dir, old);
+  const gate = deferredResource();
+  let blocked = false;
+  h.controls.readGate = async file => {
+    if (!blocked && file.endsWith('geo-settings.json')) {
+      blocked = true;
+      await gate.promise;
+    }
+  };
+  h.store.setVisible(true);
+  const oldLoad = h.store.load(h.context);
+  await untilResource(() => blocked);
+  h.store.setVisible(false);
+  h.controls.readGate = undefined;
+  let latest = await h.geo.readGeoSettings(h.dir);
+  latest.urls.mmdb = 'https://new.example/mmdb';
+  latest = await h.geo.saveGeoSettings(h.dir, latest);
+  h.server.snapshot = resourceSnapshot(2, latest.revision);
+  h.store.setVisible(true);
+  await h.store.load(h.context);
+  assert.equal(h.store.settings.urls.mmdb, 'https://new.example/mmdb');
+  gate.resolve();
+  await oldLoad;
+  assert.equal(h.store.settings.revision, latest.revision);
+  assert.equal(h.store.settings.urls.mmdb, 'https://new.example/mmdb');
+  assert.equal(h.store.settingsError, '');
+  assert.equal(h.store.canSync, true);
+}));
+
+test('损坏设置显式恢复只重置设置，保留数据库并重新开启在线应用gate', async () => resourceStoreCase(async h => {
+  await fsp.writeFile(path.join(h.dir, 'geo-settings.json'), '{broken');
+  await fsp.writeFile(path.join(h.dir, 'ASN.mmdb'), 'must-keep');
+  h.store.setConnection(true, 'boot-a');
+  h.store.setVisible(true);
+  await h.store.load(h.context);
+  assert.equal(h.store.settingsError, 'geo_invalid_settings');
+  assert.equal(h.store.canSync, false);
+  assert.equal(h.requests.filter(request => request.route.endsWith('/settings')).length, 0);
+  await h.store.resetSettings();
+  assert.equal(h.store.settingsError, '');
+  assert.equal(h.store.settings.autoUpdate, false);
+  assert.equal(h.store.canSync, true);
+  assert.equal(h.store.notice.kind, 'saved');
+  assert.equal(await fsp.readFile(path.join(h.dir, 'ASN.mmdb'), 'utf8'), 'must-keep');
+}));
+
+test('同boot连接忙碌也停流，隐藏后受理失败被丢弃而不成为新页面错误', async () => resourceStoreCase(async h => {
+  await h.online();
+  const gate = deferredResource();
+  h.server.update = async () => {
+    await gate.promise;
+    throw new Error('network https://private.example/?token=secret fixture-controller-secret');
+  };
+  const pending = h.store.sync(['asn']);
+  await untilResource(() => h.requests.some(request => request.route.endsWith('/update')));
+  h.store.setConnection(false, 'boot-a');
+  assert.equal(h.sockets[0].closed, true);
+  assert.equal(h.store.canSync, false);
+  assert.equal(h.clock.timers.size, 1);
+  h.store.setVisible(false);
+  h.store.setConnection(true, 'boot-a');
+  h.store.setVisible(true);
+  await h.store.load(h.context);
+  gate.resolve();
+  await pending;
+  assert.equal(h.store.error, '');
+  assert.equal(h.store.canSync, true);
+  assert.equal(h.store.notice, undefined);
+}));
+
+test('推送已确认应用时晚到RPC失败不能撤销成功快照的同步gate', async () => resourceStoreCase(async h => {
+  await h.online();
+  const gate = deferredResource();
+  h.server.applyGate = gate.promise;
+  h.server.applyError = 'geo_timeout';
+  const save = h.store.saveInterval(72);
+  await untilResource(() => h.server.applyStarted);
+  const disk = await h.geo.readGeoSettings(h.dir);
+  h.emit(resourceSnapshot(7, disk.revision));
+  gate.resolve();
+  await save;
+  assert.equal(h.store.pendingApply, false);
+  assert.equal(h.store.canSync, true);
+  assert.equal(h.store.notice.kind, 'saved');
+  assert.equal(h.store.error, '');
+}));
+
+test('当前受理失败仅抛脱敏错误，不产生重复notice；推送错误只保留固定错误码', async () => resourceStoreCase(async h => {
+  await h.online();
+  h.server.update = async () => { throw new Error('https://private.example/?token=secret fixture-controller-secret'); };
+  await assert.rejects(h.store.sync(['mmdb']), /^(Error: )?geo_download_failed$/);
+  assert.equal(h.store.notice, undefined);
+  h.emit(resourceOperation(resourceSnapshot(2), 'mmdb', 'automatic-failure', 'idle', 'failed',
+    'https://private.example/?token=secret'));
+  assert.equal(h.store.items[0].error, 'geo_download_failed');
+  assert.equal(h.store.notice, undefined);
 }));

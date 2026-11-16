@@ -17,6 +17,7 @@ export struct ToolsPage {
       new Entry(ToolRoute.Logs, $r('sys.symbol.doc_plaintext'), $r('app.string.tools_logs'))
     ])
     this.Group([
+      new Entry(ToolRoute.Resources, $r('sys.symbol.square_stack_3d'), $r('app.string.tools_resources')),
       new Entry(ToolRoute.Settings, $r('sys.symbol.gearshape'), $r('app.string.tools_settings')),
       new Entry(ToolRoute.About, $r('sys.symbol.info_circle'), $r('app.string.tools_about'))
     ])

@@ -1,4 +1,5 @@
-import { dashboardCount, dashboardTraffic, dashboardUpdatedAgo } from './DashboardFormat';
+import { dashboardCount, dashboardTraffic } from './DashboardFormat';
+import { formatUpdatedAgo } from '../../components/Format';
 import { DASHBOARD_CARD } from '../../components/Theme';
 import { DashboardUsageMeter } from './DashboardUsageMeter';
 import { AppGlyph } from '../../components/AppGlyph';
@@ -150,7 +151,7 @@ export struct DashboardProfile {
           Text() {
             if (this.profileUpdatedAt > 0) {
               Span($r('app.string.dash_profile_updated_prefix'))
-              Span(dashboardUpdatedAgo(this.profileUpdatedAt, this.clock))
+              Span(formatUpdatedAgo(this.profileUpdatedAt, this.clock))
             } else {
               Span('—')
             }
