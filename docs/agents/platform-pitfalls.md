@@ -62,3 +62,4 @@ ARM64 的运行问题已在真机（Pura 70 Ultra，API 26）上验证；x86_64 
 - 自动组的通知回调只做有界原子标记和入队，不取得核心锁、不重入组方法。不能用通用异步分发器冒充同步标记，也不能在每个健康结果完成时重置 URLTest 原有缓存、提前改变真实选择。
 - provider 的后台 Fetcher 不能强引用带 finalizer 的包装器，否则热切换后旧下载、健康检查和文件监听无法回收。更新通知使用弱引用，配置退休后同时解除本应用的订阅与定时任务。
 - 升级 mihomo 后先确认两个补丁能应用并通过 `make core`，再复查真实拨号取消、普通 DNS 与探测并发、provider 退休、缓存到期选路及同名成员身份。真机转发与长时间待机仍按独立门禁验证。
+- `CORE_RACE=1 make test TESTS=core` 揭示 File provider 文件监听与手动更新并发读取/写入 Fetcher hash 的竞态。`scripts/mihomo-provider-hash.patch` 在已有 loadBufMutex 下取得 hash 快照，网络读取仍在锁外；不改变更新与通知语义。
