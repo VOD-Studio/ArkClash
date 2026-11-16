@@ -384,6 +384,7 @@ export struct ResourcesPage {
         }
         .layoutWeight(1)
         .width('100%')
+        .align(Alignment.Top)
         .bindSheet($$this.editing, this.EditorSheet, {
           height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
           onWillDismiss: (action: DismissSheetAction): void => this.dismissEditor((): void => action.dismiss()),
