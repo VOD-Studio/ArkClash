@@ -21,7 +21,10 @@ export async function runProfileBatch(jobs: ProfileBatchJob[], skipped: number,
     while (cursor < jobs.length) {
       const job = jobs[cursor++];
       let failure: string | undefined;
-      try { failure = await job.run(); } catch (e) { failure = errorString(e as Object); }
+      try {
+        const operation: Promise<string | undefined> = job.run();
+        failure = await operation;
+      } catch (e) { failure = errorString(e as Object); }
       if (failure === undefined) { result.succeeded++; }
       else {
         const detail: ProfileBatchFailure = { id: job.id, name: job.name, line: job.line, error: failure };
