@@ -108,12 +108,36 @@ const prefs = {
   putSync(key, value) { state.saved[key] = value; },
   async flush() { if (state.flushError) { throw new Error('fixture preference storage failure'); } }
 };
+
+// 使用真实设置队列和原子写辅助函数，仅在平台写调用处控制提交完成。
+const geoSettings = loadConsumer('../entry/src/main/ets/shared/GeoResources.ets', {
+  '@kit.BasicServicesKit': {},
+  '@kit.ArkTS': { url: { URL: { parseURL: source => new URL(source) } } },
+  '@kit.CoreFileKit': { fileIo: {
+    OpenMode: { CREATE: 1, WRITE_ONLY: 2, TRUNC: 4 },
+    async readText() {
+      if (state.geoText === undefined) throw Object.assign(new Error('missing'), { code: 13900002 });
+      return state.geoText;
+    },
+    async open() { return { fd: 1 }; },
+    async write(_fd, text) {
+      state.geoWriting = true;
+      await state.geoSaveGate;
+      if (state.geoSaveError) throw new Error('disk failure');
+      state.geoTemporary = text;
+      return Buffer.byteLength(text);
+    },
+    async close() {},
+    async rename() { state.geoText = state.geoTemporary; }
+  } }
+});
 const { Connection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
   '@kit.AbilityKit': {}, '@kit.BasicServicesKit': {}, '@kit.NetworkKit': {},
   '@kit.ArkData': { preferences: { getPreferencesSync: () => prefs } },
   './Controller': {}, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } },
   './CoreClient': core, './Proxies': { flushProxySelections: async () => {} },
-  './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': { runtimeMayBeActive: async () => state.active }
+  './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': { runtimeMayBeActive: async () => state.active },
+  '../shared/GeoResources': geoSettings
 });
 const runControls = loadConsumer('../entry/src/main/ets/features/home/HomeRunControls.ets', {});
 
@@ -123,7 +147,8 @@ beforeEach(() => {
     receipt: undefined, startError: undefined, stopError: undefined, stopCleans: false,
     active: false, flushError: false, saved: {}, writingRuntime: false,
     instance: undefined, requestingStatus: false, statusGate: Promise.resolve(), startGate: Promise.resolve(),
-    runtimeWriteGate: Promise.resolve(), storageGate: Promise.resolve() });
+    runtimeWriteGate: Promise.resolve(), storageGate: Promise.resolve(),
+    geoText: undefined, geoTemporary: undefined, geoWriting: false, geoSaveError: false, geoSaveGate: Promise.resolve() });
 });
 
 test('连接等待已进入提交的离线配置，取消不会启动扩展', async () => {
@@ -138,6 +163,50 @@ test('连接等待已进入提交的离线配置，取消不会启动扩展', as
   await assert.rejects(pending, /启动已取消/);
   assert.equal(state.started, 0);
   assert.equal(state.runtime.secret, 'fixture-session');
+});
+
+test('Connection等待真实Geo设置提交后才能启动', async () => {
+  let release;
+  state.geoSaveGate = new Promise(resolve => { release = resolve; });
+  const saving = geoSettings.saveGeoSettings(context.filesDir, geoSettings.defaultGeoSettings());
+  const connection = new Connection();
+  connection.restore(context);
+  state.status = ready;
+  const connecting = connection.connect(context);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(state.geoWriting, true);
+  assert.equal(state.started, 0);
+  release();
+  await saving;
+  await connecting;
+  assert.equal(state.started, 1);
+  assert.equal(JSON.parse(state.geoText).revision, (await geoSettings.readGeoSettings(context.filesDir)).revision);
+});
+
+test('Geo保存等待期间取消连接不会启动扩展', async () => {
+  let release;
+  state.geoSaveGate = new Promise(resolve => { release = resolve; });
+  const saving = geoSettings.saveGeoSettings(context.filesDir, geoSettings.defaultGeoSettings());
+  const connection = new Connection();
+  connection.restore(context);
+  const connecting = connection.connect(context);
+  await new Promise(resolve => setImmediate(resolve));
+  const stopping = connection.disconnect(context);
+  release();
+  await Promise.all([saving, connecting, stopping]);
+  assert.equal(state.started, 0);
+});
+
+test('Geo保存失败阻止连接，显式恢复后屏障可再次使用', async () => {
+  state.geoSaveError = true;
+  await assert.rejects(geoSettings.saveGeoSettings(context.filesDir, geoSettings.defaultGeoSettings()), /geo_io/);
+  const connection = new Connection();
+  connection.restore(context);
+  await assert.rejects(connection.connect(context), /geo_io/);
+  assert.equal(state.started, 0);
+  state.geoSaveError = false;
+  await geoSettings.resetGeoSettings(context.filesDir);
+  await geoSettings.flushGeoSettings();
 });
 
 test('只有controller可达且没有TUN时不能宣称连接成功', async () => {
@@ -514,7 +583,8 @@ function runtimeConsumers() {
     '@kit.ArkData': { preferences: { getPreferencesSync: () => prefs } },
     './Controller': {}, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } },
     './CoreClient': client, './Proxies': { flushProxySelections: async () => {} },
-    './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': runtime
+    './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': runtime,
+    '../shared/GeoResources': geoSettings
   });
   const connection = new ConsumerConnection();
   connection.restore(localContext);

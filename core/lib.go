@@ -42,11 +42,14 @@ type startOptions struct {
 	Profile  string `json:"profile"`  // 正在运行的配置的编号
 	Mode     string `json:"mode"`     // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
 	AllowLan *bool  `json:"allowLan"` // nil = 用配置里的值
+	// Geo 设置只由原生启动流程从磁盘读取，不扩展 C ABI 或 ArkTS 参数。
+	Geo geoSettings `json:"-"`
 }
 
 var (
-	mu      sync.Mutex
-	running bool
+	mu        sync.Mutex
+	lifecycle sync.Mutex
+	running   bool
 	// 本次启动的参数，热切换和 PATCH /arkclash/configs 会更新其中的配置路径、编号、模式和局域网代理。
 	current startOptions
 	// 正在运行的配置编号，nil = 没在运行。ArkTS 主线程会同步读它，不能等 mu（热切换可能要几秒）。
@@ -54,6 +57,8 @@ var (
 )
 
 func start(opts startOptions) error {
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -63,6 +68,11 @@ func start(opts startOptions) error {
 	if opts.TunFd <= 0 {
 		return errors.New("invalid tun fd")
 	}
+	settings, err := readGeoSettings(opts.HomeDir)
+	if err != nil {
+		return err
+	}
+	opts.Geo = settings
 
 	constant.SetHomeDir(opts.HomeDir)
 	constant.SetConfig(opts.ConfigPath)
@@ -82,6 +92,17 @@ func start(opts startOptions) error {
 	current = opts
 	runningID.Store(&opts.Profile)
 	beginRuntime()
+	manager, err := newGeoManager(opts.HomeDir, runtimeBootID, opts.Geo)
+	if err != nil {
+		stopTun()
+		executor.Shutdown()
+		running = false
+		current = startOptions{}
+		runningID.Store(nil)
+		publishRuntime()
+		return err
+	}
+	activeGeo.Store(manager)
 	resetProxyIdentities()
 	watchRuntimeRoutes(cfg)
 	publishRuntime()
@@ -99,6 +120,8 @@ func parseConfig(path string, opts startOptions) (*config.Config, error) {
 		return nil, err
 	}
 	applyOverrides(rawCfg, opts)
+	// 配置解析可能初始化缺失的 Geo，来源必须先固定为页面设置。
+	setGeoURLs(opts.Geo)
 	cfg, err := config.ParseRawConfig(rawCfg)
 	if err != nil {
 		return nil, err
@@ -204,6 +227,13 @@ func applyOverrides(rawCfg *config.RawConfig, opts startOptions) {
 
 	// 节点选择只从每配置文件恢复，避免 mihomo 全局同名组缓存覆盖它。
 	rawCfg.Profile.StoreSelected = false
+	// 只有资源管理器可以调度更新，订阅不能覆盖来源或启动第二个更新器。
+	rawCfg.GeoXUrl = config.RawGeoXUrl{
+		Mmdb: opts.Geo.URLs.MMDB, ASN: opts.Geo.URLs.ASN,
+		GeoIp: opts.Geo.URLs.GeoIP, GeoSite: opts.Geo.URLs.GeoSite,
+	}
+	rawCfg.GeoAutoUpdate = false
+	rawCfg.GeoUpdateInterval = opts.Geo.IntervalHours
 
 	// The UI process drives the core over this controller only.
 	rawCfg.ExternalController = opts.Controller
@@ -233,11 +263,16 @@ func applyOverrides(rawCfg *config.RawConfig, opts startOptions) {
 }
 
 func stop() {
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
 	mu.Lock()
-	defer mu.Unlock()
-
 	if !running {
+		mu.Unlock()
 		return
+	}
+	manager := activeGeo.Swap(nil)
+	if manager != nil {
+		manager.closeLocked()
 	}
 	resetProxyIdentities()
 	stopRuntimeRoutes()
@@ -248,6 +283,11 @@ func stop() {
 	current = startOptions{}
 	runningID.Store(nil)
 	publishRuntime()
+	mu.Unlock()
+	// worker 的取消清理可能需要核心锁，且下一次 start 不得越过本次 join。
+	if manager != nil {
+		manager.wait()
+	}
 }
 
 func errorString(err error) *C.char {

@@ -8,6 +8,7 @@ import { CoreHostState, CoreStartError, readCoreHostStatus, startCore, stopCore,
 import { flushProxySelections } from './Proxies';
 import { traffic } from './Traffic';
 import { runtimeMayBeActive } from '../shared/Runtime';
+import { flushGeoSettings } from '../shared/GeoResources';
 
 const PREF_CONNECT_DURATION = 'lastConnectDuration';
 const PREF_MODE = 'outboundMode';
@@ -147,6 +148,7 @@ export class Connection {
       }
       this.hostState = 'stopped';
       await this.settingsPending.catch((): void => {});
+      await flushGeoSettings();
       await flushProxySelections(this.filesDir);
       if (generation !== this.generation) {
         return;

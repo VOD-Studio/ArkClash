@@ -3,9 +3,13 @@
 import { common } from '@kit.AbilityKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
+import {
+  GeoResourceId, GeoResourceStatus, geoMissingFile, readGeoFileInfos, readGeoMetadata, readGeoOptionalText
+} from '../shared/GeoResources';
 
-// 文件名要和 mihomo 查找的一致（constant/path.go，不区分大小写）。
+// 安装包只携带这两份数据，另外两项由用户在线获取。
 const GEO_FILES: string[] = ['geoip.metadb', 'geosite.dat'];
+const GEO_IDS: GeoResourceId[] = ['mmdb', 'geosite'];
 // scripts/fetch-geodata.sh 生成，内容是上面各文件的 SHA-256。
 const BUNDLED_VERSION = 'geo/VERSION';
 // 复制完成后在 homeDir 留一份，下次启动和安装包里的比对。
@@ -26,40 +30,49 @@ export async function installGeoData(context: common.Context, homeDir: string): 
   }
 
   const stampPath = `${homeDir}/${INSTALLED_VERSION}`;
-  if (await isInstalled(homeDir, stampPath, bundled)) {
-    return 0;
+  const installed = await readGeoOptionalText(stampPath);
+  const infos = await readGeoFileInfos(homeDir);
+  let copied = 0;
+  for (let index = 0; index < GEO_IDS.length; index++) {
+    const id = GEO_IDS[index];
+    const info = infos.find((item: GeoResourceStatus): boolean => item.id === id);
+    if (info === undefined || info.error === 'geo_io') { throw new Error('geo_io'); }
+    if (info.exists) {
+      // 损坏的元数据不能证明尚未接管，保守保护已有数据库。
+      if (info.error === 'geo_metadata_invalid') { continue; }
+      const metadata = await readGeoMetadata(homeDir, id);
+      if (metadata?.managed === true || installed === bundled) { continue; }
+    }
+    const data = await resources.getRawFileContent(`geo/${GEO_FILES[index]}`);
+    await writeFile(`${homeDir}/${info.fileName}`,
+      data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+    copied++;
   }
-  for (const name of GEO_FILES) {
-    const data = await resources.getRawFileContent(`geo/${name}`);
-    await writeFile(`${homeDir}/${name}`, data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+  // 所有复制成功后才更新版本；中断时不留下半份活动文件或成功标记。
+  if (installed !== bundled) {
+    const stamp = new util.TextEncoder().encodeInto(bundled);
+    await writeFile(stampPath, stamp.buffer.slice(stamp.byteOffset, stamp.byteOffset + stamp.byteLength));
   }
-  // 版本最后写：中途失败的话，下次启动版本对不上，会重新复制。
-  await writeFile(stampPath, bundled);
-  return GEO_FILES.length;
+  return copied;
 }
 
-async function isInstalled(homeDir: string, stampPath: string, bundled: string): Promise<boolean> {
+async function writeFile(path: string, content: ArrayBuffer): Promise<void> {
+  const temporary = `${path}.${Date.now().toString(36)}${Math.floor(Math.random() * 0xffffff).toString(36)}.tmp`;
+  let committed = false;
   try {
-    if ((await fs.readText(stampPath)) !== bundled) {
-      return false;
+    const file = await fs.open(temporary, fs.OpenMode.CREATE | fs.OpenMode.WRITE_ONLY | fs.OpenMode.TRUNC);
+    try {
+      if (await fs.write(file.fd, content) !== content.byteLength) { throw new Error('geo_io'); }
+      await fs.fsync(file.fd);
+    } finally {
+      await fs.close(file);
     }
-    for (const name of GEO_FILES) {
-      if (!(await fs.access(`${homeDir}/${name}`))) {
-        return false;
-      }
-    }
-    return true;
-  } catch (e) {
-    // 首次启动还没有版本文件。
-    return false;
-  }
-}
-
-async function writeFile(path: string, content: ArrayBuffer | string): Promise<void> {
-  const file = await fs.open(path, fs.OpenMode.CREATE | fs.OpenMode.WRITE_ONLY | fs.OpenMode.TRUNC);
-  try {
-    await fs.write(file.fd, content);
+    await fs.rename(temporary, path);
+    committed = true;
   } finally {
-    await fs.close(file);
+    if (!committed) {
+      try { await fs.unlink(temporary); }
+      catch (error) { if (!geoMissingFile(error as Object)) { throw new Error('geo_io'); } }
+    }
   }
 }

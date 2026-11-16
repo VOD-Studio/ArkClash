@@ -85,7 +85,7 @@ rules: ['MATCH,DIRECT']
 	tunnel.SetMode(tunnel.ModeMapping["direct"])
 	inner.New(tunnel.Tunnel)
 	tunnel.OnRunning()
-	current = startOptions{HomeDir: home, Profile: "fixture"}
+	current = startOptions{HomeDir: home, Profile: "fixture", Geo: defaultGeoSettings()}
 	running = true
 	runningID.Store(&current.Profile)
 	fd := 1

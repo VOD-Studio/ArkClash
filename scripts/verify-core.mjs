@@ -16,10 +16,12 @@ after(() => rm(sandbox, { recursive: true, force: true }));
 
 // 冷缓存的工具链、依赖下载和编译不占用用例执行时限。
 before(async () => {
-  for (const file of ['go.mod', 'go.sum', 'runtime.go', 'selection.go', 'delay.go', 'probe.go', 'probe_body.go', 'proxies.go']) {
+  for (const file of ['go.mod', 'go.sum', 'runtime.go', 'selection.go', 'delay.go', 'probe.go', 'probe_body.go', 'proxies.go',
+    'geo_settings.go', 'geo.go', 'geo_download.go', 'geo_events.go']) {
     await copyFile(join(root, 'core', file), join(sandbox, file));
   }
-  for (const file of ['core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go', 'geo-reader-host_test.go']) {
+  for (const file of ['core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go',
+    'geo-reader-host_test.go', 'geo-host_test.go', 'geo-scheduler-host_test.go']) {
     await copyFile(new URL(`./${file}`, import.meta.url), join(sandbox, file));
   }
   await cp(join(root, 'scripts/testdata/geo'), join(sandbox, 'testdata/geo'), { recursive: true });
@@ -45,6 +47,14 @@ before(async () => {
   await writeFile(join(sandbox, 'fetch.go'), 'package main\nimport (\n' +
     '"context"\n"errors"\n"io"\n"net/url"\n"os"\n"strings"\n"time"\n' +
     '"github.com/metacubex/http"\n)\n' + [fetchLimit, ...fetchDeclarations, ...fetchFunctions].join('\n\n') + '\n');
+  const frameFunctions = ['upgradeWebSocket', 'writeTextFrame', 'getStatus'].map(name => {
+    const declaration = apiSource.match(new RegExp(`^func ${name}\\([^\\n]+\\) [^\\n]*\\{[\\s\\S]*?^\\}`, 'm'))?.[0];
+    assert.ok(declaration, `未找到产品 WebSocket/状态函数 ${name}`);
+    return declaration;
+  });
+  await writeFile(join(sandbox, 'frames.go'), 'package main\nimport (\n' +
+    '"bufio"\n"crypto/sha1"\n"encoding/base64"\n"encoding/binary"\n"errors"\n"io"\n"net"\n' +
+    '"github.com/metacubex/http"\n"github.com/metacubex/chi/render"\n)\n' + frameFunctions.join('\n\n') + '\n');
   const nativeSource = await readFile(join(root, 'core/lib.go'), 'utf8');
   const lifecycle = ['checkProfilePath', 'runningProfile'].map(name => {
     const declaration = nativeSource.match(new RegExp(`^func ${name}\\([^\\n]*\\) [^\\n]+ \\{[\\s\\S]*?^\\}`, 'm'))?.[0];

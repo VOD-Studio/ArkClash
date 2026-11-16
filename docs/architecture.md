@@ -41,7 +41,7 @@ sequenceDiagram
   participant Sys as 系统 VPN 服务
   participant Ext as ClashVpnAbility
   participant Core as 内核
-  UI->>UI: 等待配置短提交，再写 runtime.json
+  UI->>UI: 等待配置与 Geo 设置短提交，再写 runtime.json
   UI->>Sys: startVpnExtensionAbility
   Sys-->>UI: 首次弹授权框
   Sys->>Ext: onCreate
@@ -74,9 +74,13 @@ sequenceDiagram
 | `runtime-instance.json`（当前扩展实例标识） | 应用沙箱 | VPN 进程，创建资源前 | UI、VPN 进程 |
 | `runtime-stopped.json`（当前扩展实例清理完成回执） | 应用沙箱 | VPN 进程，内核与 VPN 连接均释放后 | UI，核对 secret 与实例 |
 | `profiles/<id>.selected.json`（每配置节点选择） | 应用沙箱 | 离线 UI；在线 Go 选择事务 | UI、内核启动及热切换 |
-| Geo 数据（`filesDir/*.metadb、*.dat`）和版本标记 `geo.version` | 应用沙箱 | VPN 进程，安装包里的版本变了才从 rawfile 复制 | 内核 |
+| Geo 数据（四类固定文件）和 `geo-<id>.json` 更新元数据 | 应用沙箱 | 在线 Go 管理器；VPN 安装器只恢复缺失或升级未接管的两份内置数据 | 内核、UI（只读文件信息） |
+| `geo-settings.json`（四类 URL、自动更新与小时间隔） | 应用沙箱 | UI 串行原子保存、revision 冲突保护 | Go 启动/热应用、UI |
+| `geo.version`（内置资源版本） | 应用沙箱 | VPN 安装器全部复制成功后 | VPN 安装器 |
 | 用户设置（出站模式、局域网代理等） | UI 的 preferences | UI | UI |
 | 运行时状态（节点选择、连接、流量、正在运行的配置） | 内核内存 | 内核 | UI，经 controller |
+
+Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/update` 和独立 `/arkclash/geo/events` 最新值快照流。离线只读文件信息和编辑设置，页面可见且本次 boot 转发就绪后才订阅、下载；隐藏不取消内核任务。下载串行、可取消，文件与 reader/cache 原子切换，不重建 TUN。归属与 bundle 保护见 [ADR-0015](adr/0015-geo-resource-management.md)。
 
 同一个应用的 UI 进程和扩展进程共享模块级的 `filesDir`。preferences 只在 UI 进程里用，扩展进程需要的信息都要落到文件通道里。两个进程都会写的文件一律先写临时文件再改名（`shared/Files.ets`），同一时刻只有一方在更新订阅，交接见 ADR-0009。
 
@@ -110,6 +114,8 @@ sequenceDiagram
 | `core/selection.go` | 幂等选择、原子保存、持久化失败补偿、转发前恢复 |
 | `core/delay.go` | 8 执行槽测速、请求取消与配置代次隔离 |
 | `core/probe.go` | 按当前规则执行出口/服务探测，共用内核证书信任 |
+| `core/geo_settings.go` | Geo 磁盘设置契约、固定路径和更新元数据 |
+| `core/geo.go`、`geo_download.go`、`geo_events.go` | Geo 串行更新、可取消调度、候选校验/安全提交与最新快照推送 |
 | `core/prefetch.go` | 在后台预先下载配置里的 rule-provider，第一次热切换不用等 |
 | `core/tun.go` | 用系统给的 fd 启动 sing-tun（gVisor 栈），独立于配置的 TUN 设置 |
 | `core/socket.go` | 通过 Network Kit 原生 API 保护 Go 出站 socket，绑定失败则拒绝拨号 |

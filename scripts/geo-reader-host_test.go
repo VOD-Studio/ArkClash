@@ -31,7 +31,7 @@ func geoReaderBytes(t *testing.T, name string) []byte {
 	}
 	expected := map[string]string{
 		countryFixture: "9e0a58e6df30dd8d279c9ede70bcb1f19e1bf72f",
-		asnFixture: "16f4b201d9069fd0999bf4988ef3e8977fc4ed8e",
+		asnFixture:     "16f4b201d9069fd0999bf4988ef3e8977fc4ed8e",
 	}[name]
 	hash := sha1.New()
 	fmt.Fprintf(hash, "blob %d%c", len(data), byte(0))
@@ -196,7 +196,7 @@ func TestGeoReaderReloadAndLoadFromBytes(t *testing.T) {
 }
 
 type geoReaderLogBuffer struct {
-	mu sync.Mutex
+	mu   sync.Mutex
 	data bytes.Buffer
 }
 
@@ -244,8 +244,8 @@ func TestGeoInitializationDownloadFailureRedactsURL(t *testing.T) {
 	geodata.SetGeoIpUrl(source)
 	geodata.SetGeoSiteUrl(source)
 	for _, item := range []struct {
-		name string
-		mode bool
+		name       string
+		mode       bool
 		initialize func() error
 	}{
 		{"mmdb", false, geodata.InitGeoIP},
