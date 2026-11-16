@@ -237,6 +237,9 @@ struct Index {
         })
         // 不避让键盘：输入法弹出时页签栏留在键盘后面，不被顶到屏幕中间。
         .expandSafeArea([SafeAreaType.KEYBOARD])
+        .height(LayoutPolicy.matchParent)
+        // 仅首页页签铺满窗口；原生子页的标题栏仍由 Navigation 避让系统区域。
+        .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
         .bindSheet($$this.profilePicker, this.ProfilePicker(), {
           title: { title: $r('app.string.tab_profiles') },
           height: SheetSize.LARGE,
@@ -245,8 +248,8 @@ struct Index {
         })
       }
       .expandSafeArea([SafeAreaType.KEYBOARD])
-      // Navigation 默认让开状态栏和手势条；这里让内容铺满窗口，避让交给各页的标题栏和悬浮栏。
-      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+      .ignoreLayoutSafeArea([], [])
+      .safeAreaPadding({ top: this.topInset() })
       .backgroundColor(Color.Transparent)
       .mode(NavigationMode.Stack)
       .hideTitleBar(true)
