@@ -1,5 +1,4 @@
 import { accessibility } from '@kit.AccessibilityKit';
-import { UIUtils } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { Connection, connection } from '../../client/Connection';
 import { EmptyState } from '../../components/EmptyState';
@@ -10,7 +9,6 @@ import { ProxyBrowser } from './Proxies';
 import { ProxyGroupList } from './ProxyGroupList';
 import { ProxyTabs } from './ProxyTabs';
 import { ProxyToolbar } from './ProxyToolbar';
-import { ProxyLocateTarget } from './ProxyView';
 
 @ComponentV2
 export struct ProxiesPage {
@@ -149,24 +147,6 @@ export struct ProxiesPage {
     }
   }
 
-  private locate(groupName: string): void {
-    if (!this.visible) {
-      return;
-    }
-    if (this.listOwner !== 'groups') {
-      return;
-    }
-    const target = UIUtils.applySync<ProxyLocateTarget | undefined>((): ProxyLocateTarget | undefined => this.browser.locate(groupName));
-    if (target === undefined || !this.visible || this.listOwner !== 'groups') {
-      return;
-    }
-    if (this.scroller instanceof ListScroller) {
-      this.scroller.scrollToItemInGroup(target.groupIndex, target.rowIndex, false, ScrollAlign.CENTER);
-    } else {
-      this.scroller.scrollToIndex(target.groupIndex, false, ScrollAlign.START);
-    }
-  }
-
   private didScroll(offset: number, source: ScrollSource, scroller: Scroller): void {
     if (scroller !== this.boundScroller ||
       (!this.pickerMode && this.listOwner === '')) {
@@ -302,7 +282,6 @@ export struct ProxiesPage {
           motionEnabled: this.motionEnabled(),
           onScrollerReady: (): void => this.listReady('groups'),
           onScrollerRelease: (): void => this.listRelease('groups'),
-          onLocate: (group: string) => this.locate(group),
           onListScroll: (offset: number, source: ScrollSource) => this.didScroll(offset, source, this.scroller)
         })
           .layoutWeight(1)
