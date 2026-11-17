@@ -1,7 +1,7 @@
 import { AppGlyph } from '../../components/AppGlyph';
 import { ListSource } from '../../components/ListSource';
 import { uiResourceText } from '../../components/ResourceText';
-import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { RecordFacets, RecordGrouping } from './RecordLogic';
 import { recordColumnTitle, recordFacetText } from './RecordLabels';
 
@@ -69,7 +69,7 @@ export struct RecordActionMenu {
   @Builder
   MenuContent() {
     Column() {
-      Text(this.menuState.title).fontSize(22).lineHeight(28).fontWeight(FontWeight.Bold)
+      Text(this.menuState.title).fontSize(COMPACT_TITLE_SIZE).lineHeight(COMPACT_TITLE_LINE_HEIGHT).fontWeight(600)
         .fontColor($r('sys.color.font_primary')).width('100%').margin({ bottom: 16 })
       List() {
         LazyForEach(this.menuState.rows, (option: RecordMenuOption) => {

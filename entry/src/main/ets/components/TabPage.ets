@@ -4,10 +4,11 @@ import {
   HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, HdsTitleBarContentStyle, hdsMaterial,
   ScrollEffectType, TitleBarContentOptions
 } from '@kit.UIDesignKit';
-import { FLOATING_BAR_INSET, HEADER_ACTION, PAGE_GUTTER, SECTION_GAP } from './Theme';
+import {
+  FLOATING_BAR_INSET, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER, SECTION_GAP,
+  TAB_HEADER_HEIGHT, TAB_TITLE_LINE_HEIGHT, TAB_TITLE_SIZE
+} from './Theme';
 
-// 对齐 Prism 的 pageToolbarHeight；标题和正文起点必须使用同一尺寸。
-const TITLE_BAR_HEIGHT = 72;
 // 单帧滚动超过这个距离（vp）才算换了方向，过滤手指的细微抖动。
 const DIRECTION_THRESHOLD = 2;
 
@@ -83,10 +84,10 @@ export struct TabPage {
     if ($$.customTitle) {
       this.titleContent()
     } else {
-      Row({ space: 8 }) {
+      Row({ space: HEADER_GAP }) {
         Text($$.title)
-          .fontSize(24)
-          .lineHeight(30)
+          .fontSize(TAB_TITLE_SIZE)
+          .lineHeight(TAB_TITLE_LINE_HEIGHT)
           .fontWeight(600)
           .fontColor($r('sys.color.font_primary'))
           .maxLines(1)
@@ -96,7 +97,7 @@ export struct TabPage {
           Button({ type: ButtonType.Circle }) {
             if (menu.item.content?.icon !== undefined) {
               SymbolGlyph(menu.item.content.icon as Resource)
-                .fontSize(24)
+                .fontSize(HEADER_ICON_SIZE)
                 .fontColor([$r('sys.color.icon_primary')])
             }
           }
@@ -107,7 +108,7 @@ export struct TabPage {
         }).key((menu: HdsNavigationMenuItemOptions): string => this.menuKey(menu))
       }
       .width('100%')
-      .height(TITLE_BAR_HEIGHT)
+      .height(TAB_HEADER_HEIGHT)
       .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
     }
   }
@@ -123,7 +124,7 @@ export struct TabPage {
         .width('100%')
         .height('100%')
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
-        .contentStartOffset(this.topInset + TITLE_BAR_HEIGHT + 12)
+        .contentStartOffset(this.topInset + TAB_HEADER_HEIGHT + 12)
         .contentEndOffset(FLOATING_BAR_INSET)
         .cachedCount(2)
         .lanes(this.listLanes, this.listGutter)
@@ -141,7 +142,7 @@ export struct TabPage {
         .padding({
           left: PAGE_GUTTER,
           right: PAGE_GUTTER,
-          top: this.topInset + TITLE_BAR_HEIGHT + 12,
+          top: this.topInset + TAB_HEADER_HEIGHT + 12,
           bottom: FLOATING_BAR_INSET
         })
       }

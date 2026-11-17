@@ -1,7 +1,8 @@
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
-import { DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, DASHBOARD_CARD, HEADER_ACTION, HEADER_GAP,
+  HEADER_ICON_SIZE, PAGE_GUTTER, SHEET_HEADER_HEIGHT, sheetMaterial } from '../../components/Theme';
 import { uiResourceText } from '../../components/ResourceText';
 import { DashboardCardHeader } from './DashboardCardHeader';
 import { DashboardServiceRow, serviceConnectivityLabel } from './DashboardServiceRow';
@@ -113,10 +114,10 @@ export struct DashboardServices {
 
   @Builder
   SheetHeader() {
-    Row({ space: 8 }) {
+    Row({ space: HEADER_GAP }) {
       Text(this.managing ? $r('app.string.dash_service_manage') : $r('app.string.card_services'))
-        .fontSize(20)
-        .lineHeight(26)
+        .fontSize(COMPACT_TITLE_SIZE)
+        .lineHeight(COMPACT_TITLE_LINE_HEIGHT)
         .fontWeight(600)
         .fontColor($r('sys.color.font_primary'))
         .maxLines(1)
@@ -125,13 +126,13 @@ export struct DashboardServices {
       if (!this.managing) {
         Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL, stateEffect: true }) {
           if (this.state.busy) {
-            LoadingProgress().width(22).height(22).color($r('app.color.brand'))
+            LoadingProgress().width(HEADER_ICON_SIZE).height(HEADER_ICON_SIZE).color($r('app.color.brand'))
               .hitTestBehavior(HitTestMode.None)
           } else {
-            AppGlyph({ name: 'sync', iconSize: 22, iconColor: $r('sys.color.font_primary') })
+            AppGlyph({ name: 'sync', iconSize: HEADER_ICON_SIZE, iconColor: $r('sys.color.font_primary') })
           }
         }
-        .width(40).height(40).padding(0)
+        .attributeModifier(HEADER_ACTION)
         .enabled(!this.conn.busy && !this.conn.modePending)
         .accessibilityText(this.state.busy ? $r('app.string.action_cancel') : $r('app.string.dash_check_all'))
         .onClick((): void => {
@@ -144,22 +145,23 @@ export struct DashboardServices {
         })
       }
       Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL, stateEffect: true }) {
-        AppGlyph({ name: this.managing ? 'check' : 'edit', iconSize: 22,
+        AppGlyph({ name: this.managing ? 'check' : 'edit', iconSize: HEADER_ICON_SIZE,
           iconColor: this.managing ? $r('app.color.brand') : $r('sys.color.font_primary') })
       }
-      .width(40).height(40).padding(0)
+      .attributeModifier(HEADER_ACTION)
       .enabled(!this.settings.saving && !this.settings.hasDraft)
       .accessibilityText(this.managing ? $r('app.string.dash_done') : $r('app.string.dash_service_manage'))
       .onClick((): void => { this.managing = !this.managing; })
       Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL, stateEffect: true }) {
-        AppGlyph({ name: 'close', iconSize: 22, iconColor: $r('sys.color.font_primary') })
+        AppGlyph({ name: 'close', iconSize: HEADER_ICON_SIZE, iconColor: $r('sys.color.font_primary') })
       }
-      .width(40).height(40).padding(0)
+      .attributeModifier(HEADER_ACTION)
       .accessibilityText($r('app.string.action_close'))
       .onClick((): void => { this.details = false; })
     }
     .width('100%')
-    .constraintSize({ minHeight: 52 })
+    .height(SHEET_HEADER_HEIGHT)
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
   }
 
   @Builder
@@ -179,6 +181,7 @@ export struct DashboardServices {
         }
       }
       .width('100%')
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
       .layoutWeight(1)
       .scrollBar(BarState.Off)
       .divider({ strokeWidth: 0.5, color: $r('app.color.divider'), startMargin: 64, endMargin: 16 })
@@ -187,7 +190,7 @@ export struct DashboardServices {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .height('100%')
-    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8, bottom: 24 })
+    .padding({ top: 8, bottom: 24 })
   }
 
   build() {

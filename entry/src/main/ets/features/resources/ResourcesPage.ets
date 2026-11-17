@@ -1,7 +1,11 @@
 import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { connection, Connection } from '../../client/Connection';
-import { HEADER_ACTION, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { DestinationTitle, DESTINATION_TITLE_OPTIONS } from '../../components/DestinationTitle';
+import {
+  COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE,
+  PAGE_GUTTER, sheetMaterial
+} from '../../components/Theme';
 import { GEO_DEFAULT_URLS, GEO_RESOURCE_IDS, GeoResourceId, GeoResourceStatus, GeoUrls } from '../../shared/GeoResources';
 import { GeoEditorDraft, GeoResourceEditor, geoErrorText } from './GeoResourceEditor';
 import { GeoResourceRow } from './GeoResourceRow';
@@ -270,14 +274,19 @@ export struct ResourcesPage {
   }
 
   @Builder
+  HeaderTitle() {
+    DestinationTitle({ titleText: $r('app.string.tools_resources') })
+  }
+
+  @Builder
   HeaderMenus() {
-    Row() {
+    Row({ space: HEADER_GAP }) {
       Button({ type: ButtonType.Circle }) {
         if (this.updating()) {
-          LoadingProgress().width(22).height(22).color($r('sys.color.font_primary'))
+          LoadingProgress().width(HEADER_ICON_SIZE).height(HEADER_ICON_SIZE).color($r('sys.color.font_primary'))
             .accessibilityText($r('app.string.geo_updating'))
         } else {
-          SymbolGlyph($r('sys.symbol.arrow_clockwise')).fontSize(20)
+          SymbolGlyph($r('sys.symbol.arrow_clockwise')).fontSize(HEADER_ICON_SIZE)
             .fontColor([$r('sys.color.font_primary')])
         }
       }
@@ -307,7 +316,8 @@ export struct ResourcesPage {
   FailureSheet() {
     Scroll() {
       Column({ space: 16 }) {
-        Text($r('app.string.geo_failures')).fontSize(22).fontWeight(600)
+        Text($r('app.string.geo_failures')).fontSize(COMPACT_TITLE_SIZE)
+          .lineHeight(COMPACT_TITLE_LINE_HEIGHT).fontWeight(600)
         ForEach(this.failures, (item: GeoResourceStatus) => {
           Column({ space: 4 }) {
             Text(item.id.toUpperCase()).fontSize(17)
@@ -431,7 +441,7 @@ export struct ResourcesPage {
       .width('100%')
       .height('100%')
     }
-    .title($r('app.string.tools_resources'))
+    .title(this.HeaderTitle, DESTINATION_TITLE_OPTIONS)
     .menus(this.HeaderMenus)
     .backgroundColor($r('app.color.page_background'))
     .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })

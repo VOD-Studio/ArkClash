@@ -1,6 +1,9 @@
 import { SymbolGlyphModifier } from '@kit.ArkUI';
 import { AppGlyph } from '../../components/AppGlyph';
-import { HEADER_ACTION } from '../../components/Theme';
+import {
+  HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER, SHEET_HEADER_HEIGHT, TAB_HEADER_HEIGHT,
+  TAB_TITLE_LINE_HEIGHT, TAB_TITLE_SIZE
+} from '../../components/Theme';
 import { ProxyBrowser } from './Proxies';
 import { copyProxyStyle, ProxyDensity, ProxyIconStyle, ProxySort } from './ProxyLogic';
 
@@ -165,12 +168,12 @@ export struct ProxyToolbar {
     Button({ type: ButtonType.Circle }) {
       if (this.browser.groups[this.browser.groupIndex]?.testing === true && this.active) {
         LoadingProgress()
-          .width(24)
-          .height(24)
+          .width(HEADER_ICON_SIZE)
+          .height(HEADER_ICON_SIZE)
           .color($r('sys.color.font_primary'))
           .enableLoading(this.active)
       } else {
-        AppGlyph({ name: 'bolt', iconSize: 24 })
+        AppGlyph({ name: 'bolt', iconSize: HEADER_ICON_SIZE })
       }
     }
     .attributeModifier(HEADER_ACTION)
@@ -180,7 +183,7 @@ export struct ProxyToolbar {
   }
 
   build() {
-    Row({ space: 8 }) {
+    Row({ space: HEADER_GAP }) {
       if (this.searchShown || this.pickerMode) {
         TextInput({ text: this.browser.query, placeholder: $r('app.string.proxy_search') })
           .layoutWeight(1)
@@ -195,7 +198,7 @@ export struct ProxyToolbar {
         }
         if (!this.pickerMode) {
           Button({ type: ButtonType.Circle }) {
-            AppGlyph({ name: 'close', iconSize: 24 })
+            AppGlyph({ name: 'close', iconSize: HEADER_ICON_SIZE })
           }
           .attributeModifier(HEADER_ACTION)
           .accessibilityText($r('app.string.proxy_search_close'))
@@ -203,23 +206,23 @@ export struct ProxyToolbar {
         }
       } else {
         Text($r('app.string.tab_proxies'))
-          .fontSize(24)
-          .lineHeight(30)
+          .fontSize(TAB_TITLE_SIZE)
+          .lineHeight(TAB_TITLE_LINE_HEIGHT)
           .fontWeight(600)
           .fontColor($r('sys.color.font_primary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
-        Row({ space: 8 }) {
+        Row({ space: HEADER_GAP }) {
           Button({ type: ButtonType.Circle }) {
-            AppGlyph({ name: 'search', iconSize: 24 })
+            AppGlyph({ name: 'search', iconSize: HEADER_ICON_SIZE })
           }
           .attributeModifier(HEADER_ACTION)
           .accessibilityText($r('app.string.proxy_search'))
           .onClick(() => { this.searchShown = true; })
         }
         Button({ type: ButtonType.Circle }) {
-          AppGlyph({ name: 'more', iconSize: 24 })
+          AppGlyph({ name: 'more', iconSize: HEADER_ICON_SIZE })
         }
         .attributeModifier(HEADER_ACTION)
         .accessibilityText($r('app.string.proxy_style'))
@@ -230,7 +233,7 @@ export struct ProxyToolbar {
       }
     }
     .width('100%')
-    .height(this.pickerMode ? 56 : 72)
-    .padding({ left: 16, right: 16 })
+    .height(this.pickerMode ? SHEET_HEADER_HEIGHT : TAB_HEADER_HEIGHT)
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
   }
 }

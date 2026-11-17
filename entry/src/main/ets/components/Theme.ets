@@ -2,6 +2,14 @@ import { uiMaterial } from '@kit.ArkUI';
 
 // 页面左右留白；卡片之间、卡片内分组之间的间距。
 export const PAGE_GUTTER = 16;
+export const HEADER_GAP = 8;
+export const HEADER_ICON_SIZE = 24;
+export const TAB_HEADER_HEIGHT = 72;
+export const TAB_TITLE_SIZE = 24;
+export const TAB_TITLE_LINE_HEIGHT = 30;
+export const COMPACT_TITLE_SIZE = 20;
+export const COMPACT_TITLE_LINE_HEIGHT = 26;
+export const SHEET_HEADER_HEIGHT = 56;
 export const SECTION_GAP = 12;
 export const CARD_RADIUS = 16;
 export const CARD_PADDING = 16;

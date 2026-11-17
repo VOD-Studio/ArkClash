@@ -1,7 +1,7 @@
 import { bundleManager, common } from '@kit.AbilityKit';
-import { uiMaterial } from '@kit.ArkUI';
 import { connection, Connection } from '../../client/Connection';
 import { EmptyState } from '../../components/EmptyState';
+import { DestinationTitle, DESTINATION_TITLE_OPTIONS } from '../../components/DestinationTitle';
 import { ListRow } from '../../components/ListRow';
 import { CARD_RADIUS, PAGE_GUTTER } from '../../components/Theme';
 import { ToolRoute } from './ToolRoutes';
@@ -19,16 +19,15 @@ function titleOf(route: string): Resource {
   }
 }
 
-function titleOptions(): NavigationTitleOptions {
-  return {
-    systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR })
-  };
-}
-
 /** 工具页的二级页面，由页面层的 navDestination 按路由名创建。 */
 @ComponentV2
 export struct ToolPage {
   @Param route: string = ToolRoute.About;
+
+  @Builder
+  HeaderTitle() {
+    DestinationTitle({ titleText: titleOf(this.route) })
+  }
 
   build() {
     NavDestination() {
@@ -42,7 +41,7 @@ export struct ToolPage {
         })
       }
     }
-    .title(titleOf(this.route), titleOptions())
+    .title(this.HeaderTitle, DESTINATION_TITLE_OPTIONS)
     .backgroundColor($r('app.color.page_background'))
   }
 }

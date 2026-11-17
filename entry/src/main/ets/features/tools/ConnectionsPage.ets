@@ -2,9 +2,12 @@ import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { connection, Connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
+import { DestinationTitle, DESTINATION_TITLE_OPTIONS } from '../../components/DestinationTitle';
 import { EmptyState } from '../../components/EmptyState';
-import { uiResourceText } from '../../components/ResourceText';
-import { HEADER_ACTION, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import {
+  COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE,
+  PAGE_GUTTER, sheetMaterial
+} from '../../components/Theme';
 import { ConnectionRecordDetails } from './RecordDetails';
 import { RecordActionMenu, RecordFilterChips, RecordMenuOption, RecordMenuState, recordGroupingText } from './RecordFilters';
 import { ConnectionRecordView, diagnosticEndpoint, RecordGrouping, RequestFeed } from './RecordLogic';
@@ -242,30 +245,18 @@ export struct ConnectionsPage {
 
   @Builder
   FeedTitle() {
-    Button() {
-      Row({ space: 6 }) {
-        Text(this.feedTitle).fontSize(20).fontWeight(FontWeight.Bold)
-          .fontColor($r('sys.color.font_primary')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        AppGlyph({ name: 'chevronDown', iconSize: 16 })
-      }
-    }
-    .height('100%')
-    .buttonStyle(ButtonStyleMode.NORMAL)
-    .backgroundColor(Color.Transparent)
-    .padding({ left: 0, right: 4, top: 8, bottom: 8 })
-    .accessibilityText(uiResourceText(this.getUIContext(), this.feedTitle))
-    .onClick((): void => { this.selectFeed(); })
+    DestinationTitle({ titleText: this.feedTitle, selectable: true, onSelect: (): void => { this.selectFeed(); } })
   }
 
   @Builder
   HeaderMenus() {
-    Row({ space: 8 }) {
+    Row({ space: HEADER_GAP }) {
       if (this.store.feed === 'live') {
         Button({ type: ButtonType.Circle }) {
           if (this.store.actionPending) {
-            LoadingProgress().width(20).height(20)
+            LoadingProgress().width(HEADER_ICON_SIZE).height(HEADER_ICON_SIZE)
           } else {
-            AppGlyph({ name: 'close', iconSize: 20 })
+            AppGlyph({ name: 'close', iconSize: HEADER_ICON_SIZE })
           }
         }
         .attributeModifier(HEADER_ACTION)
@@ -274,13 +265,13 @@ export struct ConnectionsPage {
         .onClick((): void => { this.openCloseAll(); })
       }
       Button({ type: ButtonType.Circle }) {
-        AppGlyph({ name: 'search', iconSize: 20 })
+        AppGlyph({ name: 'search', iconSize: HEADER_ICON_SIZE })
       }
       .attributeModifier(HEADER_ACTION)
       .accessibilityText($r('app.string.diagnostics_search'))
       .onClick((): void => { this.searchShown = !this.searchShown; })
       Button({ type: ButtonType.Circle }) {
-        AppGlyph({ name: 'more', iconSize: 20 })
+        AppGlyph({ name: 'more', iconSize: HEADER_ICON_SIZE })
       }
       .attributeModifier(HEADER_ACTION)
       .accessibilityText($r('app.string.diagnostics_more'))
@@ -302,7 +293,8 @@ export struct ConnectionsPage {
   CloseAllSheet() {
     Scroll() {
     Column({ space: 20 }) {
-      Text($r('app.string.diagnostics_close_all')).fontSize(22).fontWeight(FontWeight.Bold)
+      Text($r('app.string.diagnostics_close_all')).fontSize(COMPACT_TITLE_SIZE)
+        .lineHeight(COMPACT_TITLE_LINE_HEIGHT).fontWeight(600)
       Text($r('app.string.diagnostics_close_all_hint')).fontSize(16)
         .fontColor($r('sys.color.font_secondary'))
       Button() {
@@ -405,7 +397,7 @@ export struct ConnectionsPage {
       }
       .width('100%').height('100%')
     }
-    .title(this.FeedTitle)
+    .title(this.FeedTitle, DESTINATION_TITLE_OPTIONS)
     .menus(this.HeaderMenus)
     .backgroundColor($r('app.color.page_background'))
     .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })

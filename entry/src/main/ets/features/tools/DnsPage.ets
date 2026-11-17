@@ -2,8 +2,9 @@ import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { connection, Connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
+import { DestinationTitle, DESTINATION_TITLE_OPTIONS } from '../../components/DestinationTitle';
 import { EmptyState } from '../../components/EmptyState';
-import { HEADER_ACTION, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { DnsRecordDetails } from './RecordDetails';
 import { RecordActionMenu, RecordFilterChips, RecordMenuOption, RecordMenuState } from './RecordFilters';
 import { recordColumnTitle, recordErrorText, recordFacetText } from './RecordLabels';
@@ -172,13 +173,18 @@ export struct DnsPage {
   }
 
   @Builder
+  HeaderTitle() {
+    DestinationTitle({ titleText: $r('app.string.tools_dns') })
+  }
+
+  @Builder
   HeaderMenus() {
-    Row({ space: 8 }) {
+    Row({ space: HEADER_GAP }) {
       Button({ type: ButtonType.Circle }) {
         if (this.store.actionPending) {
-          LoadingProgress().width(20).height(20)
+          LoadingProgress().width(HEADER_ICON_SIZE).height(HEADER_ICON_SIZE)
         } else {
-          AppGlyph({ name: 'sync', iconSize: 20 })
+          AppGlyph({ name: 'sync', iconSize: HEADER_ICON_SIZE })
         }
       }
       .attributeModifier(HEADER_ACTION)
@@ -186,13 +192,13 @@ export struct DnsPage {
       .accessibilityText($r('app.string.diagnostics_clear_cache'))
       .onClick((): void => { this.clearCache(); })
       Button({ type: ButtonType.Circle }) {
-        AppGlyph({ name: 'search', iconSize: 20 })
+        AppGlyph({ name: 'search', iconSize: HEADER_ICON_SIZE })
       }
       .attributeModifier(HEADER_ACTION)
       .accessibilityText($r('app.string.diagnostics_search'))
       .onClick((): void => { this.searchShown = !this.searchShown; })
       Button({ type: ButtonType.Circle }) {
-        SymbolGlyph($r('sys.symbol.slider_horizontal_2')).fontSize(20)
+        SymbolGlyph($r('sys.symbol.slider_horizontal_2')).fontSize(HEADER_ICON_SIZE)
           .fontColor([$r('sys.color.font_primary')])
       }
       .attributeModifier(HEADER_ACTION)
@@ -282,7 +288,7 @@ export struct DnsPage {
       }
       .width('100%').height('100%')
     }
-    .title($r('app.string.tools_dns'))
+    .title(this.HeaderTitle, DESTINATION_TITLE_OPTIONS)
     .menus(this.HeaderMenus)
     .backgroundColor($r('app.color.page_background'))
     .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })

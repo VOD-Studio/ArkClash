@@ -4,7 +4,7 @@ import { common } from '@kit.AbilityKit';
 import { Connection, connection } from '../../client/Connection';
 import { EmptyState } from '../../components/EmptyState';
 import { TabPage } from '../../components/TabPage';
-import { FLOATING_BAR_INSET, PAGE_GUTTER } from '../../components/Theme';
+import { FLOATING_BAR_INSET, PAGE_GUTTER, TAB_HEADER_HEIGHT } from '../../components/Theme';
 import { ProfileSummary } from '../../shared/profiles/Summary';
 import { ProxyBrowser } from './Proxies';
 import { ProxyGroupList } from './ProxyGroupList';
@@ -276,7 +276,7 @@ export struct ProxiesPage {
         .layoutWeight(1)
         .width('100%')
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
-        .safeAreaPadding({ top: this.pickerMode ? 0 : this.topInset + 72 })
+        .safeAreaPadding({ top: this.pickerMode ? 0 : this.topInset + TAB_HEADER_HEIGHT })
         .contentStartOffset(12)
         .contentEndOffset(FLOATING_BAR_INSET)
         .clipContent(ContentClipMode.BOUNDARY)
@@ -298,7 +298,7 @@ export struct ProxiesPage {
       } else {
         ProxyGroupList({
           browser: this.browser, scroller: this.scroller, active: this.visible, pickerMode: this.pickerMode,
-          contentInset: this.topInset + 72,
+          contentInset: this.topInset + TAB_HEADER_HEIGHT,
           motionEnabled: this.motionEnabled(),
           onScrollerReady: (): void => this.listReady('groups'),
           onScrollerRelease: (): void => this.listRelease('groups'),

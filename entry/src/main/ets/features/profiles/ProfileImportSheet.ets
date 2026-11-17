@@ -1,4 +1,4 @@
-import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { HEADER_ACTION, HEADER_ICON_SIZE, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { errorString } from '../../shared/profiles/Errors';
 import { describeError } from './ProfileErrors';
 import { ProfileBatchResult } from './ProfileModels';
@@ -71,10 +71,10 @@ export struct ProfileImportSheet {
   ImportActions() {
     Button({ type: ButtonType.Circle }) {
       SymbolGlyph(this.importingMany ? $r('sys.symbol.doc_text') : $r('sys.symbol.sort'))
-        .fontSize(24)
+        .fontSize(HEADER_ICON_SIZE)
         .fontColor([$r('sys.color.font_primary')])
     }
-    .width(40).height(40).backgroundColor(Color.Transparent)
+    .attributeModifier(HEADER_ACTION)
     .enabled(!this.adding)
     .accessibilityText(this.importingMany ? $r('app.string.profile_import_single') : $r('app.string.profile_import_batch'))
     .onClick((): void => this.toggleBatch())

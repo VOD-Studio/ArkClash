@@ -2,7 +2,7 @@ import { DiagnosticConnection, DiagnosticDnsRecord } from '../../client/Diagnost
 import { AppGlyph } from '../../components/AppGlyph';
 import { formatBytes } from '../../components/Format';
 import { uiResourceText } from '../../components/ResourceText';
-import { PAGE_GUTTER } from '../../components/Theme';
+import { COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { ConnectionRecordView, diagnosticEndpoint } from './RecordLogic';
 import { recordColumnTitle, recordFacetText, recordInitiatorText } from './RecordLabels';
 
@@ -78,7 +78,8 @@ struct RecordDetailValues {
   build() {
     Scroll() {
       Column({ space: 16 }) {
-        Text($r('app.string.diagnostics_details')).fontSize(22).fontWeight(FontWeight.Bold)
+        Text($r('app.string.diagnostics_details'))
+          .fontSize(COMPACT_TITLE_SIZE).lineHeight(COMPACT_TITLE_LINE_HEIGHT).fontWeight(600)
           .fontColor($r('sys.color.font_primary'))
         Column() {
           ForEach(this.fields, (field: RecordDetailField) => {

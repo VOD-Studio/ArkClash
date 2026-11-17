@@ -1,4 +1,5 @@
 import { GeoResourceId, validateGeoUrl } from '../../shared/GeoResources';
+import { COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE } from '../../components/Theme';
 
 export function geoErrorText(code: string): ResourceStr {
   switch (code) {
@@ -64,7 +65,8 @@ export struct GeoResourceEditor {
       Column({ space: 20 }) {
         Text(this.draft.mode === 'url' ? $r('app.string.geo_edit_url', this.draft.resourceId.toUpperCase()) :
           $r('app.string.geo_interval'))
-          .fontSize(22)
+          .fontSize(COMPACT_TITLE_SIZE)
+          .lineHeight(COMPACT_TITLE_LINE_HEIGHT)
           .fontWeight(600)
           .width('100%')
         Text(this.draft.mode === 'url' ? $r('app.string.geo_url_hint') : $r('app.string.geo_interval_hint'))
