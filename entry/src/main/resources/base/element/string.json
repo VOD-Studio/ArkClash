@@ -105,16 +105,16 @@
       "value": "Could not copy the link"
     },
     {
-      "name": "geo_enable_auto",
-      "value": "Enable automatic updates"
+      "name": "geo_section_title",
+      "value": "Geo resources"
     },
     {
-      "name": "geo_disable_auto",
-      "value": "Disable automatic updates"
+      "name": "geo_auto_update",
+      "value": "Auto update"
     },
     {
-      "name": "geo_auto_status",
-      "value": "Update interval: %d hours. Downloads use the connected core and current routing rules."
+      "name": "geo_interval_value",
+      "value": "%d hours"
     },
     {
       "name": "geo_reset_settings",

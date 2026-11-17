@@ -17,6 +17,8 @@ export struct ResourcesPage {
   @Local draft: GeoEditorDraft | undefined = undefined;
   @Local failuresShown: boolean = false;
   @Local failures: GeoResourceStatus[] = [];
+  @Local automaticDraft: boolean | undefined = undefined;
+  @Local submitting: boolean = false;
   private active: boolean = false;
   private generation: number = 0;
   private consumedNotice: number = 0;
@@ -42,6 +44,8 @@ export struct ResourcesPage {
       this.failuresShown = false;
       this.failures = [];
       this.store.clearNotice();
+      this.automaticDraft = undefined;
+      this.submitting = false;
     }
   }
 
@@ -165,11 +169,15 @@ export struct ResourcesPage {
   }
 
   private async syncResources(ids: GeoResourceId[]): Promise<void> {
-    if (!this.active || !this.store.canSync) { return; }
+    if (!this.active || !this.store.canSync || this.submitting || (ids.length > 1 && this.updating())) { return; }
     const generation = this.generation;
+    this.submitting = true;
     try { await this.store.sync(ids); }
     catch (error) {
       if (this.isCurrent(generation)) { this.toast(geoErrorText((error as Error).message)); }
+    }
+    finally {
+      if (this.isCurrent(generation)) { this.submitting = false; }
     }
   }
 
@@ -214,40 +222,26 @@ export struct ResourcesPage {
     });
   }
 
-  private moreActions(): void {
-    if (!this.active || this.actionOpen || !this.store.loaded || this.store.saving || this.store.settingsError !== '') {
-      return;
-    }
-    const generation = this.generation;
-    const autoUpdate = !this.store.settings.autoUpdate;
-    let choice = '';
-    this.actionOpen = true;
-    this.getUIContext().showActionSheet({
-      title: $r('app.string.action_more'),
-      message: $r('app.string.geo_auto_status', this.store.settings.intervalHours),
-      alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
-      sheets: [
-        { title: this.store.settings.autoUpdate ? $r('app.string.geo_disable_auto') : $r('app.string.geo_enable_auto'),
-          action: (): void => { choice = 'auto'; } },
-        { title: $r('app.string.geo_interval'), action: (): void => { choice = 'interval'; } }
-      ],
-      confirm: { value: $r('app.string.action_cancel'), action: (): void => {} },
-      onDidDisappear: (): void => {
-        this.actionOpen = false;
-        if (!this.isCurrent(generation)) { return; }
-        if (choice === 'auto') { this.saveAutomatic(autoUpdate); }
-        else if (choice === 'interval') { this.openInterval(); }
-        this.presentFailures();
-      }
-    });
-  }
 
   private async saveAutomatic(enabled: boolean): Promise<void> {
+    if (!this.active || !this.store.loaded || this.store.saving || this.store.settingsError !== '') { return; }
     const generation = this.generation;
+    this.automaticDraft = enabled;
     try { await this.store.saveAutoUpdate(enabled); }
     catch (error) {
       if (this.isCurrent(generation)) { this.toast(geoErrorText((error as Error).message)); }
     }
+    finally {
+      if (this.isCurrent(generation)) { this.automaticDraft = undefined; }
+    }
+  }
+
+  private updating(): boolean {
+    if (this.submitting) { return true; }
+    for (const item of this.store.items) {
+      if (item.phase === 'queued' || item.phase === 'updating') { return true; }
+    }
+    return false;
   }
 
   private confirmReset(): void {
@@ -279,23 +273,20 @@ export struct ResourcesPage {
   HeaderMenus() {
     Row({ space: 8 }) {
       Button({ type: ButtonType.Circle }) {
-        SymbolGlyph($r('sys.symbol.arrow_clockwise')).fontSize(20)
-          .fontColor([$r('sys.color.font_primary')])
+        if (this.updating()) {
+          LoadingProgress().width(22).height(22).color($r('sys.color.font_primary'))
+            .accessibilityText($r('app.string.geo_updating'))
+        } else {
+          SymbolGlyph($r('sys.symbol.arrow_clockwise')).fontSize(20)
+            .fontColor([$r('sys.color.font_primary')])
+        }
       }
       .attributeModifier(HEADER_ACTION)
-      .enabled(this.store.canSync)
+      .enabled(this.store.canSync && !this.updating())
       .accessibilityText($r('app.string.action_update_all'))
-      .accessibilityDescription(this.store.canSync ? $r('app.string.action_update_all') :
-        $r('app.string.geo_connect_to_update'))
+      .accessibilityDescription(this.updating() ? $r('app.string.geo_updating') :
+        (this.store.canSync ? $r('app.string.action_update_all') : $r('app.string.geo_connect_to_update')))
       .onClick((): void => { this.syncResources(GEO_RESOURCE_IDS); })
-      Button({ type: ButtonType.Circle }) {
-        SymbolGlyph($r('sys.symbol.ellipsis_circle')).fontSize(20)
-          .fontColor([$r('sys.color.font_primary')])
-      }
-      .attributeModifier(HEADER_ACTION)
-      .enabled(this.store.loaded && !this.store.saving && this.store.settingsError === '')
-      .accessibilityText($r('app.string.action_more'))
-      .onClick((): void => { this.moreActions(); })
     }
   }
 
@@ -342,6 +333,44 @@ export struct ResourcesPage {
             if (!this.store.loaded) {
               LoadingProgress().width(28).height(28).accessibilityText($r('app.string.geo_loading'))
             } else {
+              Column() {
+                Row({ space: 16 }) {
+                  Text($r('app.string.geo_auto_update')).fontSize(17)
+                    .fontColor($r('sys.color.font_primary')).layoutWeight(1)
+                  Toggle({ type: ToggleType.Switch,
+                    isOn: this.automaticDraft ?? this.store.settings.autoUpdate })
+                    .enabled(this.store.loaded && !this.store.saving && this.store.settingsError === '')
+                    .accessibilityText($r('app.string.geo_auto_update'))
+                    .onChange((enabled: boolean): void => { this.saveAutomatic(enabled); })
+                }
+                .width('100%')
+                .constraintSize({ minHeight: 64 })
+                .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+                if (this.automaticDraft ?? this.store.settings.autoUpdate) {
+                  Divider().color($r('app.color.divider')).margin({ left: 16, right: 16 })
+                  Button({ type: ButtonType.Normal }) {
+                    Row({ space: 12 }) {
+                      Text($r('app.string.geo_interval')).fontSize(17)
+                        .fontColor($r('sys.color.font_primary')).layoutWeight(1)
+                      Text($r('app.string.geo_interval_value', this.store.settings.intervalHours)).fontSize(14)
+                        .fontColor($r('sys.color.font_secondary'))
+                      SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(16)
+                        .fontColor([$r('sys.color.font_tertiary')])
+                    }
+                    .width('100%')
+                    .constraintSize({ minHeight: 64 })
+                    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+                  }
+                  .width('100%').borderRadius(0).buttonStyle(ButtonStyleMode.NORMAL)
+                  .backgroundColor(Color.Transparent)
+                  .enabled(this.store.loaded && !this.store.saving && this.store.settingsError === '')
+                  .accessibilityText($r('app.string.geo_interval'))
+                  .onClick((): void => { this.openInterval(); })
+                }
+              }
+              .width('100%').borderRadius(22).clip(true).backgroundColor($r('app.color.card_background'))
+              Text($r('app.string.geo_section_title')).fontSize(14).fontWeight(FontWeight.Medium)
+                .fontColor($r('sys.color.font_secondary')).padding({ left: 16, right: 16 })
               Column() {
                 ForEach(this.store.items, (item: GeoResourceItem, index: number) => {
                   if (index > 0) {

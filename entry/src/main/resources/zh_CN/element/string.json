@@ -105,16 +105,16 @@
       "value": "复制链接失败"
     },
     {
-      "name": "geo_enable_auto",
-      "value": "开启自动更新"
+      "name": "geo_section_title",
+      "value": "Geo 资源"
     },
     {
-      "name": "geo_disable_auto",
-      "value": "关闭自动更新"
+      "name": "geo_auto_update",
+      "value": "自动更新"
     },
     {
-      "name": "geo_auto_status",
-      "value": "更新间隔：%d 小时。下载由已连接内核按当前规则路由。"
+      "name": "geo_interval_value",
+      "value": "%d 小时"
     },
     {
       "name": "geo_reset_settings",

@@ -42,6 +42,9 @@ export struct GeoResourceRow {
           .fontSize(13)
           .fontColor($r('sys.color.font_secondary'))
           .fontFeature('"tnum" on')
+          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+          .backgroundColor($r('app.color.surface_block'))
+          .borderRadius(10)
       }
     }
     .width('100%')

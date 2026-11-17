@@ -879,3 +879,117 @@ test('当前受理失败仅抛脱敏错误，不产生重复notice；推送错�
   assert.equal(h.store.items[0].error, 'geo_download_failed');
   assert.equal(h.store.notice, undefined);
 }));
+
+function resourcePageActions(store) {
+  const source = fs.readFileSync(new URL('../entry/src/main/ets/features/resources/ResourcesPage.ets', import.meta.url), 'utf8');
+  const methods = ['isCurrent', 'toast', 'saveAutomatic', 'syncResources', 'updating'].map(name => {
+    const method = source.match(new RegExp(`^  private (?:async )?${name}\\([^\\n]*\\)[^\\n]*\\{[\\s\\S]*?^  \\}`, 'm'))?.[0];
+    assert.ok(method, `missing resource page action ${name}`);
+    return method.replace(/^  private /, '  ');
+  }).join('\n');
+  const editor = fs.readFileSync(new URL('../entry/src/main/ets/features/resources/GeoResourceEditor.ets', import.meta.url), 'utf8');
+  const errors = editor.match(/^export function geoErrorText\([^\n]*\)[^\n]*\{[\s\S]*?^}/m)?.[0];
+  assert.ok(errors, 'missing real resource error mapping');
+  const notices = [];
+  const ui = { getPromptAction: () => ({ showToast: notice => notices.push(notice.message) }) };
+  const compiled = ts.transpileModule(`${errors.replace(/^export /, '')}
+class ResourcePageActions {
+  active: boolean = true;
+  generation: number = 1;
+  automaticDraft: boolean | undefined = undefined;
+  submitting: boolean = false;
+  constructor(public store: ResourcesStore) {}
+  getUIContext(): UIContext { return ui; }
+${methods}
+}
+module.exports = ResourcePageActions;`, {
+    fileName: 'ResourcePageActions.ts',
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+  }).outputText;
+  const module = { exports: {} };
+  vm.runInNewContext(compiled, { module, exports: module.exports, ui, $r: key => key });
+  return { page: new module.exports(store), notices };
+}
+
+test('正文自动更新草稿在真实保存失败后回滚，离线重试仍可保存', async () => resourceStoreCase(async h => {
+  h.store.setVisible(true);
+  await h.store.load(h.context);
+  const { page, notices } = resourcePageActions(h.store);
+  const gate = deferredResource();
+  h.controls.writeGate = gate.promise;
+  h.controls.fail = operation => operation === 'rename';
+  const saving = page.saveAutomatic(true);
+  await untilResource(() => h.controls.writing);
+  assert.equal(page.automaticDraft, true);
+  assert.equal(h.store.saving, true);
+  assert.equal(h.store.settings.autoUpdate, false);
+  gate.resolve();
+  await saving;
+  assert.equal(page.automaticDraft, undefined);
+  assert.equal(page.automaticDraft ?? h.store.settings.autoUpdate, false);
+  assert.equal((await h.geo.readGeoSettings(h.dir)).autoUpdate, false);
+  assert.deepEqual(notices, ['app.string.geo_io']);
+  h.controls.fail = undefined;
+  h.controls.writeGate = undefined;
+  await page.saveAutomatic(true);
+  assert.equal(page.automaticDraft, undefined);
+  assert.equal(h.store.settings.autoUpdate, true);
+  assert.equal((await h.geo.readGeoSettings(h.dir)).autoUpdate, true);
+  assert.equal(h.requests.length, 0);
+}));
+
+test('全部更新在受理和queued/updating期间均拒绝重复提交，实际完成后恢复', async () => resourceStoreCase(async h => {
+  await h.online();
+  const { page } = resourcePageActions(h.store);
+  const ids = ['mmdb', 'asn', 'geoip', 'geosite'];
+  const gate = deferredResource();
+  let calls = 0;
+  let accepted = resourceSnapshot(2);
+  for (const id of ids) accepted = resourceOperation(accepted, id, `batch-${id}`, 'queued');
+  h.server.update = async (_body, response) => {
+    calls++;
+    await gate.promise;
+    return response(accepted, 202);
+  };
+  const pending = page.syncResources(ids);
+  await untilResource(() => calls === 1);
+  assert.equal(page.submitting, true);
+  await page.syncResources(ids);
+  assert.equal(calls, 1);
+  gate.resolve();
+  await pending;
+  assert.equal(page.submitting, false);
+  assert.equal(page.updating(), true);
+  await page.syncResources(ids);
+  assert.equal(calls, 1);
+  let busy = resourceSnapshot(3);
+  for (const id of ids) busy = resourceOperation(busy, id, `batch-${id}`, 'updating');
+  h.emit(busy);
+  await page.syncResources(ids);
+  assert.equal(calls, 1);
+  let done = resourceSnapshot(4);
+  for (const id of ids) done = resourceOperation(done, id, `batch-${id}`, 'idle', 'updated');
+  h.emit(done);
+  assert.equal(page.updating(), false);
+  accepted = resourceSnapshot(5);
+  for (const id of ids) accepted = resourceOperation(accepted, id, `next-${id}`, 'queued');
+  await page.syncResources(ids);
+  assert.equal(calls, 2);
+}));
+
+test('旧页面受理失败不能清掉新页面提交状态或回放Toast', async () => resourceStoreCase(async h => {
+  await h.online();
+  const { page, notices } = resourcePageActions(h.store);
+  const gate = deferredResource();
+  let started = false;
+  h.server.update = async () => { started = true; await gate.promise; throw new Error('fixture transport failure'); };
+  const pending = page.syncResources(['mmdb']);
+  await untilResource(() => started);
+  page.generation++;
+  page.active = false;
+  page.submitting = true;
+  gate.resolve();
+  await pending;
+  assert.equal(page.submitting, true);
+  assert.deepEqual(notices, []);
+}));
