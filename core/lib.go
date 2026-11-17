@@ -60,7 +60,13 @@ func start(opts startOptions) error {
 	lifecycle.Lock()
 	defer lifecycle.Unlock()
 	mu.Lock()
-	defer mu.Unlock()
+	var waitDiagnostics func()
+	defer func() {
+		mu.Unlock()
+		if waitDiagnostics != nil {
+			waitDiagnostics()
+		}
+	}()
 
 	if running {
 		return errors.New("core is already running")
@@ -91,7 +97,7 @@ func start(opts startOptions) error {
 	running = true
 	current = opts
 	runningID.Store(&opts.Profile)
-	beginRuntime()
+	waitDiagnostics = beginRuntime()
 	manager, err := newGeoManager(opts.HomeDir, runtimeBootID, opts.Geo)
 	if err != nil {
 		stopTun()
@@ -138,7 +144,13 @@ func parseConfig(path string, opts startOptions) (*config.Config, error) {
 // 由 applyOverrides 固定，不需要重建。改 start 的解析和应用流程时，这里要一起看。
 func reload(path, profile, expectedProfile string) error {
 	mu.Lock()
-	defer mu.Unlock()
+	var waitDiagnostics func()
+	defer func() {
+		mu.Unlock()
+		if waitDiagnostics != nil {
+			waitDiagnostics()
+		}
+	}()
 
 	if !running {
 		return errors.New("core is not running")
@@ -156,6 +168,7 @@ func reload(path, profile, expectedProfile string) error {
 	if err != nil {
 		return err
 	}
+	waitDiagnostics = stopDiagnosticsLocked()
 	cancelDelayTests()
 	constant.SetConfig(path)
 	executor.ApplyConfig(cfg, true)
@@ -270,6 +283,7 @@ func stop() {
 		mu.Unlock()
 		return
 	}
+	waitDiagnostics := stopDiagnosticsLocked()
 	manager := activeGeo.Swap(nil)
 	if manager != nil {
 		manager.closeLocked()
@@ -284,6 +298,7 @@ func stop() {
 	runningID.Store(nil)
 	publishRuntime()
 	mu.Unlock()
+	waitDiagnostics()
 	// worker 的取消清理可能需要核心锁，且下一次 start 不得越过本次 join。
 	if manager != nil {
 		manager.wait()

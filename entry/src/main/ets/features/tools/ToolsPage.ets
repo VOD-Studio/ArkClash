@@ -14,6 +14,7 @@ export struct ToolsPage {
   Content() {
     this.Group([
       new Entry(ToolRoute.Connections, $r('sys.symbol.list_bullet'), $r('app.string.tools_connections')),
+      new Entry(ToolRoute.Dns, $r('sys.symbol.connection'), $r('app.string.tools_dns')),
       new Entry(ToolRoute.Logs, $r('sys.symbol.doc_plaintext'), $r('app.string.tools_logs'))
     ])
     this.Group([

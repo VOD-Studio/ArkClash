@@ -1,8 +1,8 @@
-interface ProxyListKey {
+interface KeyedListItem {
   key: string;
 }
 
-export class ProxyListSource<T extends ProxyListKey> implements IDataSource {
+export class KeyedListSource<T extends KeyedListItem> implements IDataSource {
   private items: T[] = [];
   private listeners: DataChangeListener[] = [];
 

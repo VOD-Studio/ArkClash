@@ -13,6 +13,8 @@ import { ToolPage } from '../features/tools/ToolPages';
 import { ToolRoute } from '../features/tools/ToolRoutes';
 import { ToolsPage } from '../features/tools/ToolsPage';
 import { ResourcesPage } from '../features/resources/ResourcesPage';
+import { ConnectionsPage } from '../features/tools/ConnectionsPage';
+import { DnsPage } from '../features/tools/DnsPage';
 import { WindowInsets } from './WindowInsets';
 import { DashboardTab } from './DashboardTab';
 
@@ -140,6 +142,10 @@ struct Index {
   Routes(name: string) {
     if (name === ToolRoute.Resources) {
       ResourcesPage({ foreground: this.foreground })
+    } else if (name === ToolRoute.Connections) {
+      ConnectionsPage({ foreground: this.foreground })
+    } else if (name === ToolRoute.Dns) {
+      DnsPage({ foreground: this.foreground })
     } else {
       ToolPage({ route: name })
     }

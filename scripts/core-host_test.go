@@ -90,14 +90,19 @@ rules: ['MATCH,DIRECT']
 	runningID.Store(&current.Profile)
 	fd := 1
 	tunListener = &fd
-	beginRuntime()
+	waitDiagnostics := beginRuntime()
 	watchRuntimeRoutes(cfg)
 	resetProxyIdentities()
 	publishRuntime()
 	mu.Unlock()
+	waitDiagnostics()
 	t.Cleanup(func() {
 		mu.Lock()
-		defer mu.Unlock()
+		waitDiagnostics := stopDiagnosticsLocked()
+		defer func() {
+			mu.Unlock()
+			waitDiagnostics()
+		}()
 		stopRuntimeRoutes()
 		cancelDelayTests()
 		running = false

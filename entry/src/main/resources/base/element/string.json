@@ -1783,6 +1783,374 @@
     {
       "name": "dash_probe_checked_at_failed",
       "value": "Failed · Last OK"
+    },
+    {
+      "name": "tools_dns",
+      "value": "DNS queries"
+    },
+    {
+      "name": "diagnostics_live",
+      "value": "Live connections"
+    },
+    {
+      "name": "diagnostics_recent",
+      "value": "Recent requests"
+    },
+    {
+      "name": "diagnostics_search",
+      "value": "Search records"
+    },
+    {
+      "name": "diagnostics_search_hint",
+      "value": "Search"
+    },
+    {
+      "name": "diagnostics_filters",
+      "value": "Filters"
+    },
+    {
+      "name": "diagnostics_grouping",
+      "value": "Group by"
+    },
+    {
+      "name": "diagnostics_group_none",
+      "value": "No grouping"
+    },
+    {
+      "name": "diagnostics_group_host",
+      "value": "Host"
+    },
+    {
+      "name": "diagnostics_group_rule",
+      "value": "Rule"
+    },
+    {
+      "name": "diagnostics_group_exit",
+      "value": "Exit"
+    },
+    {
+      "name": "diagnostics_unknown",
+      "value": "Unknown"
+    },
+    {
+      "name": "diagnostics_disconnected",
+      "value": "Not connected"
+    },
+    {
+      "name": "diagnostics_connect_hint",
+      "value": "Connect the proxy to observe records."
+    },
+    {
+      "name": "diagnostics_connecting",
+      "value": "Connecting to diagnostics"
+    },
+    {
+      "name": "diagnostics_no_records",
+      "value": "No records yet"
+    },
+    {
+      "name": "diagnostics_collect_hint",
+      "value": "Records appear while this page is visible."
+    },
+    {
+      "name": "diagnostics_no_matches",
+      "value": "No matching records"
+    },
+    {
+      "name": "diagnostics_adjust_filters",
+      "value": "Adjust the search or filters."
+    },
+    {
+      "name": "diagnostics_invalid_request",
+      "value": "Invalid diagnostics request"
+    },
+    {
+      "name": "diagnostics_stale_runtime",
+      "value": "The active configuration changed"
+    },
+    {
+      "name": "diagnostics_not_ready",
+      "value": "Diagnostics are not ready"
+    },
+    {
+      "name": "diagnostics_operation_failed",
+      "value": "Diagnostics operation failed"
+    },
+    {
+      "name": "diagnostics_invalid_data",
+      "value": "Invalid diagnostics data"
+    },
+    {
+      "name": "diagnostics_stream_failed",
+      "value": "Diagnostics stream failed"
+    },
+    {
+      "name": "diagnostics_preferences_failed",
+      "value": "Could not save or load display preferences"
+    },
+    {
+      "name": "diagnostics_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "diagnostics_retry_preferences",
+      "value": "Retry preferences"
+    },
+    {
+      "name": "diagnostics_close_one",
+      "value": "Close connection"
+    },
+    {
+      "name": "diagnostics_close_all",
+      "value": "Close all"
+    },
+    {
+      "name": "diagnostics_close_all_hint",
+      "value": "Close every live connection, including those hidden by filters?"
+    },
+    {
+      "name": "diagnostics_clear_cache",
+      "value": "Clear DNS cache"
+    },
+    {
+      "name": "diagnostics_copy_host",
+      "value": "Copy host"
+    },
+    {
+      "name": "diagnostics_copy_endpoint",
+      "value": "Copy destination endpoint"
+    },
+    {
+      "name": "diagnostics_copy_value",
+      "value": "Copy value"
+    },
+    {
+      "name": "diagnostics_copied",
+      "value": "Copied"
+    },
+    {
+      "name": "diagnostics_copy_failed",
+      "value": "Could not copy"
+    },
+    {
+      "name": "diagnostics_closed",
+      "value": "Close request completed"
+    },
+    {
+      "name": "diagnostics_cache_cleared",
+      "value": "DNS cache cleared"
+    },
+    {
+      "name": "diagnostics_latest",
+      "value": "Back to latest"
+    },
+    {
+      "name": "diagnostics_paused",
+      "value": "Auto-follow paused"
+    },
+    {
+      "name": "diagnostics_gap",
+      "value": "%d interruptions · %d merged events · %d evicted records"
+    },
+    {
+      "name": "diagnostics_details",
+      "value": "Details"
+    },
+    {
+      "name": "diagnostics_time",
+      "value": "Time"
+    },
+    {
+      "name": "diagnostics_target",
+      "value": "Target"
+    },
+    {
+      "name": "diagnostics_protocol",
+      "value": "Protocol"
+    },
+    {
+      "name": "diagnostics_network",
+      "value": "Network"
+    },
+    {
+      "name": "diagnostics_rule",
+      "value": "Rule"
+    },
+    {
+      "name": "diagnostics_rule_payload",
+      "value": "Rule payload"
+    },
+    {
+      "name": "diagnostics_exit",
+      "value": "Exit"
+    },
+    {
+      "name": "diagnostics_traffic",
+      "value": "Traffic"
+    },
+    {
+      "name": "diagnostics_download",
+      "value": "Download"
+    },
+    {
+      "name": "diagnostics_upload",
+      "value": "Upload"
+    },
+    {
+      "name": "diagnostics_download_speed",
+      "value": "Download speed"
+    },
+    {
+      "name": "diagnostics_upload_speed",
+      "value": "Upload speed"
+    },
+    {
+      "name": "diagnostics_duration",
+      "value": "Duration"
+    },
+    {
+      "name": "diagnostics_domain",
+      "value": "Domain"
+    },
+    {
+      "name": "diagnostics_type",
+      "value": "Type"
+    },
+    {
+      "name": "diagnostics_initiator",
+      "value": "Initiator"
+    },
+    {
+      "name": "diagnostics_result",
+      "value": "Result"
+    },
+    {
+      "name": "diagnostics_elapsed",
+      "value": "Delay"
+    },
+    {
+      "name": "diagnostics_upstream",
+      "value": "Upstream"
+    },
+    {
+      "name": "diagnostics_host",
+      "value": "Host"
+    },
+    {
+      "name": "diagnostics_source",
+      "value": "Source"
+    },
+    {
+      "name": "diagnostics_destination",
+      "value": "Destination"
+    },
+    {
+      "name": "diagnostics_source_geo",
+      "value": "Source Geo"
+    },
+    {
+      "name": "diagnostics_destination_geo",
+      "value": "Destination Geo"
+    },
+    {
+      "name": "diagnostics_source_asn",
+      "value": "Source ASN"
+    },
+    {
+      "name": "diagnostics_destination_asn",
+      "value": "Destination ASN"
+    },
+    {
+      "name": "diagnostics_dns_mode",
+      "value": "DNS mode"
+    },
+    {
+      "name": "diagnostics_remote_destination",
+      "value": "Remote destination"
+    },
+    {
+      "name": "diagnostics_special_proxy",
+      "value": "Special proxy"
+    },
+    {
+      "name": "diagnostics_special_rules",
+      "value": "Special rules"
+    },
+    {
+      "name": "diagnostics_sniff_host",
+      "value": "Sniffed host"
+    },
+    {
+      "name": "diagnostics_chains",
+      "value": "Proxy chain"
+    },
+    {
+      "name": "diagnostics_provider_chains",
+      "value": "Provider chain"
+    },
+    {
+      "name": "diagnostics_answers",
+      "value": "Answers"
+    },
+    {
+      "name": "diagnostics_error",
+      "value": "Error"
+    },
+    {
+      "name": "diagnostics_rcode",
+      "value": "Response code"
+    },
+    {
+      "name": "diagnostics_cache",
+      "value": "Cache"
+    },
+    {
+      "name": "diagnostics_cached",
+      "value": "Cached"
+    },
+    {
+      "name": "diagnostics_network_query",
+      "value": "Network query"
+    },
+    {
+      "name": "diagnostics_initiator_app",
+      "value": "Application query"
+    },
+    {
+      "name": "diagnostics_initiator_rule",
+      "value": "Rule resolution"
+    },
+    {
+      "name": "diagnostics_initiator_direct",
+      "value": "DIRECT resolution"
+    },
+    {
+      "name": "diagnostics_initiator_proxy",
+      "value": "Proxy server resolution"
+    },
+    {
+      "name": "diagnostics_initiator_other",
+      "value": "Other"
+    },
+    {
+      "name": "diagnostics_resize_column",
+      "value": "Resize column"
+    },
+    {
+      "name": "diagnostics_reset_columns",
+      "value": "Reset column widths"
+    },
+    {
+      "name": "diagnostics_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "diagnostics_close",
+      "value": "Close"
+    },
+    {
+      "name": "diagnostics_more",
+      "value": "More actions"
     }
   ]
 }

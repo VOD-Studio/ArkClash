@@ -1763,6 +1763,374 @@
     {
       "name": "dash_probe_checked_at_failed",
       "value": "失败 · 上次成功"
+    },
+    {
+      "name": "tools_dns",
+      "value": "DNS 查询"
+    },
+    {
+      "name": "diagnostics_live",
+      "value": "运行中"
+    },
+    {
+      "name": "diagnostics_recent",
+      "value": "最近请求"
+    },
+    {
+      "name": "diagnostics_search",
+      "value": "搜索记录"
+    },
+    {
+      "name": "diagnostics_search_hint",
+      "value": "搜索"
+    },
+    {
+      "name": "diagnostics_filters",
+      "value": "筛选"
+    },
+    {
+      "name": "diagnostics_grouping",
+      "value": "分组"
+    },
+    {
+      "name": "diagnostics_group_none",
+      "value": "不分组"
+    },
+    {
+      "name": "diagnostics_group_host",
+      "value": "主机"
+    },
+    {
+      "name": "diagnostics_group_rule",
+      "value": "规则"
+    },
+    {
+      "name": "diagnostics_group_exit",
+      "value": "出口"
+    },
+    {
+      "name": "diagnostics_unknown",
+      "value": "未知"
+    },
+    {
+      "name": "diagnostics_disconnected",
+      "value": "未连接"
+    },
+    {
+      "name": "diagnostics_connect_hint",
+      "value": "连接代理后开始采集。"
+    },
+    {
+      "name": "diagnostics_connecting",
+      "value": "正在连接诊断流"
+    },
+    {
+      "name": "diagnostics_no_records",
+      "value": "尚无记录"
+    },
+    {
+      "name": "diagnostics_collect_hint",
+      "value": "仅记录此页可见期间的活动。"
+    },
+    {
+      "name": "diagnostics_no_matches",
+      "value": "没有匹配记录"
+    },
+    {
+      "name": "diagnostics_adjust_filters",
+      "value": "请调整搜索或筛选条件。"
+    },
+    {
+      "name": "diagnostics_invalid_request",
+      "value": "诊断请求无效"
+    },
+    {
+      "name": "diagnostics_stale_runtime",
+      "value": "运行配置已变化"
+    },
+    {
+      "name": "diagnostics_not_ready",
+      "value": "诊断尚未就绪"
+    },
+    {
+      "name": "diagnostics_operation_failed",
+      "value": "诊断操作失败"
+    },
+    {
+      "name": "diagnostics_invalid_data",
+      "value": "诊断数据无效"
+    },
+    {
+      "name": "diagnostics_stream_failed",
+      "value": "诊断流连接失败"
+    },
+    {
+      "name": "diagnostics_preferences_failed",
+      "value": "显示偏好读取或保存失败"
+    },
+    {
+      "name": "diagnostics_retry",
+      "value": "重试"
+    },
+    {
+      "name": "diagnostics_retry_preferences",
+      "value": "重试偏好操作"
+    },
+    {
+      "name": "diagnostics_close_one",
+      "value": "关闭连接"
+    },
+    {
+      "name": "diagnostics_close_all",
+      "value": "关闭全部"
+    },
+    {
+      "name": "diagnostics_close_all_hint",
+      "value": "关闭所有运行中的连接，包括被筛选隐藏的连接？"
+    },
+    {
+      "name": "diagnostics_clear_cache",
+      "value": "清 DNS 缓存"
+    },
+    {
+      "name": "diagnostics_copy_host",
+      "value": "复制主机"
+    },
+    {
+      "name": "diagnostics_copy_endpoint",
+      "value": "复制目标端点"
+    },
+    {
+      "name": "diagnostics_copy_value",
+      "value": "复制内容"
+    },
+    {
+      "name": "diagnostics_copied",
+      "value": "已复制"
+    },
+    {
+      "name": "diagnostics_copy_failed",
+      "value": "复制失败"
+    },
+    {
+      "name": "diagnostics_closed",
+      "value": "关闭请求已完成"
+    },
+    {
+      "name": "diagnostics_cache_cleared",
+      "value": "DNS 缓存已清理"
+    },
+    {
+      "name": "diagnostics_latest",
+      "value": "回到最新"
+    },
+    {
+      "name": "diagnostics_paused",
+      "value": "已暂停跟随"
+    },
+    {
+      "name": "diagnostics_gap",
+      "value": "采集间断 %d 次 · 合并 %d · 淘汰 %d"
+    },
+    {
+      "name": "diagnostics_details",
+      "value": "详情"
+    },
+    {
+      "name": "diagnostics_time",
+      "value": "时间"
+    },
+    {
+      "name": "diagnostics_target",
+      "value": "目标"
+    },
+    {
+      "name": "diagnostics_protocol",
+      "value": "协议"
+    },
+    {
+      "name": "diagnostics_network",
+      "value": "网络"
+    },
+    {
+      "name": "diagnostics_rule",
+      "value": "规则"
+    },
+    {
+      "name": "diagnostics_rule_payload",
+      "value": "规则内容"
+    },
+    {
+      "name": "diagnostics_exit",
+      "value": "出口"
+    },
+    {
+      "name": "diagnostics_traffic",
+      "value": "累计流量"
+    },
+    {
+      "name": "diagnostics_download",
+      "value": "下载"
+    },
+    {
+      "name": "diagnostics_upload",
+      "value": "上传"
+    },
+    {
+      "name": "diagnostics_download_speed",
+      "value": "下载速率"
+    },
+    {
+      "name": "diagnostics_upload_speed",
+      "value": "上传速率"
+    },
+    {
+      "name": "diagnostics_duration",
+      "value": "持续时间"
+    },
+    {
+      "name": "diagnostics_domain",
+      "value": "域名"
+    },
+    {
+      "name": "diagnostics_type",
+      "value": "类型"
+    },
+    {
+      "name": "diagnostics_initiator",
+      "value": "发起类别"
+    },
+    {
+      "name": "diagnostics_result",
+      "value": "结果"
+    },
+    {
+      "name": "diagnostics_elapsed",
+      "value": "耗时"
+    },
+    {
+      "name": "diagnostics_upstream",
+      "value": "上游"
+    },
+    {
+      "name": "diagnostics_host",
+      "value": "主机"
+    },
+    {
+      "name": "diagnostics_source",
+      "value": "来源"
+    },
+    {
+      "name": "diagnostics_destination",
+      "value": "目的地址"
+    },
+    {
+      "name": "diagnostics_source_geo",
+      "value": "来源地区"
+    },
+    {
+      "name": "diagnostics_destination_geo",
+      "value": "目标地区"
+    },
+    {
+      "name": "diagnostics_source_asn",
+      "value": "来源 ASN"
+    },
+    {
+      "name": "diagnostics_destination_asn",
+      "value": "目标 ASN"
+    },
+    {
+      "name": "diagnostics_dns_mode",
+      "value": "DNS 模式"
+    },
+    {
+      "name": "diagnostics_remote_destination",
+      "value": "远端目标"
+    },
+    {
+      "name": "diagnostics_special_proxy",
+      "value": "特殊代理"
+    },
+    {
+      "name": "diagnostics_special_rules",
+      "value": "特殊规则"
+    },
+    {
+      "name": "diagnostics_sniff_host",
+      "value": "嗅探主机"
+    },
+    {
+      "name": "diagnostics_chains",
+      "value": "代理链"
+    },
+    {
+      "name": "diagnostics_provider_chains",
+      "value": "提供者链"
+    },
+    {
+      "name": "diagnostics_answers",
+      "value": "答案"
+    },
+    {
+      "name": "diagnostics_error",
+      "value": "错误"
+    },
+    {
+      "name": "diagnostics_rcode",
+      "value": "响应码"
+    },
+    {
+      "name": "diagnostics_cache",
+      "value": "缓存"
+    },
+    {
+      "name": "diagnostics_cached",
+      "value": "缓存命中"
+    },
+    {
+      "name": "diagnostics_network_query",
+      "value": "网络查询"
+    },
+    {
+      "name": "diagnostics_initiator_app",
+      "value": "应用查询"
+    },
+    {
+      "name": "diagnostics_initiator_rule",
+      "value": "规则解析"
+    },
+    {
+      "name": "diagnostics_initiator_direct",
+      "value": "DIRECT 解析"
+    },
+    {
+      "name": "diagnostics_initiator_proxy",
+      "value": "代理服务器解析"
+    },
+    {
+      "name": "diagnostics_initiator_other",
+      "value": "其他"
+    },
+    {
+      "name": "diagnostics_resize_column",
+      "value": "调整列宽"
+    },
+    {
+      "name": "diagnostics_reset_columns",
+      "value": "恢复默认列宽"
+    },
+    {
+      "name": "diagnostics_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "diagnostics_close",
+      "value": "关闭"
+    },
+    {
+      "name": "diagnostics_more",
+      "value": "更多操作"
     }
   ]
 }

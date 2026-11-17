@@ -18,10 +18,10 @@ import (
 
 type arkObservationClient struct {
 	exchange func(context.Context, *D.Msg) (*D.Msg, error)
-	calls atomic.Int32
+	calls    atomic.Int32
 }
 
-func (c *arkObservationClient) Address() string { return "tcp://127.0.0.1:15353" }
+func (c *arkObservationClient) Address() string  { return "tcp://127.0.0.1:15353" }
 func (c *arkObservationClient) ResetConnection() {}
 func (c *arkObservationClient) ExchangeContext(ctx context.Context, msg *D.Msg) (*D.Msg, error) {
 	c.calls.Add(1)
@@ -95,19 +95,29 @@ func TestArkClashObservationDnsMissHitAndInitiators(t *testing.T) {
 		ctx := resolver.WithInitiator(context.Background(), initiator)
 		q := arkObservationQuestion(initiator+".diag.test.", D.TypeA)
 		before := time.Now()
-		if _, err := r.ExchangeContext(ctx, q); err != nil { t.Fatal(err) }
+		if _, err := r.ExchangeContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
 		hitStart := time.Now()
-		if _, err := r.ExchangeContext(ctx, q); err != nil { t.Fatal(err) }
+		if _, err := r.ExchangeContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
 		got := records()
 		miss, hit := got[len(got)-2], got[len(got)-1]
 		if miss.Cached || !hit.Cached || miss.Initiator != initiator || hit.Initiator != initiator || miss.Upstream != client.Address() || hit.Upstream != client.Address() {
 			t.Fatalf("incorrect miss/hit attribution: %+v / %+v", miss, hit)
 		}
-		if miss.Start.Before(before) || hit.Start.Before(hitStart) { t.Fatal("cache hit reused original exchange time") }
+		if miss.Start.Before(before) || hit.Start.Before(hitStart) {
+			t.Fatal("cache hit reused original exchange time")
+		}
 	}
 	service := &Service{handler: withResolver(r, true)}
-	if _, err := service.ServeMsg(context.Background(), arkObservationQuestion("app.diag.test.", D.TypeA)); err != nil { t.Fatal(err) }
-	if _, err := r.ExchangeContext(context.Background(), arkObservationQuestion("other.diag.test.", D.TypeAAAA)); err != nil { t.Fatal(err) }
+	if _, err := service.ServeMsg(context.Background(), arkObservationQuestion("app.diag.test.", D.TypeA)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.ExchangeContext(context.Background(), arkObservationQuestion("other.diag.test.", D.TypeAAAA)); err != nil {
+		t.Fatal(err)
+	}
 	got := records()
 	if len(got) != 10 || got[8].Initiator != resolver.InitiatorApp || got[9].Initiator != resolver.InitiatorOther || client.calls.Load() != 6 {
 		t.Fatalf("incorrect app/default classification or cache behavior: %+v calls=%d", got, client.calls.Load())
@@ -120,43 +130,69 @@ func TestArkClashObservationDnsAnswersAndErrors(t *testing.T) {
 	r := arkObservationResolver(client)
 	for _, qtype := range []uint16{D.TypeAAAA, D.TypeCNAME} {
 		q := arkObservationQuestion("answer.diag.test.", qtype)
-		if _, err := r.ExchangeContext(context.Background(), q); err != nil { t.Fatal(err) }
+		if _, err := r.ExchangeContext(context.Background(), q); err != nil {
+			t.Fatal(err)
+		}
 		got := records()
 		record := got[len(got)-1]
-		if record.Msg == nil || len(record.Msg.Answer) != 1 || record.Msg.Answer[0].Header().Rrtype != qtype || record.Question.Qtype != qtype { t.Fatalf("answer lost: %+v", record) }
+		if record.Msg == nil || len(record.Msg.Answer) != 1 || record.Msg.Answer[0].Header().Rrtype != qtype || record.Question.Qtype != qtype {
+			t.Fatalf("answer lost: %+v", record)
+		}
 	}
 	client.exchange = func(_ context.Context, q *D.Msg) (*D.Msg, error) {
 		reply := new(D.Msg)
 		reply.SetRcode(q, D.RcodeNameError)
 		return reply, nil
 	}
-	if _, err := r.ExchangeContext(context.Background(), arkObservationQuestion("missing.diag.test.", D.TypeA)); err != nil { t.Fatal(err) }
+	if _, err := r.ExchangeContext(context.Background(), arkObservationQuestion("missing.diag.test.", D.TypeA)); err != nil {
+		t.Fatal(err)
+	}
 	got := records()
-	if record := got[len(got)-1]; record.Err != nil || record.Msg.Rcode != D.RcodeNameError || record.Upstream != client.Address() { t.Fatalf("NXDOMAIN lost: %+v", record) }
+	if record := got[len(got)-1]; record.Err != nil || record.Msg.Rcode != D.RcodeNameError || record.Upstream != client.Address() {
+		t.Fatalf("NXDOMAIN lost: %+v", record)
+	}
 	client.exchange = func(context.Context, *D.Msg) (*D.Msg, error) { return nil, errors.New("fixture unreachable") }
 	ctx, release := resolver.WithRequestContext(context.Background())
 	defer release()
-	if _, err := r.ExchangeContext(ctx, arkObservationQuestion("failure.diag.test.", D.TypeA)); err == nil { t.Fatal("expected exchange failure") }
+	if _, err := r.ExchangeContext(ctx, arkObservationQuestion("failure.diag.test.", D.TypeA)); err == nil {
+		t.Fatal("expected exchange failure")
+	}
 	got = records()
-	if record := got[len(got)-1]; record.Err == nil || record.Upstream != "" || record.Msg != nil { t.Fatalf("failure fabricated answer/upstream: %+v", record) }
+	if record := got[len(got)-1]; record.Err == nil || record.Upstream != "" || record.Msg != nil {
+		t.Fatalf("failure fabricated answer/upstream: %+v", record)
+	}
 }
 
 func TestArkClashObservationDnsDisabledAndUnknownCache(t *testing.T) {
 	SetQueryObserver(nil)
 	t.Cleanup(func() { SetQueryObserver(nil) })
 	ctx := context.Background()
-	if got := resolver.WithInitiator(ctx, resolver.InitiatorRule); got != ctx { t.Fatal("disabled classification wrapped context") }
-	if allocs := testing.AllocsPerRun(100, func() { _ = resolver.WithInitiator(ctx, resolver.InitiatorDirect) }); allocs != 0 { t.Fatalf("disabled classification allocates %v", allocs) }
+	if got := resolver.WithInitiator(ctx, resolver.InitiatorRule); got != ctx {
+		t.Fatal("disabled classification wrapped context")
+	}
+	if allocs := testing.AllocsPerRun(100, func() { _ = resolver.WithInitiator(ctx, resolver.InitiatorDirect) }); allocs != 0 {
+		t.Fatalf("disabled classification allocates %v", allocs)
+	}
 	client := &arkObservationClient{}
 	r := arkObservationResolver(client)
 	q := arkObservationQuestion("hidden.diag.test.", D.TypeA)
-	if _, err := r.ExchangeContext(ctx, q); err != nil { t.Fatal(err) }
-	if queryObserver.Load() != nil { t.Fatal("disabled exchange created observer") }
-	if traceCtx, trace := r.traceExchange(ctx, q.Question[0], "", nil); traceCtx != ctx || trace != nil { t.Fatal("disabled exchange created trace") }
+	if _, err := r.ExchangeContext(ctx, q); err != nil {
+		t.Fatal(err)
+	}
+	if queryObserver.Load() != nil {
+		t.Fatal("disabled exchange created observer")
+	}
+	if traceCtx, trace := r.traceExchange(ctx, q.Question[0], "", nil); traceCtx != ctx || trace != nil {
+		t.Fatal("disabled exchange created trace")
+	}
 	records := arkObservationRecords(t)
-	if _, err := r.ExchangeContext(ctx, q); err != nil { t.Fatal(err) }
+	if _, err := r.ExchangeContext(ctx, q); err != nil {
+		t.Fatal(err)
+	}
 	got := records()
-	if len(got) != 1 || !got[0].Cached || got[0].Upstream != "" || client.calls.Load() != 1 { t.Fatalf("hidden upstream fabricated: %+v", got) }
+	if len(got) != 1 || !got[0].Cached || got[0].Upstream != "" || client.calls.Load() != 1 {
+		t.Fatalf("hidden upstream fabricated: %+v", got)
+	}
 }
 
 func TestArkClashObservationDnsRetiredTraceAndCancellation(t *testing.T) {
@@ -175,9 +211,15 @@ func TestArkClashObservationDnsRetiredTraceAndCancellation(t *testing.T) {
 	queryCtx := arkObservationReceive(t, entered)
 	old := queryObserver.Load()
 	oldTrace, _ := queryCtx.Value(exchangeTraceKey{}).(*exchangeTrace)
-	if oldTrace == nil { t.Fatal("actual exchange did not carry trace") }
+	if oldTrace == nil {
+		t.Fatal("actual exchange did not carry trace")
+	}
 	SetQueryObserver(nil)
-	select { case <-queryCtx.Done(): t.Fatal("observer stop canceled business DNS"); default: }
+	select {
+	case <-queryCtx.Done():
+		t.Fatal("observer stop canceled business DNS")
+	default:
+	}
 	newRecords := arkObservationRecords(t)
 	newObserver := queryObserver.Load()
 	late := arkObservationReply(q)
@@ -185,21 +227,33 @@ func TestArkClashObservationDnsRetiredTraceAndCancellation(t *testing.T) {
 	oldTrace.mu.Lock()
 	_, retained := oldTrace.upstreams[late]
 	oldTrace.mu.Unlock()
-	if retained { t.Fatal("retired trace retained late answer") }
-	close(release)
-	if err := arkObservationReceive(t, finished); err != nil { t.Fatal(err) }
-	if len(records()) != 0 || len(newRecords()) != 0 { t.Fatal("retired exchange notified old/new subscription") }
-	for _, observer := range []*queryObservation{old, newObserver} {
-		if _, ok := observer.answeredBy.Get(answeredByKey(r, q.Question[0])); ok { t.Fatal("retired exchange updated attribution cache") }
+	if retained {
+		t.Fatal("retired trace retained late answer")
 	}
-	if _, err := r.ExchangeContext(context.Background(), q); err != nil { t.Fatal(err) }
-	if got := newRecords(); len(got) != 1 || !got[0].Cached || got[0].Upstream != "" { t.Fatalf("retired answer leaked new attribution: %+v", got) }
+	close(release)
+	if err := arkObservationReceive(t, finished); err != nil {
+		t.Fatal(err)
+	}
+	if len(records()) != 0 || len(newRecords()) != 0 {
+		t.Fatal("retired exchange notified old/new subscription")
+	}
+	for _, observer := range []*queryObservation{old, newObserver} {
+		if _, ok := observer.answeredBy.Get(answeredByKey(r, q.Question[0])); ok {
+			t.Fatal("retired exchange updated attribution cache")
+		}
+	}
+	if _, err := r.ExchangeContext(context.Background(), q); err != nil {
+		t.Fatal(err)
+	}
+	if got := newRecords(); len(got) != 1 || !got[0].Cached || got[0].Upstream != "" {
+		t.Fatalf("retired answer leaked new attribution: %+v", got)
+	}
 }
 
 type arkObservationSelectedContext struct {
 	context.Context
 	selected chan struct{}
-	once sync.Once
+	once     sync.Once
 }
 
 func (ctx *arkObservationSelectedContext) Done() <-chan struct{} {
@@ -225,8 +279,14 @@ func TestArkClashObservationDnsSingleflight(t *testing.T) {
 	go func() { _, err := r.ExchangeContext(second, q.Copy()); finished <- err }()
 	arkObservationReceive(t, second.selected)
 	close(release)
-	for i := 0; i < 2; i++ { if err := arkObservationReceive(t, finished); err != nil { t.Fatal(err) } }
-	if got := records(); len(got) != 1 || got[0].Cached || client.calls.Load() != 1 { t.Fatalf("singleflight produced duplicate traces: %+v calls=%d", got, client.calls.Load()) }
+	for i := 0; i < 2; i++ {
+		if err := arkObservationReceive(t, finished); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := records(); len(got) != 1 || got[0].Cached || client.calls.Load() != 1 {
+		t.Fatalf("singleflight produced duplicate traces: %+v calls=%d", got, client.calls.Load())
+	}
 }
 
 func TestArkClashObservationDnsHostsAndFakeIPExcluded(t *testing.T) {
@@ -235,10 +295,16 @@ func TestArkClashObservationDnsHostsAndFakeIPExcluded(t *testing.T) {
 	resolver.DefaultHosts = resolver.NewHosts(trie.New[resolver.HostValue]())
 	t.Cleanup(func() { resolver.DefaultHosts = oldHosts })
 	host, err := resolver.NewHostValue([]string{"192.0.2.9"})
-	if err != nil { t.Fatal(err) }
-	if err := resolver.DefaultHosts.Insert("hosts.diag.test", host); err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := resolver.DefaultHosts.Insert("hosts.diag.test", host); err != nil {
+		t.Fatal(err)
+	}
 	pool, err := fakeip.New(fakeip.Options{IPNet: netip.MustParsePrefix("198.18.0.0/24"), Size: 16})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	client := &arkObservationClient{}
 	r := arkObservationResolver(client)
 	services := []*Service{
@@ -247,9 +313,13 @@ func TestArkClashObservationDnsHostsAndFakeIPExcluded(t *testing.T) {
 	}
 	for i, name := range []string{"hosts.diag.test.", "fake.diag.test."} {
 		answer, err := services[i].ServeMsg(context.Background(), arkObservationQuestion(name, D.TypeA))
-		if err != nil || answer == nil || len(answer.Answer) != 1 { t.Fatalf("middleware did not answer %s: %v %v", name, answer, err) }
+		if err != nil || answer == nil || len(answer.Answer) != 1 {
+			t.Fatalf("middleware did not answer %s: %v %v", name, answer, err)
+		}
 	}
-	if got := records(); len(got) != 0 || client.calls.Load() != 0 { t.Fatalf("hosts/fakeIP created records: %+v", got) }
+	if got := records(); len(got) != 0 || client.calls.Load() != 0 {
+		t.Fatalf("hosts/fakeIP created records: %+v", got)
+	}
 }
 
 func TestArkClashObservationDnsRequestContextCancellation(t *testing.T) {
@@ -266,10 +336,15 @@ func TestArkClashObservationDnsRequestContextCancellation(t *testing.T) {
 	defer release()
 	ctx = resolver.WithInitiator(ctx, resolver.InitiatorRule)
 	finished := make(chan error, 1)
-	go func() { _, err := r.ExchangeContext(ctx, arkObservationQuestion("cancel.diag.test.", D.TypeA)); finished <- err }()
+	go func() {
+		_, err := r.ExchangeContext(ctx, arkObservationQuestion("cancel.diag.test.", D.TypeA))
+		finished <- err
+	}()
 	arkObservationReceive(t, entered)
 	cancel()
-	if err := arkObservationReceive(t, finished); err == nil { t.Fatal("request cancellation was lost") }
+	if err := arkObservationReceive(t, finished); err == nil {
+		t.Fatal("request cancellation was lost")
+	}
 }
 
 func TestArkClashObservationDnsAttributionBoundAndConcurrentRetirement(t *testing.T) {
@@ -288,7 +363,9 @@ func TestArkClashObservationDnsAttributionBoundAndConcurrentRetirement(t *testin
 		traceAnswer(ctx, answer, "fixture-upstream")
 		trace.finish(answer, nil)
 	}
-	if _, ok := observer.answeredBy.Get(answeredByKey(r, first)); ok { t.Fatal("attribution exceeded 4096 entry limit") }
+	if _, ok := observer.answeredBy.Get(answeredByKey(r, first)); ok {
+		t.Fatal("attribution exceeded 4096 entry limit")
+	}
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
@@ -303,5 +380,7 @@ func TestArkClashObservationDnsAttributionBoundAndConcurrentRetirement(t *testin
 	}
 	SetQueryObserver(nil)
 	wg.Wait()
-	if queryObserver.Load() != nil { t.Fatal("retirement left observer published") }
+	if queryObserver.Load() != nil {
+		t.Fatal("retirement left observer published")
+	}
 }

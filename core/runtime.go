@@ -40,7 +40,8 @@ var runtimeStartedAt int64
 var runtimeRevision uint64
 var runtimeConfigRevision uint64
 
-func beginRuntime() {
+func beginRuntime() func() {
+	waitDiagnostics := stopDiagnosticsLocked()
 	stopRuntimeRoutes()
 	now := time.Now()
 	runtimeBootID = fmt.Sprintf("%x-%x", os.Getpid(), now.UnixNano())
@@ -49,6 +50,7 @@ func beginRuntime() {
 	runtimeConfigRevision = 1
 	selectionOperations = make(map[string]selectionOperation)
 	selectionOrder = nil
+	return waitDiagnostics
 }
 
 func publishRuntime() {

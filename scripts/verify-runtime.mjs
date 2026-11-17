@@ -676,3 +676,19 @@ test('旧安装只有runtime及新扩展尚未写实例时，有其它本应用�
   assert.equal(await connection.recheck(localContext), false);
   assert.equal(connection.offlineWritable, true);
 });
+
+test('诊断配置身份不随普通运行revision变化，旧快照不得回退身份', () => {
+  const connection = new Connection();
+  connection.applyStatus({ ...ready, revision: 10, configRevision: 4 });
+  const route = connection.routeRevision;
+  connection.applyStatus({ ...ready, revision: 11, configRevision: 4 });
+  assert.notEqual(connection.routeRevision, route);
+  assert.equal(connection.configRevision, 4);
+  connection.applyStatus({ ...ready, revision: 9, configRevision: 99 });
+  assert.equal(connection.configRevision, 4);
+  connection.applyStatus({ ...ready, bootId: 'new.diagnostics.boot', revision: 1, configRevision: 1 });
+  assert.equal(connection.bootId, 'new.diagnostics.boot');
+  assert.equal(connection.configRevision, 1);
+  connection.applyStopped();
+  assert.equal(connection.configRevision, 0);
+});

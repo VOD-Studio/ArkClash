@@ -38,7 +38,7 @@ log: ## 跟踪内核与 VPN 进程日志
 lint: ## 代码检查（CHECKS=all|go|shell|arch|arkts|actions|commits|vuln，可多个）
 	scripts/lint.sh $(CHECKS)
 
-test: ## 宿主业务回归（TESTS=profiles|proxies|dashboard|resources|runtime|core，默认全部），不操作设备
+test: ## 宿主业务回归（TESTS=profiles|proxies|dashboard|tools|resources|runtime|core，默认全部），不操作设备
 	scripts/test.sh $(TESTS)
 
 clean: ## 清理构建产物（保留 .toolchain/ 里的补丁工具链）

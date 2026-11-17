@@ -1,7 +1,7 @@
 import { connection } from '../../client/Connection';
 import { ProfileEvent, ProfileEvents } from '../../client/ProfileCommands';
 import { ProxySnapshot, readOfflineProxies, readOnlineProxies } from '../../client/Proxies';
-import { ProxyListSource } from './ProxyListSource';
+import { KeyedListSource } from '../../components/KeyedListSource';
 import {
   proxyColumnCount, proxyGroupNames,
   ProxyStyle, ProxyViewState, validProxyView
@@ -27,7 +27,7 @@ export class ProxyBrowser {
   @Trace offlineWritable: boolean = false;
   @Trace totalGroups: number = 0;
   @Trace groupIndex: number = 0;
-  readonly source: ProxyListSource<ProxyGroupView> = new ProxyListSource<ProxyGroupView>();
+  readonly source: KeyedListSource<ProxyGroupView> = new KeyedListSource<ProxyGroupView>();
   readonly listOffsets: Map<string, number> = new Map<string, number>();
   readonly tabOffsets: Map<string, number> = new Map<string, number>();
   @Trace appearance: ProxyAppearance = new ProxyAppearance((): void => this.rebuild());

@@ -19,11 +19,11 @@ const client = await import(clientUrl);
 const logicUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyLogic.ets',
   `import { isProxyGroup, proxyMemberNode, PROXY_TEST_URL } from ${JSON.stringify(clientUrl)};\n`);
 const logic = await import(logicUrl);
-const listUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyListSource.ets',
+const listUrl = await sourceModule('../entry/src/main/ets/components/KeyedListSource.ets',
   `const DataOperationType = { ADD: 'add', DELETE: 'delete', CHANGE: 'change', RELOAD: 'reload' };\n`);
 const proxyList = await import(listUrl);
 const viewUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyView.ets',
-  `import { ProxyListSource } from ${JSON.stringify(listUrl)};\n` +
+  `import { KeyedListSource } from ${JSON.stringify(listUrl)};\n` +
   `import { isProxyGroup, proxyMemberNode } from ${JSON.stringify(clientUrl)};\n` +
   `import { canTestProxy, proxyDelayKey, proxyGroupNames, proxyMembers, proxyPinnedMemberId, resolveProxyLeaf, selectableProxyGroup } from ${JSON.stringify(logicUrl)};\n`);
 const view = await import(viewUrl);
@@ -213,7 +213,7 @@ test('独立定位和测速操作保留重复失败通知', async () => {
     `import { ControllerSocket } from ${JSON.stringify(socketUrl)};\n`);
   const browserUrl = await sourceModule('../entry/src/main/ets/features/proxies/Proxies.ets',
     `import { ProfileEvents } from ${JSON.stringify(eventsUrl)};\n` +
-    `import { ProxyListSource } from ${JSON.stringify(listUrl)};\n` +
+    `import { KeyedListSource } from ${JSON.stringify(listUrl)};\n` +
     `import { ProxyAppearance } from ${JSON.stringify(harness.appearanceUrl)};\n` +
     `import { ProxySelectionSession } from ${JSON.stringify(harness.selectionUrl)};\n` +
     `import { ProxyTestSession } from ${JSON.stringify(harness.probesUrl)};\n` +
@@ -288,7 +288,7 @@ test('真实视图展开和快速反向保留组身份，向LazyForEach发送局
     });
     return previous;
   };
-  const source = new proxyList.ProxyListSource();
+  const source = new proxyList.KeyedListSource();
   source.replace(rebuild([]));
   const group = previous.find(candidate => candidate.name === 'Main');
   const groupEvents = [];

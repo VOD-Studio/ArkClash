@@ -52,6 +52,7 @@ export class Connection {
   private settingsPending: Promise<void> = Promise.resolve();
   private foreground: boolean = false;
   @Trace bootId: string = '';
+  @Trace configRevision: number = 0;
   private revision: number = -1;
   private routeEpoch: number = 0;
   private network?: networkConnection.NetConnection;
@@ -282,6 +283,7 @@ export class Connection {
     this.intent = 'stopped';
     this.forward = 'stopped';
     this.connectedAt = 0;
+    this.configRevision = 0;
     this.listenersOpen = false;
     this.tunAttached = false;
     this.error = '';
@@ -296,6 +298,7 @@ export class Connection {
     }
     this.bootId = status.bootId;
     this.revision = status.revision;
+    this.configRevision = status.configRevision;
     this.coreVersion = status.version;
     this.hostState = status.running ? 'running' : 'stopped';
     this.intent = status.intent;

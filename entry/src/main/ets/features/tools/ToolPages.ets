@@ -10,8 +10,6 @@ const SOURCE_URL = 'https://github.com/VOD-Studio/ArkClash';
 
 function titleOf(route: string): Resource {
   switch (route) {
-    case ToolRoute.Connections:
-      return $r('app.string.tools_connections');
     case ToolRoute.Logs:
       return $r('app.string.tools_logs');
     case ToolRoute.Settings:
