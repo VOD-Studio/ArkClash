@@ -271,7 +271,7 @@ export struct ResourcesPage {
 
   @Builder
   HeaderMenus() {
-    Row({ space: 8 }) {
+    Row() {
       Button({ type: ButtonType.Circle }) {
         if (this.updating()) {
           LoadingProgress().width(22).height(22).color($r('sys.color.font_primary'))
@@ -288,6 +288,9 @@ export struct ResourcesPage {
         (this.store.canSync ? $r('app.string.action_update_all') : $r('app.string.geo_connect_to_update')))
       .onClick((): void => { this.syncResources(GEO_RESOURCE_IDS); })
     }
+    .height('100%')
+    .alignItems(VerticalAlign.Center)
+    .padding({ right: PAGE_GUTTER })
   }
 
   @Builder
