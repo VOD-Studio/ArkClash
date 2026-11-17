@@ -159,46 +159,26 @@ export struct ProxyNodeCard {
         .height((this.cardType === 'compact' ? 20 : 40) * this.textScale)
         .alignItems(VerticalAlign.Top)
         .hitTestBehavior(HitTestMode.None)
-        if (this.cardType === 'loose') {
+        Row({ space: 8 }) {
           Text(this.description())
             .fontSize(13)
             .lineHeight(18)
             .fontColor(this.node.leafRetired ? $r('app.color.warning') : $r('sys.color.font_secondary'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .height(18 * this.textScale)
-            .width('100%')
-            .margin({ top: 8 })
+            .layoutWeight(1)
             .hitTestBehavior(HitTestMode.None)
           Row() {
             ProxyDelay({ node: this.node, active: this.active, textScale: this.textScale,
               restriction: this.restriction(), onTest: () => this.onTest() })
           }
-          .height(13 * this.textScale)
-          .margin({ top: 6 })
           .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
-        } else {
-          Row({ space: 8 }) {
-            Text(this.description())
-              .fontSize(13)
-              .lineHeight(18)
-              .fontColor(this.node.leafRetired ? $r('app.color.warning') : $r('sys.color.font_secondary'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
-              .hitTestBehavior(HitTestMode.None)
-            Row() {
-              ProxyDelay({ node: this.node, active: this.active, textScale: this.textScale,
-                restriction: this.restriction(), onTest: () => this.onTest() })
-            }
-            .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
-          }
-          .height(18 * this.textScale)
-          .width('100%')
-          .margin({ top: 8 })
-          .alignItems(VerticalAlign.Center)
-          .hitTestBehavior(HitTestMode.None)
         }
+        .height(18 * this.textScale)
+        .width('100%')
+        .margin({ top: 8 })
+        .alignItems(VerticalAlign.Center)
+        .hitTestBehavior(HitTestMode.None)
       }
       .width('100%')
       .height('100%')
