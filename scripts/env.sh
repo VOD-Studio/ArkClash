@@ -1,7 +1,8 @@
 # shellcheck shell=bash
 # 定位 HarmonyOS 工具链，供其他脚本 source。
-#   - CI 用 Command Line Tools：设置 HARMONYOS_TOOLS_HOME 指向解压目录。
-#   - 本地用 DevEco Studio：默认 /Applications/DevEco-Studio.app/Contents，可用 DEVECO_HOME 覆盖。
+#   - Command Line Tools：HARMONYOS_TOOLS_HOME；也复用 DEVECO_CLI_CLT_PATH。
+#   - DevEco Studio：DEVECO_HOME；macOS 默认 /Applications/DevEco-Studio.app/Contents。
+#   - Linux 未指定路径时，使用 ~/.local/opt/harmonyos-clt-*/command-line-tools 下唯一的安装。
 # 导出：DEVECO_SDK_HOME、OHOS_SDK（OpenHarmony SDK，内含 NDK）、HVIGORW、OHPM、HDC、CODELINTER（可能为空）。
 
 # 在 $1 下按候选相对路径找第一个存在的文件，都没有再按文件名搜索。
@@ -17,8 +18,22 @@ _find_tool() {
   find "$home" -maxdepth 5 -name "$name" -type f 2>/dev/null | head -1
 }
 
-if [[ -n "${HARMONYOS_TOOLS_HOME:-}" ]]; then
-  _tools_home="$HARMONYOS_TOOLS_HOME"
+_tools_home="${HARMONYOS_TOOLS_HOME:-}"
+if [[ -z "$_tools_home" && -z "${DEVECO_HOME:-}" ]]; then
+  _tools_home="${DEVECO_CLI_CLT_PATH:-}"
+  if [[ -z "$_tools_home" && "${OSTYPE:-}" == linux* ]]; then
+    for _candidate in "$HOME"/.local/opt/harmonyos-clt-*/command-line-tools; do
+      [[ -d "$_candidate" ]] || continue
+      if [[ -n "$_tools_home" ]]; then
+        echo "找到多个 HarmonyOS Command Line Tools，请设置 HARMONYOS_TOOLS_HOME 选择安装目录" >&2
+        return 1
+      fi
+      _tools_home="$_candidate"
+    done
+  fi
+fi
+
+if [[ -n "$_tools_home" ]]; then
   export DEVECO_SDK_HOME="${DEVECO_SDK_HOME:-$_tools_home/sdk}"
   HVIGORW="$(_find_tool "$_tools_home" hvigorw bin/hvigorw hvigor/bin/hvigorw)"
   OHPM="$(_find_tool "$_tools_home" ohpm bin/ohpm ohpm/bin/ohpm)"
