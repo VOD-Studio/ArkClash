@@ -110,5 +110,6 @@ export struct GeoResourceEditor {
     }
     .width('100%')
     .height('100%')
+    .align(Alignment.Top)
   }
 }

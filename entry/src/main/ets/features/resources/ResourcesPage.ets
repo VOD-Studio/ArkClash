@@ -419,6 +419,7 @@ export struct ResourcesPage {
         .align(Alignment.Top)
         .bindSheet($$this.editing, this.EditorSheet, {
           height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
+          keyboardAvoidMode: SheetKeyboardAvoidMode.RESIZE_ONLY,
           onWillDismiss: (action: DismissSheetAction): void => this.dismissEditor((): void => action.dismiss()),
           onDisappear: (): void => { this.draft = undefined; this.presentFailures(); }
         })
