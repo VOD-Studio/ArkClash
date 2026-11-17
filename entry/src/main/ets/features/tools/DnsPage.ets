@@ -5,7 +5,7 @@ import { AppGlyph } from '../../components/AppGlyph';
 import { EmptyState } from '../../components/EmptyState';
 import { HEADER_ACTION, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { DnsRecordDetails } from './RecordDetails';
-import { RecordFilterChips, RecordMenuOption, showRecordMenu } from './RecordFilters';
+import { RecordActionMenu, RecordFilterChips, RecordMenuOption, RecordMenuState } from './RecordFilters';
 import { recordColumnTitle, recordErrorText, recordFacetText } from './RecordLabels';
 import { DnsRecordList } from './RecordList';
 import { dnsRecords, DnsRecordsStore } from './RecordStores';
@@ -19,6 +19,7 @@ export struct DnsPage {
   @Local searchShown: boolean = false;
   @Local detailsShown: boolean = false;
   @Local preferencePending: boolean = false;
+  @Local menuState: RecordMenuState = new RecordMenuState();
   private active: boolean = false;
   private generation: number = 0;
   private consumedNotice: number = 0;
@@ -120,7 +121,7 @@ export struct DnsPage {
     if (!this.active || this.actionOpen || this.detailsShown || this.detailOpen) { return; }
     const generation = this.generation;
     this.actionOpen = true;
-    showRecordMenu(this.getUIContext(), title, options, (choice: string): void => {
+    this.menuState.open(title, options, (choice: string): void => {
       this.actionOpen = false;
       if (choice !== '' && this.isCurrent(generation)) { onSelect(choice); }
     });
@@ -198,6 +199,9 @@ export struct DnsPage {
       .accessibilityText($r('app.string.diagnostics_filters'))
       .onClick((): void => { this.filtersMenu(); })
     }
+    .height('100%')
+    .alignItems(VerticalAlign.Center)
+    .padding({ right: PAGE_GUTTER })
   }
 
   @Builder
@@ -269,6 +273,7 @@ export struct DnsPage {
             .onClick((): void => { this.store.setFollowing(true); })
             .margin({ bottom: 8 })
         }
+        RecordActionMenu({ menuState: this.menuState })
         Column().bindSheet($$this.detailsShown, this.DetailSheet, {
           height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true,
           onWillAppear: (): void => { this.detailOpen = true; },

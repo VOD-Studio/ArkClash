@@ -1,7 +1,7 @@
-import { UIContext } from '@kit.ArkUI';
 import { AppGlyph } from '../../components/AppGlyph';
+import { ListSource } from '../../components/ListSource';
 import { uiResourceText } from '../../components/ResourceText';
-import { sheetMaterial } from '../../components/Theme';
+import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { RecordFacets, RecordGrouping } from './RecordLogic';
 import { recordColumnTitle, recordFacetText } from './RecordLabels';
 
@@ -28,18 +28,94 @@ export function recordGroupingText(grouping: RecordGrouping): ResourceStr {
 }
 
 // 选择仅在原生面板完全退出后交付，下一层菜单不会与前一层竞争。
-export function showRecordMenu(context: UIContext, title: ResourceStr, options: RecordMenuOption[],
-  onResult: (choice: string) => void): void {
-  let choice = '';
-  const sheets: SheetInfo[] = options.map<SheetInfo>((option: RecordMenuOption): SheetInfo => {
-    return { title: option.title, action: (): void => { choice = option.key; } };
-  });
-  context.showActionSheet({
-    title: title, message: '', sheets: sheets, alignment: DialogAlignment.Bottom,
-    systemMaterial: sheetMaterial(), autoCancel: true,
-    confirm: { value: $r('app.string.diagnostics_cancel'), action: (): void => {} },
-    onDidDisappear: (): void => { onResult(choice); }
-  });
+@ObservedV2
+export class RecordMenuState {
+  @Trace shown: boolean = false;
+  @Trace title: ResourceStr = '';
+  @Trace optionCount: number = 0;
+  readonly rows: ListSource<RecordMenuOption> = new ListSource<RecordMenuOption>();
+  private choice: string = '';
+  private onResult: ((choice: string) => void) | undefined = undefined;
+
+  open(title: ResourceStr, options: RecordMenuOption[], onResult: (choice: string) => void): void {
+    this.title = title;
+    this.optionCount = options.length;
+    this.rows.replace(options);
+    this.choice = '';
+    this.onResult = onResult;
+    this.shown = true;
+  }
+
+  select(choice: string): void {
+    if (!this.shown) { return; }
+    this.choice = choice;
+    this.shown = false;
+  }
+
+  finish(): void {
+    const onResult = this.onResult;
+    const choice = this.choice;
+    this.onResult = undefined;
+    this.choice = '';
+    this.rows.replace([]);
+    onResult?.(choice);
+  }
+}
+
+@ComponentV2
+export struct RecordActionMenu {
+  @Param @Require menuState: RecordMenuState;
+
+  @Builder
+  MenuContent() {
+    Column() {
+      Text(this.menuState.title).fontSize(22).lineHeight(28).fontWeight(FontWeight.Bold)
+        .fontColor($r('sys.color.font_primary')).width('100%').margin({ bottom: 16 })
+      List() {
+        LazyForEach(this.menuState.rows, (option: RecordMenuOption) => {
+          ListItem() {
+            RecordMenuRow({ option: option, onSelect: (key: string): void => { this.menuState.select(key); } })
+          }
+        }, (option: RecordMenuOption): string => option.key)
+      }
+      .width('100%').layoutWeight(1).scrollBar(BarState.Auto).cachedCount(2)
+      .divider({ strokeWidth: 0.5, color: $r('app.color.divider'), startMargin: 16, endMargin: 16 })
+      Button($r('app.string.diagnostics_cancel'))
+        .width('100%').constraintSize({ minHeight: 48 }).margin({ top: 16 })
+        .buttonStyle(ButtonStyleMode.NORMAL)
+        .onClick((): void => { this.menuState.select(''); })
+    }
+    .width('100%').height('100%')
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 24, bottom: 24 })
+  }
+
+  build() {
+    Column()
+      .bindSheet($$this.menuState.shown, this.MenuContent, {
+        height: this.menuState.optionCount * 56 + 180, preferType: SheetType.BOTTOM,
+        systemMaterial: sheetMaterial(), showClose: false,
+        onDisappear: (): void => { this.menuState.finish(); }
+      })
+  }
+}
+
+@ComponentV2
+@ReusableV2
+struct RecordMenuRow {
+  @Param @Require option: RecordMenuOption;
+  @Event onSelect: (key: string) => void = () => {};
+
+  build() {
+    Button() {
+      Text(this.option.title).fontSize(17).lineHeight(24).fontColor($r('sys.color.font_primary'))
+        .width('100%').textAlign(TextAlign.Start)
+    }
+    .width('100%').constraintSize({ minHeight: 56 })
+    .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+    .buttonStyle(ButtonStyleMode.NORMAL).backgroundColor(Color.Transparent).borderRadius(12)
+    .accessibilityText(uiResourceText(this.getUIContext(), this.option.title))
+    .onClick((): void => { this.onSelect(this.option.key); })
+  }
 }
 
 @ComponentV2

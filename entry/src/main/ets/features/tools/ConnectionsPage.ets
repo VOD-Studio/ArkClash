@@ -6,7 +6,7 @@ import { EmptyState } from '../../components/EmptyState';
 import { uiResourceText } from '../../components/ResourceText';
 import { HEADER_ACTION, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
 import { ConnectionRecordDetails } from './RecordDetails';
-import { RecordFilterChips, RecordMenuOption, recordGroupingText, showRecordMenu } from './RecordFilters';
+import { RecordActionMenu, RecordFilterChips, RecordMenuOption, RecordMenuState, recordGroupingText } from './RecordFilters';
 import { ConnectionRecordView, diagnosticEndpoint, RecordGrouping, RequestFeed } from './RecordLogic';
 import { recordColumnTitle, recordErrorText, recordFacetText } from './RecordLabels';
 import { ConnectionRecordList } from './RecordList';
@@ -22,6 +22,7 @@ export struct ConnectionsPage {
   @Local detailsShown: boolean = false;
   @Local confirmShown: boolean = false;
   @Local preferencePending: boolean = false;
+  @Local menuState: RecordMenuState = new RecordMenuState();
   private active: boolean = false;
   private generation: number = 0;
   private consumedNotice: number = 0;
@@ -131,7 +132,7 @@ export struct ConnectionsPage {
       this.detailOpen || this.confirmationOpen) { return; }
     const generation = this.generation;
     this.actionOpen = true;
-    showRecordMenu(this.getUIContext(), title, options, (choice: string): void => {
+    this.menuState.open(title, options, (choice: string): void => {
       this.actionOpen = false;
       if (choice !== '' && this.isCurrent(generation)) { onSelect(choice); }
     });
@@ -248,6 +249,7 @@ export struct ConnectionsPage {
         AppGlyph({ name: 'chevronDown', iconSize: 16 })
       }
     }
+    .height('100%')
     .buttonStyle(ButtonStyleMode.NORMAL)
     .backgroundColor(Color.Transparent)
     .padding({ left: 0, right: 4, top: 8, bottom: 8 })
@@ -284,6 +286,9 @@ export struct ConnectionsPage {
       .accessibilityText($r('app.string.diagnostics_more'))
       .onClick((): void => { this.moreActions(); })
     }
+    .height('100%')
+    .alignItems(VerticalAlign.Center)
+    .padding({ right: PAGE_GUTTER })
   }
 
   @Builder
@@ -383,6 +388,7 @@ export struct ConnectionsPage {
             .onClick((): void => { this.store.setFollowing(true); })
             .margin({ bottom: 8 })
         }
+        RecordActionMenu({ menuState: this.menuState })
         Column().bindSheet($$this.detailsShown, this.DetailSheet, {
           height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true,
           onWillAppear: (): void => { this.detailOpen = true; },
