@@ -46,10 +46,6 @@ UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo
 - 签名材料只留在本机。DevEco 自动签名会把证书路径和加密后的密码写进 `build-profile.json5` 的 `signingConfigs`，这部分改动一直不暂存；提交时按文件路径精确暂存。
 - 订阅链接、controller secret、节点信息只放在应用沙箱里，不进日志、提交、issue 或 PR。
 
-## 分支与提交
-
-开分支、提交、改历史、开 PR 或 issue 前读 `docs/agents/git.md`。要点：新任务从 `main` 拉分支；中文 Conventional Commits；一个 commit 一个逻辑变更；只在本地提交，等用户要求再推送。
-
 开发计划和进度记在 GitHub Issues。README 面向访客，只写功能、安装和使用，这几样变了才更新它。
 
 ## 界面
