@@ -1,0 +1,559 @@
+--- a/tunnel/tunnel.go
++++ b/tunnel/tunnel.go
+@@ -40,7 +40,7 @@
+ var (
+ 	status        = atomic.NewInt32Enum(Suspend)
+ 	udpInit       sync.Once
+-	udpQueues     []chan C.PacketAdapter
++	udpQueues     []chan arkClashUDPPacket
+ 	natTable      = nat.New()
+ 	rules         []C.Rule
+ 	listeners     = make(map[string]C.InboundListener)
+@@ -88,15 +88,20 @@
+ 		numUDPWorkers = num
+ 	}
+ 
+-	udpQueues = make([]chan C.PacketAdapter, numUDPWorkers)
++	udpQueues = make([]chan arkClashUDPPacket, numUDPWorkers)
+ 	for i := 0; i < numUDPWorkers; i++ {
+-		queue := make(chan C.PacketAdapter, queueCapacity)
++		queue := make(chan arkClashUDPPacket, queueCapacity)
+ 		udpQueues[i] = queue
+ 		go processUDP(queue)
+ 	}
+ }
+ 
+ func (t tunnel) HandleUDPPacket(packet C.UDPPacket, metadata *C.Metadata) {
++	generation, admitted := arkClashAdmitForwarding()
++	if !admitted {
++		packet.Drop()
++		return
++	}
+ 	udpInit.Do(initUDP)
+ 
+ 	packetAdapter := C.NewPacketAdapter(packet, metadata)
+@@ -106,9 +111,10 @@
+ 	queueNo := uint(hash) % uint(len(udpQueues))
+ 
+ 	select {
+-	case udpQueues[queueNo] <- packetAdapter:
++	case udpQueues[queueNo] <- arkClashUDPPacket{packet: packetAdapter, generation: generation}:
+ 	default:
+ 		packet.Drop()
++		generation.done()
+ 	}
+ }
+ 
+@@ -415,13 +421,18 @@
+ }
+ 
+ // processUDP starts a loop to handle udp packet
+-func processUDP(queue chan C.PacketAdapter) {
+-	for conn := range queue {
+-		handleUDPConn(conn)
+-	}
+-}
+-
+-func handleUDPConn(packet C.PacketAdapter) {
++func processUDP(queue chan arkClashUDPPacket) {
++	for entry := range queue {
++		handleUDPConn(entry.packet, entry.generation)
++	}
++}
++
++func handleUDPConn(packet C.PacketAdapter, generation *arkClashForwardingGeneration) {
++	defer generation.done()
++	if generation.context().Err() != nil {
++		packet.Drop()
++		return
++	}
+ 	if !isHandle(packet.Metadata().Type) {
+ 		packet.Drop()
+ 		return
+@@ -442,15 +453,24 @@
+ 	}
+ 
+ 	key := packet.Key()
++	var baseSender *packetSender
++	var senderResource *arkClashForwardingResource
+ 	sender, loaded := natTable.GetOrCreate(key, func() C.PacketSender {
+-		sender := newPacketSender()
++		baseSender = newPacketSender(generation)
++		var sender C.PacketSender = baseSender
+ 		if sniffingEnable && snifferDispatcher.Enable() {
+-			return snifferDispatcher.UDPSniff(packet, sender)
++			sender = snifferDispatcher.UDPSniff(packet, sender)
++		}
++		if generation != nil {
++			senderResource = generation.own(func() error { sender.Close(); return nil })
+ 		}
+ 		return sender
+ 	})
+ 	if !loaded {
+ 		dial := func() (C.PacketConn, C.WriteBackProxy, error) {
++			if err := baseSender.ctx.Err(); err != nil {
++				return nil, nil, err
++			}
+ 			originMetadata := metadata  // save origin metadata
+ 			metadata = metadata.Clone() // don't modify PacketAdapter's metadata
+ 
+@@ -461,14 +481,14 @@
+ 
+ 			_ = preHandleMetadata(metadata) // error was pre-checked
+ 
+-			proxy, rule, err := resolveMetadata(metadata)
++			proxy, rule, err := resolveMetadataContext(baseSender.ctx, metadata)
+ 			if err != nil {
+ 				log.Warnln("[UDP] Parse metadata failed: %s", err.Error())
+ 				return nil, nil, err
+ 			}
+ 
+ 			dialMetadata := metadata.Pure()
+-			ctx, cancel := context.WithTimeout(context.Background(), C.DefaultUDPTimeout)
++			ctx, cancel := context.WithTimeout(baseSender.ctx, C.DefaultUDPTimeout)
+ 			defer cancel()
+ 			rawPc, err := retry(ctx, func(ctx context.Context) (C.PacketConn, error) {
+ 				return proxy.ListenPacketContext(ctx, dialMetadata)
+@@ -478,6 +498,11 @@
+ 			if err != nil {
+ 				return nil, nil, err
+ 			}
++			rawPc = arkClashOwnForwardingPacketConn(generation, rawPc)
++			if err := ctx.Err(); err != nil {
++				_ = rawPc.Close()
++				return nil, nil, err
++			}
+ 			logMetadata(metadata, rule, rawPc)
+ 
+ 			pc := statistic.NewUDPTracker(rawPc, statistic.DefaultManager, metadata, rule, 0, 0, true)
+@@ -486,14 +511,29 @@
+ 			oAddrPort := dialMetadata.AddrPort()
+ 			writeBackProxy := nat.NewWriteBackProxy(packet)
+ 
+-			go handleUDPToLocal(writeBackProxy, pc, sender, key, oAddrPort)
++			generation.fork()
++			go func() {
++				defer generation.done()
++				handleUDPToLocal(writeBackProxy, pc, sender, key, oAddrPort, generation)
++			}()
+ 			return pc, writeBackProxy, nil
+ 		}
+ 
++		generation.fork()
+ 		go func() {
++			defer generation.done()
++			if baseSender.release != nil {
++				defer baseSender.release()
++			}
++			defer func() {
++				if senderResource != nil {
++					_ = senderResource.Close()
++				} else {
++					sender.Close()
++				}
++			}()
+ 			pc, proxy, err := dial()
+ 			if err != nil {
+-				sender.Close()
+ 				natTable.Delete(key)
+ 				return
+ 			}
+@@ -504,14 +544,40 @@
+ }
+ 
+ func handleTCPConn(connCtx C.ConnContext) {
++	generation, admitted := arkClashAdmitForwarding()
++	if !admitted {
++		_ = connCtx.Conn().Close()
++		return
++	}
++	defer generation.done()
++	ctx := generation.context()
++	if generation != nil {
++		var finish func()
++		ctx, finish = resolver.WithRequestContext(ctx)
++		defer finish()
++	}
++	var localResource *arkClashForwardingResource
++	if generation != nil {
++		local := connCtx.Conn()
++		upstream := local.ExtendedConn
++		localResource = generation.own(upstream.Close)
++		local.ExtendedConn = &arkClashForwardingLocalConn{ExtendedConn: upstream, resource: localResource}
++	}
++	var peekWorker sync.WaitGroup
++	defer func() {
++		if localResource != nil {
++			_ = localResource.Close()
++		} else {
++			_ = connCtx.Conn().Close()
++		}
++		peekWorker.Wait()
++	}()
++	if ctx.Err() != nil {
++		return
++	}
+ 	if !isHandle(connCtx.Metadata().Type) {
+-		_ = connCtx.Conn().Close()
+-		return
+-	}
+-
+-	defer func(conn net.Conn) {
+-		_ = conn.Close()
+-	}(connCtx.Conn())
++		return
++	}
+ 
+ 	metadata := connCtx.Metadata()
+ 	if !metadata.Valid() {
+@@ -547,7 +613,9 @@
+ 	peekMutex := sync.Mutex{}
+ 	if !conn.Peeked() {
+ 		peekMutex.Lock()
++		peekWorker.Add(1)
+ 		go func() {
++			defer peekWorker.Done()
+ 			defer peekMutex.Unlock()
+ 			_ = conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+ 			_, _ = conn.Peek(1)
+@@ -555,7 +623,7 @@
+ 		}()
+ 	}
+ 
+-	proxy, rule, err := resolveMetadata(metadata)
++	proxy, rule, err := resolveMetadataContext(ctx, metadata)
+ 	if err != nil {
+ 		log.Warnln("[Metadata] parse failed: %s", err.Error())
+ 		return
+@@ -575,12 +643,17 @@
+ 	var peekBytes []byte
+ 	var peekLen int
+ 
+-	ctx, cancel := context.WithTimeout(context.Background(), C.DefaultTCPTimeout)
++	ctx, cancel := context.WithTimeout(ctx, C.DefaultTCPTimeout)
+ 	defer cancel()
+ 	remoteConn, err := retry(ctx, func(ctx context.Context) (remoteConn C.Conn, err error) {
+ 		remoteConn, err = proxy.DialContext(ctx, dialMetadata)
+ 		if err != nil {
+ 			return
++		}
++		remoteConn = arkClashOwnForwardingConn(generation, remoteConn)
++		if err = ctx.Err(); err != nil {
++			_ = remoteConn.Close()
++			return nil, err
+ 		}
+ 
+ 		if N.NeedHandshake(remoteConn) {
+--- a/tunnel/connection.go
++++ b/tunnel/connection.go
+@@ -10,13 +10,16 @@
+ 
+ 	N "github.com/metacubex/mihomo/common/net"
+ 	C "github.com/metacubex/mihomo/constant"
++	"github.com/metacubex/mihomo/component/resolver"
+ 	"github.com/metacubex/mihomo/log"
+ )
+ 
+ type packetSender struct {
+-	ctx    context.Context
+-	cancel context.CancelFunc
+-	ch     chan C.PacketAdapter
++	ctx     context.Context
++	cancel  context.CancelFunc
++	release func()
++	ch      chan C.PacketAdapter
++	queueMu sync.Mutex
+ 
+ 	// destination NAT mapping
+ 	originToTarget map[string]netip.Addr
+@@ -26,13 +29,18 @@
+ 
+ // newPacketSender return a chan based C.PacketSender
+ // It ensures that packets can be sent sequentially and without blocking
+-func newPacketSender() C.PacketSender {
+-	ctx, cancel := context.WithCancel(context.Background())
++func newPacketSender(generation *arkClashForwardingGeneration) *packetSender {
++	ctx, cancel := context.WithCancel(generation.context())
++	var release func()
++	if generation != nil {
++		ctx, release = resolver.WithRequestContext(ctx)
++	}
+ 	ch := make(chan C.PacketAdapter, senderCapacity)
+ 	return &packetSender{
+-		ctx:    ctx,
+-		cancel: cancel,
+-		ch:     ch,
++		ctx:     ctx,
++		cancel:  cancel,
++		release: release,
++		ch:      ch,
+ 
+ 		originToTarget: make(map[string]netip.Addr),
+ 		targetToOrigin: make(map[netip.Addr]netip.Addr),
+@@ -107,6 +115,10 @@
+ 		case <-s.ctx.Done():
+ 			return // sender closed
+ 		case packet := <-s.ch:
++			if s.ctx.Err() != nil {
++				packet.Drop()
++				return
++			}
+ 			if proxy != nil {
+ 				proxy.UpdateWriteBack(packet)
+ 			}
+@@ -127,6 +139,8 @@
+ }
+ 
+ func (s *packetSender) Send(packet C.PacketAdapter) {
++	s.queueMu.Lock()
++	defer s.queueMu.Unlock()
+ 	select {
+ 	case <-s.ctx.Done():
+ 		packet.Drop() // sender closed before Send()
+@@ -145,6 +159,8 @@
+ }
+ 
+ func (s *packetSender) Close() {
++	s.queueMu.Lock()
++	defer s.queueMu.Unlock()
+ 	s.cancel()
+ 	s.dropAll()
+ }
+@@ -165,11 +181,11 @@
+ 	return nil
+ }
+ 
+-func handleUDPToLocal(writeBack C.WriteBack, pc C.PacketConn, sender C.PacketSender, key string, oAddrPort netip.AddrPort) {
++func handleUDPToLocal(writeBack C.WriteBack, pc C.PacketConn, sender C.PacketSender, key string, oAddrPort netip.AddrPort, generation *arkClashForwardingGeneration) {
+ 	defer func() {
+ 		sender.Close()
+ 		_ = pc.Close()
+-		closeAllLocalCoon(key)
++		generation.recordError(closeAllLocalCoon(key))
+ 		natTable.Delete(key)
+ 	}()
+ 
+@@ -207,14 +223,18 @@
+ 	}
+ }
+ 
+-func closeAllLocalCoon(lAddr string) {
++func closeAllLocalCoon(lAddr string) error {
++	var result error
+ 	natTable.RangeForLocalConn(lAddr, func(key string, value *net.UDPConn) bool {
+ 		conn := value
+ 
+-		conn.Close()
++		if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
++			result = errors.Join(result, err)
++		}
+ 		log.Debugln("Closing TProxy local conn... lAddr=%s rAddr=%s", lAddr, key)
+ 		return true
+ 	})
++	return result
+ }
+ 
+ func handleSocket(inbound, outbound net.Conn) {
+--- /dev/null
++++ b/tunnel/arkclash_forwarding.go
+@@ -0,0 +1,200 @@
++package tunnel
++
++import (
++	"context"
++	"errors"
++	"net"
++	"sync"
++
++	N "github.com/metacubex/mihomo/common/net"
++	C "github.com/metacubex/mihomo/constant"
++)
++
++type arkClashForwardingGeneration struct {
++	ctx context.Context
++	cancel context.CancelFunc
++	tasks sync.WaitGroup
++	mu sync.Mutex
++	closed bool
++	resources map[*arkClashForwardingResource]struct{}
++	err error
++}
++
++type arkClashForwardingResource struct {
++	generation *arkClashForwardingGeneration
++	close func() error
++	once sync.Once
++	err error
++}
++
++var arkClashForwarding struct {
++	operations sync.Mutex
++	mu sync.Mutex
++	enabled bool
++	current *arkClashForwardingGeneration
++	err error
++}
++
++// ArkClashSuspendForwarding 先封住准入，再取消、关闭并等待本代转发；不包含独立 URLTest。
++// 调用期间不得持有转发 worker 需要回调取得的锁；本注册表不回调 ArkClash 核心。
++func ArkClashSuspendForwarding() error {
++	arkClashForwarding.operations.Lock()
++	defer arkClashForwarding.operations.Unlock()
++	arkClashForwarding.mu.Lock()
++	arkClashForwarding.enabled = true
++	generation := arkClashForwarding.current
++	arkClashForwarding.current = nil
++	arkClashForwarding.mu.Unlock()
++	if generation != nil {
++		generation.cancel()
++		generation.mu.Lock()
++		generation.closed = true
++		resources := make([]*arkClashForwardingResource, 0, len(generation.resources))
++		for resource := range generation.resources {
++			resources = append(resources, resource)
++		}
++		generation.mu.Unlock()
++		for _, resource := range resources {
++			_ = resource.Close()
++		}
++		generation.tasks.Wait()
++		generation.mu.Lock()
++		arkClashForwarding.err = errors.Join(arkClashForwarding.err, generation.err)
++		generation.mu.Unlock()
++	}
++	return arkClashForwarding.err
++}
++
++func ArkClashResumeForwarding() {
++	arkClashForwarding.operations.Lock()
++	defer arkClashForwarding.operations.Unlock()
++	arkClashForwarding.mu.Lock()
++	defer arkClashForwarding.mu.Unlock()
++	arkClashForwarding.enabled = true
++	if arkClashForwarding.current == nil {
++		ctx, cancel := context.WithCancel(context.Background())
++		arkClashForwarding.current = &arkClashForwardingGeneration{
++			ctx: ctx, cancel: cancel,
++			resources: make(map[*arkClashForwardingResource]struct{}),
++		}
++		arkClashForwarding.err = nil
++	}
++}
++
++func arkClashAdmitForwarding() (*arkClashForwardingGeneration, bool) {
++	arkClashForwarding.mu.Lock()
++	defer arkClashForwarding.mu.Unlock()
++	if !arkClashForwarding.enabled {
++		return nil, true
++	}
++	generation := arkClashForwarding.current
++	if generation == nil {
++		return nil, false
++	}
++	// Add 与关闭准入共用锁；子任务只能由尚未 Done 的已准入任务派生。
++	generation.tasks.Add(1)
++	return generation, true
++}
++
++func (g *arkClashForwardingGeneration) context() context.Context {
++	if g == nil {
++		return context.Background()
++	}
++	return g.ctx
++}
++
++func (g *arkClashForwardingGeneration) done() {
++	if g != nil {
++		g.tasks.Done()
++	}
++}
++
++func (g *arkClashForwardingGeneration) fork() {
++	if g != nil {
++		g.tasks.Add(1)
++	}
++}
++
++func (g *arkClashForwardingGeneration) recordError(err error) {
++	if g == nil || err == nil || errors.Is(err, net.ErrClosed) {
++		return
++	}
++	g.mu.Lock()
++	g.err = errors.Join(g.err, err)
++	g.mu.Unlock()
++}
++
++func (g *arkClashForwardingGeneration) own(close func() error) *arkClashForwardingResource {
++	resource := &arkClashForwardingResource{generation: g, close: close}
++	g.mu.Lock()
++	closed := g.closed
++	if !closed {
++		g.resources[resource] = struct{}{}
++	}
++	g.mu.Unlock()
++	if closed {
++		_ = resource.Close()
++	}
++	return resource
++}
++
++func (r *arkClashForwardingResource) Close() error {
++	r.once.Do(func() {
++		r.err = r.close()
++		r.generation.recordError(r.err)
++		r.generation.mu.Lock()
++		delete(r.generation.resources, r)
++		r.generation.mu.Unlock()
++	})
++	return r.err
++}
++
++type arkClashForwardingConn struct {
++	C.Conn
++	resource *arkClashForwardingResource
++}
++
++func (c *arkClashForwardingConn) Close() error { return c.resource.Close() }
++func (c *arkClashForwardingConn) Upstream() any { return c.Conn }
++func (c *arkClashForwardingConn) ReaderReplaceable() bool { return true }
++func (c *arkClashForwardingConn) WriterReplaceable() bool { return true }
++
++func arkClashOwnForwardingConn(g *arkClashForwardingGeneration, conn C.Conn) C.Conn {
++	if g == nil {
++		return conn
++	}
++	return &arkClashForwardingConn{Conn: conn, resource: g.own(conn.Close)}
++}
++
++type arkClashForwardingPacketConn struct {
++	C.PacketConn
++	resource *arkClashForwardingResource
++}
++
++func (c *arkClashForwardingPacketConn) Close() error { return c.resource.Close() }
++func (c *arkClashForwardingPacketConn) Upstream() any { return c.PacketConn }
++func (c *arkClashForwardingPacketConn) ReaderReplaceable() bool { return true }
++func (c *arkClashForwardingPacketConn) WriterReplaceable() bool { return true }
++
++func arkClashOwnForwardingPacketConn(g *arkClashForwardingGeneration, conn C.PacketConn) C.PacketConn {
++	if g == nil {
++		return conn
++	}
++	return &arkClashForwardingPacketConn{PacketConn: conn, resource: g.own(conn.Close)}
++}
++
++type arkClashForwardingLocalConn struct {
++	N.ExtendedConn
++	resource *arkClashForwardingResource
++}
++
++func (c *arkClashForwardingLocalConn) Close() error { return c.resource.Close() }
++func (c *arkClashForwardingLocalConn) Upstream() any { return c.ExtendedConn }
++func (c *arkClashForwardingLocalConn) ReaderReplaceable() bool { return true }
++func (c *arkClashForwardingLocalConn) WriterReplaceable() bool { return true }
++
++// 代次随队列元素按值传递，不给每个 UDP 包分配额外包装对象。
++type arkClashUDPPacket struct {
++	packet C.PacketAdapter
++	generation *arkClashForwardingGeneration
++}

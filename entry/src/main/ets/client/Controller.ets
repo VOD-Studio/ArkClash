@@ -24,6 +24,7 @@ export interface RuntimeStatus {
   sessionMode: 'tun' | 'proxyOnly';
   listenersOpen: boolean;
   tunAttached: boolean;
+  vpnCreated: boolean;
   startedAt: number;
   bootId: string;
   revision: number;

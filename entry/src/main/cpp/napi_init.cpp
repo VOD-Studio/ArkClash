@@ -1,5 +1,7 @@
 // NAPI bridge between ArkTS and libclash.so. start/stop run on the libuv
 // worker pool so the ArkTS thread never blocks on the core.
+#include <cmath>
+#include <climits>
 #include <string>
 
 #include "arkclash.h"
@@ -7,7 +9,7 @@
 
 namespace {
 
-enum class CoreCall { Start, Stop, Reload, Fetch, Prefetch };
+enum class CoreCall { Start, Stop, Reload, Fetch, Prefetch, AttachTun, DetachTun, UpdateVpnState, RuntimeStatus };
 
 struct CoreWork {
   napi_async_work work = nullptr;
@@ -16,8 +18,13 @@ struct CoreWork {
   std::string arg0;
   std::string arg1;
   std::string expectedProfile;
+  bool hasExpectedProfile = false;
+  std::string bootId;
+  int fd = 0;
+  unsigned long long configRevision = 0;
+  bool vpnCreated = false;
   std::string error;
-  std::string result; // fetch、prefetch 的结果 JSON
+  std::string result; // fetch、prefetch、runtimeStatus 的结果 JSON
 };
 
 // 返回值是 libclash.so 分配的字符串，复制后立即释放。
@@ -37,11 +44,12 @@ void Execute(napi_env, void *data) {
     w->error = TakeString(ArkClashStart(w->arg0.data()));
     break;
   case CoreCall::Stop:
-    ArkClashStop();
+    w->error = TakeString(ArkClashStop());
     break;
   case CoreCall::Reload:
-    w->error = TakeString(ArkClashReload(w->arg0.data(), w->arg1.data(),
-                                         w->expectedProfile.data()));
+    w->error = TakeString(ArkClashReload(
+        w->arg0.data(), w->arg1.data(),
+        w->hasExpectedProfile ? w->expectedProfile.data() : nullptr));
     break;
   case CoreCall::Fetch:
     w->result = TakeString(ArkClashFetch(w->arg0.data()));
@@ -49,14 +57,31 @@ void Execute(napi_env, void *data) {
   case CoreCall::Prefetch:
     w->result = TakeString(ArkClashPrefetch(w->arg0.data()));
     break;
+  case CoreCall::AttachTun:
+    w->error = TakeString(ArkClashAttachTun(w->fd, w->arg0.data(), w->bootId.data(),
+                                           w->arg1.data(), w->configRevision));
+    break;
+  case CoreCall::DetachTun:
+    w->error = TakeString(ArkClashDetachTun());
+    break;
+  case CoreCall::UpdateVpnState:
+    w->error = TakeString(ArkClashUpdateVpnState(w->arg0.data(), w->arg1.data(), w->vpnCreated));
+    break;
+  case CoreCall::RuntimeStatus:
+    w->result = TakeString(ArkClashRuntimeStatus());
+    break;
   }
 }
 
-void Complete(napi_env env, napi_status, void *data) {
+void Complete(napi_env env, napi_status status, void *data) {
   auto *w = static_cast<CoreWork *>(data);
+  if (status != napi_ok && w->error.empty()) {
+    w->error = "native async work failed";
+  }
   if (w->error.empty()) {
     napi_value value;
-    if (w->call == CoreCall::Fetch || w->call == CoreCall::Prefetch) {
+    if (w->call == CoreCall::Fetch || w->call == CoreCall::Prefetch ||
+        w->call == CoreCall::RuntimeStatus) {
       napi_create_string_utf8(env, w->result.c_str(), w->result.size(), &value);
     } else {
       napi_get_undefined(env, &value);
@@ -125,6 +150,59 @@ napi_value Stop(napi_env env, napi_callback_info) {
   return Queue(env, new CoreWork(), "ArkClashStop");
 }
 
+bool GetInteger(napi_env env, napi_value value, double min, double max, double &out) {
+  return napi_get_value_double(env, value, &out) == napi_ok &&
+         std::isfinite(out) && std::floor(out) == out && out >= min && out <= max;
+}
+
+napi_value AttachTun(napi_env env, napi_callback_info info) {
+  size_t argc = 5;
+  napi_value args[5] = {};
+  napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  auto *w = new CoreWork();
+  double fd, revision;
+  if (argc != 5 || !GetInteger(env, args[0], 1, INT_MAX, fd) ||
+      !GetString(env, args[1], w->arg0) || !GetString(env, args[2], w->bootId) ||
+      !GetString(env, args[3], w->arg1) ||
+      !GetInteger(env, args[4], 1, 9007199254740991.0, revision)) {
+    delete w;
+    napi_throw_type_error(env, nullptr, "attachTun(fd, stack, bootId, profile, configRevision)");
+    return nullptr;
+  }
+  w->call = CoreCall::AttachTun;
+  w->fd = static_cast<int>(fd);
+  w->configRevision = static_cast<unsigned long long>(revision);
+  return Queue(env, w, "ArkClashAttachTun");
+}
+
+napi_value DetachTun(napi_env env, napi_callback_info) {
+  auto *w = new CoreWork();
+  w->call = CoreCall::DetachTun;
+  return Queue(env, w, "ArkClashDetachTun");
+}
+
+napi_value UpdateVpnState(napi_env env, napi_callback_info info) {
+  size_t argc = 3;
+  napi_value args[3] = {};
+  napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  auto *w = new CoreWork();
+  if (argc != 3 || !GetString(env, args[0], w->arg0) ||
+      !GetString(env, args[1], w->arg1) ||
+      napi_get_value_bool(env, args[2], &w->vpnCreated) != napi_ok) {
+    delete w;
+    napi_throw_type_error(env, nullptr, "updateVpnState(intent, forward, vpnCreated)");
+    return nullptr;
+  }
+  w->call = CoreCall::UpdateVpnState;
+  return Queue(env, w, "ArkClashUpdateVpnState");
+}
+
+napi_value RuntimeStatus(napi_env env, napi_callback_info) {
+  auto *w = new CoreWork();
+  w->call = CoreCall::RuntimeStatus;
+  return Queue(env, w, "ArkClashRuntimeStatus");
+}
+
 napi_value Reload(napi_env env, napi_callback_info info) {
   size_t argc = 3;
   napi_value args[3] = {nullptr, nullptr, nullptr};
@@ -144,6 +222,7 @@ napi_value Reload(napi_env env, napi_callback_info info) {
         "reload(path, profile, expectedProfile?) expects strings");
     return nullptr;
   }
+  w->hasExpectedProfile = expectedType != napi_undefined;
   w->call = CoreCall::Reload;
   return Queue(env, w, "ArkClashReload");
 }
@@ -282,6 +361,10 @@ napi_value Init(napi_env env, napi_value exports) {
       {"start", nullptr, Start, nullptr, nullptr, nullptr, napi_default,
        nullptr},
       {"stop", nullptr, Stop, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"attachTun", nullptr, AttachTun, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"detachTun", nullptr, DetachTun, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"updateVpnState", nullptr, UpdateVpnState, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"runtimeStatus", nullptr, RuntimeStatus, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"reload", nullptr, Reload, nullptr, nullptr, nullptr, napi_default,
        nullptr},
       {"fetch", nullptr, Fetch, nullptr, nullptr, nullptr, napi_default,

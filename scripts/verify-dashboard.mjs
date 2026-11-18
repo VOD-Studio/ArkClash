@@ -149,19 +149,27 @@ async function makeContext(name) { const filesDir = path.join(sandbox, name); aw
 
 try {
   const runControls = load(path.join(homeSource, 'HomeRunControls.ets'));
-  assert.equal(runControls.homeShouldStopRuntime('started', 'preparing', false, false, 'running'), true);
-  assert.equal(runControls.homeShouldStopRuntime('stopped', 'failed', true, false, 'running'), true);
-  assert.equal(runControls.homeShouldStopRuntime('stopped', 'failed', false, true, 'running'), true);
-  assert.equal(runControls.homeShouldStopRuntime('stopped', 'failed', false, false, 'stopped'), false);
-  assert.equal(runControls.homeShouldStopRuntime('stopped', 'stopped', false, false, 'stopped'), false);
-  assert.equal(runControls.homeRunActionLabel('stopped', 'failed', false, true, 'running'), 'app.string.dash_stop_retry');
-  assert.equal(runControls.homeShouldStopRuntime('stopped', 'failed', false, false, 'unknown'), true);
-  assert.equal(runControls.homeShouldStopRuntime('stopped', 'stopped', false, false, 'unknown'), true);
-  assert.equal(runControls.homeRuntimeAppearsStarted('stopped', 'failed', false, false), false);
-  assert.equal(runControls.homeRuntimeAppearsStarted('stopped', 'stopped', false, false), false);
-  assert.equal(runControls.homeRuntimeAppearsStarted('started', 'preparing', false, false), true);
-  assert.equal(runControls.homeRuntimeAppearsStarted('stopped', 'failed', false, true), true);
-  assert.equal(runControls.homeRunActionLabel('stopped', 'failed', false, false, 'unknown'),
+  assert.equal(runControls.homeShouldStopRuntime('started', 'preparing', false, false, false, 'running'), true);
+  for (const resources of [[true, false, false], [false, true, false], [false, false, true]]) {
+    for (const forward of ['failed', 'stopped']) {
+      assert.equal(runControls.homeHasPendingCleanup(forward, ...resources), true);
+      assert.equal(runControls.homeShouldStopRuntime('stopped', forward, ...resources, 'running'), true);
+      assert.equal(runControls.homeRunActionLabel('stopped', forward, ...resources, 'running'),
+        'app.string.dash_stop_retry');
+    }
+  }
+  for (const host of ['running', 'stopped']) {
+    assert.equal(runControls.homeShouldStopRuntime('stopped', 'stopped', false, false, false, host), false);
+    assert.equal(runControls.homeRuntimeAppearsStarted('stopped', 'stopped', false, false, false), false);
+    assert.equal(runControls.homeRunActionLabel('stopped', 'stopped', false, false, false, host),
+      'app.string.action_connect');
+  }
+  assert.equal(runControls.homeRuntimeAppearsStarted('started', 'preparing', false, false, false), true);
+  assert.equal(runControls.homeHasPendingCleanup('running', true, true, true), false);
+  assert.equal(runControls.homeRunActionLabel('started', 'running', true, true, true, 'running'),
+    'app.string.action_disconnect');
+  assert.equal(runControls.homeShouldStopRuntime('stopped', 'failed', false, false, false, 'unknown'), true);
+  assert.equal(runControls.homeRunActionLabel('stopped', 'stopped', false, false, false, 'unknown'),
     'app.string.dash_runtime_stop_confirm');
   const layout = load(path.join(homeSource, 'DashboardLayout.ets'));
   const services = load(path.join(homeSource, 'Services.ets'));

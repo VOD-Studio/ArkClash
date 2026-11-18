@@ -121,12 +121,15 @@ func captureProxySnapshot() (proxySnapshotResponse, error) {
 	if !running {
 		return proxySnapshotResponse{}, errors.New("core_not_running")
 	}
+	if current.Profile == "" {
+		return proxySnapshotResponse{}, errors.New("core_profile_unavailable")
+	}
 	return currentProxyGraph(), nil
 }
 
 // ID 必须同时属于当前实例与当前组；不能退回按显示名查找。
 func currentProxyMember(id, groupName string) (C.Proxy, bool) {
-	if proxyIdentityBoot != runtimeBootID || proxyIdentityRevision != runtimeConfigRevision {
+	if !running || current.Profile == "" || proxyIdentityBoot != runtimeBootID || proxyIdentityRevision != runtimeConfigRevision {
 		return nil, false
 	}
 	proxy := identifiedProxies[id]

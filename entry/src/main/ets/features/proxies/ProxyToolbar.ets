@@ -1,4 +1,5 @@
 import { SymbolGlyphModifier } from '@kit.ArkUI';
+import { Connection, connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
 import {
   HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER, SHEET_HEADER_HEIGHT, TAB_HEADER_HEIGHT,
@@ -14,6 +15,7 @@ export struct ProxyToolbar {
   @Param active: boolean = true;
   @Param motionEnabled: boolean = false;
   @Local searchShown: boolean = false;
+  @Local link: Connection = connection;
   private densities: ProxyDensity[] = ['loose', 'standard', 'compact'];
   private sorts: ProxySort[] = ['none', 'delay', 'name'];
   private icons: ProxyIconStyle[] = ['filled', 'icon', 'hidden'];
@@ -130,6 +132,11 @@ export struct ProxyToolbar {
   @Builder
   private styleMenu() {
     Menu() {
+      if (!this.link.coreReady) {
+        MenuItem({ content: $r('app.string.proxy_start_core') })
+          .enabled(this.active && !this.link.coreStarting)
+          .onClick(() => this.browser.startCore())
+      }
       if ((this.browser.groups[this.browser.groupIndex]?.pinned ?? '') !== '') {
         MenuItem({ content: $r('app.string.proxy_clear_pin') })
           .enabled(this.active && (this.browser.online || this.browser.offlineWritable))
@@ -177,9 +184,17 @@ export struct ProxyToolbar {
       }
     }
     .attributeModifier(HEADER_ACTION)
-    .accessibilityText($r('app.string.proxy_test_current_group'))
-    .enabled(this.active && this.browser.online && !(this.browser.groups[this.browser.groupIndex]?.testing ?? false))
-    .onClick(() => this.browser.test(this.browser.currentGroup))
+    .accessibilityText(this.link.coreReady ?
+      $r('app.string.proxy_test_current_group') : $r('app.string.proxy_start_core'))
+    .enabled(this.active && !this.link.coreStarting &&
+      (!this.link.coreReady || !(this.browser.groups[this.browser.groupIndex]?.testing ?? false)))
+    .onClick(() => {
+      if (this.link.coreReady) {
+        this.browser.test(this.browser.currentGroup);
+      } else {
+        this.browser.startCore();
+      }
+    })
   }
 
   build() {

@@ -1438,7 +1438,11 @@
     },
     {
       "name": "proxy_test_offline",
-      "value": "连接后可测试节点延迟。"
+      "value": "内核尚未就绪，启动后可测试节点延迟。"
+    },
+    {
+      "name": "proxy_start_core",
+      "value": "启动内核"
     },
     {
       "name": "proxy_test_queued",

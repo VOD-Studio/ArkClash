@@ -68,6 +68,8 @@ func init() {
 			r.Post("/diagnostics/connections/close", postDiagnosticConnectionsClose)
 			r.Post("/diagnostics/dns/clear-cache", postDiagnosticDnsClearCache)
 			r.Post("/profiles/{name}", forwardCommand)
+			r.Post("/vpn/connect", forwardCommand)
+			r.Post("/vpn/disconnect", forwardCommand)
 		})
 	})
 }
@@ -109,9 +111,9 @@ func patchRuntimeOptions(w http.ResponseWriter, r *http.Request) {
 }
 
 type reloadBody struct {
-	Profile         string `json:"profile"`
-	Path            string `json:"path"`
-	ExpectedProfile string `json:"expectedProfile,omitempty"`
+	Profile         string  `json:"profile"`
+	Path            string  `json:"path"`
+	ExpectedProfile *string `json:"expectedProfile,omitempty"`
 }
 
 func postReload(w http.ResponseWriter, r *http.Request) {
@@ -178,8 +180,7 @@ var (
 	pending        = map[int64]chan commandReply{}
 )
 
-// forwardCommand 把 POST /arkclash/profiles/{name} 原样交给 VPN 进程的 ArkTS，等它用
-// ArkClashReply 回复。请求方中途断开时不再等，但 ArkTS 照样把命令做完（ADR-0009）。
+// HTTP 超时或断开只停止等待，不取消已交给扩展的操作。
 func forwardCommand(w http.ResponseWriter, r *http.Request) {
 	handler := commandHandler.Load()
 	if handler == nil {
@@ -203,7 +204,11 @@ func forwardCommand(w http.ResponseWriter, r *http.Request) {
 		pendingMu.Unlock()
 	}()
 
-	cName := C.CString(chi.URLParam(r, "name"))
+	name := "profiles/" + chi.URLParam(r, "name")
+	if strings.HasPrefix(r.URL.Path, "/arkclash/vpn/") {
+		name = strings.TrimPrefix(r.URL.Path, "/arkclash/")
+	}
+	cName := C.CString(name)
 	cBody := C.CString(string(body))
 	C.arkclashCallCommandHandler(*handler, C.longlong(id), cName, cBody)
 	C.free(unsafe.Pointer(cName))

@@ -51,7 +51,7 @@ export struct ProxiesPage {
   }
 
   @Monitor('visible', 'profileId', 'summary', 'profileReady', 'initialGroup', 'online', 'offlineWritable',
-    'link.mode', 'link.bootId')
+    'link.mode', 'link.bootId', 'link.coreReady', 'link.configRevision')
   configureBrowser(): void {
     if (this.savedProfile !== this.profileId) {
       this.savedProfile = this.profileId;
@@ -60,8 +60,9 @@ export struct ProxiesPage {
     this.browser.configure({
       context: this.getUIContext().getHostContext() as common.UIAbilityContext,
       profile: this.profileId, summary: this.summary, ready: this.profileReady, visible: this.visible,
-      online: this.online, offlineWritable: this.offlineWritable,
+      online: this.link.coreReady, offlineWritable: this.offlineWritable,
       bootId: this.link.bootId, mode: this.link.mode === '' ? 'rule' : this.link.mode,
+      configRevision: this.link.configRevision,
       picker: this.pickerMode, initialGroup: this.initialGroup
     });
   }
@@ -200,6 +201,14 @@ export struct ProxiesPage {
         actionLabel: $r('app.string.proxy_open_profiles'),
         onAction: () => this.onOpenProfiles()
       })
+    } else if (!this.link.coreReady) {
+      EmptyState({
+        title: $r('app.string.proxy_not_ready'),
+        hint: $r('app.string.proxy_test_offline'),
+        actionLabel: $r('app.string.proxy_start_core'),
+        onAction: () => this.browser.startCore()
+      })
+        .enabled(!this.link.coreStarting)
     } else if (this.browser.query.trim() !== '') {
       EmptyState({
         title: $r('app.string.proxy_search_empty'),

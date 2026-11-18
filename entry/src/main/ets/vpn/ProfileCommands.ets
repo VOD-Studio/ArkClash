@@ -1,5 +1,5 @@
 import core from 'libarkclash.so';
-import { errorString, ProfileError } from '../shared/profiles/Errors';
+import { ProfileError } from '../shared/profiles/Errors';
 import { checkProfileCommit, findProfile, readListAsync, readStateAsync, validProfileId } from '../shared/profiles/Store';
 import { downloadNewSubscription, UpdateEnv, UpdateOutcome, UpdateScheduler } from '../shared/profiles/Updater';
 
@@ -15,15 +15,11 @@ interface VpnProfileAddCommand {
   label?: string;
 }
 
-interface VpnProfileErrorReply { message: string; }
 interface VpnProfileOkReply { ok: boolean; }
 interface VpnProfileUpdatedEvent { type: string; subscription: string; ok: boolean; }
 
-function send(id: number, status: number, body: Object): void {
-  core.reply(id, status, JSON.stringify(body));
-}
-
-async function handle(scheduler: UpdateScheduler, env: UpdateEnv, name: string, body: string): Promise<Object> {
+export async function handleProfileCommand(scheduler: UpdateScheduler, env: UpdateEnv,
+  name: string, body: string): Promise<Object> {
   const generation = scheduler.operationGeneration();
   const eligible = (): boolean => scheduler.acceptsGeneration(generation) && env.eligible?.() !== false;
   checkProfileCommit(eligible);
@@ -62,17 +58,6 @@ async function handle(scheduler: UpdateScheduler, env: UpdateEnv, name: string, 
     }
     default: throw new ProfileError('unsupported_input');
   }
-}
-
-export function serveProfileCommands(scheduler: UpdateScheduler, env: UpdateEnv): void {
-  core.onCommand((id: number, name: string, body: string): void => {
-    handle(scheduler, env, name, body).then((result: Object): void => {
-      send(id, 200, result);
-    }).catch((error: Error): void => {
-      const reply: VpnProfileErrorReply = { message: errorString(error) };
-      send(id, 500, reply);
-    });
-  });
 }
 
 export function emitUpdated(outcome: UpdateOutcome): void {

@@ -32,7 +32,7 @@ export class ProfileStore {
   @Trace items: ProfileItem[] = [];
   @Trace current: string = '';
   @Trace running: string = '';
-  @Trace connected: boolean = false;
+  @Trace coreReady: boolean = false;
   @Trace offlineWritable: boolean = false;
   @Trace summary: ProfileSummary | undefined = undefined;
   @Trace updatingAll: boolean = false;
@@ -70,7 +70,7 @@ export class ProfileStore {
       this.scheduler = new UpdateScheduler(this.localEnv(), (outcome: UpdateOutcome): void => {
         if (this.localWritable()) { this.applyOutcome(outcome); }
       });
-      if (!this.connectionKnown && this.context !== undefined) {
+      if (this.context !== undefined) {
         try { await this.recheckRoute(); } catch (e) { this.applyError = errorString(e as Object); }
         await this.refresh();
       }
@@ -84,7 +84,7 @@ export class ProfileStore {
   }
 
   get ready(): boolean { return this.loaded && this.loadError === '' && this.active() !== undefined; }
-  active(): ProfileItem | undefined { return this.find(this.connected ? this.running : this.current); }
+  active(): ProfileItem | undefined { return this.find(this.coreReady ? this.running : this.current); }
   selectedId(): string { return this.current; }
   find(id: string): ProfileItem | undefined {
     return this.items.find((item: ProfileItem): boolean => item.id === id);
@@ -98,18 +98,18 @@ export class ProfileStore {
     this.initialized = this.initialize();
   }
 
-  setConnected(connected: boolean, offlineWritable: boolean = false): void {
-    const writable = !connected && offlineWritable;
-    const changed = this.connected !== connected || this.offlineWritable !== writable || !this.connectionKnown;
+  setCoreReady(coreReady: boolean, offlineWritable: boolean = false): void {
+    const writable = !coreReady && offlineWritable;
+    const changed = this.coreReady !== coreReady || this.offlineWritable !== writable || !this.connectionKnown;
     this.connectionKnown = true;
-    this.connected = connected;
+    this.coreReady = coreReady;
     this.offlineWritable = writable;
     if (changed) {
       this.routeGeneration++;
       this.runningQueryGeneration++;
       this.scheduler?.stop(true);
-      if (!connected) { this.running = ''; }
-      if (connected) { this.refreshRunning(); }
+      if (!coreReady) { this.running = ''; }
+      if (coreReady) { this.refreshRunning(); }
       this.refresh().catch((error: Error): void => { this.loadError = errorString(error); });
     }
     this.syncLifecycle();
@@ -121,7 +121,7 @@ export class ProfileStore {
     this.foreground = foreground;
     if (foreground && this.filesDir !== '') {
       this.refresh().catch((error: Error): void => { this.loadError = errorString(error); });
-      if (changed && this.connected) { this.refreshRunning(); }
+      if (changed && this.coreReady) { this.refreshRunning(); }
     }
     this.syncLifecycle();
   }
@@ -145,7 +145,7 @@ export class ProfileStore {
         });
       await this.refresh();
       this.notifyChanged();
-      return outcome.ok ? undefined : outcome.error ?? 'network';
+      return outcome.ok ? await this.activateCurrentIfEmpty() : outcome.error ?? 'network';
     } catch (e) { return errorString(e as Object); }
   }
 
@@ -169,7 +169,7 @@ export class ProfileStore {
         });
       } finally { await removeProfileFile(candidate); }
       await this.refresh();
-      return undefined;
+      return await this.activateCurrentIfEmpty();
     } catch (e) { return errorString(e as Object); }
   }
 
@@ -237,12 +237,12 @@ export class ProfileStore {
       });
       this.current = id;
       checkProfileCommit((): boolean => this.businessWritable(generation));
-      if (this.connected) {
+      if (this.coreReady) {
         await withProfileTask<void>(this.filesDir, id, async (): Promise<void> => {
           checkProfileCommit((): boolean => this.businessWritable(generation));
           await reloadProfile(this.filesDir, id, yamlPath(this.filesDir, id));
         });
-        if (generation !== this.routeGeneration || !this.connected) { return 'canceled'; }
+        if (generation !== this.routeGeneration || !this.coreReady) { return 'canceled'; }
         await this.refreshRunning();
       }
       await this.refresh();
@@ -259,6 +259,7 @@ export class ProfileStore {
       await this.ensureLoaded();
       await this.recheckRoute();
       const generation = this.routeGeneration;
+      if (this.coreReady && edit.content !== undefined) { await this.readRunningStatus(generation); }
       const sourceChanged = await saveProfileEdit(this.importEnv(generation), id, edit,
         (): boolean => this.businessWritable(generation));
       await this.refresh();
@@ -279,34 +280,59 @@ export class ProfileStore {
     return this.businessWritable() && this.pending === '' && this.find(id) !== undefined;
   }
   async remove(id: string): Promise<string | undefined> {
+    let ownsPending = false;
     try {
       await this.ensureLoaded();
       await this.recheckRoute();
       if (!this.canRemove(id)) { return 'busy'; }
-      if (this.connected && (this.running === id || this.current === id)) {
-        const desired = this.find(this.current);
+      const latest = await readListAsync(this.filesDir);
+      const status = this.coreReady ? await this.readRunningStatus(this.routeGeneration) : undefined;
+      if (status !== undefined && (status.profile === id || latest.current === id)) {
+        const desired = findProfile(latest, latest.current);
         const next = desired !== undefined && desired.id !== id ? desired :
-          this.items.find((item: ProfileItem): boolean => item.id !== id);
+          latest.profiles.find((record: ProfileRecord): boolean => record.id !== id);
         if (next !== undefined) {
           const failure = await this.select(next.id);
           if (failure !== undefined) { return failure; }
-        } else if (this.context !== undefined) {
+        } else if (this.hasVpnResources(status)) {
+          if (this.context === undefined) { return 'io'; }
           await connection.disconnect(this.context);
-          if (connection.error !== '') { return 'apply_failed'; }
+          if (connection.error !== '') { throw new ProfileError('apply_failed'); }
           await this.recheckRoute();
-          if (!this.localWritable()) { return 'apply_failed'; }
-        } else { return 'io'; }
+        }
       }
+      if (this.pending !== '') { return 'busy'; }
+      this.pending = id;
+      ownsPending = true;
       const generation = this.routeGeneration;
-      await removeSavedProfile(this.filesDir, id, (): boolean => this.businessWritable(generation));
+      await withProfileTask<void>(this.filesDir, id, async (): Promise<void> => {
+        checkProfileCommit((): boolean => this.businessWritable(generation));
+        if (this.coreReady) {
+          const running = await this.readRunningStatus(generation);
+          const beforeClear = await readListAsync(this.filesDir);
+          const last = !beforeClear.profiles.some((record: ProfileRecord): boolean => record.id !== id);
+          if (running.profile === id || last) {
+            if (!last || running.profile !== status?.profile) { throw new ProfileError('conflict'); }
+            if (this.hasVpnResources(running)) { throw new ProfileError('apply_failed'); }
+            if (running.profile !== '') {
+              checkProfileCommit((): boolean => this.businessWritable(generation));
+              await reloadProfile(this.filesDir, '', '', running.profile);
+              const cleared = await this.readRunningStatus(generation);
+              if (cleared.profile !== '' || this.hasVpnResources(cleared)) { throw new ProfileError('apply_failed'); }
+            }
+          }
+        }
+        await removeSavedProfile(this.filesDir, id, (): boolean => this.businessWritable(generation));
+      });
       await this.refresh();
       this.notifyChanged();
       return undefined;
     } catch (e) {
       const failure = errorString(e as Object);
+      this.applyError = failure;
       await this.refresh().catch((): void => {});
       return failure;
-    }
+    } finally { if (ownsPending) { this.pending = ''; } }
   }
 
   async reorder(ids: string[]): Promise<string | undefined> {
@@ -352,25 +378,25 @@ export class ProfileStore {
     if (!this.loaded || this.loadError !== '') { throw new ProfileError(this.loadError || 'busy'); }
   }
   private businessWritable(generation: number = this.routeGeneration): boolean {
-    return generation === this.routeGeneration && (this.connected || this.offlineWritable) && !connection.busy;
+    return generation === this.routeGeneration && (this.coreReady || this.offlineWritable) && !connection.busy;
   }
   private localWritable(generation: number = this.routeGeneration): boolean {
-    return generation === this.routeGeneration && this.offlineWritable && !this.connected && !connection.busy;
+    return generation === this.routeGeneration && this.offlineWritable && !this.coreReady && !connection.busy;
   }
   private async recheckRoute(): Promise<void> {
     if (connection.busy) { throw new ProfileError('busy'); }
     if (this.context === undefined) { throw new ProfileError('io'); }
     const generation = this.routeGeneration;
-    let connected: boolean;
-    try { connected = await connection.recheck(this.context); }
+    let coreReady: boolean;
+    try { coreReady = await connection.recheck(this.context); }
     catch (e) {
-      if (generation === this.routeGeneration) { this.setConnected(false, false); }
+      if (generation === this.routeGeneration) { this.setCoreReady(false, false); }
       throw new ProfileError('host_unknown');
     }
     if (connection.busy) { throw new ProfileError('busy'); }
     if (generation !== this.routeGeneration) {
-      if (connected ? !this.connected : !this.localWritable()) { throw new ProfileError('canceled'); }
-    } else { this.setConnected(connected, !connected); }
+      if (coreReady ? !this.coreReady : !this.localWritable()) { throw new ProfileError('canceled'); }
+    } else { this.setCoreReady(coreReady, !coreReady); }
     if (!this.businessWritable()) { throw new ProfileError('host_unknown'); }
   }
   private localEnv(): UpdateEnv {
@@ -378,18 +404,18 @@ export class ProfileStore {
       eligible: (): boolean => this.localWritable() };
   }
   private importEnv(generation: number): UpdateEnv {
-    return { filesDir: this.filesDir, downloader: new DirectDownloader(), running: (): string => this.connected ? this.running : '',
+    return { filesDir: this.filesDir, downloader: new DirectDownloader(), running: (): string => this.coreReady ? this.running : '',
       eligible: (): boolean => this.businessWritable(generation),
       reload: async (path: string, profile: string, expectedProfile?: string): Promise<void> => {
-        if (!this.connected || !this.businessWritable(generation)) { throw new ProfileError('canceled'); }
+        if (!this.coreReady || !this.businessWritable(generation)) { throw new ProfileError('canceled'); }
         await reloadProfile(this.filesDir, profile, path, expectedProfile);
       }, prefetch: (path: string): void => {
-        if (this.connected && this.businessWritable(generation)) { prefetchProfile(this.filesDir, path).catch((): void => {}); }
+        if (this.coreReady && this.businessWritable(generation)) { prefetchProfile(this.filesDir, path).catch((): void => {}); }
       } };
   }
   private async remoteOrLocal(remote: () => Promise<UpdateOutcome>, local: () => Promise<UpdateOutcome>): Promise<UpdateOutcome> {
     await this.recheckRoute();
-    if (!this.connected) { return await local(); }
+    if (!this.coreReady) { return await local(); }
     const generation = this.routeGeneration;
     try {
       const outcome = await remote();
@@ -397,16 +423,16 @@ export class ProfileStore {
       return outcome;
     } catch (e) {
       await this.recheckRoute();
-      if (this.connected) { throw e as Error; }
+      if (this.coreReady) { throw e as Error; }
       return await local();
     }
   }
   private notifyChanged(): void {
-    if (this.connected) { notifyListChanged(this.filesDir).catch((): void => {}); }
+    if (this.coreReady) { notifyListChanged(this.filesDir).catch((): void => {}); }
     else if (this.localWritable()) { this.scheduler?.reschedule(); }
   }
   private syncLifecycle(): void {
-    if (this.foreground && this.connected) { this.events.start(this.filesDir); } else { this.events.stop(); }
+    if (this.foreground && this.coreReady) { this.events.start(this.filesDir); } else { this.events.stop(); }
     if (this.localWritable() && this.foreground && this.loaded) { this.scheduler?.start(); }
     else { this.scheduler?.stop(true); }
   }
@@ -415,7 +441,7 @@ export class ProfileStore {
     this.refresh().catch((error: Error): void => { this.loadError = errorString(error); });
   }
   private onEvent(event: ProfileEvent): void {
-    if (!this.connected || !this.foreground || connection.busy) { return; }
+    if (!this.coreReady || !this.foreground || connection.busy) { return; }
     const status = event.status;
     if (event.type === 'runtime' && status !== undefined) {
       if (this.retiredRuntimeBoots.has(status.bootId)) { return; }
@@ -429,11 +455,11 @@ export class ProfileStore {
 
   private runningQueryCurrent(query: number, route: number): boolean {
     return query === this.runningQueryGeneration && route === this.routeGeneration &&
-      this.connected && this.foreground && !connection.busy;
+      this.coreReady && this.foreground && !connection.busy;
   }
 
   private async refreshRunning(): Promise<void> {
-    if (!this.connected || !this.foreground || connection.busy || this.filesDir === '') { return; }
+    if (!this.coreReady || !this.foreground || connection.busy || this.filesDir === '') { return; }
     const query = ++this.runningQueryGeneration;
     const route = this.routeGeneration;
     const boot = connection.bootId;
@@ -449,14 +475,74 @@ export class ProfileStore {
     }
   }
 
-  private applyRunningStatus(status: RuntimeStatus): boolean {
+  private async readRunningStatus(generation: number): Promise<RuntimeStatus> {
+    const boot = connection.bootId;
+    this.runningQueryGeneration++;
+    const status = await getRuntimeStatus(this.filesDir);
+    checkProfileCommit((): boolean => this.coreReady && this.businessWritable(generation));
+    if (boot !== connection.bootId || (connection.bootId !== '' && status.bootId !== connection.bootId)) {
+      throw new ProfileError('canceled');
+    }
+    if (!this.acceptsRunningStatus(status)) { throw new ProfileError('conflict'); }
+    this.applyRunningStatus(status);
+    return status;
+  }
+
+  private async activateCurrentIfEmpty(): Promise<string | undefined> {
+    if (!this.coreReady) { return undefined; }
+    const generation = this.routeGeneration;
+    let ownsPending = false;
+    try {
+      this.applyError = '';
+      for (;;) {
+        checkProfileCommit((): boolean => this.coreReady && this.businessWritable(generation));
+        const latest = await readListAsync(this.filesDir);
+        const id = latest.current;
+        if (id === '') { return undefined; }
+        let changed = false;
+        await withProfileTask<void>(this.filesDir, id, async (): Promise<void> => {
+          const status = await this.readRunningStatus(generation);
+          if (!status.running) { throw new ProfileError('apply_failed'); }
+          if (status.profile !== '') { return; }
+          // 提交锁已经释放；任务锁后的最新选择决定首次加载，不能回写旧的 current。
+          const current = await readListAsync(this.filesDir);
+          checkProfileCommit((): boolean => this.businessWritable(generation));
+          if (current.current !== id) { changed = true; return; }
+          if (findProfile(current, id) === undefined) { throw new ProfileError('not_found'); }
+          if (this.pending !== '') { throw new ProfileError('busy'); }
+          this.pending = id;
+          ownsPending = true;
+          await reloadProfile(this.filesDir, id, yamlPath(this.filesDir, id), '');
+          const applied = await this.readRunningStatus(generation);
+          if (!applied.running || applied.profile === '') { throw new ProfileError('apply_failed'); }
+        });
+        if (!changed) { await this.refresh(); return undefined; }
+      }
+    } catch (e) {
+      const failure = errorString(e as Object);
+      this.applyError = failure;
+      return failure;
+    } finally { if (ownsPending) { this.pending = ''; } }
+  }
+
+  private hasVpnResources(status: RuntimeStatus): boolean {
+    return status.vpnCreated || status.tunAttached || status.listenersOpen || status.intent === 'started' ||
+      status.forward === 'preparing' || status.forward === 'running';
+  }
+
+  private acceptsRunningStatus(status: RuntimeStatus): boolean {
     if (typeof status.bootId !== 'string' || status.bootId === '' || typeof status.profile !== 'string' ||
       typeof status.running !== 'boolean' || !Number.isSafeInteger(status.configRevision) || status.configRevision < 0 ||
       !Number.isSafeInteger(status.revision) || status.revision < 0 || this.retiredRuntimeBoots.has(status.bootId)) {
       return false;
     }
+    return status.bootId !== this.runtimeBootId ||
+      (status.configRevision >= this.runtimeConfigRevision && status.revision >= this.runtimeRevision);
+  }
+
+  private applyRunningStatus(status: RuntimeStatus): boolean {
+    if (!this.acceptsRunningStatus(status)) { return false; }
     const sameBoot = status.bootId === this.runtimeBootId;
-    if (sameBoot && (status.configRevision < this.runtimeConfigRevision || status.revision < this.runtimeRevision)) { return false; }
     const profile = status.running ? status.profile : '';
     const changed = !sameBoot || status.configRevision !== this.runtimeConfigRevision || profile !== this.running;
     const advanced = status.revision !== this.runtimeRevision;
@@ -489,16 +575,16 @@ export class ProfileStore {
     if (generation !== this.refreshGeneration) { return; }
     this.items = snapshot.items.map((fresh: ProfileItem): ProfileItem => mergeProfileItem(this.find(fresh.id), fresh));
     this.current = snapshot.list.current;
-    if (this.connected && this.active()?.state.error === 'apply_failed') { this.applyError = 'apply_failed'; }
+    if (this.coreReady && this.active()?.state.error === 'apply_failed') { this.applyError = 'apply_failed'; }
     this.loadError = '';
     this.refreshSummary();
   }
   private refreshSummary(): void {
     const generation = ++this.summaryGeneration;
-    const id = this.connected ? this.running : this.current;
-    if (id === '' || (this.connected && this.applyError === 'apply_failed')) { this.summary = undefined; return; }
+    const id = this.coreReady ? this.running : this.current;
+    if (id === '' || (this.coreReady && this.applyError === 'apply_failed')) { this.summary = undefined; return; }
     readSummary(this.filesDir, id).then((summary: ProfileSummary | undefined): void => {
-      if (generation === this.summaryGeneration && id === (this.connected ? this.running : this.current)) { this.summary = summary; }
+      if (generation === this.summaryGeneration && id === (this.coreReady ? this.running : this.current)) { this.summary = summary; }
     }).catch((error: Error): void => {
       if (generation === this.summaryGeneration) { this.loadError = errorString(error); }
     });

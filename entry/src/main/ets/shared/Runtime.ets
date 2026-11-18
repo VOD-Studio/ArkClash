@@ -8,12 +8,14 @@ import { readText, writeText, writeTextAsync } from './Files';
 
 export const CONTROLLER_ADDRESS = '127.0.0.1:19090';
 
-/** 界面写，VPN 进程在启动时读。要用哪份配置不在这里，VPN 进程从配置列表里读（ADR-0010）。 */
+/** 启动设置与转发意图在短锁内提交；扩展新实例复位意图，当前配置仍以配置列表为准。 */
 export interface RuntimeConfig {
   secret: string;
   stack: string;
   mode: string; // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
   allowLan?: boolean; // 没有 = 用配置里的值
+  vpnIntent: 'started' | 'stopped';
+  vpnOperation: string;
 }
 
 function runtimePath(filesDir: string): string {
@@ -117,6 +119,13 @@ export async function readRuntime(filesDir: string): Promise<RuntimeConfig | und
   // 0.3.0 写的 runtime.json 没有 mode。
   if (typeof config.mode !== 'string') {
     config.mode = '';
+  }
+  if (config.vpnIntent !== 'started' && config.vpnIntent !== 'stopped') {
+    config.vpnIntent = 'stopped';
+  }
+  if (typeof config.vpnOperation !== 'string' || config.vpnOperation === '') {
+    config.vpnOperation = '';
+    config.vpnIntent = 'stopped';
   }
   return config;
 }

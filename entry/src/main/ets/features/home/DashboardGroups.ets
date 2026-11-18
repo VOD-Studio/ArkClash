@@ -33,17 +33,17 @@ export struct DashboardGroups {
     this.generation++;
   }
 
-  @Monitor('visible', 'profileId', 'routeRevision', 'conn.routeRevision', 'conn.state', 'conn.mode')
+  @Monitor('visible', 'profileId', 'routeRevision', 'conn.routeRevision', 'conn.state', 'conn.coreReady', 'conn.mode')
   sync(): void {
     const target = `${this.profileId}:${this.routeRevision}:${this.conn.routeRevision}:${this.conn.mode}`;
-    if (target !== this.target || !this.conn.connected) {
+    if (target !== this.target || !this.conn.coreReady) {
       this.summary = undefined;
       this.failed = false;
       this.target = target;
     }
     this.generation++;
     this.loading = false;
-    if (this.visible && this.conn.connected) {
+    if (this.visible && this.conn.coreReady) {
       this.refresh();
     }
   }
@@ -54,7 +54,7 @@ export struct DashboardGroups {
     this.failed = false;
     try {
       const summary = await getMainGroup(this.context.filesDir);
-      if (generation === this.generation && this.visible && this.conn.connected) {
+      if (generation === this.generation && this.visible && this.conn.coreReady) {
         this.summary = summary;
       }
     } catch (e) {
@@ -72,14 +72,14 @@ export struct DashboardGroups {
     if (this.conn.mode === 'direct') {
       return [];
     }
-    if (this.conn.connected) {
+    if (this.conn.coreReady) {
       return this.summary?.groups ?? [];
     }
     return this.summaryGroups;
   }
 
   private iconSource(name: string): string {
-    const icons = this.conn.connected ? this.summary?.groupIcons : this.summaryGroupIcons;
+    const icons = this.conn.coreReady ? this.summary?.groupIcons : this.summaryGroupIcons;
     return icons === undefined ? '' : icons[name] ?? '';
   }
 

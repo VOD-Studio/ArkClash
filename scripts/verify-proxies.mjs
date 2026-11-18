@@ -653,7 +653,7 @@ test('过期视图提交保留草稿，重试按最新revision只提交自己的
 
 test('在线provider同名节点保留真实协议、历史和嵌套测速归属', async () => {
   const harness = await consumerHarness();
-  const status = { profile: 'one', bootId: 'fixture', revision: 1, configRevision: 1 };
+  const status = { running: true, profile: 'one', bootId: 'fixture', revision: 1, configRevision: 1 };
   const url = 'https://example.org/204';
   const ref = (id, name, provider = '') => ({ id, name, provider, selectable: true });
   const graph = {
@@ -705,7 +705,8 @@ test('在线provider同名节点保留真实协议、历史和嵌套测速归属
 });
 
 async function readConsumerGraph(harness, graph) {
-  const status = { profile: 'one', bootId: 'fixture', revision: 1, configRevision: 1 };
+  const status = { running: true, profile: 'one', bootId: 'fixture', revision: 1, configRevision: 1,
+    tunAttached: false, vpnCreated: false, forward: 'stopped' };
   const pending = harness.client.readOnlineProxies('/fixture', 'one', undefined);
   await drainConsumers();
   harness.native.commands.shift().resolve(JSON.stringify(status));
@@ -716,7 +717,8 @@ async function readConsumerGraph(harness, graph) {
     else assert.fail(`unexpected snapshot request ${command.path}`);
   }
   await drainConsumers();
-  harness.native.commands.shift().resolve(JSON.stringify(status));
+  harness.native.commands.shift().resolve(JSON.stringify({ ...status, revision: status.revision + 1,
+    tunAttached: true, vpnCreated: true, forward: 'running' }));
   return await pending;
 }
 
@@ -1027,4 +1029,95 @@ test('实际Controller摘要沿URLTest退休actual取旧实例，明确retired�
   assert.equal(summary.node, 'Shared');
   assert.equal(summary.delay, 77);
   assert.equal(summary.retired, true);
+});
+
+test('预热未连接的节点页与picker支持选择和测速，连断不清结果，拒绝后缓存页可显式重试', async () => {
+  const harness = await consumerHarness();
+  const browserUrl = await sourceModule('../entry/src/main/ets/features/proxies/Proxies.ets',
+    `import { KeyedListSource } from ${JSON.stringify(listUrl)};\n` +
+    `import { ProxyAppearance } from ${JSON.stringify(harness.appearanceUrl)};\n` +
+    `import { ProxySelectionSession } from ${JSON.stringify(harness.selectionUrl)};\n` +
+    `import { ProxyTestSession } from ${JSON.stringify(harness.probesUrl)};\n` +
+    `import { proxyColumnCount, proxyGroupNames, validProxyView } from ${JSON.stringify(logicUrl)};\n` +
+    `import { applyProxyDelayViews, buildProxyViews } from ${JSON.stringify(viewUrl)};\n` +
+    `let current; export function setSnapshot(next) { current = next; }\n` +
+    `export let attempts = 0;\n` +
+    `export const connection = { coreReady: true, coreStarting: false, connected: false, busy: false,
+      offlineWritable: false, bootId: 'warm', mode: 'rule',
+      async ensureReady(_context, automatic) {
+        assertExplicit(automatic); attempts++;
+        if (attempts === 1) throw new Error('authorization_denied');
+        this.coreReady = true;
+      } };\n` +
+    `function assertExplicit(automatic) { if (automatic !== false) throw new Error('not_explicit'); }\n` +
+    `class ProfileEvents { start() {} stop() {} }\n` +
+    `async function readOnlineProxies() { return current; }\n` +
+    `async function readOfflineProxies() { return { ...current, online: false }; }\n`);
+  const module = await import(browserUrl);
+  const current = snapshot();
+  current.online = true;
+  current.offlineWritable = false;
+  current.bootId = 'warm';
+  current.configRevision = 7;
+  module.setSnapshot(current);
+  const browser = new module.ProxyBrowser();
+  const input = {
+    context: { filesDir: '/fixture' }, profile: 'one', summary: undefined, ready: true,
+    visible: true, online: true, offlineWritable: false, bootId: 'warm', mode: 'rule',
+    picker: false, initialGroup: 'Main'
+  };
+  browser.configure(input);
+  await browser.refresh();
+  const selected = current.nodes.Main.now;
+  browser.test('Main', 'beta HK');
+  await drainConsumers();
+  assert.equal(new URL(harness.native.requests[0].url).searchParams.get('id'), 'beta HK');
+  const pending = harness.native.requests[0];
+  module.connection.connected = true;
+  module.connection.busy = true;
+  browser.configure({ ...input });
+  await browser.refresh();
+  assert.equal(browser.tests.activeBatches.size, 1);
+  pending.reply(200, '{"delay":42}');
+  await drainConsumers();
+  assert.equal([...browser.tests.latest.values()][0], 42);
+  module.connection.connected = false;
+  browser.configure({ ...input, picker: true });
+  await browser.refresh();
+  assert.equal([...browser.tests.latest.values()][0], 42);
+  browser.test('Main');
+  await drainConsumers();
+  assert.deepEqual(harness.native.requests.slice(1).map(request =>
+    new URL(request.url).searchParams.get('id')).sort(), ['Alpha US', 'Gamma JP', 'beta HK'].sort());
+  assert.equal(current.nodes.Main.now, selected);
+  assert.equal(harness.native.commands.length, 0, '测速不得修改出口');
+  browser.choose('Main', 'beta HK');
+  await drainConsumers();
+  const command = harness.native.commands.shift();
+  assert.equal(command.path, '/arkclash/selection');
+  assert.equal(JSON.parse(command.body).nodeId, 'beta HK');
+  command.resolve(JSON.stringify({
+    changed: true, selected: 'beta HK', selectedId: 'beta HK', pinned: '', cleanupFailed: false
+  }));
+  await drainConsumers();
+  assert.equal(current.nodes.Main.now, 'beta HK');
+  module.setSnapshot({ ...current, configRevision: 8 });
+  await browser.refresh();
+  assert.equal(browser.tests.latest.size, 0);
+  assert.equal(browser.tests.activeBatches.size, 0);
+  module.connection.coreReady = false;
+  browser.configure({ ...input, online: false });
+  await browser.refresh();
+  assert.ok(browser.groups.length > 0, '拒绝后保留缓存节点');
+  await browser.startCore();
+  assert.equal(module.attempts, 1);
+  assert.equal(browser.notice, 'notReady');
+  module.connection.coreStarting = true;
+  await browser.startCore();
+  assert.equal(module.attempts, 1);
+  module.connection.coreStarting = false;
+  await browser.startCore();
+  assert.equal(module.attempts, 2);
+  assert.equal(browser.online, true);
+  browser.suspend();
 });

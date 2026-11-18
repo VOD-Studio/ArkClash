@@ -56,6 +56,7 @@ struct Index {
   // 每个页签一个 Scroller，绑定给 HdsTabs：页面滚动时页签栏收起、连接条展开。
   private scrollers: Scroller[] = [new Scroller(), new ListScroller(), new ListScroller(), new Scroller()];
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+  private warmRequested: boolean = false;
 
   aboutToAppear(): void {
     this.reduceMotion = accessibility.isAnimationReduceEnabledSync();
@@ -67,6 +68,7 @@ struct Index {
   }
 
   aboutToDisappear(): void {
+    this.foreground = false;
     accessibility.offAnimationReduceStateChange(this.reductionListener);
     this.scrollers.forEach((scroller: Scroller) => this.tabs.unbindScroller(scroller));
     traffic.stop('shell');
@@ -76,15 +78,19 @@ struct Index {
 
   // 配置的更新由谁负责、要不要订阅 VPN 进程的推送，取决于连接状态和应用是否在前台（ADR-0009）。
   // @Monitor 不在初始化时触发，aboutToAppear 里先按缓存的状态调一次。
-  @Monitor('conn.state', 'conn.hostState', 'foreground', 'profiles.loaded')
+  @Monitor('conn.state', 'conn.hostState', 'conn.coreReady', 'foreground', 'profiles.loaded', 'profiles.loadError')
   syncProfiles(): void {
     this.conn.observe(this.context, this.foreground);
     if (!this.profiles.loaded) {
       return;
     }
-    this.profiles.setConnected(this.conn.hostState === 'running', this.conn.offlineWritable);
+    this.profiles.setCoreReady(this.conn.coreReady, this.conn.offlineWritable);
     // 交接：正在连接、正在断开时界面不发起新的更新。
     this.profiles.setForeground(this.foreground && !this.conn.busy);
+    if (this.foreground && this.profiles.loadError === '' && !this.warmRequested) {
+      this.warmRequested = true;
+      this.conn.ensureReady(this.context, true).catch((): void => {});
+    }
   }
 
   private activeProfile(): ProfileItem | undefined {
@@ -108,6 +114,7 @@ struct Index {
   }
 
   onPageHide(): void {
+    this.warmRequested = false;
     this.foreground = false;
   }
 
@@ -179,7 +186,7 @@ struct Index {
               profileId: this.activeProfile()?.id ?? '',
               profileReady: this.profiles.ready,
               summary: this.profiles.summary,
-              online: this.conn.hostState === 'running',
+              online: this.conn.coreReady,
               offlineWritable: this.conn.offlineWritable,
               onOpenProfiles: () => this.tabs.changeIndex(Tab.Profiles),
               onScrollDirection: (down: boolean) => this.onScrollDirection(down)
@@ -300,7 +307,7 @@ struct Index {
       profileId: this.activeProfile()?.id ?? '',
       profileReady: this.profiles.ready,
       summary: this.profiles.summary,
-      online: this.conn.hostState === 'running',
+      online: this.conn.coreReady,
       offlineWritable: this.conn.offlineWritable,
       pickerMode: true,
       onOpenProfiles: () => {

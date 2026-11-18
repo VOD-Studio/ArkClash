@@ -13,7 +13,6 @@ import (
 	"github.com/metacubex/mihomo/config"
 	"github.com/metacubex/mihomo/constant"
 	P "github.com/metacubex/mihomo/constant/provider"
-	"github.com/metacubex/mihomo/listener"
 	"github.com/metacubex/mihomo/tunnel"
 )
 
@@ -26,6 +25,7 @@ type statusResponse struct {
 	SessionMode    string `json:"sessionMode"`
 	ListenersOpen  bool   `json:"listenersOpen"`
 	TunAttached    bool   `json:"tunAttached"`
+	VpnCreated     bool   `json:"vpnCreated"`
 	StartedAt      int64  `json:"startedAt"`
 	BootID         string `json:"bootId"`
 	Revision       uint64 `json:"revision"`
@@ -39,38 +39,69 @@ var runtimeBootID string
 var runtimeStartedAt int64
 var runtimeRevision uint64
 var runtimeConfigRevision uint64
+var runtimeIntent = "stopped"
+var runtimeForward = "stopped"
+var runtimeVpnCreated bool
 
 func beginRuntime() func() {
 	waitDiagnostics := stopDiagnosticsLocked()
 	stopRuntimeRoutes()
 	now := time.Now()
 	runtimeBootID = fmt.Sprintf("%x-%x", os.Getpid(), now.UnixNano())
-	runtimeStartedAt = now.UnixMilli()
+	runtimeStartedAt = 0
 	runtimeRevision = 0
 	runtimeConfigRevision = 1
+	runtimeIntent = "stopped"
+	runtimeForward = "stopped"
+	runtimeVpnCreated = false
 	selectionOperations = make(map[string]selectionOperation)
 	selectionOrder = nil
 	return waitDiagnostics
 }
 
+// 调用方持有 mu；平台资源事实与转发状态在同一个提交点发布。
+func updateVpnState(intent, forward string, vpnCreated bool) error {
+	if intent != "started" && intent != "stopped" {
+		return fmt.Errorf("invalid_vpn_intent")
+	}
+	switch forward {
+	case "stopped", "preparing", "running", "paused", "failed":
+	default:
+		return fmt.Errorf("invalid_vpn_forward")
+	}
+	runtimeIntent = intent
+	runtimeForward = forward
+	runtimeVpnCreated = vpnCreated
+	publishRuntime()
+	if runtimeForward != forward {
+		return fmt.Errorf("vpn_resources_inconsistent")
+	}
+	return nil
+}
+
 func publishRuntime() {
 	runtimeRevision++
-	ports := listener.GetPorts()
 	next := &statusResponse{
-		Profile: current.Profile, Running: running, Intent: "stopped", Forward: "stopped", SessionMode: "tun",
-		ListenersOpen: ports.Port > 0 || ports.SocksPort > 0 || ports.MixedPort > 0 || ports.RedirPort > 0 || ports.TProxyPort > 0,
-		TunAttached:   tunListener != nil, StartedAt: runtimeStartedAt,
+		Profile: current.Profile, Running: running, Intent: runtimeIntent, Forward: runtimeForward, SessionMode: "tun",
+		ListenersOpen: businessListenersOpen(),
+		TunAttached:   tunListener != nil, VpnCreated: runtimeVpnCreated,
 		BootID: runtimeBootID, Revision: runtimeRevision, Version: constant.Version, Mode: tunnel.Mode().String(),
 		ConfigRevision: runtimeConfigRevision,
 	}
-	if running {
-		next.Intent = "started"
-		if next.TunAttached {
-			next.Forward = "running"
+	if next.Forward == "running" && (!running || next.Intent != "started" || !next.TunAttached || !next.VpnCreated) ||
+		next.Forward == "stopped" && (next.TunAttached || next.VpnCreated || next.ListenersOpen) ||
+		next.Forward == "preparing" && (!running || next.Intent != "started") || cleanupFailure != nil {
+		next.Forward = "failed"
+		runtimeForward = next.Forward
+	}
+	if next.Forward == "running" {
+		if runtimeStartedAt == 0 {
+			runtimeStartedAt = time.Now().UnixMilli()
 		}
 	} else {
-		next.StartedAt = 0
+		runtimeStartedAt = 0
 	}
+	next.StartedAt = runtimeStartedAt
 	runtimeSnapshot.Store(next)
 	emit(struct {
 		Type   string          `json:"type"`

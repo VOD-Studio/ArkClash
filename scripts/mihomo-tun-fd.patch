@@ -1,0 +1,473 @@
+--- a/listener/sing_tun/server_notwindows.go
++++ b/listener/sing_tun/server_notwindows.go
+@@ -1,4 +1,4 @@
+-//go:build !windows
++//go:build !windows && !linux
+ 
+ package sing_tun
+ 
+--- /dev/null
++++ b/listener/sing_tun/server_linux.go
+@@ -0,0 +1,18 @@
++//go:build linux
++
++package sing_tun
++
++import (
++ tun "github.com/metacubex/sing-tun"
++ "golang.org/x/sys/unix"
++)
++
++func tunNew(options tun.Options) (tun.Tun, error) {
++ if options.FileDescriptor != 0 {
++  // 平台保留原 fd；此处之后由 NativeTun 和构造回滚独占副本。
++  fd, err := unix.FcntlInt(uintptr(options.FileDescriptor), unix.F_DUPFD_CLOEXEC, 0)
++  if err != nil { return nil, err }
++  options.FileDescriptor = fd
++ }
++ return tun.New(options)
++}
+--- a/listener/sing_tun/server.go
++++ b/listener/sing_tun/server.go
+@@ -514,11 +514,11 @@
+ 		return
+ 	}
+ 
++	l.tunStack = tunStack
+ 	err = tunStack.Start()
+ 	if err != nil {
+ 		return
+ 	}
+-	l.tunStack = tunStack
+ 
+ 	if l.autoRedirect != nil {
+ 		if len(l.options.RouteAddressSet) > 0 && len(l.routeAddressSet) == 0 {
+--- /dev/null
++++ b/listener/arkclash.go
+@@ -0,0 +1,75 @@
++package listener
++
++import (
++ "errors"
++ "fmt"
++ "sync"
++)
++
++type ArkClashListeners struct {
++ Inbound map[string]bool
++ TCPTunnels map[string]bool
++ UDPTunnels map[string]bool
++}
++
++func ArkClashListenerSnapshot() ArkClashListeners {
++ s := ArkClashListeners{Inbound: map[string]bool{}, TCPTunnels: map[string]bool{}, UDPTunnels: map[string]bool{}}
++ inboundMux.Lock()
++ for name := range inboundListeners { s.Inbound[name] = true }
++ inboundMux.Unlock()
++ tunnelMux.Lock()
++ for name := range tunnelTCPListeners { s.TCPTunnels[name] = true }
++ for name := range tunnelUDPListeners { s.UDPTunnels[name] = true }
++ tunnelMux.Unlock()
++ return s
++}
++
++var arkClashCloseMu sync.Mutex
++var arkClashCloseErrors = map[string]error{}
++
++func ArkClashCloseListeners() error {
++ arkClashCloseMu.Lock()
++ defer arkClashCloseMu.Unlock()
++ closeOne := func(name string, close func() error, clear func()) {
++  if arkClashCloseErrors[name] != nil { return }
++  if err := close(); err != nil { arkClashCloseErrors[name] = fmt.Errorf("%s: %w", name, err) } else { clear() }
++ }
++ httpMux.Lock()
++ if httpListener != nil { closeOne("httpListener", httpListener.Close, func() { httpListener = nil }) }
++ httpMux.Unlock()
++ socksMux.Lock()
++ if socksListener != nil { closeOne("socksListener", socksListener.Close, func() { socksListener = nil }) }
++ if socksUDPListener != nil { closeOne("socksUDPListener", socksUDPListener.Close, func() { socksUDPListener = nil }) }
++ socksMux.Unlock()
++ redirMux.Lock()
++ if redirListener != nil { closeOne("redirListener", redirListener.Close, func() { redirListener = nil }) }
++ if redirUDPListener != nil { closeOne("redirUDPListener", redirUDPListener.Close, func() { redirUDPListener = nil }) }
++ redirMux.Unlock()
++ tproxyMux.Lock()
++ if tproxyListener != nil { closeOne("tproxyListener", tproxyListener.Close, func() { tproxyListener = nil }) }
++ if tproxyUDPListener != nil { closeOne("tproxyUDPListener", tproxyUDPListener.Close, func() { tproxyUDPListener = nil }) }
++ tproxyMux.Unlock()
++ mixedMux.Lock()
++ if mixedListener != nil { closeOne("mixedListener", mixedListener.Close, func() { mixedListener = nil }) }
++ if mixedUDPLister != nil { closeOne("mixedUDPLister", mixedUDPLister.Close, func() { mixedUDPLister = nil }) }
++ mixedMux.Unlock()
++ ssMux.Lock()
++ if shadowSocksListener != nil { closeOne("shadowSocksListener", shadowSocksListener.Close, func() { shadowSocksListener = nil }) }
++ ssMux.Unlock()
++ vmessMux.Lock()
++ if vmessListener != nil { closeOne("vmessListener", vmessListener.Close, func() { vmessListener = nil }) }
++ vmessMux.Unlock()
++ tuicMux.Lock()
++ if tuicListener != nil { closeOne("tuicListener", tuicListener.Close, func() { tuicListener = nil }) }
++ tuicMux.Unlock()
++ inboundMux.Lock()
++ for name, entry := range inboundListeners { closeOne("inboundListeners/"+name, entry.Close, func() { delete(inboundListeners, name) }) }
++ inboundMux.Unlock()
++ tunnelMux.Lock()
++ for name, entry := range tunnelTCPListeners { closeOne("tunnelTCPListeners/"+name, entry.Close, func() { delete(tunnelTCPListeners, name) }) }
++ for name, entry := range tunnelUDPListeners { closeOne("tunnelUDPListeners/"+name, entry.Close, func() { delete(tunnelUDPListeners, name) }) }
++ tunnelMux.Unlock()
++ var errs []error
++ for _, err := range arkClashCloseErrors { errs = append(errs, err) }
++ return errors.Join(errs...)
++}
+--- /dev/null
++++ b/hub/route/arkclash.go
+@@ -0,0 +1,128 @@
++package route
++
++import (
++ "context"
++ "errors"
++ "net"
++ "sync"
++
++ "github.com/metacubex/mihomo/adapter/inbound"
++ "github.com/metacubex/http"
++)
++
++// http.Server.Close 不关闭已劫持的 WebSocket；监听器持有全部已接受连接。
++type arkClashListener struct {
++ net.Listener
++ mu sync.Mutex
++ accepting sync.WaitGroup
++ closing bool
++ conns map[*arkClashConn]struct{}
++ errs []error
++ closeOnce sync.Once
++ closeErr error
++}
++
++type arkClashConn struct {
++ net.Conn
++ owner *arkClashListener
++ once sync.Once
++ err error
++}
++
++func (c *arkClashConn) Close() error {
++ c.once.Do(func() {
++  c.err = c.Conn.Close()
++  c.owner.mu.Lock()
++  delete(c.owner.conns, c)
++  if c.err != nil { c.owner.errs = append(c.owner.errs, c.err) }
++  c.owner.mu.Unlock()
++ })
++ return c.err
++}
++
++func (l *arkClashListener) Accept() (net.Conn, error) {
++ l.mu.Lock()
++ if l.closing { l.mu.Unlock(); return nil, net.ErrClosed }
++ l.accepting.Add(1)
++ l.mu.Unlock()
++ defer l.accepting.Done()
++ conn, err := l.Listener.Accept()
++ if err != nil { return nil, err }
++ c := &arkClashConn{Conn: conn, owner: l}
++ l.mu.Lock()
++ if l.closing {
++  l.mu.Unlock()
++  _ = c.Close()
++  return nil, net.ErrClosed
++ }
++ l.conns[c] = struct{}{}
++ l.mu.Unlock()
++ return c, nil
++}
++
++func (l *arkClashListener) Close() error {
++ l.closeOnce.Do(func() {
++  l.mu.Lock()
++  l.closing = true
++  l.mu.Unlock()
++  err := l.Listener.Close()
++  if errors.Is(err, net.ErrClosed) { err = nil }
++  // 关闭 listener 后等待在途 Accept，避免迟到连接逃过本次清理。
++  if err == nil { l.accepting.Wait() }
++  l.mu.Lock()
++  conns := make([]*arkClashConn, 0, len(l.conns))
++  for c := range l.conns { conns = append(conns, c) }
++  l.mu.Unlock()
++  for _, c := range conns { _ = c.Close() }
++  l.mu.Lock()
++  l.closeErr = errors.Join(append(l.errs, err)...)
++  l.mu.Unlock()
++ })
++ return l.closeErr
++}
++
++var arkClashController struct {
++ sync.Mutex
++ server *http.Server
++ listener *arkClashListener
++ done chan struct{}
++ err error
++}
++
++func arkClashCloseServer() error {
++ if arkClashController.err != nil { return arkClashController.err }
++ if arkClashController.server == nil { return nil }
++ err := arkClashController.server.Close()
++ closeErr := arkClashController.listener.Close()
++ if closeErr == nil { <-arkClashController.done }
++ arkClashController.err = errors.Join(err, closeErr)
++ if arkClashController.err != nil { return arkClashController.err }
++ arkClashController.server = nil
++ arkClashController.listener = nil
++ arkClashController.done = nil
++ return nil
++}
++
++func ArkClashCloseServer() error {
++ arkClashController.Lock()
++ defer arkClashController.Unlock()
++ return arkClashCloseServer()
++}
++
++func ArkClashReCreateServer(cfg *Config) error {
++ arkClashController.Lock()
++ defer arkClashController.Unlock()
++ if err := arkClashCloseServer(); err != nil { return err }
++ if cfg == nil || cfg.Addr == "" { return nil }
++ if cfg.TLSAddr != "" || cfg.UnixAddr != "" || cfg.PipeAddr != "" { return errors.New("ArkClash controller requires HTTP only") }
++ lc := inbound.NewListenConfig()
++ lc.SetRouteMark(cfg.RoutingMark)
++ l, err := lc.Listen(context.Background(), "tcp", cfg.Addr)
++ if err != nil { return err }
++ owned := &arkClashListener{Listener: l, conns: map[*arkClashConn]struct{}{}}
++ s := &http.Server{Handler: router(cfg.IsDebug, cfg.Secret, cfg.DohServer, cfg.Cors)}
++ done := make(chan struct{})
++ arkClashController.server, arkClashController.listener, arkClashController.done = s, owned, done
++ go func() { defer close(done); _ = s.Serve(owned) }()
++ return nil
++}
+--- a/dns/server.go
++++ b/dns/server.go
+@@ -3,6 +3,7 @@
+ import (
+ 	"context"
+ 	"net"
++ "sync"
+ 
+ 	"github.com/metacubex/mihomo/common/sockopt"
+ 	"github.com/metacubex/mihomo/component/resolver"
+@@ -13,14 +14,18 @@
+ )
+ 
+ var (
+-	address string
++	serverMu sync.Mutex
++ address string
+ 	server  = &Server{}
+ 
+ 	dnsDefaultTTL uint32 = 600
+ )
+ 
+ type Server struct {
+-	service   resolver.Service
++	serviceMu sync.RWMutex
++ service   resolver.Service
++ tcpDone chan struct{}
++ udpDone chan struct{}
+ 	tcpServer *D.Server
+ 	udpServer *D.Server
+ }
+@@ -32,7 +37,10 @@
+ 
+ // ServeDNS implement D.Handler ServeDNS
+ func (s serverHandler) ServeDNS(w D.ResponseWriter, r *D.Msg) {
+-	msg, err := s.service.ServeMsg(context.Background(), r)
++	s.serviceMu.RLock()
++ service := s.service
++ s.serviceMu.RUnlock()
++ msg, err := service.ServeMsg(context.Background(), r)
+ 	if err != nil {
+ 		m := new(D.Msg)
+ 		m.SetRcode(r, D.RcodeServerFailure)
+@@ -58,73 +66,55 @@
+ }
+ 
+ func (s *Server) SetService(service resolver.Service) {
+-	s.service = service
++	s.serviceMu.Lock()
++ s.service = service
++ s.serviceMu.Unlock()
+ }
+ 
+ func ReCreateServer(addr string, lc C.InboundListenConfig, service resolver.Service) {
+-	if addr == address && service != nil {
+-		server.SetService(service)
+-		return
+-	}
++ serverMu.Lock()
++ defer serverMu.Unlock()
++ if arkClashDNSError != nil { log.Errorln("DNS cleanup failed: %s", arkClashDNSError); return }
++ if addr == address && service != nil && server.tcpServer != nil && server.udpServer != nil {
++  server.SetService(service)
++  return
++ }
++ if err := arkClashCloseServer(); err != nil { log.Errorln("DNS cleanup failed: %s", err); return }
++ server = &Server{service: service}
++ address = ""
++ if addr == "" || lc == nil || service == nil { return }
++ _, port, err := net.SplitHostPort(addr)
++ if port == "0" || port == "" || err != nil { return }
++ address = addr
++ p, err := lc.ListenPacket(context.Background(), "udp", addr)
++ if err != nil {
++  log.Errorln("Start DNS server(UDP) error: %s", err)
++ } else {
++  if err := sockopt.UDPReuseaddr(p); err != nil { log.Warnln("Failed to Reuse UDP Address: %s", err) }
++  ready, done := make(chan struct{}), make(chan struct{})
++  p = &arkClashPacketConn{PacketConn: p}
++  ds := &D.Server{Addr: addr, PacketConn: p, Handler: server.UDPHandler(), NotifyStartedFunc: func() { close(ready) }}
++  server.udpServer, server.udpDone = ds, done
++  go func() { defer close(done); _ = ds.ActivateAndServe() }()
++  select { case <-ready: case <-done: if err := p.Close(); err != nil { arkClashDNSError = err } else { server.udpServer = nil } }
++ }
++ l, err := lc.Listen(context.Background(), "tcp", addr)
++ if err != nil {
++  log.Errorln("Start DNS server(TCP) error: %s", err)
++ } else {
++  ready, done := make(chan struct{}), make(chan struct{})
++  l = &arkClashListener{Listener: l}
++  ds := &D.Server{Addr: addr, Listener: l, Handler: server.TCPHandler(), NotifyStartedFunc: func() { close(ready) }}
++  server.tcpServer, server.tcpDone = ds, done
++  go func() { defer close(done); _ = ds.ActivateAndServe() }()
++  select { case <-ready: case <-done: if err := l.Close(); err != nil { arkClashDNSError = err } else { server.tcpServer = nil } }
++ }
++}
+ 
+-	if server.tcpServer != nil {
+-		_ = server.tcpServer.Shutdown()
+-		server.tcpServer = nil
+-	}
+-
+-	if server.udpServer != nil {
+-		_ = server.udpServer.Shutdown()
+-		server.udpServer = nil
+-	}
+-
+-	server.service = nil
+-	address = ""
+-
+-	if addr == "" || lc == nil || service == nil {
+-		return
+-	}
+-
+-	var err error
+-	defer func() {
+-		if err != nil {
+-			log.Errorln("Start DNS server error: %s", err.Error())
+-		}
+-	}()
+-
+-	_, port, err := net.SplitHostPort(addr)
+-	if port == "0" || port == "" || err != nil {
+-		return
+-	}
+-
+-	address = addr
+-	server = &Server{service: service}
+-
+-	go func() {
+-		p, err := lc.ListenPacket(context.Background(), "udp", addr)
+-		if err != nil {
+-			log.Errorln("Start DNS server(UDP) error: %s", err.Error())
+-			return
+-		}
+-
+-		if err := sockopt.UDPReuseaddr(p); err != nil {
+-			log.Warnln("Failed to Reuse UDP Address: %s", err)
+-		}
+-
+-		log.Infoln("DNS server(UDP) listening at: %s", p.LocalAddr().String())
+-		server.udpServer = &D.Server{Addr: addr, PacketConn: p, Handler: server.UDPHandler()}
+-		_ = server.udpServer.ActivateAndServe()
+-	}()
+-
+-	go func() {
+-		l, err := lc.Listen(context.Background(), "tcp", addr)
+-		if err != nil {
+-			log.Errorln("Start DNS server(TCP) error: %s", err.Error())
+-			return
+-		}
+-
+-		log.Infoln("DNS server(TCP) listening at: %s", l.Addr().String())
+-		server.tcpServer = &D.Server{Addr: addr, Listener: l, Handler: server.TCPHandler()}
+-		_ = server.tcpServer.ActivateAndServe()
+-	}()
+-
++func ArkClashServerSnapshot() (tcp string, udp string) {
++ serverMu.Lock()
++ defer serverMu.Unlock()
++ if server.tcpServer != nil { tcp = server.tcpServer.Listener.Addr().String() }
++ if server.udpServer != nil { udp = server.udpServer.PacketConn.LocalAddr().String() }
++ return
+ }
+--- /dev/null
++++ b/dns/arkclash.go
+@@ -0,0 +1,53 @@
++package dns
++
++import (
++ "errors"
++ "net"
++ "sync"
++)
++
++// miekg/dns 会忽略底层 Close 错误并重复关闭 listener；包装器记录真实结果且只释放一次。
++type arkClashListener struct {
++ net.Listener
++ once sync.Once
++ err error
++}
++func (l *arkClashListener) Close() error {
++ l.once.Do(func() { l.err = l.Listener.Close() })
++ return l.err
++}
++type arkClashPacketConn struct {
++ net.PacketConn
++ once sync.Once
++ err error
++}
++func (p *arkClashPacketConn) Close() error {
++ p.once.Do(func() { p.err = p.PacketConn.Close() })
++ return p.err
++}
++
++var arkClashDNSError error
++
++func arkClashCloseServer() error {
++ if arkClashDNSError != nil { return arkClashDNSError }
++ var errs []error
++ if server.tcpServer != nil {
++  err := server.tcpServer.Listener.(*arkClashListener).Close()
++  if err == nil { err = server.tcpServer.Shutdown(); if err == nil { <-server.tcpDone } }
++  if err != nil { errs = append(errs, err) } else { server.tcpServer = nil }
++ }
++ if server.udpServer != nil {
++  err := server.udpServer.PacketConn.(*arkClashPacketConn).Close()
++  if err == nil { err = server.udpServer.Shutdown(); if err == nil { <-server.udpDone } }
++  if err != nil { errs = append(errs, err) } else { server.udpServer = nil }
++ }
++ arkClashDNSError = errors.Join(errs...)
++ if arkClashDNSError == nil { address = "" }
++ return arkClashDNSError
++}
++
++func ArkClashCloseServer() error {
++ serverMu.Lock()
++ defer serverMu.Unlock()
++ return arkClashCloseServer()
++}

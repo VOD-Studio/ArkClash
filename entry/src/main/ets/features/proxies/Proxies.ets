@@ -71,10 +71,11 @@ export class ProxyBrowser {
     const previous = this.input;
     const changedProfile = previous?.profile !== input.profile;
     const changedContext = changedProfile || previous?.online !== input.online ||
-      previous?.offlineWritable !== input.offlineWritable || previous?.mode !== input.mode ||
-      previous?.bootId !== input.bootId || previous?.summary?.revision !== input.summary?.revision;
-    const refresh = changedContext || previous?.summary !== input.summary || previous?.ready !== input.ready ||
-      previous?.visible !== input.visible;
+      previous?.offlineWritable !== input.offlineWritable ||
+      previous?.bootId !== input.bootId || previous?.configRevision !== input.configRevision ||
+      (!input.online && previous?.summary?.revision !== input.summary?.revision);
+    const refresh = changedContext || previous?.mode !== input.mode ||
+      previous?.summary !== input.summary || previous?.ready !== input.ready || previous?.visible !== input.visible;
     this.input = input;
     if (input.visible && previous?.visible !== true) {
       this.preferencesLoaded = false;
@@ -178,7 +179,8 @@ export class ProxyBrowser {
       if (sequence !== this.refreshSequence || input.profile !== this.input?.profile || mutation !== this.mutation) {
         return;
       }
-      if (this.snapshot?.revision !== snapshot.revision || this.snapshot?.online !== snapshot.online ||
+      if (this.snapshot?.revision !== snapshot.revision || this.snapshot?.bootId !== snapshot.bootId ||
+        this.snapshot?.configRevision !== snapshot.configRevision || this.snapshot?.online !== snapshot.online ||
         this.snapshot?.offlineWritable !== snapshot.offlineWritable) {
         this.tests.cancel(true);
         this.contextEpoch++;
@@ -255,7 +257,7 @@ export class ProxyBrowser {
     this.beginAction();
     const snapshot = this.snapshot;
     const input = this.input;
-    if (snapshot === undefined || input === undefined || !input.visible || connection.busy || this.loadError ||
+    if (snapshot === undefined || input === undefined || !input.visible || connection.coreStarting || this.loadError ||
       snapshot.online !== input.online || snapshot.offlineWritable !== input.offlineWritable ||
       (!input.online && !input.offlineWritable) || this.snapshotEpoch !== this.contextEpoch) {
       this.notice = 'notReady';
@@ -264,7 +266,7 @@ export class ProxyBrowser {
     const epoch = this.contextEpoch;
     const stillCurrent = (): boolean => epoch === this.contextEpoch && this.input?.profile === snapshot.profile &&
       this.input?.online === snapshot.online && this.input?.offlineWritable === snapshot.offlineWritable &&
-      (snapshot.online ? connection.hostState === 'running' : connection.offlineWritable);
+      (snapshot.online ? connection.coreReady : connection.offlineWritable);
     if (clearPin) {
       this.selection.clearPin(input.context.filesDir, snapshot, group, this.appearance.closeConnections, stillCurrent);
     } else {
@@ -274,8 +276,8 @@ export class ProxyBrowser {
 
   test(group: string, node: string = ''): void {
     this.beginAction();
-    if (this.input?.visible === true && this.snapshot?.online === true && connection.hostState === 'running' &&
-      !connection.busy && !this.loadError && this.snapshotEpoch === this.contextEpoch) {
+    if (this.input?.visible === true && this.snapshot?.online === true && connection.coreReady &&
+      !connection.coreStarting && !this.loadError && this.snapshotEpoch === this.contextEpoch) {
       this.tests.start(this.input.context.filesDir, this.snapshot, group, this.query, node);
     } else {
       this.notice = this.online ? 'notReady' : 'offline';
@@ -305,6 +307,30 @@ export class ProxyBrowser {
   changeStyle(style: ProxyStyle): void {
     if (this.input !== undefined) {
       this.appearance.change(this.input.context, style);
+    }
+  }
+
+  async startCore(): Promise<void> {
+    const input = this.input;
+    if (input === undefined || !input.visible || connection.coreStarting) {
+      return;
+    }
+    this.beginAction();
+    try {
+      await connection.ensureReady(input.context, false);
+      if (this.input !== undefined && this.input.visible) {
+        this.configure({
+          context: this.input.context, profile: this.input.profile, summary: this.input.summary,
+          ready: this.input.ready, visible: true, online: connection.coreReady,
+          offlineWritable: connection.offlineWritable, bootId: connection.bootId,
+          configRevision: connection.configRevision,
+          mode: connection.mode === '' ? 'rule' : connection.mode,
+          picker: this.input.picker, initialGroup: this.input.initialGroup
+        });
+        await this.refresh();
+      }
+    } catch (e) {
+      this.notice = 'notReady';
     }
   }
 

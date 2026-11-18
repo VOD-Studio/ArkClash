@@ -12,21 +12,25 @@ const race = process.env.CORE_RACE === '1';
 const goEnv = { ...process.env, CGO_ENABLED: race ? '1' : '0', GOTOOLCHAIN: `go${goVersion}` };
 const sandbox = await mkdtemp(join(tmpdir(), 'arkclash-core-host-'));
 const executable = join(sandbox, 'core.test');
-const observationExecutables = ['dns', 'tunnel/statistic'].map((pkg, index) => ({
-  pkg, executable: join(sandbox, `observation-${index}.test`)
+const linuxFdEnabled = process.platform === 'linux' || process.env.CORE_LINUX_FD === '1';
+const linuxFdExecutable = join(sandbox, 'tun-fd.test');
+const mihomoExecutables = ['dns', 'tunnel/statistic', 'adapter/inbound', 'listener/auth', 'log'].map((pkg, index) => ({
+  pkg, executable: join(sandbox, `mihomo-${index}.test`)
 }));
 after(() => rm(sandbox, { recursive: true, force: true }));
 
 // 冷缓存的工具链、依赖下载和编译不占用用例执行时限。
 before(async () => {
-  for (const file of ['go.mod', 'go.sum', 'runtime.go', 'selection.go', 'delay.go', 'probe.go', 'probe_body.go', 'proxies.go',
+  for (const file of ['go.mod', 'go.sum', 'lifecycle.go', 'inbound.go', 'runtime.go', 'selection.go', 'delay.go', 'probe.go', 'probe_body.go', 'proxies.go',
     'geo_settings.go', 'geo.go', 'geo_download.go', 'geo_events.go', 'diagnostics.go',
     'diagnostics_connections.go', 'diagnostics_dns.go', 'diagnostics_stream.go']) {
     await copyFile(join(root, 'core', file), join(sandbox, file));
   }
   for (const file of ['core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go',
     'geo-reader-host_test.go', 'geo-host_test.go', 'geo-scheduler-host_test.go', 'diagnostics-host_test.go',
-    'diagnostics-stream-host_test.go', 'diagnostics-lifecycle-host_test.go', 'diagnostics-control-host_test.go']) {
+    'diagnostics-stream-host_test.go', 'diagnostics-lifecycle-host_test.go', 'diagnostics-control-host_test.go',
+    'lifecycle-host_test.go', 'runtime-lifecycle-host_test.go', 'disconnected-delay-host_test.go', 'inbound-host_test.go',
+    'controller-lifecycle-host_test.go', 'forwarding-lifecycle-host_test.go']) {
     await copyFile(new URL(`./${file}`, import.meta.url), join(sandbox, file));
   }
   await cp(join(root, 'scripts/testdata/geo'), join(sandbox, 'testdata/geo'), { recursive: true });
@@ -37,7 +41,8 @@ before(async () => {
   for (const [source, destination] of [
     ['observation-dns-host_test.go', 'dns/arkclash_observation_test.go'],
     ['observation-clear-host_test.go', 'dns/arkclash_observation_clear_test.go'],
-    ['observation-statistic-host_test.go', 'tunnel/statistic/arkclash_observation_test.go']
+    ['observation-statistic-host_test.go', 'tunnel/statistic/arkclash_observation_test.go'],
+    ['tun-fd-linux-host_test.go', 'listener/sing_tun/arkclash_fd_linux_test.go']
   ]) {
     await copyFile(join(root, 'scripts', source), join(sandbox, 'mihomo', destination));
   }
@@ -67,30 +72,22 @@ before(async () => {
   await writeFile(join(sandbox, 'frames.go'), 'package main\nimport (\n' +
     '"bufio"\n"crypto/sha1"\n"encoding/base64"\n"encoding/binary"\n"errors"\n"io"\n"net"\n' +
     '"github.com/metacubex/http"\n"github.com/metacubex/chi/render"\n)\n' + frameFunctions.join('\n\n') + '\n');
-  const nativeSource = await readFile(join(root, 'core/lib.go'), 'utf8');
-  const lifecycle = ['checkProfilePath', 'runningProfile', 'parseConfig', 'reload'].map(name => {
-    const declaration = nativeSource.match(new RegExp(`^func ${name}\\([^\\n]*\\) [^\\n]+ \\{[\\s\\S]*?^\\}`, 'm'))?.[0];
-    assert.ok(declaration, `未找到产品生命周期函数 ${name}`);
-    return declaration;
-  }).join('\n\n');
-  const options = nativeSource.match(/^type startOptions struct \{[\s\S]*?^\}/m)?.[0];
-  const overrides = nativeSource.match(/^func applyOverrides\([^\n]+\) \{[\s\S]*?^\}/m)?.[0];
-  const reloadedEvent = nativeSource.match(/^type reloadedEvent struct \{[\s\S]*?^\}/m)?.[0];
-  assert.ok(reloadedEvent, '未找到产品热切换事件类型');
-  assert.ok(options && overrides, '未找到产品配置覆盖接缝');
-  await writeFile(join(sandbox, 'overrides.go'), `package main\nimport (\n"strings"\n"fmt"\n"path/filepath"\n"os"\n"errors"\n` +
-    `"github.com/metacubex/mihomo/component/process"\n"github.com/metacubex/mihomo/config"\n` +
-    `"github.com/metacubex/mihomo/constant"\n"github.com/metacubex/mihomo/tunnel"\n` +
-    `"github.com/metacubex/mihomo/hub/executor"\n"github.com/metacubex/mihomo/log"\n` +
-    `)\n${options}\n${overrides}\n${lifecycle}\n${reloadedEvent}\n`);
   const build = spawnSync('go', ['test', '-mod=readonly', ...(race ? ['-race'] : []), '-c', '-o', executable, '.'], {
     cwd: sandbox, encoding: 'utf8', timeout: 600000, env: goEnv
   });
   assert.equal(build.status, 0, `${build.error ?? ''}\n${build.stdout}\n${build.stderr}`);
-  for (const target of observationExecutables) {
+  for (const target of mihomoExecutables) {
     const compiled = spawnSync('go', ['test', '-mod=readonly', ...(race ? ['-race'] : []),
       '-c', '-o', target.executable, `github.com/metacubex/mihomo/${target.pkg}`], {
       cwd: sandbox, encoding: 'utf8', timeout: 600000, env: goEnv
+    });
+    assert.equal(compiled.status, 0, `${compiled.error ?? ''}\n${compiled.stdout}\n${compiled.stderr}`);
+  }
+  if (linuxFdEnabled) {
+    const compiled = spawnSync('go', ['test', '-mod=readonly', '-c', '-o', linuxFdExecutable,
+      'github.com/metacubex/mihomo/listener/sing_tun'], {
+      cwd: sandbox, encoding: 'utf8', timeout: 600000,
+      env: { ...goEnv, CGO_ENABLED: '0', GOOS: 'linux', GOARCH: process.arch === 'arm64' ? 'arm64' : 'amd64' }
     });
     assert.equal(compiled.status, 0, `${compiled.error ?? ''}\n${compiled.stdout}\n${compiled.stderr}`);
   }
@@ -106,13 +103,24 @@ test('核心选择持久化、回滚、规则探测与实际请求取消', { tim
   console.log(result.stdout.trim());
 });
 
-test('mihomo 可见诊断观察与完整 DNS 缓存清理', { timeout: 120000 }, () => {
-  for (const target of observationExecutables) {
-    const result = spawnSync(target.executable, ['-test.run=^TestArkClashObservation', '-test.count=1',
+test('mihomo 诊断、DNS 缓存与监听所有权回归', { timeout: 300000 }, () => {
+  for (const target of mihomoExecutables) {
+    const result = spawnSync(target.executable, ['-test.run=^TestArkClash', '-test.count=1',
       '-test.timeout=45s', '-test.v'], {
       cwd: sandbox, encoding: 'utf8', timeout: 55000, env: goEnv
     });
     assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
     console.log(result.stdout.trim());
   }
+});
+
+test('Linux TUN 原始 fd 与副本所有权', { skip: !linuxFdEnabled, timeout: 120000 }, () => {
+  const args = ['-test.run=^TestArkClash', '-test.count=1', '-test.timeout=45s', '-test.v'];
+  const result = process.platform === 'linux' ?
+    spawnSync(linuxFdExecutable, args, { encoding: 'utf8', timeout: 55000 }) :
+    spawnSync('docker', ['run', '--rm', '--network', 'none', '--mount',
+      `type=bind,source=${sandbox},target=/test,readonly`, process.env.CORE_LINUX_IMAGE ?? 'alpine:latest',
+      '/test/tun-fd.test', ...args], { encoding: 'utf8', timeout: 110000 });
+  assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
+  console.log(result.stdout.trim());
 });

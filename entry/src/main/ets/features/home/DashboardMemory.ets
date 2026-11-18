@@ -26,7 +26,7 @@ export struct DashboardMemory {
     this.stop();
   }
 
-  @Monitor('visible', 'conn.state')
+  @Monitor('visible', 'conn.state', 'conn.coreReady')
   sync(): void {
     if (!this.visible) {
       this.details = false;
@@ -34,7 +34,7 @@ export struct DashboardMemory {
       return;
     }
     this.clock = Date.now();
-    if (this.conn.connected) {
+    if (this.conn.coreReady) {
       this.core.start(this.context.filesDir, 'dashboard-memory');
     } else {
       this.core.stop('dashboard-memory');
@@ -59,17 +59,17 @@ export struct DashboardMemory {
 
   private stale(): boolean {
     return this.ui.failed || this.core.failed || (this.ui.sampledAt > 0 && this.clock - this.ui.sampledAt > 10000) ||
-      (this.conn.connected && this.core.sampledAt > 0 && this.clock - this.core.sampledAt > 5000);
+      (this.conn.coreReady && this.core.sampledAt > 0 && this.clock - this.core.sampledAt > 5000);
   }
 
 
   private totalRss(): number {
-    return this.ui.rssBytes + (this.conn.connected && this.core.received ? this.core.coreBytes : 0);
+    return this.ui.rssBytes + (this.conn.coreReady && this.core.received ? this.core.coreBytes : 0);
   }
 
   private rssReady(): boolean {
-    return this.ui.sampledAt > 0 && (this.conn.connected ? this.core.received :
-      this.conn.forward === 'stopped' && this.conn.intent === 'stopped');
+    return this.ui.sampledAt > 0 && (this.conn.coreReady ? this.core.received :
+      this.conn.hostState === 'stopped');
   }
 
   @Computed
@@ -167,7 +167,7 @@ export struct DashboardMemory {
         Row({ space: 2 }) {
           if (this.rssReady() && this.totalRss() > 0) {
             Row().height(8).layoutWeight(Math.max(1, this.ui.rssBytes)).backgroundColor($r('app.color.brand'))
-            if (this.conn.connected && this.core.coreBytes > 0) {
+            if (this.conn.coreReady && this.core.coreBytes > 0) {
               Row().height(8).layoutWeight(this.core.coreBytes).backgroundColor($r('app.color.dash_series_secondary'))
             }
           }
@@ -191,7 +191,7 @@ export struct DashboardMemory {
           Row({ space: 6 }) {
             Circle({ width: 8, height: 8 }).fill($r('app.color.dash_series_secondary')).strokeWidth(0)
             Text($r('app.string.dash_memory_core')).fontSize(12).fontColor($r('sys.color.font_secondary'))
-            Text(this.conn.connected && this.core.received ? dashboardTraffic(this.core.coreBytes) : '—')
+            Text(this.conn.coreReady && this.core.received ? dashboardTraffic(this.core.coreBytes) : '—')
               .fontSize(13)
               .fontWeight(600)
               .fontFeature('"tnum" on')

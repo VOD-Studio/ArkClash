@@ -81,7 +81,7 @@ export struct DashboardStatus {
     if (this.conn.hostState === 'unknown' && !this.conn.busy) {
       return $r('app.string.dash_runtime_unknown');
     }
-    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached) &&
+    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated) &&
       this.conn.state !== ConnectionState.Disconnecting) {
       return $r('app.string.dash_cleanup_required');
     }
@@ -112,12 +112,13 @@ export struct DashboardStatus {
 
   private shouldStop(): boolean {
     return homeShouldStopRuntime(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached,
-      this.conn.hostState);
+      this.conn.vpnCreated, this.conn.hostState);
   }
 
   private appearsStarted(): boolean {
     return this.conn.state !== ConnectionState.Disconnecting &&
-      homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached);
+      homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached,
+        this.conn.vpnCreated);
   }
 
   private showRuntimeError(message: ResourceStr): void {
@@ -307,7 +308,7 @@ export struct DashboardStatus {
             interactive: this.interactive && (this.profileReady || this.shouldStop()) &&
               this.conn.state !== ConnectionState.Disconnecting,
             label: homeRunActionLabel(this.conn.intent, this.conn.forward,
-              this.conn.listenersOpen, this.conn.tunAttached, this.conn.hostState),
+              this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState),
             onToggle: (): void => { this.toggleRun(); }
           })
         }

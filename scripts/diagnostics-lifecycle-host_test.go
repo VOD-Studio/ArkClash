@@ -24,7 +24,7 @@ func TestDiagnosticsReloadKeepsSessionOnParseFailure(t *testing.T) {
 	if err := os.WriteFile(path, []byte("rules: [\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := reload(path, "next", "fixture"); err == nil {
+	if err := reload(path, "next", new("fixture")); err == nil {
 		t.Fatal("invalid config accepted")
 	}
 	select {
@@ -38,7 +38,7 @@ func TestDiagnosticsReloadKeepsSessionOnParseFailure(t *testing.T) {
 	if err := os.WriteFile(path, []byte("mode: direct\nlog-level: silent\nrules: ['MATCH,DIRECT']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := reload(path, "next", "fixture"); err != nil {
+	if err := reload(path, "next", new("fixture")); err != nil {
 		t.Fatal(err)
 	}
 	select {

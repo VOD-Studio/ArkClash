@@ -1,0 +1,451 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+
+	"github.com/metacubex/mihomo/adapter/inbound"
+	"github.com/metacubex/mihomo/component/process"
+	"github.com/metacubex/mihomo/component/resolver"
+	"github.com/metacubex/mihomo/config"
+	"github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/hub/executor"
+	"github.com/metacubex/mihomo/hub/route"
+	"github.com/metacubex/mihomo/listener"
+	"github.com/metacubex/mihomo/log"
+	"github.com/metacubex/mihomo/ntp/ntp"
+	"github.com/metacubex/mihomo/tunnel"
+)
+
+// VPN 进程传入启动设置；JSON 避免新增设置改变 C ABI，TUN 由独立操作附加。
+type startOptions struct {
+	HomeDir    string `json:"homeDir"`
+	ConfigPath string `json:"configPath"`
+	Controller string `json:"controller"`
+	Secret     string `json:"secret"`
+	// 以下由 VPN 进程从 runtime.json 和配置列表（entry/src/main/ets/shared/）读出后传入。
+	Profile  string `json:"profile"`  // 正在运行的配置的编号
+	Mode     string `json:"mode"`     // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
+	AllowLan *bool  `json:"allowLan"` // nil = 用配置里的值
+	// Geo 设置只由原生启动流程从磁盘读取，不扩展 C ABI 或 ArkTS 参数。
+	Geo geoSettings `json:"-"`
+}
+
+var (
+	mu        sync.Mutex
+	lifecycle sync.Mutex
+	running   bool
+	// 本次启动的参数，热切换和 PATCH /arkclash/configs 会更新其中的配置路径、编号、模式和局域网代理。
+	current startOptions
+	// 正在运行的配置编号，nil = 没在运行。ArkTS 主线程会同步读它，不能等 mu（热切换可能要几秒）。
+	runningID atomic.Pointer[string]
+)
+
+func start(opts startOptions) error {
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
+	mu.Lock()
+	var waitDiagnostics func()
+	defer func() {
+		mu.Unlock()
+		if waitDiagnostics != nil {
+			waitDiagnostics()
+		}
+	}()
+
+	if running {
+		return errors.New("core is already running")
+	}
+	if tunListener != nil || runtimeVpnCreated {
+		return errors.New("previous VPN resources are not released")
+	}
+	if cleanupFailure != nil {
+		return cleanupFailure
+	}
+	inbound.EnableArkClashListenerOwnership()
+	if err := tunnel.ArkClashSuspendForwarding(); err != nil {
+		cleanupFailure = errors.Join(cleanupFailure, err)
+		return cleanupFailure
+	}
+	settings, err := readGeoSettings(opts.HomeDir)
+	if err != nil {
+		return err
+	}
+	opts.Geo = settings
+
+	constant.SetHomeDir(opts.HomeDir)
+	constant.SetConfig(opts.ConfigPath)
+
+	var nextInbound inboundSettings
+	cfg, err := parseConfigWithInbound(opts.ConfigPath, opts, &nextInbound)
+	if err != nil {
+		return err
+	}
+	desiredInbound = nextInbound
+	if err := route.ArkClashReCreateServer(&route.Config{
+		Addr: cfg.Controller.ExternalController, Secret: cfg.Controller.Secret,
+		RoutingMark: cfg.Controller.ExternalControllerRoutingMark,
+		DohServer:   cfg.Controller.ExternalDohServer, IsDebug: cfg.General.LogLevel == log.DEBUG,
+		Cors: route.Cors{AllowOrigins: cfg.Controller.Cors.AllowOrigins,
+			AllowPrivateNetwork: cfg.Controller.Cors.AllowPrivateNetwork},
+	}); err != nil {
+		return err
+	}
+	executor.ApplyConfig(withoutBusinessInbounds(cfg), true)
+
+	running = true
+	current = opts
+	runningID.Store(&opts.Profile)
+	waitDiagnostics = beginRuntime()
+	manager, err := newGeoManager(opts.HomeDir, runtimeBootID, opts.Geo)
+	if err != nil {
+		closeCoreListeners()
+		executor.Shutdown()
+		cleanupFailure = errors.Join(cleanupFailure, route.ArkClashCloseServer())
+		tunnel.OnSuspend()
+		tunnel.UpdateProxies(nil, nil)
+		tunnel.UpdateRules(nil, nil, nil)
+		running = false
+		current = startOptions{}
+		runningID.Store(nil)
+		publishRuntime()
+		return errors.Join(err, cleanupFailure)
+	}
+	activeGeo.Store(manager)
+	resetProxyIdentities()
+	watchRuntimeRoutes(cfg)
+	publishRuntime()
+	log.Infoln("[ArkClash] core started")
+	return nil
+}
+
+func parseConfig(path string, opts startOptions) (*config.Config, error) {
+	return parseConfigWithInbound(path, opts, nil)
+}
+
+func parseConfigWithInbound(path string, opts startOptions, settings *inboundSettings) (*config.Config, error) {
+	var rawCfg *config.RawConfig
+	if path == "" {
+		if opts.Profile != "" {
+			return nil, errors.New("selected profile requires a configuration path")
+		}
+		rawCfg = config.DefaultRawConfig()
+	} else {
+		buf, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		if len(buf) == 0 {
+			return nil, errors.New("selected configuration is empty")
+		}
+		rawCfg, err = config.UnmarshalRawConfig(buf)
+		if err != nil {
+			return nil, err
+		}
+	}
+	applyOverrides(rawCfg, opts)
+	// 自定义 TUN 不经过平台 fd 所有权，不能让订阅绕过唯一的系统 VPN。
+	for _, mapping := range rawCfg.Listeners {
+		if kind, _ := mapping["type"].(string); kind == "tun" {
+			return nil, errors.New("custom TUN listeners are not supported")
+		}
+	}
+	// 配置解析可能初始化缺失的 Geo，来源必须先固定为页面设置。
+	setGeoURLs(opts.Geo)
+	mappings := rawCfg.Listeners
+	cfg, err := config.ParseRawConfig(rawCfg)
+	if err != nil {
+		return nil, err
+	}
+	if opts.Profile != "" {
+		if err := restoreSelections(cfg, opts); err != nil {
+			return nil, err
+		}
+	}
+	if settings != nil {
+		*settings = captureInbound(cfg, mappings)
+	}
+	return cfg, nil
+}
+
+// reload 是热切换：解析 path，成功后换用新配置，profile 记为正在运行的配置。
+// 只调 executor.ApplyConfig，不走 hub.ApplyConfig：后者的 applyRoute 每次都会关掉 controller
+// 再重开，掐断发起热切换的请求和界面的 WebSocket（ADR-0010）。controller 的地址和 secret
+// 由 applyOverrides 固定，不需要重建。改 start 的解析和应用流程时，这里要一起看。
+func reload(path, profile string, expectedProfile *string) error {
+	mu.Lock()
+	var waitDiagnostics func()
+	defer func() {
+		mu.Unlock()
+		if waitDiagnostics != nil {
+			waitDiagnostics()
+		}
+	}()
+
+	if !running {
+		return errors.New("core is not running")
+	}
+	if expectedProfile != nil && current.Profile != *expectedProfile {
+		return errors.New("profile_changed")
+	}
+	if profile == "" {
+		if path != "" || tunListener != nil || runtimeVpnCreated || businessListenersOpen() || cleanupFailure != nil {
+			return errors.New("empty profile requires a fully detached core")
+		}
+	} else if err := checkProfilePath(path); err != nil {
+		return err
+	}
+	next := current
+	next.Profile = profile
+	next.ConfigPath = path
+	var nextInbound inboundSettings
+	cfg, err := parseConfigWithInbound(path, next, &nextInbound)
+	if err != nil {
+		return err
+	}
+	waitDiagnostics = stopDiagnosticsLocked()
+	cancelDelayTests()
+	constant.SetConfig(path)
+	attached := tunListener != nil
+	// 始终先屏蔽，避免 executor 接管平台 TUN，也避免失败时暴露部分入口。
+	if err := closeBusinessInbounds(); err != nil {
+		cleanupFailure = errors.Join(cleanupFailure, err, stopTun())
+		resolver.ResetConnection()
+		publishRuntime()
+		return cleanupFailure
+	}
+	executor.ApplyConfig(withoutBusinessInbounds(cfg), true)
+	desiredInbound = nextInbound
+	current.ConfigPath = path
+	current.Profile = profile
+	runningID.Store(&profile)
+	runtimeConfigRevision++
+	resetProxyIdentities()
+	watchRuntimeRoutes(cfg)
+	log.Infoln("[ArkClash] reloaded profile %s", profile)
+	var inboundErr error
+	if attached {
+		inboundErr = restoreBusinessInbounds()
+		if inboundErr != nil {
+			cleanupFailure = errors.Join(cleanupFailure, closeBusinessInbounds(), stopTun())
+		}
+	}
+	publishRuntime()
+	emit(reloadedEvent{Type: "reloaded", Profile: profile})
+	return errors.Join(inboundErr, cleanupFailure)
+}
+
+// 推给界面的「热切换完成」事件，格式和 entry/src/main/ets/client/ 里的解析一致。
+type reloadedEvent struct {
+	Type    string `json:"type"`
+	Profile string `json:"profile"`
+}
+
+// 热切换只接受配置目录下的文件，见 entry/src/main/ets/shared/profiles/Store.ets。
+func checkProfilePath(path string) error {
+	dir := filepath.Join(current.HomeDir, "profiles") + string(filepath.Separator)
+	if !strings.HasPrefix(filepath.Clean(path), dir) {
+		return fmt.Errorf("profile must be under %s", dir)
+	}
+	return nil
+}
+
+func runningProfile() (string, bool) {
+	p := runningID.Load()
+	if p == nil {
+		return "", false
+	}
+	return *p, true
+}
+
+// setRuntimeOptions 立即修改出站模式和局域网代理，并记下来供之后的热切换使用。
+func setRuntimeOptions(mode *string, allowLan *bool) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if !running {
+		return errors.New("core is not running")
+	}
+	if mode != nil {
+		m, ok := tunnel.ModeMapping[strings.ToLower(*mode)]
+		if !ok {
+			return fmt.Errorf("unknown mode %q", *mode)
+		}
+		tunnel.SetMode(m)
+		current.Mode = *mode
+	}
+	if allowLan != nil {
+		desiredInbound.inbound.AllowLan = *allowLan
+		listener.SetAllowLan(*allowLan)
+		v := *allowLan
+		current.AllowLan = &v
+	}
+	publishRuntime()
+	return nil
+}
+
+// applyOverrides forces the settings ArkClash owns, whatever the profile says.
+func applyOverrides(rawCfg *config.RawConfig, opts startOptions) {
+	// The TUN is created by VpnExtensionAbility and handed over as an fd, so the
+	// profile must not try to create its own.
+	rawCfg.Tun.Enable = false
+	rawCfg.Tun.AutoRoute = false
+	rawCfg.Tun.AutoRedirect = false
+	rawCfg.Tun.AutoDetectInterface = false
+	rawCfg.IPTables.Enable = false
+
+	// 节点选择只从每配置文件恢复，避免 mihomo 全局同名组缓存覆盖它。
+	rawCfg.Profile.StoreSelected = false
+	// 只有资源管理器可以调度更新，订阅不能覆盖来源或启动第二个更新器。
+	rawCfg.GeoXUrl = config.RawGeoXUrl{
+		Mmdb: opts.Geo.URLs.MMDB, ASN: opts.Geo.URLs.ASN,
+		GeoIp: opts.Geo.URLs.GeoIP, GeoSite: opts.Geo.URLs.GeoSite,
+	}
+	rawCfg.GeoAutoUpdate = false
+	rawCfg.GeoUpdateInterval = opts.Geo.IntervalHours
+
+	// The UI process drives the core over this controller only.
+	rawCfg.ExternalController = opts.Controller
+	rawCfg.Secret = opts.Secret
+	rawCfg.ExternalControllerTLS = ""
+	rawCfg.ExternalControllerUnix = ""
+	rawCfg.ExternalControllerPipe = ""
+	rawCfg.ExternalUI = ""
+
+	// Process lookup scans /proc for every connection and cannot map to apps on
+	// HarmonyOS anyway; it only costs battery.
+	rawCfg.FindProcessMode = process.FindProcessOff
+
+	// DNS from the TUN is hijacked into mihomo, so the resolver has to be on.
+	if !rawCfg.DNS.Enable {
+		rawCfg.DNS.Enable = true
+		rawCfg.DNS.EnhancedMode = constant.DNSFakeIP
+	}
+
+	// 用户在界面上选过的出站模式和局域网代理优先于配置，热切换后不会被新配置改回去（ADR-0010）。
+	if m, ok := tunnel.ModeMapping[strings.ToLower(opts.Mode)]; ok {
+		rawCfg.Mode = m
+	}
+	if opts.AllowLan != nil {
+		rawCfg.AllowLan = *opts.AllowLan
+	}
+}
+
+type attachIdentity struct {
+	BootID         string
+	Profile        string
+	ConfigRevision uint64
+}
+
+func attachTun(fd int, stack string, expected attachIdentity) error {
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
+
+	if !running {
+		return errors.New("core is not running")
+	}
+	if expected.BootID != runtimeBootID || expected.Profile != current.Profile ||
+		expected.ConfigRevision != runtimeConfigRevision {
+		return errors.New("stale_attach_identity")
+	}
+	if current.Profile == "" || current.ConfigPath == "" {
+		return errors.New("no profile is loaded")
+	}
+	if fd <= 0 {
+		return errors.New("invalid tun fd")
+	}
+	if tunListener != nil {
+		if cleanupFailure != nil {
+			return cleanupFailure
+		}
+		return nil
+	}
+	if cleanupFailure != nil {
+		return cleanupFailure
+	}
+	if err := startTun(fd, stack); err != nil {
+		// 平台构造器必须自行回滚未发布资源；已发布的 listener 仍由这里收尾。
+		var cleanupErr error
+		if tunListener != nil {
+			cleanupErr = stopTun()
+		}
+		cleanupFailure = errors.Join(cleanupFailure, cleanupErr)
+		publishRuntime()
+		return errors.Join(err, cleanupFailure)
+	}
+	if err := restoreBusinessInbounds(); err != nil {
+		cleanupFailure = errors.Join(cleanupFailure, closeBusinessInbounds(), stopTun())
+		publishRuntime()
+		return errors.Join(err, cleanupFailure)
+	}
+	publishRuntime()
+	return nil
+}
+
+func detachTun() error {
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
+
+	err := errors.Join(closeBusinessInbounds(), stopTun())
+	cleanupFailure = errors.Join(cleanupFailure, err)
+	// URLTest 直接拨指定节点，不登记到转发 tracker，断开不能取消其上下文。
+	resolver.ResetConnection()
+	publishRuntime()
+	return cleanupFailure
+}
+
+func closeCoreListeners() {
+	cleanupFailure = errors.Join(cleanupFailure, closeBusinessInbounds())
+	ntp.ReCreateNTPService("", 0, "", nil, false)
+}
+
+func stop() error {
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
+	mu.Lock()
+	closeCoreListeners()
+	if !running && tunListener == nil && !businessListenersOpen() {
+		_ = updateVpnState("stopped", "stopped", runtimeVpnCreated)
+		mu.Unlock()
+		return cleanupFailure
+	}
+	waitDiagnostics := stopDiagnosticsLocked()
+	manager := activeGeo.Swap(nil)
+	if manager != nil {
+		manager.closeLocked()
+	}
+	resetProxyIdentities()
+	stopRuntimeRoutes()
+	cancelDelayTests()
+	cleanupFailure = errors.Join(cleanupFailure, stopTun())
+	resolver.ResetConnection()
+	executor.Shutdown()
+	cleanupFailure = errors.Join(cleanupFailure, route.ArkClashCloseServer())
+	tunnel.OnSuspend()
+	tunnel.UpdateProxies(nil, nil)
+	tunnel.UpdateRules(nil, nil, nil)
+	tunnel.UpdateListeners(nil)
+	running = false
+	current = startOptions{}
+	runningID.Store(nil)
+	desiredInbound = inboundSettings{}
+	if err := updateVpnState("stopped", "stopped", runtimeVpnCreated); err != nil {
+		log.Errorln("[ArkClash] core stopped with pending VPN resources: %s", err)
+	}
+	mu.Unlock()
+	waitDiagnostics()
+	// worker 的取消清理可能需要核心锁，且下一次 start 不得越过本次 join。
+	if manager != nil {
+		manager.wait()
+	}
+	return cleanupFailure
+}

@@ -290,7 +290,7 @@ export struct ProfilesPage {
         LazyForEach(this.rows, (item: ProfileItem) => {
           ListItem() {
             ProfileCard({ item: item, selected: this.store.selectedId() === item.id, currentTime: this.currentTime,
-              applying: this.store.pending === item.id, running: this.store.connected && this.store.running === item.id,
+              applying: this.store.pending === item.id, running: this.store.coreReady && this.store.running === item.id,
               removable: this.store.canRemove(item.id), onSelect: (): void => { this.select(item); },
               onEdit: (): void => this.openEdit(item), onRemove: (): void => this.confirmRemove(item),
               onCopy: (): void => { this.copyLink(item); }, onExport: (): void => { this.export(item); },

@@ -363,12 +363,18 @@ async function waitForProfileFixture(predicate) {
 
 function profileRuntime(profile, configRevision, bootId = 'profile.boot.a', revision = configRevision) {
   return { profile, running: true, intent: 'started', forward: 'running', sessionMode: 'tun',
-    tunAttached: true, listenersOpen: false, startedAt: 1, bootId, configRevision, revision,
+    tunAttached: true, vpnCreated: true, listenersOpen: false, startedAt: 1, bootId, configRevision, revision,
     version: 'profile.fixture', mode: 'rule' };
 }
 
+function warmProfileRuntime(profile, configRevision, bootId = 'profile.boot.a', revision = configRevision) {
+  return { ...profileRuntime(profile, configRevision, bootId, revision), intent: 'stopped', forward: 'stopped',
+    tunAttached: false, vpnCreated: false, listenersOpen: false, startedAt: 0 };
+}
+
 async function actualProfileConsumer(filesDir,
-  { subscription = false, autoUpdate = false, initialHost = 'stopped', legacy = false } = {}) {
+  { subscription = false, autoUpdate = false, initialHost = 'stopped', legacy = false,
+    profileIds = ['p1', 'p2', 'p3'], earlyUnknown = false } = {}) {
   const requests = [];
   const sockets = [];
   const moduleCache = new Map();
@@ -378,9 +384,15 @@ async function actualProfileConsumer(filesDir,
   let selectedUris = [];
   let saveUris = [];
   let ioHold;
-  const connectionInput = { connected: initialHost === 'running', busy: false, bootId: 'profile.boot.a', error: '',
+  const connectionInput = { connected: initialHost === 'running', coreReady: initialHost === 'running',
+    busy: false, bootId: 'profile.boot.a', error: '', disconnects: 0, disconnectFailure: '',
     recheckFailure: initialHost === 'unknown' ? new Error('unconfirmed host') : undefined, rechecks: 0,
-    async recheck() { this.rechecks++; if (this.recheckFailure) { throw this.recheckFailure; } return this.connected; } };
+    async recheck() { this.rechecks++; if (this.recheckFailure) { throw this.recheckFailure; } return this.coreReady; },
+    async disconnect() {
+      this.disconnects++;
+      this.error = this.disconnectFailure;
+      if (this.error === '') { this.connected = false; }
+    } };
   const io = {};
   for (const key of Object.keys(fileIo)) {
     const original = fileIo[key];
@@ -474,17 +486,18 @@ async function actualProfileConsumer(filesDir,
     await actualStore.ensureProfilesDir(filesDir);
     await actualStore.writeProfileText(path.join(store.profilesDir(filesDir), 'default.yaml'), 'proxies: []\n');
   } else {
-    await actualStore.writeList(filesDir, { version: 1, current: 'p1',
+    await actualStore.writeList(filesDir, { version: 1, current: profileIds[0] ?? '',
       subscriptions: subscription ? [{ id: 's1', url: 'https://subscription.invalid/source', autoUpdate,
         intervalHours: 24, intervalMinutes: 1440, revision: 'subscription.1' }] : [], profiles:
-      ['p1', 'p2', 'p3'].map((id) => ({ id, name: id, nameEdited: false, subscription: subscription && id === 'p1' ? 's1' : '' })) });
-    for (const id of ['p1', 'p2', 'p3']) {
+      profileIds.map((id) => ({ id, name: id, nameEdited: false, subscription: subscription && id === 'p1' ? 's1' : '' })) });
+    for (const id of profileIds) {
       await actualStore.writeProfileText(actualStore.yamlPath(filesDir, id), 'proxies: []\n');
       await actualStore.writeProfileText(actualStore.summaryPath(filesDir, id), JSON.stringify({ groups: [], proxies: 0, revision: `source.${id}` }));
     }
   }
   const { ProfileStore } = loadActual(path.join(featureDir, 'Profiles.ets'));
   const view = new ProfileStore();
+  if (earlyUnknown) { view.setCoreReady(false, false); }
   view.load({ filesDir });
   await waitForProfileFixture(() => view.loaded);
   assert.equal(view.loadError, '');
@@ -496,6 +509,19 @@ async function actualProfileConsumer(filesDir,
   }
   return { view, connection: connectionInput, requests, take, store: actualStore,
     pick(uri) { selectedUris = [uri]; }, saveTo(uri) { saveUris = [uri]; },
+    async commitRemoteAdd(request, text = 'proxies: []\n') {
+      const body = JSON.parse(request.options.extraData);
+      const { DirectDownloader } = loadActual(path.join(etsDir, 'shared/profiles/Download.ets'));
+      const { downloadNewSubscription } = loadActual(path.join(etsDir, 'shared/profiles/Updater.ets'));
+      const adding = downloadNewSubscription({ filesDir, downloader: new DirectDownloader(), running: () => '' },
+        body.profile, body.subscription, body.url, body.label);
+      const source = await take(new URL(body.url).pathname);
+      source.respondSource(text);
+      const outcome = await adding;
+      assert.equal(outcome.ok, true);
+      request.respond(outcome);
+      return body.profile;
+    },
     draft(id) { return new (loadActual(path.join(featureDir, 'ProfileDraft.ets')).ProfileDraft)(view.find(id)); },
     async idle() {
       await flushProfileCallbacks();
@@ -514,13 +540,15 @@ async function actualProfileConsumer(filesDir,
     },
     unknown() {
       connectionInput.connected = false;
+      connectionInput.coreReady = false;
       connectionInput.recheckFailure = new Error('unconfirmed host');
-      view.setConnected(false, false);
+      view.setCoreReady(false, false);
     },
     stopped() {
       connectionInput.connected = false;
+      connectionInput.coreReady = false;
       connectionInput.recheckFailure = undefined;
-      view.setConnected(false, true);
+      view.setCoreReady(false, true);
     },
     emit(payload) {
       const wire = sockets.filter((socket) => socket.active).at(-1);
@@ -529,9 +557,10 @@ async function actualProfileConsumer(filesDir,
     },
     async connect(status) {
       connectionInput.recheckFailure = undefined;
-      connectionInput.connected = true;
+      connectionInput.coreReady = true;
+      connectionInput.connected = status.forward === 'running' && status.tunAttached && status.vpnCreated;
       connectionInput.bootId = status.bootId;
-      view.setConnected(true);
+      view.setCoreReady(true);
       const request = await take('/arkclash/status');
       request.respond(status);
       await flushProfileCallbacks();
@@ -554,12 +583,322 @@ async function actualProfileConsumer(filesDir,
   };
 }
 
+test('initial unknown readiness cannot skip proven-stop migration before the profile store becomes loaded',
+  { timeout: 10000 }, async () => {
+    await sandbox(async (dir) => {
+      const fixture = await actualProfileConsumer(dir, { legacy: true, earlyUnknown: true });
+      try {
+        assert.equal(fixture.view.loaded, true);
+        assert.ok(fixture.connection.rechecks > 0);
+        assert.equal(fixture.view.offlineWritable, true);
+        assert.equal(fixture.view.items.length, 1);
+        assert.notEqual((await fixture.store.readListAsync(dir)).current, '');
+        assert.equal(fixture.view.find(fixture.view.current).name, 'default.yaml');
+      } finally { await fixture.close(); }
+    });
+    await sandbox(async (dir) => {
+      const fixture = await actualProfileConsumer(dir, { legacy: true, earlyUnknown: true, initialHost: 'unknown' });
+      try {
+        assert.equal(fixture.view.loaded, true);
+        assert.ok(fixture.connection.rechecks > 0);
+        assert.equal(fixture.view.offlineWritable, false);
+        assert.equal(fixture.view.items.length, 0);
+        assert.equal(fixture.view.applyError, 'host_unknown');
+      } finally { await fixture.close(); }
+    });
+  });
+
+test('first local import activates a warm empty core even while the initial runtime read is pending',
+  { timeout: 10000 }, async () => {
+    await sandbox(async (dir) => {
+      const fixture = await actualProfileConsumer(dir, { profileIds: [] });
+      try {
+        fixture.connection.coreReady = true;
+        fixture.view.setCoreReady(true);
+        const initial = await fixture.take('/arkclash/status');
+        const source = path.join(dir, 'first.yaml');
+        await fsp.writeFile(source, 'proxies: []\nmode: direct\n');
+        fixture.pick(source);
+        const importing = fixture.view.importLocal();
+        (await fixture.take('/arkclash/status')).respond(warmProfileRuntime('', 1));
+        const reload = await fixture.take('/arkclash/reload');
+        const body = JSON.parse(reload.options.extraData);
+        const saved = await fixture.store.readListAsync(dir);
+        assert.equal(body.profile, saved.current);
+        assert.equal(body.path, fixture.store.yamlPath(dir, saved.current));
+        assert.equal(body.expectedProfile, '');
+        assert.equal(await fsp.readFile(body.path, 'utf8'), 'proxies: []\nmode: direct\n');
+        await fixture.store.withProfileStorage(dir, async () => {
+          assert.equal((await fixture.store.readListAsync(dir)).current, body.profile);
+        });
+        initial.respond(profileRuntime('obsolete', 99));
+        reload.respond({});
+        (await fixture.take('/arkclash/status')).respond(warmProfileRuntime(body.profile, 2));
+        assert.equal(await importing, undefined);
+        assert.equal(fixture.view.coreReady, true);
+        assert.equal(fixture.connection.connected, false);
+        assert.equal(fixture.view.running, body.profile);
+        assert.equal(fixture.view.current, body.profile);
+        assert.equal(fixture.view.applyError, '');
+        assert.equal(fixture.connection.disconnects, 0);
+      } finally { await fixture.close(); }
+    });
+  });
+
+test('first remote subscription commit activates the current profile after the real commit locks are released',
+  { timeout: 10000 }, async () => {
+    await sandbox(async (dir) => {
+      const fixture = await actualProfileConsumer(dir, { profileIds: [] });
+      try {
+        await fixture.connect(warmProfileRuntime('', 1));
+        const adding = fixture.view.addSubscription('https://subscription.invalid/first', 'First subscription');
+        const remote = await fixture.take('/arkclash/profiles/add');
+        const id = await fixture.commitRemoteAdd(remote, 'proxies: []\nmode: rule\n');
+        (await fixture.take('/arkclash/status')).respond(warmProfileRuntime('', 1));
+        const reload = await fixture.take('/arkclash/reload');
+        assert.deepEqual(JSON.parse(reload.options.extraData),
+          { profile: id, path: fixture.store.yamlPath(dir, id), expectedProfile: '' });
+        await fixture.store.withProfileStorage(dir, async () => {
+          assert.equal((await fixture.store.readListAsync(dir)).current, id);
+        });
+        reload.respond({});
+        (await fixture.take('/arkclash/status')).respond(warmProfileRuntime(id, 2));
+        assert.equal(await adding, undefined);
+        assert.equal(fixture.view.active().id, id);
+        assert.equal(fixture.view.find(id).name, 'First subscription');
+        assert.equal(fixture.connection.connected, false);
+        assert.equal(fixture.requests.filter((request) => request.path === '/first').length, 1);
+      } finally { await fixture.close(); }
+    });
+  });
+
+test('new imports do not force a switch when the detached core already has a running profile',
+  { timeout: 10000 }, async () => {
+    await sandbox(async (dir) => {
+      const fixture = await actualProfileConsumer(dir);
+      try {
+        await fixture.connect(warmProfileRuntime('p2', 1));
+        const source = path.join(dir, 'additional.yaml');
+        await fsp.writeFile(source, 'proxies: []\nmode: direct\n');
+        fixture.pick(source);
+        const importing = fixture.view.importLocal();
+        (await fixture.take('/arkclash/status')).respond(warmProfileRuntime('p2', 1));
+        assert.equal(await importing, undefined);
+        assert.equal(fixture.view.running, 'p2');
+        assert.equal(fixture.view.current, 'p1');
+        assert.equal(fixture.view.items.length, 4);
+        assert.equal(fixture.requests.filter((request) => request.path === '/arkclash/reload').length, 0);
+        assert.equal(fixture.connection.connected, false);
+      } finally { await fixture.close(); }
+    });
+  });
+
+test('first activation rereads a choice changed during its status query without rewriting that persistent choice',
+  { timeout: 10000 }, async () => {
+    await sandbox(async (dir) => {
+      const fixture = await actualProfileConsumer(dir, { profileIds: [] });
+      try {
+        await fixture.connect(warmProfileRuntime('', 1));
+        const source = path.join(dir, 'first.yaml');
+        await fsp.writeFile(source, 'proxies: []\n');
+        fixture.pick(source);
+        const importing = fixture.view.importLocal();
+        const beforeChoice = await fixture.take('/arkclash/status');
+        await fixture.store.writeProfileText(fixture.store.yamlPath(dir, 'newer'), 'proxies: []\nmode: direct\n');
+        await fixture.store.withProfileStorage(dir, async () => {
+          const latest = await fixture.store.readListAsync(dir);
+          latest.profiles.push({ id: 'newer', name: 'Newer choice', nameEdited: false, subscription: '', type: 'file' });
+          latest.current = 'newer';
+          await fixture.store.writeList(dir, latest);
+        });
+        beforeChoice.respond(warmProfileRuntime('', 1));
+        (await fixture.take('/arkclash/status')).respond(warmProfileRuntime('', 1));
+        const reload = await fixture.take('/arkclash/reload');
+        assert.equal(JSON.parse(reload.options.extraData).profile, 'newer');
+        assert.equal(JSON.parse(reload.options.extraData).expectedProfile, '');
+        reload.respond({});
+        (await fixture.take('/arkclash/status')).respond(warmProfileRuntime('newer', 2));
+        assert.equal(await importing, undefined);
+        assert.equal((await fixture.store.readListAsync(dir)).current, 'newer');
+        assert.equal(fixture.view.current, 'newer');
+        assert.equal(fixture.view.running, 'newer');
+        assert.equal(fixture.requests.filter((request) => request.path === '/arkclash/reload').length, 1);
+      } finally { await fixture.close(); }
+    });
+  });
+
+test('a competing loaded runtime rejects stale empty-core activation and preserves the newer persistent choice',
+  { timeout: 10000 }, async () => {
+    await sandbox(async (dir) => {
+      const fixture = await actualProfileConsumer(dir);
+      try {
+        await fixture.connect(warmProfileRuntime('', 1));
+        const source = path.join(dir, 'additional.yaml');
+        await fsp.writeFile(source, 'proxies: []\n');
+        fixture.pick(source);
+        const importing = fixture.view.importLocal();
+        (await fixture.take('/arkclash/status')).respond(warmProfileRuntime('', 1));
+        const staleActivation = await fixture.take('/arkclash/reload');
+        assert.equal(JSON.parse(staleActivation.options.extraData).expectedProfile, '');
+        await fixture.store.withProfileStorage(dir, async () => {
+          const latest = await fixture.store.readListAsync(dir);
+          latest.current = 'p2';
+          await fixture.store.writeList(dir, latest);
+        });
+        fixture.emit({ type: 'runtime', status: warmProfileRuntime('p2', 2) });
+        staleActivation.fail(new Error('conflict'));
+        assert.equal(await importing, 'conflict');
+        await fixture.idle();
+        assert.equal(fixture.view.applyError, 'conflict');
+        assert.equal(fixture.view.running, 'p2');
+        assert.equal((await fixture.store.readListAsync(dir)).current, 'p2');
+        assert.equal(fixture.view.current, 'p2');
+        assert.equal(fixture.requests.filter((request) => request.path === '/arkclash/reload').length, 1);
+      } finally { await fixture.close(); }
+    });
+  });
+
+test('failed first activation remains explicit and can be retried by selecting the saved profile',
+  { timeout: 10000 }, async () => {
+    await sandbox(async (dir) => {
+      const fixture = await actualProfileConsumer(dir, { profileIds: [] });
+      try {
+        await fixture.connect(warmProfileRuntime('', 1));
+        const source = path.join(dir, 'first.yaml');
+        await fsp.writeFile(source, 'proxies: []\n');
+        fixture.pick(source);
+        const importing = fixture.view.importLocal();
+        (await fixture.take('/arkclash/status')).respond(warmProfileRuntime('', 1));
+        const failed = await fixture.take('/arkclash/reload');
+        const id = JSON.parse(failed.options.extraData).profile;
+        failed.fail(new Error('rejected'));
+        assert.equal(await importing, 'rejected');
+        assert.equal(fixture.view.applyError, 'rejected');
+        assert.equal(fixture.view.running, '');
+        assert.equal(fixture.view.ready, false);
+        assert.equal((await fixture.store.readListAsync(dir)).current, id);
+        assert.equal(fixture.view.pending, '');
+        const retrying = fixture.view.select(id);
+        const retry = await fixture.take('/arkclash/reload');
+        assert.equal(JSON.parse(retry.options.extraData).profile, id);
+        retry.respond({});
+        (await fixture.take('/arkclash/status')).respond(warmProfileRuntime(id, 2));
+        assert.equal(await retrying, undefined);
+        assert.equal(fixture.view.applyError, '');
+        assert.equal(fixture.view.running, id);
+        assert.equal(fixture.view.ready, true);
+        assert.equal(fixture.connection.connected, false);
+      } finally { await fixture.close(); }
+    });
+  });
+
+test('detached source edits establish the pending runtime profile and reload through the controller before committing',
+  { timeout: 10000 }, async () => {
+    await sandbox(async (dir) => {
+      const fixture = await actualProfileConsumer(dir);
+      try {
+        fixture.connection.coreReady = true;
+        fixture.view.setCoreReady(true);
+        const initial = await fixture.take('/arkclash/status');
+        const content = 'proxies: []\nmode: direct\n';
+        const editing = fixture.view.edit('p1', { name: 'Edited while detached', url: '', autoUpdate: false, content });
+        (await fixture.take('/arkclash/status')).respond(warmProfileRuntime('p1', 1));
+        initial.respond(warmProfileRuntime('', 1));
+        const reload = await fixture.take('/arkclash/reload');
+        const body = JSON.parse(reload.options.extraData);
+        assert.equal(body.profile, 'p1');
+        assert.equal(body.expectedProfile, 'p1');
+        assert.notEqual(body.path, fixture.store.yamlPath(dir, 'p1'));
+        assert.equal(await fsp.readFile(body.path, 'utf8'), content);
+        assert.equal(await fsp.readFile(fixture.store.yamlPath(dir, 'p1'), 'utf8'), 'proxies: []\n');
+        reload.respond({});
+        assert.equal(await editing, undefined);
+        assert.equal(await fsp.readFile(fixture.store.yamlPath(dir, 'p1'), 'utf8'), content);
+        const selecting = fixture.view.select('p2');
+        (await fixture.take('/arkclash/reload')).respond({});
+        (await fixture.take('/arkclash/status')).respond(warmProfileRuntime('p2', 3));
+        assert.equal(await selecting, undefined);
+        assert.equal(fixture.view.running, 'p2');
+        assert.equal(fixture.view.coreReady, true);
+        assert.equal(fixture.connection.connected, false);
+        assert.equal(fixture.connection.disconnects, 0);
+      } finally { await fixture.close(); }
+    });
+  });
+
+test('deleting the last profile detaches actual VPN resources and clears the runtime before files while retaining the warm core',
+  { timeout: 20000 }, async () => {
+    const scenarios = [
+      { status: warmProfileRuntime('p1', 1), disconnects: 0 },
+      { status: profileRuntime('p1', 1), disconnects: 1 },
+      { status: { ...warmProfileRuntime('p1', 1), forward: 'failed', vpnCreated: true }, disconnects: 1 }
+    ];
+    for (const scenario of scenarios) {
+      await sandbox(async (dir) => {
+        const fixture = await actualProfileConsumer(dir, { profileIds: ['p1'] });
+        try {
+          await fixture.connect(scenario.status);
+          const removing = fixture.view.remove('p1');
+          (await fixture.take('/arkclash/status')).respond(scenario.status);
+          (await fixture.take('/arkclash/status')).respond(warmProfileRuntime('p1', 1, scenario.status.bootId, 2));
+          const clear = await fixture.take('/arkclash/reload');
+          assert.deepEqual(JSON.parse(clear.options.extraData), { profile: '', path: '', expectedProfile: 'p1' });
+          assert.equal(fixture.connection.disconnects, scenario.disconnects);
+          assert.equal(await fsp.readFile(fixture.store.yamlPath(dir, 'p1'), 'utf8'), 'proxies: []\n');
+          assert.equal((await fixture.store.readListAsync(dir)).profiles.length, 1);
+          await fixture.store.withProfileStorage(dir, async () => {
+            assert.equal((await fixture.store.readListAsync(dir)).current, 'p1');
+          });
+          clear.respond({});
+          (await fixture.take('/arkclash/status')).respond(warmProfileRuntime('', 2, scenario.status.bootId, 3));
+          assert.equal(await removing, undefined);
+          const saved = await fixture.store.readListAsync(dir);
+          assert.equal(saved.current, '');
+          assert.equal(saved.profiles.length, 0);
+          assert.equal(fixture.view.running, '');
+          assert.equal(fixture.view.coreReady, true);
+          assert.equal(fixture.view.offlineWritable, false);
+          assert.equal(fixture.connection.bootId, scenario.status.bootId);
+          assert.equal(fixture.connection.connected, false);
+          assert.equal(fixture.view.pending, '');
+          await assert.rejects(fsp.access(fixture.store.yamlPath(dir, 'p1')));
+        } finally { await fixture.close(); }
+      });
+    }
+  });
+
+test('failed last-profile cleanup preserves its files and persistent choice for an explicit retry',
+  { timeout: 15000 }, async () => {
+    for (const failure of ['destroy', 'reload']) {
+      await sandbox(async (dir) => {
+        const fixture = await actualProfileConsumer(dir, { profileIds: ['p1'] });
+        try {
+          const status = failure === 'destroy' ? profileRuntime('p1', 1) : warmProfileRuntime('p1', 1);
+          await fixture.connect(status);
+          if (failure === 'destroy') { fixture.connection.disconnectFailure = 'destroy failed'; }
+          const before = await profileBusinessFiles(dir);
+          const removing = fixture.view.remove('p1');
+          (await fixture.take('/arkclash/status')).respond(status);
+          if (failure === 'reload') {
+            (await fixture.take('/arkclash/status')).respond(status);
+            (await fixture.take('/arkclash/reload')).fail(new Error('rejected'));
+          }
+          assert.equal(await removing, failure === 'destroy' ? 'apply_failed' : 'rejected');
+          assert.notEqual(fixture.view.applyError, '');
+          assert.deepEqual(await profileBusinessFiles(dir), before);
+          assert.equal(fixture.view.coreReady, true);
+          assert.equal(fixture.view.pending, '');
+        } finally { await fixture.close(); }
+      });
+    }
+  });
+
 test('real ProfileStore rejects the older status reply after two overlapping reload notifications', { timeout: 5000 }, async () => {
   await sandbox(async (dir) => {
     const fixture = await actualProfileConsumer(dir);
     try {
       fixture.connection.connected = true;
-      fixture.view.setConnected(true);
+      fixture.view.setCoreReady(true);
       const older = await fixture.take('/arkclash/status');
       fixture.emit({ type: 'reloaded', profile: 'p3' });
       const newer = await fixture.take('/arkclash/status');
@@ -700,8 +1039,8 @@ test('real foreground handoff rejects the old query and keeps the same-boot runt
       resumed.respond(profileRuntime('p3', 7));
       await flushProfileCallbacks();
       assert.equal(fixture.view.running, 'p3');
-      fixture.view.setConnected(false);
-      fixture.view.setConnected(true);
+      fixture.view.setCoreReady(false);
+      fixture.view.setCoreReady(true);
       const reconnected = await fixture.take('/arkclash/status');
       reconnected.respond(profileRuntime('p1', 5));
       await flushProfileCallbacks();
@@ -860,6 +1199,7 @@ test('real controller failure cannot fall back locally until a fresh recheck con
         const retry = fixture.view.update('p1');
         const retryRemote = await fixture.take('/arkclash/profiles/update');
         fixture.connection.connected = false;
+        fixture.connection.coreReady = false;
         retryRemote.fail(new Error('host stopped during request'));
         const fallback = await fixture.take('/source');
         fallback.respondSource('proxies: []\nmode: direct\n');
@@ -877,7 +1217,7 @@ test('real core operations remain remote when forwarding is paused and Connectio
         await fixture.connect(profileRuntime('p1', 1));
         fixture.connection.connected = false;
         fixture.connection.recheck = async () => { fixture.connection.rechecks++; return true; };
-        fixture.view.setConnected(true, false);
+        fixture.view.setCoreReady(true, false);
         const updating = fixture.view.update('p1');
         const remote = await fixture.take('/arkclash/profiles/update');
         remote.respond({ subscription: 's1', ok: true, state: { updatedAt: 1, failures: 0 } });
@@ -905,7 +1245,7 @@ test('real profile commits roll back when host qualification changes during awai
       } },
       { name: 'node selection', method: 'rename', suffix: '/p2.selected.json', run: async (fixture, dir) => {
         try {
-          await fixture.store.writeSelected(dir, 'p2', { Group: 'Node' }, () => fixture.view.offlineWritable && !fixture.view.connected);
+          await fixture.store.writeSelected(dir, 'p2', { Group: 'Node' }, () => fixture.view.offlineWritable && !fixture.view.coreReady);
           return undefined;
         } catch (error) { return error.message; }
       } }
@@ -963,6 +1303,7 @@ test('real acknowledged source reload records an applied failure when host quali
           const editedSource = 'proxies: []\nmode: global\n';
           const editing = fixture.view.edit('p1', { name: 'edited active source', url: '', autoUpdate: false,
             content: editedSource });
+          (await fixture.take('/arkclash/status')).respond(profileRuntime('p1', 1));
           const reload = await fixture.take('/arkclash/reload');
           const applied = JSON.parse(reload.options.extraData);
           assert.equal(applied.profile, 'p1');
@@ -973,8 +1314,8 @@ test('real acknowledged source reload records an applied failure when host quali
           reload.respond({});
           if (transition === 'unknown') { fixture.unknown(); }
           else {
-            fixture.view.setConnected(false, false);
-            fixture.view.setConnected(true, false);
+            fixture.view.setCoreReady(false, false);
+            fixture.view.setCoreReady(true, false);
           }
           assert.equal(await editing, 'apply_failed', transition);
           assert.equal(fixture.view.applyError, 'apply_failed', transition);
@@ -997,6 +1338,7 @@ test('real acknowledged reload compensates a conflicting disk commit through HTT
         const before = await profileBusinessFiles(dir);
         const editing = fixture.view.edit('p1', { name: 'conflicting edit', url: '', autoUpdate: false,
           content: 'proxies: []\nmode: direct\n', baseContentRevision: '' });
+        (await fixture.take('/arkclash/status')).respond(profileRuntime('p1', 1));
         const reload = await fixture.take('/arkclash/reload');
         const applied = JSON.parse(reload.options.extraData);
         assert.equal(await fsp.readFile(applied.path, 'utf8'), 'proxies: []\nmode: direct\n');

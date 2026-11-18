@@ -1458,7 +1458,11 @@
     },
     {
       "name": "proxy_test_offline",
-      "value": "Connect to test node latency."
+      "value": "Start the core to test node latency."
+    },
+    {
+      "name": "proxy_start_core",
+      "value": "Start core"
     },
     {
       "name": "proxy_test_queued",

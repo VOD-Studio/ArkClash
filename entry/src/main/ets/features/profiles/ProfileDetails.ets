@@ -72,7 +72,7 @@ export struct ProfileDetails {
           if (this.store.current === this.item.id) {
             Text($r('app.string.profile_current')).fontColor($r('app.color.brand'))
           }
-          if (this.store.connected && this.store.running === this.item.id) {
+          if (this.store.coreReady && this.store.running === this.item.id) {
             Text($r('app.string.profile_running')).fontColor($r('app.color.brand'))
           }
         }

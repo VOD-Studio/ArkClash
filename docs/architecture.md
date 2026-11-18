@@ -13,7 +13,7 @@ flowchart LR
   subgraph VPN["VPN 进程（ClashVpnAbility）"]
     ability["vpn/ClashVpnAbility"] --> bridge["libarkclash.so（NAPI）"]
     bridge --> core["libclash.so（mihomo）"]
-    core -- "订阅类命令<br/>（线程安全函数）" --> ability
+    core -- "配置 / VPN 命令<br/>（线程安全函数）" --> ability
   end
   sys["系统 VPN 服务"]
   client -- "HTTP / WebSocket<br/>127.0.0.1:19090 + secret<br/>mihomo API 和 /arkclash/" --> core
@@ -24,7 +24,7 @@ flowchart LR
 ```
 
 - **UI 进程**只做界面和控制，不加载内核。界面恢复时重新查询运行事实，不能用上次的连接缓存断言 VPN 仍存活。
-- **VPN 进程**持有 TUN fd 和内核，是代理的唯一运行位置。系统销毁扩展后不承诺继续转发，UI 被杀与真正内存回收的区别见 #58 的设备证据。
+- **VPN 进程**是内核的唯一宿主，可先启动无 TUN 的核心。只有连接时才创建系统 VPN 并附加 TUN；普通断开保留核心。系统销毁扩展后不承诺驻留或转发（[ADR-0017](adr/0017-core-ready-without-vpn.md)）。
 - 两个进程之间只有两条通道（[ADR-0003](adr/0003-ui-core-via-external-controller.md)）：
   - **内核控制面**：mihomo external-controller 承载运行查询、节点选择、测速、规则探测、流量与事件。ArkClash 路由在 `/arkclash/` 下：Go 处理运行快照、选择事务和热切换，订阅命令经 NAPI 转给 VPN 进程的 ArkTS（[ADR-0009](adr/0009-arkclash-commands-on-controller.md)）。独立进程专用的 `PUT`/`PATCH /configs`、`/restart`、`/upgrade` 保持关闭。
   - **文件通道**：`shared/Runtime.ets` 交接启动设置、错误和停止回执；`shared/profiles/Store.ets` 保存配置列表、内容、摘要及每配置节点选择。跨进程短提交持有存储锁，下载使用独立资源任务锁，不占住提交锁等待网络。
@@ -41,35 +41,42 @@ sequenceDiagram
   participant Sys as 系统 VPN 服务
   participant Ext as ClashVpnAbility
   participant Core as 内核
-  UI->>UI: 等待配置与 Geo 设置短提交，再写 runtime.json
-  UI->>Sys: startVpnExtensionAbility
-  Sys-->>UI: 首次弹授权框
-  Sys->>Ext: onCreate
-  Ext->>Ext: installGeoData（按需复制）
-  Ext->>Sys: createVpnConnection / protectProcessNet
-  Ext->>Sys: create(VpnConfig，排除本应用 UID)
-  Sys-->>Ext: TUN fd
-  Ext->>Core: start(JSON：配置、fd、controller、secret)
-  Core->>Core: 解析配置、恢复节点选择、applyOverrides、启动 TUN
-  loop 有界等待真实转发就绪
-    UI->>Core: GET /arkclash/status（running + tunAttached）
+  UI->>UI: 首帧缓存渲染；等待配置迁移与设置短提交
+  UI->>Sys: 前台 startVpnExtensionAbility（自动预热）
+  Sys-->>UI: 首次弹授权框，批准不等于接管流量
+  Sys->>Ext: onCreate，写实例证据并复位 stopped 意图
+  Ext->>Ext: installGeoData；createVpnConnection / protectProcessNet
+  Ext->>Core: start（配置可为空，不带 fd）
+  Core->>Core: 加载 resolver、节点与选择，屏蔽业务入口
+  loop 有界等待认证核心就绪
+    UI->>Core: GET /arkclash/status（running）
   end
-  Note over Ext,UI: 启动失败时 Ext 写 core_error.txt，UI 读到后报错
+  UI->>UI: 点击连接，短锁写 intent + operation token
+  UI->>Core: POST /arkclash/vpn/connect（boot/profile/configRevision）
+  Core->>Ext: 进入统一操作队列
+  Ext->>Sys: create(VpnConfig，排除本应用 UID)
+  Sys-->>Ext: 原始 TUN fd
+  Ext->>Core: 记录 vpnCreated，attachTun（原子核身份）
+  Core->>Core: 复制 fd，创建 TUN，再恢复业务入口
+  Ext->>Core: updateVpnState → running
+  Note over Ext,UI: 每个异步返回重核 secret/token/intent；失败保留真实资源事实
 ```
 
-断开：UI 调 `stopVpnExtensionAbility`，扩展清理等待启动代次结束，再分别停止内核、销毁 VPN 连接；其中一项失败仍尝试另一项。扩展在创建资源前写入独立实例标识，两项都成功才写 `runtime-stopped.json`；UI 同时核对当前 secret 和实例，防止系统复用 secret 重新拉起时接受旧清理回执。系统直接杀死 VPN 进程或设备重启无法补写回执，此时由 `appManager.getRunningProcessInformation()` 成功返回且包含当前 UI PID、没有其他本应用进程，证明宿主已消失；查询前后 runtime/实例文件必须一致。查询异常、空列表、缺少 UI PID 或存在其他本应用进程均保留未知，不删除残留文件。controller 失联本身不算停止成功，清理失败保留停止确认入口（[ADR-0013](adr/0013-runtime-host-process-evidence.md)）。
+断开：UI 先原子写停止意图和新 token，再发 `/arkclash/vpn/disconnect`。扩展在同一队列里关闭业务入口、已接受的转发连接和 Go TUN，并独立尝试销毁系统 VPN；清理失败保留 `vpnCreated/tunAttached/listenersOpen` 与错误，不报停止成功。controller、resolver/fake-IP、节点、选择、测速结果和 scheduler 保留，boot/configRevision 不变；完整换配置才更新配置身份并取消旧测速。系统持有原 fd，Go 只持有 Linux 获取接口时复制的 `F_DUPFD_CLOEXEC` 副本；关闭失败不重复 close 可能已复用的描述符。
 
-启动从等待配置短提交起由 `CoreClient` 模块内 Promise 和宿主代次保护，覆盖 runtime 写好但系统尚未创建 VPN 进程的窗口；此时宿主查询一律未知。公开停止先取消该代次、请求停止，再等待启动收尾后重新取证；启动自身清理使用私有停止函数，避免等待自身。界面首次恢复未知只显示待确认状态，不生成启动意图；停止确认动作不依赖是否曾在本 UI 进程启动过。已发出的 HTTP 运行快照须再次核 secret/实例，取消后晚到的就绪结果不得成为连接成功。
+完整关闭仅用于扩展销毁、启动失败或明确恢复未知宿主：等待启动和操作队列收尾，分别停止核心与销毁平台 VPN，两者都成功才写 `runtime-stopped.json`。启动从等待配置短提交起由 `CoreClient` 单飞 Promise 和宿主代次保护，覆盖 runtime 已写好但系统尚未创建 VPN 进程的窗口；此时宿主查询仍为 unknown。停止回执绑定 secret+instance；系统直接杀死进程或重启没有回执时，沿用系统仅剩调用方 UI 进程的前后文件取证。controller 失联、空进程列表或查询异常均不证明停止（[ADR-0013](adr/0013-runtime-host-process-evidence.md)）。完整关闭同步退休 controller 的 HTTP/WebSocket 连接，旧流不能越过新 boot。
 
 节点选择携带 `expectedBootId` 和配置的 `expectedRevision`。`configRevision` 只在完整配置启动或热切换提交后前进；同一配置内连续选节点不会互相使请求过期。旧配置请求在 Go 事务内拒绝，持久化失败恢复原转发目标，幂等重放返回原操作结果。
+
+`coreReady/coreStarting` 与实际 VPN 连接分开。运行事件只在前台且核心就绪时订阅；流量、出口/服务探测和连接/DNS 诊断保留实际连接条件。首次授权拒绝后不自动重试，节点页可显式启动核心。首个配置用 `expectedProfile=""` 原子激活空核心；省略该字段才是不约束。删除最后一个配置先断开、清空运行配置，再删除文件，保留空核心。完整契约、手机驻留限制和未测性能项见 [ADR-0017](adr/0017-core-ready-without-vpn.md)。
 
 ## 状态归属
 
 | 状态 | 归属 | 写入方 | 读取方 |
 |---|---|---|---|
 | 配置列表 `profiles/list.json`（订阅和配置的记录、当前配置） | 应用沙箱 | UI | UI、VPN 进程 |
-| 配置内容、摘要、订阅状态（`profiles/` 下其余文件） | 应用沙箱 | 来自订阅的：未连接时 UI，连接中 VPN 进程；本地配置：UI | UI、VPN 进程、内核 |
-| `runtime.json`（secret、协议栈、出站模式、局域网代理） | 应用沙箱 | UI，每次连接前和连接中改设置时 | VPN 进程 |
+| 配置内容、摘要、订阅状态（`profiles/` 下其余文件） | 应用沙箱 | 核心确实停止时 UI；核心运行时订阅由 VPN 进程更新，本地编辑由 UI 经 controller 应用后提交 | UI、VPN 进程、内核 |
+| `runtime.json`（secret、协议栈、模式、LAN、VPN 意图/token） | 应用沙箱 | UI 短锁提交；扩展新实例将转发意图复位为 stopped | VPN 进程、UI |
 | `core_error.txt` | 应用沙箱 | VPN 进程 | UI，读后删除 |
 | `runtime-instance.json`（当前扩展实例标识） | 应用沙箱 | VPN 进程，创建资源前 | UI、VPN 进程 |
 | `runtime-stopped.json`（当前扩展实例清理完成回执） | 应用沙箱 | VPN 进程，内核与 VPN 连接均释放后 | UI，核对 secret 与实例 |
@@ -94,12 +101,12 @@ Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/
 | 目录 | 职责 | 可以依赖 |
 |---|---|---|
 | `shared/` | 两个进程共用的代码：路径、文件读写，以及订阅更新（`shared/profiles/`，[ADR-0009](adr/0009-arkclash-commands-on-controller.md)） | 系统 Kit、`yaml` |
-| `client/` | UI 访问内核的唯一入口：拉起/停止 VPN、controller 请求、数据模型 | `shared/` |
+| `client/` | UI 访问内核的唯一入口：核心预热与取证、VPN 命令、controller 请求、数据模型 | `shared/` |
 | `features/<功能>/` | 一个功能的状态、页面片段和组件（订阅、代理组、连接、日志、设置） | `client/`、`shared/`、`components/` |
 | `components/` | 跨功能复用的界面组件，不带业务逻辑 | `shared/` |
 | `pages/` | 路由入口，只负责把 feature 组装成页面 | 上面所有 UI 层 |
 | `entryability/` | UI 进程入口 | `pages/` |
-| `vpn/` | VPN 进程：TUN、内核生命周期、Geo 数据，连接期间的订阅更新和命令处理 | `shared/`、`libarkclash.so` |
+| `vpn/` | VPN 进程：核心宿主、可选 TUN、Geo、核心运行期间的订阅更新与统一命令队列 | `shared/`、`libarkclash.so` |
 
 规则：
 
@@ -113,7 +120,9 @@ Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/
 
 | 文件 | 职责 |
 |---|---|
-| `core/lib.go` | 导出的 C API（`arkclash.h`）；`applyOverrides` 强制 ArkClash 接管的配置项；热切换 `reload` |
+| `core/lib.go` | 导出的 C ABI（`arkclash.h`），不包含生命周期实现 |
+| `core/lifecycle.go` | 唯一核心状态、无 TUN 启动、attach/detach、热切换及 `applyOverrides` |
+| `core/inbound.go` | 最小业务入口设置、应用前屏蔽、恢复与真实资源校验 |
 | `core/api.go` | controller 上的 `/arkclash/` 路由、转给 ArkTS 的命令、事件推送、经内核下载 |
 | `core/runtime.go` | 原子运行快照、boot/revision 与事件 |
 | `core/selection.go` | 幂等选择、原子保存、持久化失败补偿、转发前恢复 |
@@ -125,12 +134,12 @@ Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/
 | `core/diagnostics_connections.go`、`diagnostics_dns.go` | 仅订阅期间运行的观察 collector、不可变 DTO、有界历史与收尾累计量采样 |
 | `core/diagnostics_stream.go` | 独立诊断 WebSocket、控制帧、整帧写锁、deadline 与订阅清理 |
 | `core/prefetch.go` | 在后台预先下载配置里的 rule-provider，第一次热切换不用等 |
-| `core/tun.go` | 用系统给的 fd 启动 sing-tun（gVisor 栈），独立于配置的 TUN 设置 |
+| `core/tun.go` | 独立持有平台 TUN 的 Go listener；副本 fd 获取与回滚见 mihomo 补丁 |
 | `core/socket.go` | 通过 Network Kit 原生 API 保护 Go 出站 socket，绑定失败则拒绝拨号 |
 | `core/hilog.go` | 内核日志转发到 hilog |
 | `core/loopback.go` | 关闭回环检测（原因见 platform-pitfalls 第 4 条） |
 
-TUN 由 `tun.go` 单独持有，不走配置文件，所以重新加载或切换配置都不会重建 TUN（[ADR-0001](adr/0001-core-in-vpn-extension.md)）。热切换只调 `executor.ApplyConfig`，不重建 controller（[ADR-0010](adr/0010-hot-switch-reload-in-vpn.md)）。
+TUN 由 `tun.go` 单独持有，不走配置文件，所以热切换不重建它。detached 启动和热切换在 `executor.ApplyConfig` 前屏蔽业务入口；连接时只恢复入口，不重新应用整个配置或重建 resolver。controller 只随完整宿主生命周期启停（[ADR-0010](adr/0010-hot-switch-reload-in-vpn.md)、[ADR-0017](adr/0017-core-ready-without-vpn.md)）。
 
 ## 构建产物
 

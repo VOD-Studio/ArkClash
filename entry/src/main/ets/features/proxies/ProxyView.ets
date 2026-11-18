@@ -17,6 +17,7 @@ export interface ProxyBrowserInput {
   online: boolean;
   offlineWritable: boolean;
   bootId: string;
+  configRevision: number;
   mode: OutboundMode;
   picker: boolean;
   initialGroup: string;

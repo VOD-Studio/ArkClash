@@ -63,3 +63,12 @@ ARM64 的运行问题已在真机（Pura 70 Ultra，API 26）上验证；x86_64 
 - provider 的后台 Fetcher 不能强引用带 finalizer 的包装器，否则热切换后旧下载、健康检查和文件监听无法回收。更新通知使用弱引用，配置退休后同时解除本应用的订阅与定时任务。
 - 升级 mihomo 后先确认两个补丁能应用并通过 `make core`，再复查真实拨号取消、普通 DNS 与探测并发、provider 退休、缓存到期选路及同名成员身份。真机转发与长时间待机仍按独立门禁验证。
 - `CORE_RACE=1 make test TESTS=core` 揭示 File provider 文件监听与手动更新并发读取/写入 Fetcher hash 的竞态。`scripts/mihomo-provider-hash.patch` 在已有 loadBufMutex 下取得 hash 快照，网络读取仍在锁外；不改变更新与通知语义。
+
+## 7. 系统与 Go 不能共同关闭同一个 TUN fd
+
+- OpenHarmony `NetworkVpnClient::DestroyVpn()` 会关闭 create 返回的原始 fd。Go 必须在真正获取 TUN 接口时复制，不能把原件直接交给 `os.NewFile`。
+- `scripts/mihomo-tun-fd.patch` 给 Linux `sing_tun.tunNew` 加 `F_DUPFD_CLOEXEC`；平台只关闭原件，Go listener 只关闭副本。固定版本的外部 fd 分支直接包装文件，没有包装后返回错误的路径。
+- stack 在 Start 前登记到 listener，构造失败走已有 Close 回滚。不能在 `sing_tun.New` 外层出错后再盲目 close；Close 出错后保留不确定性，不能重试关闭可能已被复用的 fd。
+- `CORE_LINUX_FD=1 make test TESTS=core` 在 macOS 上交叉编译后用本机 Docker（默认 `alpine:latest`，可设 `CORE_LINUX_IMAGE`）验证原 fd、副本、构造回滚与复用；Linux 主机直接执行。未配置此项的 macOS 回归会明确跳过 Linux fd 用例。
+- 升级 mihomo/sing-tun 后复查外部 fd 分支、stack 启动回滚及一次性关闭；Linux 容器通过不能替代手机 TUN 成功转发和至少 20 轮连断的 fd/线程验收。无 TUN 预热和驻留边界见 [ADR-0017](../adr/0017-core-ready-without-vpn.md)。
+

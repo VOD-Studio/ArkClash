@@ -18,6 +18,8 @@ const (
 )
 
 var tunListener *sing_tun.Listener
+var tunCloseErr error
+var tunCloseAttempted bool
 
 // startTun runs our own TUN listener instead of the profile's, so reloading or
 // switching profiles never tears down the TUN.
@@ -54,12 +56,23 @@ func startTun(fd int, stack string) error {
 		return err
 	}
 	tunListener = l
+	tunCloseErr = nil
+	tunCloseAttempted = false
 	return nil
 }
 
-func stopTun() {
-	if tunListener != nil {
-		_ = tunListener.Close()
+func stopTun() error {
+	if tunListener == nil {
+		return nil
+	}
+	// 清理失败保留资源不确定事实，但绝不重试可能已复用的 fd。
+	if tunCloseAttempted {
+		return tunCloseErr
+	}
+	tunCloseAttempted = true
+	tunCloseErr = tunListener.Close()
+	if tunCloseErr == nil {
 		tunListener = nil
 	}
+	return tunCloseErr
 }
