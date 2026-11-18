@@ -11,6 +11,7 @@ import { ProfileItem, ProfileStore } from '../features/profiles/Profiles';
 import { ProfilesPage } from '../features/profiles/ProfilesPage';
 import { ProxiesPage } from '../features/proxies/ProxiesPage';
 import { AboutPage } from '../features/tools/AboutPage';
+import { ThemePage } from '../features/tools/ThemePage';
 import { ToolRoute } from '../features/tools/ToolRoutes';
 import { ToolsPage } from '../features/tools/ToolsPage';
 import { ResourcesPage } from '../features/resources/ResourcesPage';
@@ -189,7 +190,9 @@ struct Index {
 
   @Builder
   Routes(name: string) {
-    if (name === ToolRoute.Resources) {
+    if (name === ToolRoute.Theme) {
+      ThemePage({ reduceMotion: this.reduceMotion })
+    } else if (name === ToolRoute.Resources) {
       ResourcesPage({ foreground: this.foreground })
     } else if (name === ToolRoute.Connections) {
       ConnectionsPage({ foreground: this.foreground })

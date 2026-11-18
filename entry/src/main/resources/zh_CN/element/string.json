@@ -293,6 +293,178 @@
       "value": "关于"
     },
     {
+      "name": "tools_theme",
+      "value": "主题"
+    },
+    {
+      "name": "theme_mode",
+      "value": "显示模式"
+    },
+    {
+      "name": "theme_system",
+      "value": "跟随系统"
+    },
+    {
+      "name": "theme_light",
+      "value": "浅色"
+    },
+    {
+      "name": "theme_dark",
+      "value": "深色"
+    },
+    {
+      "name": "theme_pure_black_mode",
+      "value": "深色背景"
+    },
+    {
+      "name": "theme_standard",
+      "value": "标准"
+    },
+    {
+      "name": "theme_pure_black",
+      "value": "纯黑"
+    },
+    {
+      "name": "theme_color",
+      "value": "主题色"
+    },
+    {
+      "name": "theme_color_style",
+      "value": "配色风格"
+    },
+    {
+      "name": "theme_vivid",
+      "value": "鲜艳"
+    },
+    {
+      "name": "theme_tinted",
+      "value": "染色"
+    },
+    {
+      "name": "theme_soft",
+      "value": "柔和"
+    },
+    {
+      "name": "theme_monochrome",
+      "value": "单色"
+    },
+    {
+      "name": "theme_add_color",
+      "value": "添加颜色"
+    },
+    {
+      "name": "theme_custom_color",
+      "value": "自定义颜色"
+    },
+    {
+      "name": "theme_hex",
+      "value": "十六进制颜色"
+    },
+    {
+      "name": "theme_hue",
+      "value": "色相"
+    },
+    {
+      "name": "theme_saturation",
+      "value": "饱和度"
+    },
+    {
+      "name": "theme_value",
+      "value": "明度"
+    },
+    {
+      "name": "theme_edit",
+      "value": "编辑"
+    },
+    {
+      "name": "theme_delete",
+      "value": "删除"
+    },
+    {
+      "name": "theme_delete_color",
+      "value": "删除此颜色？"
+    },
+    {
+      "name": "theme_reset",
+      "value": "重置"
+    },
+    {
+      "name": "theme_reset_colors",
+      "value": "恢复默认主题色？"
+    },
+    {
+      "name": "theme_confirm",
+      "value": "保存"
+    },
+    {
+      "name": "theme_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "theme_navigation",
+      "value": "导航栏"
+    },
+    {
+      "name": "theme_floating",
+      "value": "悬浮"
+    },
+    {
+      "name": "theme_docked",
+      "value": "固定"
+    },
+    {
+      "name": "theme_tab_motion",
+      "value": "页签动效"
+    },
+    {
+      "name": "theme_slide",
+      "value": "滑动"
+    },
+    {
+      "name": "theme_fade",
+      "value": "淡入"
+    },
+    {
+      "name": "theme_glass",
+      "value": "沉浸光感"
+    },
+    {
+      "name": "theme_none",
+      "value": "关闭"
+    },
+    {
+      "name": "theme_ultra",
+      "value": "通透"
+    },
+    {
+      "name": "theme_font",
+      "value": "字体"
+    },
+    {
+      "name": "theme_font_retry",
+      "value": "字体加载失败，重试"
+    },
+    {
+      "name": "theme_default",
+      "value": "默认"
+    },
+    {
+      "name": "theme_text_scale",
+      "value": "文字大小"
+    },
+    {
+      "name": "theme_custom",
+      "value": "自定义"
+    },
+    {
+      "name": "theme_text_sample",
+      "value": "这是一段字体与字号预览。"
+    },
+    {
+      "name": "theme_save_failed",
+      "value": "无法保存主题设置"
+    },
+    {
       "name": "coming_soon",
       "value": "开发中"
     },

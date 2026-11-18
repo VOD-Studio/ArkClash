@@ -20,6 +20,7 @@ export struct ToolsPage {
       new Entry(ToolRoute.Resources, $r('sys.symbol.square_stack_3d'), $r('app.string.tools_resources'))
     ])
     this.Group([
+      new Entry(ToolRoute.Theme, $r('sys.symbol.slider_horizontal_2'), $r('app.string.tools_theme')),
       new Entry(ToolRoute.About, $r('sys.symbol.info_circle'), $r('app.string.tools_about'))
     ])
   }

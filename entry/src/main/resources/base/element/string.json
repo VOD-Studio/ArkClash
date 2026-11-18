@@ -313,6 +313,178 @@
       "value": "About"
     },
     {
+      "name": "tools_theme",
+      "value": "Theme"
+    },
+    {
+      "name": "theme_mode",
+      "value": "Appearance"
+    },
+    {
+      "name": "theme_system",
+      "value": "Follow system"
+    },
+    {
+      "name": "theme_light",
+      "value": "Light"
+    },
+    {
+      "name": "theme_dark",
+      "value": "Dark"
+    },
+    {
+      "name": "theme_pure_black_mode",
+      "value": "Dark background"
+    },
+    {
+      "name": "theme_standard",
+      "value": "Standard"
+    },
+    {
+      "name": "theme_pure_black",
+      "value": "Pure black"
+    },
+    {
+      "name": "theme_color",
+      "value": "Theme color"
+    },
+    {
+      "name": "theme_color_style",
+      "value": "Color style"
+    },
+    {
+      "name": "theme_vivid",
+      "value": "Vivid"
+    },
+    {
+      "name": "theme_tinted",
+      "value": "Tinted"
+    },
+    {
+      "name": "theme_soft",
+      "value": "Soft"
+    },
+    {
+      "name": "theme_monochrome",
+      "value": "Monochrome"
+    },
+    {
+      "name": "theme_add_color",
+      "value": "Add color"
+    },
+    {
+      "name": "theme_custom_color",
+      "value": "Custom color"
+    },
+    {
+      "name": "theme_hex",
+      "value": "Hex color"
+    },
+    {
+      "name": "theme_hue",
+      "value": "Hue"
+    },
+    {
+      "name": "theme_saturation",
+      "value": "Saturation"
+    },
+    {
+      "name": "theme_value",
+      "value": "Brightness"
+    },
+    {
+      "name": "theme_edit",
+      "value": "Edit"
+    },
+    {
+      "name": "theme_delete",
+      "value": "Delete"
+    },
+    {
+      "name": "theme_delete_color",
+      "value": "Delete this color?"
+    },
+    {
+      "name": "theme_reset",
+      "value": "Reset"
+    },
+    {
+      "name": "theme_reset_colors",
+      "value": "Reset theme colors?"
+    },
+    {
+      "name": "theme_confirm",
+      "value": "Save"
+    },
+    {
+      "name": "theme_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "theme_navigation",
+      "value": "Navigation bar"
+    },
+    {
+      "name": "theme_floating",
+      "value": "Floating"
+    },
+    {
+      "name": "theme_docked",
+      "value": "Docked"
+    },
+    {
+      "name": "theme_tab_motion",
+      "value": "Tab animation"
+    },
+    {
+      "name": "theme_slide",
+      "value": "Slide"
+    },
+    {
+      "name": "theme_fade",
+      "value": "Fade"
+    },
+    {
+      "name": "theme_glass",
+      "value": "Immersive glass"
+    },
+    {
+      "name": "theme_none",
+      "value": "None"
+    },
+    {
+      "name": "theme_ultra",
+      "value": "Ultra"
+    },
+    {
+      "name": "theme_font",
+      "value": "Font family"
+    },
+    {
+      "name": "theme_font_retry",
+      "value": "Could not load fonts. Retry"
+    },
+    {
+      "name": "theme_default",
+      "value": "Default"
+    },
+    {
+      "name": "theme_text_scale",
+      "value": "Text size"
+    },
+    {
+      "name": "theme_custom",
+      "value": "Custom"
+    },
+    {
+      "name": "theme_text_sample",
+      "value": "The quick brown fox jumps over the lazy dog."
+    },
+    {
+      "name": "theme_save_failed",
+      "value": "Could not save theme settings"
+    },
+    {
       "name": "coming_soon",
       "value": "Under construction"
     },
