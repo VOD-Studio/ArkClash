@@ -2,23 +2,43 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/tunnel"
 	"github.com/metacubex/mihomo/tunnel/statistic"
 )
 
-func TestDiagnosticsReloadKeepsSessionOnParseFailure(t *testing.T) {
+func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing.T) {
 	fixture(t)
-	session, status, err := subscribeDiagnostics("connections", runtimeBootID, runtimeConfigRevision)
-	if err != nil {
-		t.Fatalf("subscribe status=%d err=%v", status, err)
+	server := newDiagnosticStreamServer(t, nil)
+	rs := newDiagnosticTestResolver(t)
+	capture, captureReader, captureExecution := dialDiagnosticStream(t, server, "capture", false)
+	readDiagnosticCaptureReady(t, capture, captureReader)
+	mu.Lock()
+	lease, previousConnections, previousDNS := diagnosticCapture, diagnosticConnections, diagnosticDNS
+	mu.Unlock()
+	old := newDiagnosticStreamTracker(t, "old.diag.test")
+	if err := old.Close(); err != nil {
+		t.Fatal(err)
 	}
-	go func() { <-session.done; close(session.workerDone) }()
-	defer session.close()
+	diagnosticTestQuery(t, rs, "old.diag.test.")
+	connectionPage, connectionReader, connectionExecution := dialDiagnosticStream(t, server, "connections", false)
+	connectionSnapshot := readDiagnosticCanonicalSnapshot(t, connectionPage, connectionReader, "connections")
+	dnsPage, dnsReader, dnsExecution := dialDiagnosticStream(t, server, "dns", false)
+	dnsSnapshot := readDiagnosticCanonicalSnapshot(t, dnsPage, dnsReader, "dns")
+	oldRecent := diagnosticSnapshotRows[DiagnosticConnection](t, connectionSnapshot.Recent)
+	oldRecords := diagnosticSnapshotRows[DiagnosticDnsRecord](t, dnsSnapshot.Records)
+	if len(oldRecent) != 1 || oldRecent[0].ID != old.ID() || len(oldRecords) != 1 || oldRecords[0].Domain != "old.diag.test" {
+		t.Fatal("old boot lease did not populate both rings")
+	}
+	oldBoot := runtimeBootID
 	oldRevision := runtimeConfigRevision
 	path := filepath.Join(current.HomeDir, "profiles", "next.yaml")
 	if err := os.WriteFile(path, []byte("rules: [\n"), 0600); err != nil {
@@ -27,11 +47,20 @@ func TestDiagnosticsReloadKeepsSessionOnParseFailure(t *testing.T) {
 	if err := reload(path, "next", new("fixture")); err == nil {
 		t.Fatal("invalid config accepted")
 	}
-	select {
-	case <-session.done:
-		t.Fatal("failed parse stopped existing observation session")
-	default:
+	for _, execution := range []*diagnosticStreamExecution{connectionExecution, dnsExecution, captureExecution} {
+		select {
+		case <-execution.done:
+			t.Fatal("failed parse stopped a diagnostic socket")
+		default:
+		}
 	}
+	mu.Lock()
+	untouched := diagnosticCapture == lease && diagnosticConnections == previousConnections && diagnosticDNS == previousDNS
+	mu.Unlock()
+	if !untouched {
+		t.Fatal("failed parse cleared diagnostic state")
+	}
+	pingDiagnosticCapture(t, capture, captureReader)
 	if runtimeConfigRevision != oldRevision || current.Profile != "fixture" {
 		t.Fatal("failed parse changed runtime identity")
 	}
@@ -41,14 +70,110 @@ func TestDiagnosticsReloadKeepsSessionOnParseFailure(t *testing.T) {
 	if err := reload(path, "next", new("fixture")); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-session.done:
-	default:
-		t.Fatal("successful reload retained old observation session")
-	}
-	if runtimeConfigRevision != oldRevision+1 || current.Profile != "next" {
+	waitDiagnosticStream(t, connectionExecution.done)
+	waitDiagnosticStream(t, dnsExecution.done)
+	waitDiagnosticStream(t, previousConnections.workerDone)
+	waitDiagnosticStream(t, previousDNS.workerDone)
+	pingDiagnosticCapture(t, capture, captureReader)
+	mu.Lock()
+	fresh := diagnosticCapture == lease && diagnosticConnections != nil && diagnosticConnections != previousConnections &&
+		diagnosticDNS != nil && diagnosticDNS != previousDNS
+	mu.Unlock()
+	if !fresh || runtimeBootID != oldBoot || runtimeConfigRevision != oldRevision+1 || current.Profile != "next" {
 		t.Fatal("successful reload did not advance configuration identity")
 	}
+	next := newDiagnosticStreamTracker(t, "next.diag.test")
+	if err := next.Close(); err != nil {
+		t.Fatal(err)
+	}
+	diagnosticTestQuery(t, rs, "next.diag.test.")
+	if err := detachTun(); err != nil {
+		t.Fatal(err)
+	}
+	pingDiagnosticCapture(t, capture, captureReader)
+	connectionPage, connectionReader, connectionExecution = dialDiagnosticStream(t, server, "connections", false)
+	connectionSnapshot = readDiagnosticCanonicalSnapshot(t, connectionPage, connectionReader, "connections")
+	dnsPage, dnsReader, dnsExecution = dialDiagnosticStream(t, server, "dns", false)
+	dnsSnapshot = readDiagnosticCanonicalSnapshot(t, dnsPage, dnsReader, "dns")
+	recent := diagnosticSnapshotRows[DiagnosticConnection](t, connectionSnapshot.Recent)
+	records := diagnosticSnapshotRows[DiagnosticDnsRecord](t, dnsSnapshot.Records)
+	if len(recent) != 1 || recent[0].ID != next.ID() || len(records) != 1 || records[0].Domain != "next.diag.test" ||
+		records[0].ID == oldRecords[0].ID || runtimeBootID != oldBoot || runtimeConfigRevision != oldRevision+1 {
+		t.Fatal("reload leaked old history or detach cleared the new generation")
+	}
+	closeDiagnosticClient(t, connectionPage, connectionReader)
+	closeDiagnosticClient(t, dnsPage, dnsReader)
+	waitDiagnosticStream(t, connectionExecution.done)
+	waitDiagnosticStream(t, dnsExecution.done)
+	closeDiagnosticClient(t, capture, captureReader)
+	waitDiagnosticStream(t, captureExecution.done)
+}
+
+type diagnosticUncertainInbound struct {
+	net.Conn
+	err error
+}
+
+func (conn *diagnosticUncertainInbound) Close() error {
+	_ = conn.Conn.Close()
+	return conn.err
+}
+
+func TestDiagnosticsReloadKeepsCollectorsOnForwardingSuspensionFailure(t *testing.T) {
+	fixture(t)
+	t.Cleanup(tunnel.ArkClashResumeForwarding)
+	server := newDiagnosticStreamServer(t, nil)
+	capture, reader, execution := dialDiagnosticStream(t, server, "capture", false)
+	readDiagnosticCaptureReady(t, capture, reader)
+	session, _ := diagnosticTestSubscribe(t, "connections")
+	old := newDiagnosticStreamTracker(t, "preserve.diag.test")
+	if err := old.Close(); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	dns := diagnosticDNS
+	oldRevision := runtimeConfigRevision
+	mu.Unlock()
+	dns.observeDNS(diagnosticTestRecord(1))
+
+	sentinel := errors.New("fixture forwarding close uncertainty")
+	inbound, peer := net.Pipe()
+	defer peer.Close()
+	// 无效 Metadata 不拨号；已准入连接的 Close 错误仍由转发代次保留。
+	tunnel.Tunnel.HandleTCPConn(&diagnosticUncertainInbound{Conn: inbound, err: sentinel}, &C.Metadata{})
+	path := filepath.Join(current.HomeDir, "profiles", "next.yaml")
+	if err := os.WriteFile(path, []byte("mode: direct\nrules: ['MATCH,DIRECT']\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := reload(path, "next", new("fixture")); !errors.Is(err, sentinel) {
+		t.Fatalf("reload did not fail at forwarding suspension: %v", err)
+	}
+	select {
+	case <-session.done:
+		t.Fatal("failed suspension canceled the existing stream")
+	default:
+	}
+	pingDiagnosticCapture(t, capture, reader)
+	mu.Lock()
+	intact := diagnosticConnections == session.collector && diagnosticDNS == dns && runtimeConfigRevision == oldRevision
+	mu.Unlock()
+	if !intact {
+		t.Fatal("failed suspension replaced canonical diagnostic state")
+	}
+	late, releaseLate := diagnosticTestSubscribe(t, "connections")
+	recent := diagnosticTestFrame(t, late, time.Now()).Recent
+	if len(recent) != 1 || recent[0].ID != old.ID() {
+		t.Fatal("connection ring was cleared by failed suspension")
+	}
+	releaseLate()
+	dnsSession, releaseDNS := diagnosticTestSubscribe(t, "dns")
+	records := diagnosticTestDNSFrame(t, dnsSession, time.Now()).Records
+	if len(records) != 1 || records[0].Domain != "request-1.diag.test" {
+		t.Fatal("DNS ring was cleared by failed suspension")
+	}
+	releaseDNS()
+	closeDiagnosticClient(t, capture, reader)
+	waitDiagnosticStream(t, execution.done)
 }
 
 type lifecycleDiagnosticConn struct {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -21,11 +20,6 @@ type DiagnosticDnsRecord struct {
 	Answers   []string `json:"answers"`
 	Delay     int64    `json:"delay"`
 	Time      string   `json:"time"`
-}
-
-type diagnosticDNSItem struct {
-	record   DiagnosticDnsRecord
-	observed uint64
 }
 
 type diagnosticDNSFrame struct {
@@ -77,33 +71,24 @@ func (c *diagnosticCollector) observeDNS(record dns.QueryRecord) {
 	if c.closed {
 		return
 	}
-	c.observed++
-	query := diagnosticDNSRecord(record, fmt.Sprintf("%s-%x", c.id, c.observed), time.Now())
-	item := diagnosticDNSItem{record: query, observed: c.observed}
+	query := diagnosticDNSRecord(record, diagnosticID(), time.Now())
 	if len(c.dnsRecords) < diagnosticDNSLimit {
-		c.dnsRecords = append(c.dnsRecords, item)
+		c.dnsRecords = append(c.dnsRecords, query)
 	} else {
-		previous := c.dnsRecords[c.dnsHead]
-		for s := range c.sessions {
-			if previous.observed >= s.start {
-				s.evicted++
-			}
-		}
-		c.dnsRecords[c.dnsHead] = item
+		c.evicted++
+		c.dnsRecords[c.dnsHead] = query
 		c.dnsHead = (c.dnsHead + 1) % diagnosticDNSLimit
 	}
-	c.broadcastLocked(diagnosticEvent{kind: "dns", dns: query})
+	if len(c.sessions) != 0 {
+		c.broadcastLocked(diagnosticEvent{kind: "dns", dns: query})
+	}
 }
 
-func (c *diagnosticCollector) dnsSnapshotLocked(s *diagnosticSession, kind string, now time.Time, initial bool) diagnosticDNSFrame {
-	frame := diagnosticDNSFrame{diagnosticHeader: c.headerLocked(s, kind, now), Records: []DiagnosticDnsRecord{}, Added: []DiagnosticDnsRecord{}}
-	if !initial {
-		for i := range c.dnsRecords {
-			item := c.dnsRecords[(c.dnsHead+i)%len(c.dnsRecords)]
-			if item.observed >= s.start {
-				frame.Records = append(frame.Records, item.record)
-			}
-		}
+func (c *diagnosticCollector) dnsSnapshotLocked(s *diagnosticSession, kind string, now time.Time) diagnosticDNSFrame {
+	frame := diagnosticDNSFrame{diagnosticHeader: c.headerLocked(s, kind, now),
+		Records: make([]DiagnosticDnsRecord, len(c.dnsRecords)), Added: []DiagnosticDnsRecord{}}
+	for i := range c.dnsRecords {
+		frame.Records[i] = c.dnsRecords[(c.dnsHead+i)%len(c.dnsRecords)]
 	}
 	return frame
 }

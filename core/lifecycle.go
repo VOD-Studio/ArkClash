@@ -208,9 +208,7 @@ func reload(path, profile string, expectedProfile *string) error {
 	if err != nil {
 		return err
 	}
-	waitDiagnostics = stopDiagnosticsLocked()
 	cancelDelayTests()
-	constant.SetConfig(path)
 	attached := tunListener != nil
 	// 始终先屏蔽，避免 executor 接管平台 TUN，也避免失败时暴露部分入口。
 	if err := closeBusinessInbounds(); err != nil {
@@ -219,12 +217,15 @@ func reload(path, profile string, expectedProfile *string) error {
 		publishRuntime()
 		return cleanupFailure
 	}
+	waitDiagnostics = reloadDiagnosticsLocked()
+	constant.SetConfig(path)
 	executor.ApplyConfig(withoutBusinessInbounds(cfg), true)
 	desiredInbound = nextInbound
 	current.ConfigPath = path
 	current.Profile = profile
 	runningID.Store(&profile)
 	runtimeConfigRevision++
+	ensureDiagnosticCaptureCollectorsLocked()
 	resetProxyIdentities()
 	watchRuntimeRoutes(cfg)
 	log.Infoln("[ArkClash] reloaded profile %s", profile)

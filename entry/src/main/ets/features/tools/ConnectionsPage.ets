@@ -67,18 +67,19 @@ export struct ConnectionsPage {
     this.syncLifecycle();
   }
 
-  @Monitor('foreground', 'conn.state', 'conn.forward', 'conn.bootId', 'conn.configRevision',
-    'conn.tunAttached', 'conn.listenersOpen', 'conn.sessionMode')
+  @Monitor('foreground', 'conn.coreReady', 'conn.hostState', 'conn.bootId', 'conn.configRevision',
+    'conn.state', 'conn.forward', 'conn.vpnCreated', 'conn.tunAttached', 'conn.listenersOpen')
   syncLifecycle(): void {
     const visible = this.shown && this.foreground;
-    const ready = this.conn.connected && !this.conn.busy;
-    const changed = this.conn.bootId !== '' && this.conn.configRevision > 0 &&
-      (this.runtimeBoot !== this.conn.bootId || this.runtimeRevision !== this.conn.configRevision);
+    const ready = this.conn.coreReady && this.conn.hostState === 'running';
+    const forwardingReady = this.conn.connected && !this.conn.busy;
+    const changed = this.runtimeBoot !== this.conn.bootId || this.runtimeRevision !== this.conn.configRevision;
     const entering = visible && !this.active;
     if (visible !== this.active || changed || ready !== this.runtimeReady) { ++this.generation; }
     this.active = visible;
     this.runtimeReady = ready;
     if (changed) { this.runtimeBoot = this.conn.bootId; this.runtimeRevision = this.conn.configRevision; }
+    if (!forwardingReady) { this.confirmShown = false; }
     if (!visible || changed) {
       this.dismissMore();
       this.detailsShown = false;
@@ -97,7 +98,7 @@ export struct ConnectionsPage {
       this.store.setListAnimation();
       this.store.setVisible(false);
     }
-    this.store.setConnection(ready, this.conn.bootId, this.conn.configRevision);
+    this.store.setConnection(ready, this.conn.bootId, this.conn.configRevision, forwardingReady);
     if (visible) { this.store.setVisible(true); }
     if (entering) { this.restore(this.generation); }
   }
@@ -144,7 +145,7 @@ export struct ConnectionsPage {
     if (!this.store.ready) { return $r('app.string.diagnostics_disconnected'); }
     if (this.store.error !== '') { return recordErrorText(this.store.error); }
     if (this.store.streamState === 'failed') { return $r('app.string.diagnostics_stream_failed'); }
-    if (this.store.streamState !== 'open' || (!this.store.canAct && !this.store.actionPending)) {
+    if (!this.store.synced) {
       return $r('app.string.diagnostics_connecting');
     }
     return this.store.totalRecords > 0 ? $r('app.string.diagnostics_no_matches') :
@@ -154,8 +155,7 @@ export struct ConnectionsPage {
   @Computed
   get emptyHint(): ResourceStr {
     if (!this.store.ready) { return $r('app.string.diagnostics_connect_hint'); }
-    if (this.store.totalRecords > 0 && this.store.error === '' &&
-      (this.store.canAct || this.store.actionPending)) {
+    if (this.store.totalRecords > 0 && this.store.error === '' && this.store.synced) {
       return $r('app.string.diagnostics_adjust_filters');
     }
     return $r('app.string.diagnostics_collect_hint');
@@ -430,7 +430,7 @@ export struct ConnectionsPage {
           Button($r('app.string.diagnostics_retry')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
             .onClick((): void => { this.store.retry(); })
         }
-      } else if (this.store.streamState !== 'open' || (!this.store.canAct && !this.store.actionPending)) {
+      } else if (!this.store.synced) {
         Text($r('app.string.diagnostics_connecting')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
       }
     }

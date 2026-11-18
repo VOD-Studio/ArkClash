@@ -1998,11 +1998,11 @@
     },
     {
       "name": "diagnostics_disconnected",
-      "value": "Not connected"
+      "value": "Diagnostics unavailable"
     },
     {
       "name": "diagnostics_connect_hint",
-      "value": "Connect the proxy to observe records."
+      "value": "Records are available once the core is ready."
     },
     {
       "name": "diagnostics_connecting",
@@ -2014,7 +2014,7 @@
     },
     {
       "name": "diagnostics_collect_hint",
-      "value": "Records appear while this page is visible."
+      "value": "The app records activity even in the background."
     },
     {
       "name": "diagnostics_no_matches",

@@ -1,11 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,10 +48,8 @@ type diagnosticSession struct {
 	conn       net.Conn
 	closed     bool
 	id         string
-	start      uint64
 	seq        uint64
 	dropped    uint64
-	evicted    uint64
 	initial    any
 	queue      []diagnosticEvent
 	traffic    map[string]int
@@ -64,37 +63,53 @@ type diagnosticCollector struct {
 	feed         string
 	bootID       string
 	revision     uint64
-	id           string
 	closed       bool
 	sessions     map[*diagnosticSession]struct{}
 	stop         chan struct{}
 	workerDone   chan struct{}
 	kick         chan struct{}
-	observed     uint64
+	evicted      uint64
 	connections  map[string]*diagnosticConnectionEntry
+	liveCount    int
 	recent       []*diagnosticConnectionEntry
 	recentHead   int
-	dnsRecords   []diagnosticDNSItem
+	dnsRecords   []DiagnosticDnsRecord
 	dnsHead      int
 	sampleDue    time.Time
 	timer        *time.Timer
 	initializing bool
 }
 
+type diagnosticCaptureLease struct {
+	conn       net.Conn
+	workerDone chan struct{}
+}
+
 var diagnosticConnections *diagnosticCollector
 var diagnosticDNS *diagnosticCollector
+var diagnosticCapture *diagnosticCaptureLease
 var diagnosticIDs atomic.Uint64
 
-func diagnosticID() string { return fmt.Sprintf("%x", diagnosticIDs.Add(1)) }
+func diagnosticID() string { return strconv.FormatUint(diagnosticIDs.Add(1), 16) }
 
 func diagnosticRuntimeError(boot string, revision uint64) (int, error) {
 	if boot == "" || revision == 0 {
 		return http.StatusBadRequest, errors.New("diagnostics_invalid_request")
 	}
+	if status, err := diagnosticBootError(boot); err != nil {
+		return status, err
+	}
+	if revision != runtimeConfigRevision {
+		return http.StatusConflict, errors.New("diagnostics_stale_runtime")
+	}
+	return 0, nil
+}
+
+func diagnosticBootError(boot string) (int, error) {
 	if !running {
 		return http.StatusServiceUnavailable, errors.New("diagnostics_not_ready")
 	}
-	if boot != runtimeBootID || revision != runtimeConfigRevision {
+	if boot != runtimeBootID {
 		return http.StatusConflict, errors.New("diagnostics_stale_runtime")
 	}
 	return 0, nil
@@ -113,42 +128,85 @@ func subscribeDiagnostics(feed, expectedBootID string, expectedConfigRevision ui
 	if feed == "dns" {
 		owner = &diagnosticDNS
 	}
-	c := *owner
-	first := c == nil
-	if first {
-		c = &diagnosticCollector{feed: feed, bootID: expectedBootID, revision: expectedConfigRevision,
-			id: diagnosticID(), sessions: make(map[*diagnosticSession]struct{}), stop: make(chan struct{}),
-			workerDone: make(chan struct{}), kick: make(chan struct{}, 1), connections: make(map[string]*diagnosticConnectionEntry), initializing: feed == "connections"}
-		*owner = c
-	}
+	c := ensureDiagnosticCollectorLocked(owner, feed)
 	c.mu.Lock()
+	if c.sessions == nil {
+		c.sessions = make(map[*diagnosticSession]struct{})
+	}
+	now := time.Now()
 	s := &diagnosticSession{wake: make(chan struct{}, 1), done: make(chan struct{}), workerDone: make(chan struct{}),
-		collector: c, id: diagnosticID(), start: c.observed + 1, traffic: make(map[string]int), lastFrame: time.Now()}
+		collector: c, id: diagnosticID(), lastFrame: now}
 	c.sessions[s] = struct{}{}
+	s.initial = c.snapshotLocked(s, "snapshot", now)
+	s.signalLocked()
+	c.scheduleSampleLocked(now)
 	c.mu.Unlock()
-	if first {
-		if feed == "connections" {
-			statistic.SetTrackerObserver(&statistic.TrackerObserver{Open: c.openConnection, Close: c.closeConnection})
-			// Join 的通知早于 Store；Range 只能补基线，不能覆盖通知的建立/关闭事实。
-			statistic.DefaultManager.Range(func(tracker statistic.Tracker) bool { c.baselineConnection(tracker); return true })
-		} else {
-			dns.SetQueryObserver(c.observeDNS)
-		}
+	return s, 0, nil
+}
+
+func ensureDiagnosticCollectorLocked(owner **diagnosticCollector, feed string) *diagnosticCollector {
+	if c := *owner; c != nil {
+		return c
 	}
-	c.mu.Lock()
-	if first {
+	c := &diagnosticCollector{feed: feed, bootID: runtimeBootID, revision: runtimeConfigRevision,
+		stop: make(chan struct{}), workerDone: make(chan struct{}), kick: make(chan struct{}, 1)}
+	if feed == "connections" {
+		c.connections = make(map[string]*diagnosticConnectionEntry)
+		c.initializing = true
+		statistic.SetTrackerObserver(&statistic.TrackerObserver{Open: c.openConnection, Close: c.closeConnection})
+		// Join 的通知早于 Store；Range 只能补基线，不能覆盖通知的建立/关闭事实。
+		statistic.DefaultManager.Range(func(tracker statistic.Tracker) bool { c.baselineConnection(tracker); return true })
+		c.mu.Lock()
 		c.initializing = false
 		c.releaseUnreferencedLocked()
+		c.mu.Unlock()
+	} else {
+		dns.SetQueryObserver(c.observeDNS)
 	}
-	s.initial = c.snapshotLocked(s, "snapshot", time.Now(), true)
-	s.signalLocked()
-	c.scheduleSampleLocked(time.Now())
-	c.kickLocked()
-	c.mu.Unlock()
-	if first {
-		go c.run()
+	*owner = c
+	go c.run()
+	return c
+}
+
+func ensureDiagnosticCaptureCollectorsLocked() {
+	if diagnosticCapture != nil {
+		ensureDiagnosticCollectorLocked(&diagnosticConnections, "connections")
+		ensureDiagnosticCollectorLocked(&diagnosticDNS, "dns")
 	}
-	return s, 0, nil
+}
+
+func acquireDiagnosticCapture(ctx context.Context, bootID string, conn net.Conn, readerDone <-chan struct{}) (*diagnosticCaptureLease, *diagnosticCaptureLease) {
+	mu.Lock()
+	defer mu.Unlock()
+	if _, err := diagnosticBootError(bootID); err != nil || ctx.Err() != nil {
+		return nil, nil
+	}
+	select {
+	case <-readerDone:
+		return nil, nil
+	default:
+	}
+	lease := &diagnosticCaptureLease{conn: conn, workerDone: make(chan struct{})}
+	previous := diagnosticCapture
+	diagnosticCapture = lease
+	if previous != nil {
+		_ = previous.conn.Close()
+	}
+	ensureDiagnosticCaptureCollectorsLocked()
+	return lease, previous
+}
+
+func (lease *diagnosticCaptureLease) release() {
+	mu.Lock()
+	if diagnosticCapture != lease {
+		// 换手后旧连接退出不能注销新持有者。
+		mu.Unlock()
+		return
+	}
+	diagnosticCapture = nil
+	workers := retireDiagnosticCollectorsLocked(true)
+	mu.Unlock()
+	waitDiagnosticWorkers(workers)
 }
 
 func (s *diagnosticSession) signalLocked() {
@@ -190,6 +248,9 @@ func (s *diagnosticSession) enqueueLocked(event diagnosticEvent) {
 		s.queue = make([]diagnosticEvent, 0, diagnosticQueueLimit)
 	}
 	if event.kind == "traffic" {
+		if s.traffic == nil {
+			s.traffic = make(map[string]int)
+		}
 		s.traffic[event.id] = len(s.queue)
 	}
 	s.queue = append(s.queue, event)
@@ -233,7 +294,7 @@ func (s *diagnosticSession) nextFrameAt(now time.Time) any {
 	}
 	var frame any
 	if s.needsReset {
-		frame = c.snapshotLocked(s, "reset", now, false)
+		frame = c.snapshotLocked(s, "reset", now)
 	} else {
 		frame = c.deltaLocked(s, now)
 	}
@@ -250,7 +311,7 @@ func (s *diagnosticSession) nextFrameAt(now time.Time) any {
 
 func (c *diagnosticCollector) headerLocked(s *diagnosticSession, kind string, now time.Time) diagnosticHeader {
 	return diagnosticHeader{Type: c.feed, Kind: kind, BootID: c.bootID, ConfigRevision: c.revision, SessionID: s.id,
-		Seq: s.seq + 1, SampledAt: now.UnixMilli(), Dropped: s.dropped, Evicted: s.evicted}
+		Seq: s.seq + 1, SampledAt: now.UnixMilli(), Dropped: s.dropped, Evicted: c.evicted}
 }
 
 func (c *diagnosticCollector) run() {
@@ -329,20 +390,26 @@ func (s *diagnosticSession) close() {
 	mu.Lock()
 	c := s.collector
 	c.mu.Lock()
-	if !s.closed {
-		s.cancelLocked()
-		delete(c.sessions, s)
+	if s.closed {
+		c.mu.Unlock()
+		mu.Unlock()
+		return
 	}
-	last := len(c.sessions) == 0 && !c.closed
-	if last {
+	s.cancelLocked()
+	delete(c.sessions, s)
+	last := len(c.sessions) == 0
+	retire := last && diagnosticCapture == nil
+	if retire {
 		c.retireLocked()
+	} else if last && c.feed == "connections" {
+		c.stopSamplingLocked()
 	}
 	c.mu.Unlock()
-	if last {
+	if retire {
 		c.uninstallLocked()
 	}
 	mu.Unlock()
-	if last {
+	if retire {
 		<-c.workerDone
 	}
 }
@@ -369,6 +436,7 @@ func (c *diagnosticCollector) retireLocked() {
 		c.timer = nil
 	}
 	c.connections = nil
+	c.liveCount = 0
 	c.recent = nil
 	c.dnsRecords = nil
 }
@@ -388,14 +456,18 @@ func (c *diagnosticCollector) uninstallLocked() {
 	}
 }
 
-func stopDiagnosticsLocked() func() {
-	collectors := []*diagnosticCollector{diagnosticConnections, diagnosticDNS}
+func retireDiagnosticCollectorsLocked(onlyUnused bool) []<-chan struct{} {
+	collectors := [...]*diagnosticCollector{diagnosticConnections, diagnosticDNS}
 	var workers []<-chan struct{}
 	for _, c := range collectors {
 		if c == nil {
 			continue
 		}
 		c.mu.Lock()
+		if onlyUnused && len(c.sessions) != 0 {
+			c.mu.Unlock()
+			continue
+		}
 		for s := range c.sessions {
 			if !s.closed {
 				s.cancelLocked()
@@ -408,11 +480,28 @@ func stopDiagnosticsLocked() func() {
 		c.uninstallLocked()
 		workers = append(workers, c.workerDone)
 	}
-	return func() {
-		for _, done := range workers {
-			<-done
-		}
+	return workers
+}
+
+func waitDiagnosticWorkers(workers []<-chan struct{}) {
+	for _, done := range workers {
+		<-done
 	}
+}
+
+func reloadDiagnosticsLocked() func() {
+	workers := retireDiagnosticCollectorsLocked(false)
+	return func() { waitDiagnosticWorkers(workers) }
+}
+
+func stopDiagnosticsLocked() func() {
+	workers := retireDiagnosticCollectorsLocked(false)
+	if lease := diagnosticCapture; lease != nil {
+		diagnosticCapture = nil
+		_ = lease.conn.Close()
+		workers = append(workers, lease.workerDone)
+	}
+	return func() { waitDiagnosticWorkers(workers) }
 }
 
 type diagnosticActionRequest struct {

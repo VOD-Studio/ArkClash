@@ -20,6 +20,7 @@
 | [0013](0013-runtime-host-process-evidence.md) | 用系统进程事实恢复异常终止的运行宿主 | 已采纳，宿主回归与 API 26 真机启停、转发通过 |
 | [0014](0014-x86-emulator-toolchain.md) | 为 x86_64 模拟器单独适配 Go 工具链 | 原生加载与双 ABI 构建通过，待签名后应用/VPN 验收 |
 | [0015](0015-geo-resource-management.md) | Geo 设置、任务与数据库按进程明确所有权 | 已采纳，设备和性能门禁独立验收 |
-| [0016](0016-visible-diagnostics.md) | 连接与 DNS 记录只在对应工具页可见时采集 | 已采纳，宿主 race 通过，设备与性能门禁独立验收 |
+| [0016](0016-visible-diagnostics.md) | 连接与 DNS 记录只在对应工具页可见时采集 | 已被 0019 取代 |
 | [0017](0017-core-ready-without-vpn.md) | 一个核心预热，系统 VPN 转发独立启停 | 已采纳，宿主与 Linux fd 回归通过，手机驻留和性能待验收 |
 | [0018](0018-ui-appearance.md) | 应用外观只由 UI 进程管理 | 已采纳 |
+| [0019](0019-app-diagnostics-capture.md) | 诊断采集跟随应用，实时列表跟随页面 | 已采纳，设备性能独立验收 |

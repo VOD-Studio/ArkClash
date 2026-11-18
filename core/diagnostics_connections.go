@@ -56,13 +56,12 @@ type diagnosticConnectionsFrame struct {
 }
 
 type diagnosticConnectionEntry struct {
-	dto      DiagnosticConnection
-	info     *statistic.TrackerInfo
-	observed uint64
-	live     bool
-	recent   bool
-	closed   bool
-	stable   int
+	dto    DiagnosticConnection
+	info   *statistic.TrackerInfo
+	live   bool
+	recent bool
+	closed bool
+	stable int
 }
 
 func diagnosticStrings(values []string) []string { return append([]string{}, values...) }
@@ -106,6 +105,7 @@ func (c *diagnosticCollector) baselineConnection(tracker statistic.Tracker) {
 	}
 	entry := newDiagnosticConnection(tracker)
 	entry.live = true
+	c.liveCount++
 	c.connections[entry.dto.ID] = entry
 }
 
@@ -116,20 +116,21 @@ func (c *diagnosticCollector) openConnection(tracker statistic.Tracker) {
 		return
 	}
 	entry := c.connections[tracker.ID()]
-	if entry != nil && (entry.observed != 0 || entry.closed) {
+	if entry != nil && (entry.recent || entry.closed) {
 		return
 	}
 	if entry == nil {
 		entry = newDiagnosticConnection(tracker)
+		entry.live = true
+		c.liveCount++
 		c.connections[entry.dto.ID] = entry
 	}
-	c.observed++
-	entry.observed = c.observed
-	entry.live = true
 	entry.recent = true
 	c.appendRecentLocked(entry)
-	c.broadcastLocked(diagnosticEvent{kind: "opened", connection: entry.dto, id: entry.dto.ID})
-	c.scheduleSampleLocked(time.Now())
+	if len(c.sessions) != 0 {
+		c.broadcastLocked(diagnosticEvent{kind: "opened", connection: entry.dto})
+		c.scheduleSampleLocked(time.Now())
+	}
 }
 
 func (c *diagnosticCollector) appendRecentLocked(entry *diagnosticConnectionEntry) {
@@ -139,11 +140,7 @@ func (c *diagnosticCollector) appendRecentLocked(entry *diagnosticConnectionEntr
 	}
 	previous := c.recent[c.recentHead]
 	previous.recent = false
-	for s := range c.sessions {
-		if previous.observed >= s.start {
-			s.evicted++
-		}
-	}
+	c.evicted++
 	if !previous.live {
 		previous.info = nil
 		delete(c.connections, previous.dto.ID)
@@ -170,17 +167,47 @@ func (c *diagnosticCollector) closeConnection(tracker statistic.Tracker) {
 		return
 	}
 	entry.closed = true
+	if entry.live {
+		c.liveCount--
+	}
 	entry.live = false
-	c.readTrafficLocked(entry, true)
-	c.broadcastLocked(diagnosticEvent{kind: "closed", id: entry.dto.ID})
+	visible := len(c.sessions) != 0
+	if visible {
+		c.readTrafficLocked(entry, true)
+		c.broadcastLocked(diagnosticEvent{kind: "closed", id: entry.dto.ID})
+	} else {
+		entry.updateTraffic()
+		entry.info = nil
+	}
 	if !entry.recent && !c.initializing {
 		entry.info = nil
 		delete(c.connections, entry.dto.ID)
 	}
-	c.scheduleSampleLocked(time.Now())
+	if visible {
+		c.scheduleSampleLocked(time.Now())
+	}
 }
 
 func (c *diagnosticCollector) readTrafficLocked(entry *diagnosticConnectionEntry, force bool) bool {
+	changed := entry.updateTraffic()
+	if changed || force {
+		c.broadcastLocked(diagnosticEvent{kind: "traffic", id: entry.dto.ID,
+			traffic: diagnosticTraffic{ID: entry.dto.ID, Upload: entry.dto.Upload, Download: entry.dto.Download}})
+	}
+	return changed
+}
+
+func (entry *diagnosticConnectionEntry) withCurrentTraffic() DiagnosticConnection {
+	// 快照不能推进共享采样基线，否则其他已打开的页面会漏掉流量增量。
+	dto := entry.dto
+	if entry.info != nil {
+		dto.Upload = diagnosticCounter(entry.info.UploadTotal.Load())
+		dto.Download = diagnosticCounter(entry.info.DownloadTotal.Load())
+	}
+	return dto
+}
+
+func (entry *diagnosticConnectionEntry) updateTraffic() bool {
 	if entry.info == nil {
 		return false
 	}
@@ -188,36 +215,49 @@ func (c *diagnosticCollector) readTrafficLocked(entry *diagnosticConnectionEntry
 	download := diagnosticCounter(entry.info.DownloadTotal.Load())
 	changed := upload != entry.dto.Upload || download != entry.dto.Download
 	entry.dto.Upload, entry.dto.Download = upload, download
-	if changed || force {
-		c.broadcastLocked(diagnosticEvent{kind: "traffic", id: entry.dto.ID,
-			traffic: diagnosticTraffic{ID: entry.dto.ID, Upload: upload, Download: download}})
-	}
 	return changed
 }
 
-func (c *diagnosticCollector) scheduleSampleLocked(now time.Time) {
-	if c.feed != "connections" || !c.sampleDue.IsZero() {
-		return
-	}
-	for _, entry := range c.connections {
-		if entry.live || entry.recent && entry.info != nil {
-			c.sampleDue = now.Add(time.Second)
-			c.kickLocked()
-			return
+func (c *diagnosticCollector) stopSamplingLocked() {
+	c.sampleDue = time.Time{}
+	for _, entry := range c.recent {
+		if !entry.live && entry.info != nil {
+			entry.updateTraffic()
+			entry.info = nil
 		}
 	}
+	c.kickLocked()
+}
+
+func (c *diagnosticCollector) scheduleSampleLocked(now time.Time) {
+	if c.feed != "connections" || len(c.sessions) == 0 || !c.sampleDue.IsZero() {
+		return
+	}
+	if c.liveCount == 0 {
+		for _, entry := range c.recent {
+			if entry.info != nil {
+				c.sampleDue = now.Add(time.Second)
+				c.kickLocked()
+				return
+			}
+		}
+		return
+	}
+	c.sampleDue = now.Add(time.Second)
+	c.kickLocked()
 }
 
 func (c *diagnosticCollector) sampleConnectionsLocked(now time.Time) {
 	c.sampleDue = time.Time{}
-	live := false
+	if len(c.sessions) == 0 {
+		return
+	}
 	for _, entry := range c.connections {
 		if entry.info == nil {
 			continue
 		}
 		changed := c.readTrafficLocked(entry, false)
 		if entry.live {
-			live = true
 			continue
 		}
 		if !entry.recent {
@@ -233,7 +273,7 @@ func (c *diagnosticCollector) sampleConnectionsLocked(now time.Time) {
 			entry.info = nil
 		}
 	}
-	if live {
+	if c.liveCount != 0 {
 		for s := range c.sessions {
 			s.heartbeat = true
 		}
@@ -250,15 +290,16 @@ func (c *diagnosticCollector) releaseUnreferencedLocked() {
 	}
 }
 
-func (c *diagnosticCollector) snapshotLocked(s *diagnosticSession, kind string, now time.Time, initial bool) any {
+func (c *diagnosticCollector) snapshotLocked(s *diagnosticSession, kind string, now time.Time) any {
 	if c.feed == "dns" {
-		return c.dnsSnapshotLocked(s, kind, now, initial)
+		return c.dnsSnapshotLocked(s, kind, now)
 	}
-	frame := diagnosticConnectionsFrame{diagnosticHeader: c.headerLocked(s, kind, now), Live: []DiagnosticConnection{}, Recent: []DiagnosticConnection{},
-		Opened: []DiagnosticConnection{}, Traffic: []diagnosticTraffic{}, Closed: []string{}}
+	frame := diagnosticConnectionsFrame{diagnosticHeader: c.headerLocked(s, kind, now), Live: make([]DiagnosticConnection, 0, c.liveCount),
+		Recent: make([]DiagnosticConnection, len(c.recent)), Opened: []DiagnosticConnection{},
+		Traffic: []diagnosticTraffic{}, Closed: []string{}}
 	for _, entry := range c.connections {
 		if entry.live {
-			frame.Live = append(frame.Live, entry.dto)
+			frame.Live = append(frame.Live, entry.withCurrentTraffic())
 		}
 	}
 	sort.Slice(frame.Live, func(i, j int) bool {
@@ -267,13 +308,8 @@ func (c *diagnosticCollector) snapshotLocked(s *diagnosticSession, kind string, 
 		}
 		return frame.Live[i].Start < frame.Live[j].Start
 	})
-	if !initial {
-		for i := range c.recent {
-			entry := c.recent[(c.recentHead+i)%len(c.recent)]
-			if entry.observed >= s.start {
-				frame.Recent = append(frame.Recent, entry.dto)
-			}
-		}
+	for i := range c.recent {
+		frame.Recent[i] = c.recent[(c.recentHead+i)%len(c.recent)].withCurrentTraffic()
 	}
 	return frame
 }

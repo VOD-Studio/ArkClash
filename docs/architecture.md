@@ -68,7 +68,7 @@ sequenceDiagram
 
 节点选择携带 `expectedBootId` 和配置的 `expectedRevision`。`configRevision` 只在完整配置启动或热切换提交后前进；同一配置内连续选节点不会互相使请求过期。旧配置请求在 Go 事务内拒绝，持久化失败恢复原转发目标，幂等重放返回原操作结果。
 
-`coreReady/coreStarting` 与实际 VPN 连接分开。运行事件只在前台且核心就绪时订阅；流量、出口/服务探测和连接/DNS 诊断保留实际连接条件。首次授权拒绝后不自动重试，节点页可显式启动核心。首个配置用 `expectedProfile=""` 原子激活空核心；省略该字段才是不约束。删除最后一个配置先断开、清空运行配置，再删除文件，保留空核心。完整契约、手机驻留限制和未测性能项见 [ADR-0017](adr/0017-core-ready-without-vpn.md)。
+`coreReady/coreStarting` 与实际 VPN 连接分开。运行事件只在前台且核心就绪时订阅；流量、出口和服务探测保留实际连接条件。诊断采集跟随应用级接收端与已认证的核心，不依赖 TUN 是否附加。首次授权拒绝后不自动重试，节点页可显式启动核心。首个配置用 `expectedProfile=""` 原子激活空核心；省略该字段才是不约束。删除最后一个配置先断开、清空运行配置，再删除文件，保留空核心。完整契约、手机驻留限制和未测性能项见 [ADR-0017](adr/0017-core-ready-without-vpn.md)。
 
 ## 状态归属
 
@@ -87,13 +87,13 @@ sequenceDiagram
 | 用户设置（出站模式、局域网代理等） | UI 的 preferences | UI | UI |
 | 应用主题（深浅色、色板、导航及字体） | UI 的 `appearance` preferences | UI | UI；不进入 VPN 进程 |
 | 运行时状态（节点选择、连接、流量、正在运行的配置） | 内核内存 | 内核 | UI，经 controller |
-| 连接 recent/live 与 DNS 诊断历史 | 内核与 UI 内存，不落盘 | 对应可见订阅的内核观察 hook；UI 合并已观察的同代次历史 | 对应工具页，经独立诊断 WebSocket |
+| 连接 recent/live 与 DNS 诊断历史 | 内核与 UI 内存，不落盘 | 内核观察 hook 写入有界历史，应用级接收端维持采集 | 对应工具页，经独立诊断 WebSocket |
 
 Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/update` 和独立 `/arkclash/geo/events` 最新值快照流。离线只读文件信息和编辑设置，页面可见且本次 boot 转发就绪后才订阅、下载；隐藏不取消内核任务。下载串行、可取消，文件与 reader/cache 原子切换，不重建 TUN。归属与 bundle 保护见 [ADR-0015](adr/0015-geo-resource-management.md)。
 
-连接与 DNS 工具分别订阅 `/arkclash/diagnostics/connections`、`/arkclash/diagnostics/dns`，只在对应页面可见且转发就绪时采集；隐藏停止该类订阅，历史保留在内存且隐藏期间不补回。连接首帧 live 是基线，不算 recent；FindProcessOff 不变，DNS initiator 类别不是应用身份。连接 ring 2000、DNS ring 3000，每会话队列 256；溢出以 reset 补齐 canonical 状态，dropped（中间事件合并）与 evicted（历史淘汰）分开计数。多个同类订阅共用 hook/采样器，最后一个离开即撤销。协议及限制见 [ADR-0016](adr/0016-visible-diagnostics.md)。
+`/arkclash/diagnostics/capture` 是随 UI 接收端存活的应用级采集通道，不传记录。连接与 DNS 工具只在页面可见、应用在前台且核心就绪时分别订阅 `/arkclash/diagnostics/connections`、`/arkclash/diagnostics/dns`；重新打开读取同代次完整有界历史，包括此前离页和后台期间的记录。连接首帧 live 基线不算 recent；FindProcessOff 不变，DNS initiator 不是应用身份。连接 ring 2000、DNS ring 3000，页面会话队列 256；溢出以 reset 补齐，dropped（会话内中间事件合并）与 evicted（历史淘汰）分开计数。详见 [ADR-0019](adr/0019-app-diagnostics-capture.md)。
 
-关闭连接使用 `POST /arkclash/diagnostics/connections/close`，清理全部网络 DNS 缓存/传输使用 `POST /arkclash/diagnostics/dns/clear-cache`（不清 FakeIP 或诊断历史）。动作和订阅均以 bootId/configRevision 保护，旧代次动作在核心事务内拒绝；成功热切换在应用配置前退休会话，解析失败不动旧会话。秒级增量及有界 reset 不经过允许丢事件的通用事件通道。
+关闭连接使用 `POST /arkclash/diagnostics/connections/close`，清理全部网络 DNS 缓存/传输使用 `POST /arkclash/diagnostics/dns/clear-cache`（不清 FakeIP 或诊断历史）。动作和页面流均以 bootId/configRevision 保护，旧代次动作在核心事务内拒绝；成功热切换退休旧数据会话与历史，不关闭绑定 bootId 的采集通道。普通 VPN 断开保留同代次历史。秒级增量及有界 reset 不经过允许丢事件的通用事件通道。
 
 同一个应用的 UI 进程和扩展进程共享模块级的 `filesDir`。preferences 只在 UI 进程里用，扩展进程需要的信息都要落到文件通道里。两个进程都会写的文件一律先写临时文件再改名（`shared/Files.ets`），同一时刻只有一方在更新订阅，交接见 ADR-0009。
 
@@ -131,9 +131,9 @@ Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/
 | `core/probe.go` | 按当前规则执行出口/服务探测，共用内核证书信任 |
 | `core/geo_settings.go` | Geo 磁盘设置契约、固定路径和更新元数据 |
 | `core/geo.go`、`geo_download.go`、`geo_events.go` | Geo 串行更新、可取消调度、候选校验/安全提交与最新快照推送 |
-| `core/diagnostics.go` | 可见订阅 registry、运行代次校验、会话背压与连接/DNS 动作事务 |
-| `core/diagnostics_connections.go`、`diagnostics_dns.go` | 仅订阅期间运行的观察 collector、不可变 DTO、有界历史与收尾累计量采样 |
-| `core/diagnostics_stream.go` | 独立诊断 WebSocket、控制帧、整帧写锁、deadline 与订阅清理 |
+| `core/diagnostics.go` | 采集通道及页面订阅生命周期、代次校验、会话背压与诊断动作事务 |
+| `core/diagnostics_connections.go`、`diagnostics_dns.go` | 连接与 DNS 观察、不可变 DTO、有界历史和可见时的流量采样 |
+| `core/diagnostics_stream.go` | 诊断 WebSocket、控制帧、整帧写锁、deadline 与会话清理 |
 | `core/prefetch.go` | 在后台预先下载配置里的 rule-provider，第一次热切换不用等 |
 | `core/tun.go` | 独立持有平台 TUN 的 Go listener；副本 fd 获取与回滚见 mihomo 补丁 |
 | `core/socket.go` | 通过 Network Kit 原生 API 保护 Go 出站 socket，绑定失败则拒绝拨号 |

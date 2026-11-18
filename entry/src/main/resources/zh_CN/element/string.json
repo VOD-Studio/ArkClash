@@ -1978,11 +1978,11 @@
     },
     {
       "name": "diagnostics_disconnected",
-      "value": "未连接"
+      "value": "诊断不可用"
     },
     {
       "name": "diagnostics_connect_hint",
-      "value": "连接代理后开始采集。"
+      "value": "内核就绪后即可查看记录。"
     },
     {
       "name": "diagnostics_connecting",
@@ -1994,7 +1994,7 @@
     },
     {
       "name": "diagnostics_collect_hint",
-      "value": "仅记录此页可见期间的活动。"
+      "value": "应用在后台运行时也会记录活动。"
     },
     {
       "name": "diagnostics_no_matches",

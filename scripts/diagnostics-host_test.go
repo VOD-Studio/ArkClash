@@ -237,16 +237,19 @@ func TestDiagnosticsAllLiveUnboundedHistoryAndOverflowReset(t *testing.T) {
 	}
 	late, _ := diagnosticTestSubscribe(t, "connections")
 	lateFirst := diagnosticTestFrame(t, late, now)
-	if len(lateFirst.Live) != 2105 || len(lateFirst.Recent) != 0 {
-		t.Fatal("late subscriber received historical requests")
+	if len(lateFirst.Live) != 2105 || len(lateFirst.Recent) != 2000 || lateFirst.Evicted != 105 || lateFirst.Dropped != 0 ||
+		lateFirst.Recent[0].ID != trackers[105].ID() || lateFirst.Recent[1999].ID != trackers[2104].ID() {
+		t.Fatal("late subscriber did not receive the canonical ring oldest-first")
 	}
 	for _, tracker := range trackers {
 		tracker.Close()
 	}
 	frame = diagnosticTestFrame(t, s, now.Add(2*time.Second))
 	lateFrame := diagnosticTestFrame(t, late, now.Add(time.Second))
-	if frame.Kind != "reset" || len(frame.Live) != 0 || len(frame.Recent) != 2000 || len(lateFrame.Live) != 0 || len(lateFrame.Recent) != 0 || lateFrame.Evicted != 0 {
-		t.Fatalf("overflow lost close or violated session boundary: first live=%d recent=%d late live=%d recent=%d evicted=%d", len(frame.Live), len(frame.Recent), len(lateFrame.Live), len(lateFrame.Recent), lateFrame.Evicted)
+	if frame.Kind != "reset" || len(frame.Live) != 0 || len(frame.Recent) != 2000 || lateFrame.Kind != "reset" ||
+		len(lateFrame.Live) != 0 || len(lateFrame.Recent) != 2000 || lateFrame.Evicted != 105 ||
+		lateFrame.Recent[0].ID != frame.Recent[0].ID || lateFrame.Recent[1999].ID != frame.Recent[1999].ID {
+		t.Fatalf("overflow reset lost canonical history or final state: first live=%d recent=%d late live=%d recent=%d evicted=%d", len(frame.Live), len(frame.Recent), len(lateFrame.Live), len(lateFrame.Recent), lateFrame.Evicted)
 	}
 	if frame.Evicted != 105 || frame.Dropped <= frame.Evicted {
 		t.Fatal("dropped and evicted are not independent")
@@ -338,13 +341,18 @@ func TestDiagnosticsDNSOverflowBoundaryConversionAndRetirement(t *testing.T) {
 		t.Fatalf("DNS reset incorrect: kind=%s count=%d dropped=%d evicted=%d", frame.Kind, len(frame.Records), frame.Dropped, frame.Evicted)
 	}
 	late, releaseLate := diagnosticTestSubscribe(t, "dns")
-	diagnosticTestDNSFrame(t, late, now)
+	lateFirst := diagnosticTestDNSFrame(t, late, now)
+	if len(lateFirst.Records) != 3000 || lateFirst.Evicted != 5 || lateFirst.Dropped != 0 ||
+		lateFirst.Records[0].ID != frame.Records[0].ID || lateFirst.Records[2999].ID != frame.Records[2999].ID {
+		t.Fatal("late DNS subscriber did not receive the canonical ring oldest-first")
+	}
 	for index := range 257 {
 		c.observeDNS(diagnosticTestRecord(index + 4000))
 	}
 	lateFrame := diagnosticTestDNSFrame(t, late, now.Add(time.Second))
-	if lateFrame.Kind != "reset" || len(lateFrame.Records) != 257 || lateFrame.Evicted != 0 {
-		t.Fatalf("late DNS session replayed history: %+v", lateFrame)
+	if lateFrame.Kind != "reset" || len(lateFrame.Records) != 3000 || lateFrame.Evicted != 262 ||
+		lateFrame.Records[0].Domain != "request-262.diag.test" || lateFrame.Records[2999].Domain != "request-4256.diag.test" {
+		t.Fatalf("late DNS reset lost canonical history: kind=%s count=%d evicted=%d", lateFrame.Kind, len(lateFrame.Records), lateFrame.Evicted)
 	}
 	record := diagnosticTestRecord(9000)
 	record.Msg.Answer = append(record.Msg.Answer,
@@ -456,11 +464,8 @@ func TestDiagnosticsActionsRejectStaleMalformedAndCloseIdempotently(t *testing.T
 	mu.Unlock()
 }
 
-func TestDiagnosticsDNSRealMissHitClearAndStaleNoSideEffect(t *testing.T) {
-	fixture(t)
-	s, _ := diagnosticTestSubscribe(t, "dns")
-	now := time.Now()
-	diagnosticTestDNSFrame(t, s, now)
+func newDiagnosticTestResolver(t *testing.T) dns.Resolvers {
+	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -478,20 +483,31 @@ func TestDiagnosticsDNSRealMissHitClearAndStaleNoSideEffect(t *testing.T) {
 	served := make(chan error, 1)
 	go func() { served <- server.ActivateAndServe() }()
 	diagnosticTestReceive(t, started)
-	defer func() { server.Shutdown(); diagnosticTestReceive(t, served) }()
+	t.Cleanup(func() { server.Shutdown(); diagnosticTestReceive(t, served) })
 	rs := dns.NewResolver(dns.Config{Main: []dns.NameServer{{Net: "tcp", Addr: listener.Addr().String()}}, IPv6: true})
-	defer rs.ResetConnection()
+	t.Cleanup(rs.ResetConnection)
+	return rs
+}
+
+func diagnosticTestQuery(t *testing.T, rs dns.Resolvers, name string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(resolver.WithInitiator(context.Background(), "rule"), 5*time.Second)
+	defer cancel()
+	if _, err := rs.ExchangeContext(ctx, new(D.Msg).SetQuestion(name, D.TypeA)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDiagnosticsDNSRealMissHitClearAndStaleNoSideEffect(t *testing.T) {
+	fixture(t)
+	s, _ := diagnosticTestSubscribe(t, "dns")
+	now := time.Now()
+	diagnosticTestDNSFrame(t, s, now)
+	rs := newDiagnosticTestResolver(t)
 	previous := resolver.DefaultResolver
 	resolver.DefaultResolver = rs
 	defer func() { resolver.DefaultResolver = previous }()
-	query := func(name string) {
-		t.Helper()
-		ctx, cancel := context.WithTimeout(resolver.WithInitiator(context.Background(), "rule"), 5*time.Second)
-		defer cancel()
-		if _, err := rs.ExchangeContext(ctx, new(D.Msg).SetQuestion(name, D.TypeA)); err != nil {
-			t.Fatal(err)
-		}
-	}
+	query := func(name string) { diagnosticTestQuery(t, rs, name) }
 	query("ok.diag.test.")
 	query("ok.diag.test.")
 	identity := fmt.Sprintf(`"expectedBootId":%q,"expectedConfigRevision":%d`, runtimeBootID, runtimeConfigRevision)
@@ -568,7 +584,7 @@ func TestDiagnosticsStopCancelsSocketsAndWaitsOutsideCoreLock(t *testing.T) {
 	}
 }
 
-func TestDiagnosticsInitializationQueuesLifecycleAfterSnapshot(t *testing.T) {
+func TestDiagnosticsInitializationReconcilesLifecycleAndSnapshot(t *testing.T) {
 	cfg := fixture(t)
 	manager := new(statistic.Manager)
 	left, peer := net.Pipe()
@@ -576,6 +592,8 @@ func TestDiagnosticsInitializationQueuesLifecycleAfterSnapshot(t *testing.T) {
 	baseline := statistic.NewTCPTracker(outbound.NewConn(left, cfg.Proxies["DIRECT"].Adapter()), manager, &C.Metadata{Host: "baseline.diag.test"}, nil, 0, 0, false)
 	defer baseline.Close()
 	s, _ := diagnosticTestSubscribe(t, "connections")
+	now := time.Now()
+	diagnosticTestFrame(t, s, now)
 	c := s.collector
 	c.mu.Lock()
 	c.initializing = true
@@ -603,19 +621,18 @@ func TestDiagnosticsInitializationQueuesLifecycleAfterSnapshot(t *testing.T) {
 	}
 	close(resume)
 	diagnosticTestReceive(t, ranged)
-	now := time.Now()
 	c.mu.Lock()
 	c.initializing = false
 	c.releaseUnreferencedLocked()
-	s.initial = c.snapshotLocked(s, "snapshot", now, true)
 	missingBaseline := c.connections[baseline.ID()] == nil
 	c.mu.Unlock()
 	if !missingBaseline {
 		t.Fatal("initial Range resurrected baseline closed before merge")
 	}
-	snapshot := diagnosticTestFrame(t, s, now)
-	if len(snapshot.Live) != 0 || len(snapshot.Recent) != 0 {
-		t.Fatalf("initial snapshot replayed lifecycle: %+v", snapshot)
+	late, _ := diagnosticTestSubscribe(t, "connections")
+	snapshot := diagnosticTestFrame(t, late, now)
+	if len(snapshot.Live) != 0 || len(snapshot.Recent) != 1 || snapshot.Recent[0].ID != short.ID() || snapshot.Recent[0].Upload != 19 {
+		t.Fatalf("snapshot lost short connection or its final counters: %+v", snapshot)
 	}
 	delta := diagnosticTestFrame(t, s, now.Add(time.Second))
 	if len(delta.Opened) != 1 || delta.Opened[0].ID != short.ID() || len(delta.Closed) != 2 {

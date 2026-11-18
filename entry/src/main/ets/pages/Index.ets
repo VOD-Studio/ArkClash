@@ -71,11 +71,13 @@ struct Index {
     accessibility.onAnimationReduceStateChange(this.reductionListener);
     this.profiles.load(this.context);
     this.conn.restore(this.context);
+    this.conn.setDiagnosticsReceiverMounted(true);
     this.syncProfiles();
     this.scrollers.forEach((scroller: Scroller, index: number) => this.tabs.bindScroller(index, scroller));
   }
 
   aboutToDisappear(): void {
+    this.conn.setDiagnosticsReceiverMounted(false);
     this.foreground = false;
     accessibility.offAnimationReduceStateChange(this.reductionListener);
     this.scrollers.forEach((scroller: Scroller) => this.tabs.unbindScroller(scroller));

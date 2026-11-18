@@ -10,12 +10,13 @@ export type ControllerSocketState = 'connecting' | 'open' | 'retrying' | 'closed
 
 /**
  * controller 的一路 WebSocket 推送（/traffic、/connections、/memory 等）。
- * 页面可见时 start，不可见时 stop；收到的每条文本消息交给 onMessage。
+ * 订阅方决定生命周期；收到的文本消息交给 onMessage。
  */
 export class ControllerSocket {
   private path: string;
   private onMessage: (text: string) => void;
   private onState?: (state: ControllerSocketState) => void;
+  private retryAcknowledgement?: string;
   private socket?: webSocket.WebSocket;
   private filesDir: string = '';
   private retries: number = 0;
@@ -27,10 +28,11 @@ export class ControllerSocket {
 
   /** path 含查询参数，比如 '/connections?interval=2000'。 */
   constructor(path: string, onMessage: (text: string) => void,
-    onState?: (state: ControllerSocketState) => void) {
+    onState?: (state: ControllerSocketState) => void, retryAcknowledgement?: string) {
     this.path = path;
     this.onMessage = onMessage;
     this.onState = onState;
+    this.retryAcknowledgement = retryAcknowledgement;
   }
 
   get active(): boolean {
@@ -128,7 +130,9 @@ export class ControllerSocket {
         if (generation !== this.generation || this.socket !== socket || error || typeof data !== 'string') {
           return;
         }
-        this.retries = 0;
+        if (this.retryAcknowledgement === undefined || data === this.retryAcknowledgement) {
+          this.retries = 0;
+        }
         this.onMessage(data);
       });
       const retry = (): void => { this.retry(socket); };

@@ -57,6 +57,9 @@ export class Connection {
   private startPending?: Promise<void>;
   private settingsPending: Promise<void> = Promise.resolve();
   private foreground: boolean = false;
+  private diagnosticsReceiverMounted: boolean = false;
+  private diagnosticsCapture?: ControllerSocket;
+  private diagnosticsBootId: string = '';
   @Trace bootId: string = '';
   @Trace configRevision: number = 0;
   private revision: number = -1;
@@ -95,6 +98,11 @@ export class Connection {
     this.connectDuration = this.prefs.getSync(PREF_CONNECT_DURATION, 0) as number;
     this.allowLan = this.prefs.hasSync(PREF_ALLOW_LAN) ? this.prefs.getSync(PREF_ALLOW_LAN, false) as boolean : undefined;
     // 历史连接标记不能证明当前隧道存在；首帧只恢复用户偏好。
+  }
+
+  setDiagnosticsReceiverMounted(mounted: boolean): void {
+    this.diagnosticsReceiverMounted = mounted;
+    this.syncDiagnosticsCapture();
   }
 
   observe(context: common.UIAbilityContext, visible: boolean): void {
@@ -375,6 +383,7 @@ export class Connection {
     traffic.reset();
     this.invalidateRoute();
     this.syncEvents();
+    this.syncDiagnosticsCapture();
   }
 
   private applyStatus(status: RuntimeStatus): void {
@@ -401,6 +410,7 @@ export class Connection {
       status.tunAttached && status.listenersOpen ? ConnectionState.Connected : ConnectionState.Disconnected;
     this.routeRevision = `${this.bootId}/${this.revision}/${this.routeEpoch}`;
     this.syncEvents();
+    this.syncDiagnosticsCapture();
   }
 
   private userMode(): string {
@@ -477,6 +487,25 @@ export class Connection {
     } else {
       this.events.stop();
     }
+  }
+
+  private syncDiagnosticsCapture(): void {
+    if (!this.diagnosticsReceiverMounted || this.hostState === 'stopped' ||
+      this.diagnosticsBootId !== this.bootId) {
+      this.diagnosticsCapture?.stop();
+      this.diagnosticsCapture = undefined;
+      this.diagnosticsBootId = '';
+    }
+    // 失去状态查询不代表内核或已有租约已失效；只凭认证状态开始订阅。
+    if (!this.diagnosticsReceiverMounted || !this.coreReady || this.hostState !== 'running' || this.bootId === '') {
+      return;
+    }
+    if (this.diagnosticsCapture === undefined) {
+      const path = `/arkclash/diagnostics/capture?expectedBootId=${encodeURIComponent(this.bootId)}`;
+      this.diagnosticsCapture = new ControllerSocket(path, (): void => {}, undefined, 'ready');
+      this.diagnosticsBootId = this.bootId;
+    }
+    this.diagnosticsCapture.start(this.filesDir);
   }
 
   private invalidateRoute(): void {

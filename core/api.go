@@ -63,6 +63,7 @@ func init() {
 			r.Post("/geo/settings", postGeoSettings)
 			r.Post("/geo/update", postGeoUpdate)
 			r.Get("/geo/events", getGeoEvents)
+			r.Get("/diagnostics/capture", getDiagnosticCapture)
 			r.Get("/diagnostics/connections", getDiagnosticConnections)
 			r.Get("/diagnostics/dns", getDiagnosticDns)
 			r.Post("/diagnostics/connections/close", postDiagnosticConnectionsClose)

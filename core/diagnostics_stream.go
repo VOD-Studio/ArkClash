@@ -29,7 +29,7 @@ func getDiagnosticDns(w http.ResponseWriter, r *http.Request) {
 	getDiagnosticStream(w, r, "dns")
 }
 
-func diagnosticStreamRuntime(r *http.Request) (string, uint64, error) {
+func diagnosticStreamRuntime(r *http.Request, requireRevision bool) (string, uint64, error) {
 	invalid := errors.New("diagnostics_invalid_request")
 	if r.Method != http.MethodGet || !r.ProtoAtLeast(1, 1) ||
 		!strings.EqualFold(r.Header.Get("Upgrade"), "websocket") ||
@@ -52,8 +52,15 @@ func diagnosticStreamRuntime(r *http.Request) (string, uint64, error) {
 	if err != nil {
 		return "", 0, invalid
 	}
-	boot, revision := query["expectedBootId"], query["expectedConfigRevision"]
-	if len(boot) != 1 || strings.TrimSpace(boot[0]) == "" || len(revision) != 1 || revision[0] == "" {
+	boot := query["expectedBootId"]
+	if len(boot) != 1 || strings.TrimSpace(boot[0]) == "" {
+		return "", 0, invalid
+	}
+	if !requireRevision {
+		return boot[0], 0, nil
+	}
+	revision := query["expectedConfigRevision"]
+	if len(revision) != 1 || revision[0] == "" {
 		return "", 0, invalid
 	}
 	for _, digit := range revision[0] {
@@ -68,8 +75,43 @@ func diagnosticStreamRuntime(r *http.Request) (string, uint64, error) {
 	return boot[0], parsed, nil
 }
 
+func getDiagnosticCapture(w http.ResponseWriter, r *http.Request) {
+	bootID, _, err := diagnosticStreamRuntime(r, false)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	mu.Lock()
+	status, err := diagnosticBootError(bootID)
+	mu.Unlock()
+	if err != nil {
+		writeError(w, r, status, err)
+		return
+	}
+	conn, rw, err := upgradeWebSocket(w, r)
+	if err != nil {
+		return
+	}
+	writer, readerDone, stop := startDiagnosticSocket(r, conn, rw.Reader)
+	lease, previous := acquireDiagnosticCapture(r.Context(), bootID, conn, readerDone)
+	if lease == nil {
+		stop()
+		return
+	}
+	defer close(lease.workerDone)
+	if previous != nil {
+		// 完整停机只需等待当前 lease；它会依次等待尚未退出的前任。
+		defer func() { <-previous.workerDone }()
+	}
+	defer lease.release()
+	defer stop()
+	if writer.text([]byte("ready")) == nil {
+		<-readerDone
+	}
+}
+
 func getDiagnosticStream(w http.ResponseWriter, r *http.Request, feed string) {
-	bootID, revision, err := diagnosticStreamRuntime(r)
+	bootID, revision, err := diagnosticStreamRuntime(r, true)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, err)
 		return
@@ -90,29 +132,8 @@ func getDiagnosticStream(w http.ResponseWriter, r *http.Request, feed string) {
 	if !session.attach(conn) {
 		return
 	}
-	writer := diagnosticSocketWriter{conn: conn}
-	readerDone, watcherDone := make(chan struct{}), make(chan struct{})
-	go func() {
-		defer close(readerDone)
-		readDiagnosticControls(rw.Reader, &writer)
-	}()
-	go func() {
-		defer close(watcherDone)
-		select {
-		case <-r.Context().Done():
-		case <-session.done:
-		case <-readerDone:
-		}
-		// 写入可能正被慢读端阻塞，取消不能等待主循环再次进入 select。
-		session.close()
-		_ = conn.Close()
-	}()
-	defer func() {
-		session.close()
-		_ = conn.Close()
-		<-readerDone
-		<-watcherDone
-	}()
+	writer, readerDone, stop := startDiagnosticSocket(r, conn, rw.Reader)
+	defer stop()
 	for {
 		select {
 		case <-r.Context().Done():
@@ -136,6 +157,30 @@ func getDiagnosticStream(w http.ResponseWriter, r *http.Request, feed string) {
 				return
 			}
 		}
+	}
+}
+
+func startDiagnosticSocket(r *http.Request, conn net.Conn, reader *bufio.Reader) (*diagnosticSocketWriter, <-chan struct{}, func()) {
+	writer := &diagnosticSocketWriter{conn: conn}
+	readerDone, watcherDone := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(readerDone)
+		// EOF 或 Close 控制帧也要唤醒可能被慢读端阻塞的写入。
+		defer conn.Close()
+		readDiagnosticControls(reader, writer)
+	}()
+	go func() {
+		defer close(watcherDone)
+		select {
+		case <-r.Context().Done():
+			_ = conn.Close()
+		case <-readerDone:
+		}
+	}()
+	return writer, readerDone, func() {
+		_ = conn.Close()
+		<-readerDone
+		<-watcherDone
 	}
 }
 

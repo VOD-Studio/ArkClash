@@ -146,13 +146,19 @@ const geoSettings = loadConsumer('../entry/src/main/ets/shared/GeoResources.ets'
     async rename() { state.geoText = state.geoTemporary; }
   } }
 });
-const { Connection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
+const connectionBindings = {
   '@kit.AbilityKit': {}, '@kit.BasicServicesKit': {}, '@kit.NetworkKit': {},
   '@kit.ArkData': { preferences: { getPreferencesSync: () => prefs } },
-  './Controller': {}, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } },
+  './Controller': {},
   './CoreClient': core, './Proxies': { flushProxySelections: async () => {} },
-  './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': { runtimeMayBeActive: async () => state.active },
+  './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': {
+    CONTROLLER_ADDRESS: '127.0.0.1:19090', readRuntime: async () => state.runtime,
+    runtimeMayBeActive: async () => state.active
+  },
   '../shared/GeoResources': geoSettings
+};
+const { Connection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
+  ...connectionBindings, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } }
 });
 const runControls = loadConsumer('../entry/src/main/ets/features/home/HomeRunControls.ets', {});
 
@@ -758,6 +764,93 @@ test('预热允许空配置，不连接VPN且复用同一认证实例', async ()
   await connection.ensureReady(context);
   assert.equal(state.started, 1);
   assert.equal(state.runtime.secret, secret);
+});
+
+test('诊断捕获绑定已挂载的UI接收端和认证boot，不随前后台、普通断开或配置切换停止', async () => {
+  const captures = [];
+  const { Connection: CaptureConnection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
+    ...connectionBindings,
+    '@kit.NetworkKit': {
+      connection: { createNetConnection: () => ({ on() {}, register(done) { done(); }, unregister() {} }) },
+      webSocket: { createWebSocket() {
+        const handlers = new Map();
+        return {
+          closed: false,
+          on(name, listener) { handlers.set(name, listener); },
+          off(name) { handlers.delete(name); },
+          async connect(address, options) {
+            const url = new URL(address);
+            if (url.pathname === '/arkclash/diagnostics/capture') {
+              assert.equal(options.header.Authorization, 'Bearer fixture-session');
+              assert.deepEqual([...url.searchParams.keys()], ['expectedBootId']);
+              captures.push({ boot: url.searchParams.get('expectedBootId'), socket: this });
+              handlers.get('message')(undefined, 'ready');
+            }
+            handlers.get('open')(undefined);
+            return true;
+          },
+          async close() { this.closed = true; }
+        };
+      } }
+    }
+  });
+  const connection = new CaptureConnection();
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const bootId = 'fixture+boot&query';
+  connection.restore(context);
+  state.active = true;
+  connection.setDiagnosticsReceiverMounted(true);
+  await settle();
+  assert.equal(captures.length, 0);
+
+  state.status = { ...warm, bootId };
+  await connection.recheck(context);
+  await settle();
+  assert.equal(captures.length, 1);
+  assert.equal(captures[0].boot, bootId);
+  assert.equal(connection.connected, false);
+  connection.observe(context, true);
+  await settle();
+  connection.observe(context, false);
+  state.status = undefined;
+  await assert.rejects(connection.recheck(context), /尚未确认代理状态/);
+  assert.equal(connection.hostState, 'unknown');
+  assert.equal(captures[0].socket.closed, false);
+
+  state.status = { ...ready, bootId, configRevision: 2, revision: 2 };
+  await connection.recheck(context);
+  await connection.disconnect(context);
+  assert.equal(connection.connected, false);
+  assert.equal(connection.configRevision, 2);
+  assert.equal(captures.length, 1);
+  assert.equal(captures[0].socket.closed, false);
+
+  connection.diagnosticsCapture.fail('fixture');
+  assert.equal(captures[0].socket.closed, true);
+  connection.observe(context, true);
+  await settle();
+  assert.equal(captures.length, 2, 'authenticated foreground recheck re-arms inactive transport');
+
+  state.status = { ...warm, bootId: 'new.boot' };
+  await connection.recheck(context);
+  await settle();
+  assert.equal(captures.length, 3);
+  assert.equal(captures[1].socket.closed, true);
+  assert.equal(captures[2].boot, 'new.boot');
+  connection.setDiagnosticsReceiverMounted(false);
+  assert.equal(captures[2].socket.closed, true);
+  await connection.recheck(context);
+  assert.equal(captures.length, 3);
+
+  connection.setDiagnosticsReceiverMounted(true);
+  await settle();
+  assert.equal(captures.length, 4);
+  state.status = undefined;
+  state.active = false;
+  assert.equal(await connection.recheck(context), false);
+  assert.equal(captures[3].socket.closed, true);
+  connection.observe(context, false);
+  connection.setDiagnosticsReceiverMounted(false);
 });
 
 test('预热单飞，连接和普通断开保持同一核心', async () => {

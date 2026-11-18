@@ -36,16 +36,10 @@ interface RecordHistoryItem {
   id: string;
 }
 
-interface RecordHistoryEntry<T extends RecordHistoryItem> {
-  record: T;
-  session: string;
-}
-
-// canonical 与暂停视图各自有界；reset 只替换产生它的会话分区。
+// canonical 按内核顺序保存；暂停时保留独立、有界的滚动窗口。
 class RecordHistory<T extends RecordHistoryItem> {
-  private canonical: RecordHistoryEntry<T>[] = [];
+  private canonical: Map<string, T> = new Map<string, T>();
   private paused: T[] = [];
-  private entries: Map<string, RecordHistoryEntry<T>> = new Map<string, RecordHistoryEntry<T>>();
   private pausedIndices: Map<string, number> = new Map<string, number>();
   private limit: number;
   private pausedLimit: number;
@@ -58,60 +52,55 @@ class RecordHistory<T extends RecordHistoryItem> {
   }
 
   clear(): void {
-    this.canonical = [];
+    this.canonical.clear();
     this.paused = [];
-    this.entries.clear();
     this.pausedIndices.clear();
     this.following = true;
     this.anchor = '';
   }
 
   values(): T[] {
-    return this.following ? this.canonical.map<T>((entry: RecordHistoryEntry<T>): T => entry.record) : this.paused;
+    return this.following ? Array.from<T>(this.canonical.values()) : this.paused;
   }
 
-  get count(): number { return this.following ? this.canonical.length : this.paused.length; }
+  get count(): number { return this.following ? this.canonical.size : this.paused.length; }
 
   get(id: string): T | undefined {
     const index = this.pausedIndices.get(id);
-    return this.entries.get(id)?.record ?? (index === undefined ? undefined : this.paused[index]);
+    return this.canonical.get(id) ?? (index === undefined ? undefined : this.paused[index]);
   }
 
-  append(records: T[], session: string): void {
-    for (const record of records) {
-      const entry = this.entries.get(record.id);
-      if (entry === undefined) {
-        const next: RecordHistoryEntry<T> = { record: record, session: session };
-        this.entries.set(record.id, next);
-        this.canonical.push(next);
-      } else {
-        entry.record = record;
+  append(records: T[]): void {
+    for (const record of records) { this.canonical.set(record.id, record); }
+    if (this.canonical.size > this.limit) {
+      for (const id of this.canonical.keys()) {
+        this.canonical.delete(id);
+        if (this.canonical.size === this.limit) { break; }
       }
     }
-    this.trim();
     this.mergePaused(records);
   }
 
   update(record: T): void {
-    const entry = this.entries.get(record.id);
-    if (entry !== undefined) { entry.record = record; }
+    if (this.canonical.has(record.id)) { this.canonical.set(record.id, record); }
     const index = this.pausedIndices.get(record.id);
     if (index !== undefined) { this.paused[index] = record; }
   }
 
-  reset(records: T[], session: string): void {
-    const ids: Set<string> = new Set<string>(records.map<string>((record: T): string => record.id));
-    this.canonical = this.canonical.filter((entry: RecordHistoryEntry<T>): boolean =>
-      entry.session !== session || ids.has(entry.record.id));
-    this.entries.clear();
-    for (const entry of this.canonical) { this.entries.set(entry.record.id, entry); }
-    this.append(records, session);
+  replace(records: T[], newSession: boolean): void {
+    this.canonical.clear();
+    // 同一 boot/revision 的新流也可能来自新 collector，不能携带旧暂停记录。
+    if (newSession && !this.following) {
+      this.paused = [];
+      this.pausedIndices.clear();
+    }
+    this.append(records);
   }
 
   setFollowing(following: boolean): void {
     if (following === this.following) { return; }
     if (!following) {
-      this.paused = this.canonical.map<T>((entry: RecordHistoryEntry<T>): T => entry.record);
+      this.paused = Array.from<T>(this.canonical.values());
       this.reindexPaused();
     } else {
       this.paused = [];
@@ -119,13 +108,6 @@ class RecordHistory<T extends RecordHistoryItem> {
       this.anchor = '';
     }
     this.following = following;
-  }
-
-  private trim(): void {
-    if (this.canonical.length > this.limit) {
-      const removed = this.canonical.splice(0, this.canonical.length - this.limit);
-      for (const entry of removed) { this.entries.delete(entry.record.id); }
-    }
   }
 
   private mergePaused(records: T[]): void {
@@ -181,13 +163,13 @@ class RecordStreamSession {
 
   setRuntime(ready: boolean, bootId: string, configRevision: number): boolean {
     const valid = bootId !== '' && Number.isSafeInteger(configRevision) && configRevision > 0;
-    const changed = valid && (bootId !== this.runtime.bootId || configRevision !== this.runtime.configRevision);
+    const nextBoot = valid ? bootId : '';
+    const nextRevision = valid ? configRevision : 0;
+    const changed = nextBoot !== this.runtime.bootId || nextRevision !== this.runtime.configRevision;
     if (changed) {
-      this.stop();
-      this.runtime = { bootId: bootId, configRevision: configRevision };
+      this.runtime = { bootId: nextBoot, configRevision: nextRevision };
     }
     this.ready = ready && valid;
-    if (!this.ready) { this.stop(); }
     return changed;
   }
 
@@ -262,6 +244,14 @@ function historicalConnection(record: DiagnosticConnection, previous?: Connectio
   return view;
 }
 
+function sameDnsRecord(first: DiagnosticDnsRecord, second: DiagnosticDnsRecord): boolean {
+  return first.domain === second.domain && first.type === second.type && first.initiator === second.initiator &&
+    first.upstream === second.upstream && first.rcode === second.rcode && first.error === second.error &&
+    first.cached === second.cached && first.delay === second.delay && first.time === second.time &&
+    first.answers.length === second.answers.length &&
+    first.answers.every((answer: string, index: number): boolean => answer === second.answers[index]);
+}
+
 @ObservedV2
 export class ConnectionRecordsStore {
   @Trace query: string = '';
@@ -296,6 +286,7 @@ export class ConnectionRecordsStore {
   @Trace private liveCount: number = 0;
   @Trace private historyCount: number = 0;
   @Trace private connectionReady: boolean = false;
+  @Trace private forwardingReady: boolean = false;
   @Trace private baselineReady: boolean = false;
   @Trace private selectedRecord?: ConnectionRecordView;
   private context?: common.UIAbilityContext;
@@ -319,9 +310,10 @@ export class ConnectionRecordsStore {
   private savedLiveWidths: Record<string, number> = {};
 
   get canAct(): boolean {
-    return this.connectionReady && this.baselineReady && this.streamState === 'open' && !this.actionPending;
+    return this.forwardingReady && this.synced && !this.actionPending;
   }
   get ready(): boolean { return this.connectionReady; }
+  get synced(): boolean { return this.connectionReady && this.baselineReady && this.streamState === 'open'; }
   get totalRecords(): number { return this.feed === 'live' ? this.liveCount : this.historyCount; }
   get visibleRecords(): number { return this.filteredCount; }
   get activeRuntime(): DiagnosticRuntime {
@@ -348,11 +340,15 @@ export class ConnectionRecordsStore {
     else { this.syncStream(); }
   }
 
-  setConnection(ready: boolean, bootId: string, configRevision: number): void {
+  setConnection(ready: boolean, bootId: string, configRevision: number, forwardingReady: boolean): void {
+    this.forwardingReady = forwardingReady;
+    if (!forwardingReady && this.actionPending) {
+      ++this.session.actionEpoch;
+      this.actionPending = false;
+    }
     const changed = this.session.setRuntime(ready, bootId, configRevision);
     this.connectionReady = this.session.ready;
-    if (changed) { this.clearRecords(); }
-    if (!this.session.ready) { this.stopStream(); }
+    if (changed || !this.session.ready) { this.stopStream(changed); }
     this.syncStream();
   }
 
@@ -495,11 +491,12 @@ export class ConnectionRecordsStore {
     }
   }
 
-  private stopStream(): void {
+  private stopStream(resetRecords: boolean = false): void {
     this.session.stop();
     this.baselineReady = false;
     this.streamState = 'closed';
     this.actionPending = false;
+    if (resetRecords) { this.clearRecords(); return; }
     this.clearLive();
     this.refresh();
   }
@@ -522,25 +519,12 @@ export class ConnectionRecordsStore {
     this.evicted = frame.evicted;
     this.error = '';
     if (frame.kind === 'snapshot' || frame.kind === 'reset') {
-      const previous = this.live;
-      this.live = new Map<string, DiagnosticConnection>();
-      for (const connection of frame.live) {
-        const existing = previous.get(connection.id) ?? this.history.get(connection.id);
-        const record = existing === undefined ? connection :
-          connectionWithTraffic(existing, connection.upload, connection.download);
-        this.live.set(record.id, record);
-        this.history.update(record);
-      }
-      if (frame.kind === 'reset') {
-        const recent = frame.recent.map<DiagnosticConnection>((record: DiagnosticConnection): DiagnosticConnection => {
-          const existing = this.history.get(record.id);
-          return existing === undefined ? record : connectionWithTraffic(existing, record.upload, record.download);
-        });
-        this.history.reset(recent, frame.sessionId);
-      }
+      this.live.clear();
+      for (const connection of frame.live) { this.live.set(connection.id, connection); }
+      this.history.replace(frame.recent, frame.kind === 'snapshot');
     } else {
       for (const connection of frame.opened) { this.live.set(connection.id, connection); }
-      this.history.append(frame.opened, frame.sessionId);
+      this.history.append(frame.opened);
       for (const traffic of frame.traffic) { this.applyTraffic(traffic); }
       for (const id of frame.closed) { this.live.delete(id); }
     }
@@ -759,6 +743,7 @@ export class DnsRecordsStore {
   @Trace private filteredCount: number = 0;
   @Trace private historyCount: number = 0;
   @Trace private connectionReady: boolean = false;
+  @Trace private forwardingReady: boolean = false;
   @Trace private baselineReady: boolean = false;
   @Trace private selectedRecord?: DiagnosticDnsRecord;
   private context?: common.UIAbilityContext;
@@ -771,9 +756,10 @@ export class DnsRecordsStore {
   @Trace private tableSort: RecordSort = { column: '', direction: '' };
 
   get canAct(): boolean {
-    return this.connectionReady && this.baselineReady && this.streamState === 'open' && !this.actionPending;
+    return this.forwardingReady && this.synced && !this.actionPending;
   }
   get ready(): boolean { return this.connectionReady; }
+  get synced(): boolean { return this.connectionReady && this.baselineReady && this.streamState === 'open'; }
   get totalRecords(): number { return this.historyCount; }
   get visibleRecords(): number { return this.filteredCount; }
   get activeRuntime(): DiagnosticRuntime {
@@ -800,11 +786,15 @@ export class DnsRecordsStore {
     else { this.syncStream(); }
   }
 
-  setConnection(ready: boolean, bootId: string, configRevision: number): void {
+  setConnection(ready: boolean, bootId: string, configRevision: number, forwardingReady: boolean): void {
+    this.forwardingReady = forwardingReady;
+    if (!forwardingReady && this.actionPending) {
+      ++this.session.actionEpoch;
+      this.actionPending = false;
+    }
     const changed = this.session.setRuntime(ready, bootId, configRevision);
     this.connectionReady = this.session.ready;
-    if (changed) { this.clearRecords(); }
-    if (!this.session.ready) { this.stopStream(); }
+    if (changed || !this.session.ready) { this.stopStream(changed); }
     this.syncStream();
   }
 
@@ -893,9 +883,10 @@ export class DnsRecordsStore {
     }
   }
 
-  private stopStream(): void {
+  private stopStream(resetRecords: boolean = false): void {
     this.session.stop(); this.streamState = 'closed'; this.actionPending = false;
     this.baselineReady = false;
+    if (resetRecords) { this.clearRecords(); }
   }
 
   private clearRecords(): void {
@@ -909,10 +900,15 @@ export class DnsRecordsStore {
     if (!this.session.accept(frame.bootId, frame.configRevision, frame.sessionId, frame.seq, frame.kind)) { return; }
     this.baselineReady = true;
     this.sampledAt = frame.sampledAt; this.dropped = frame.dropped; this.evicted = frame.evicted; this.error = '';
-    const records = (frame.kind === 'delta' ? frame.added : frame.records).map<DiagnosticDnsRecord>(
-      (record: DiagnosticDnsRecord): DiagnosticDnsRecord => this.history.get(record.id) ?? record);
-    if (frame.kind === 'reset') { this.history.reset(records, frame.sessionId); }
-    else { this.history.append(records, frame.sessionId); }
+    if (frame.kind === 'delta') {
+      this.history.append(frame.added);
+    } else {
+      const records = frame.records.map<DiagnosticDnsRecord>((record: DiagnosticDnsRecord): DiagnosticDnsRecord => {
+        const previous = this.history.get(record.id);
+        return previous !== undefined && sameDnsRecord(previous, record) ? previous : record;
+      });
+      this.history.replace(records, frame.kind === 'snapshot');
+    }
     this.refresh(frame.kind === 'delta' && this.following);
   }
 

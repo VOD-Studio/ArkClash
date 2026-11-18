@@ -227,7 +227,7 @@ export function toolFrame(type = 'connections', kind = 'snapshot', seq = 1, opti
 async function onlineTools(h, type = 'connections', options = {}) {
   const { ConnectionRecordsStore, DnsRecordsStore } = h.load('features/tools/RecordStores.ets');
   const store = h.track(type === 'connections' ? new ConnectionRecordsStore() : new DnsRecordsStore());
-  store.setConnection(true, options.bootId ?? 'boot-a', options.configRevision ?? 1);
+  store.setConnection(true, options.bootId ?? 'boot-a', options.configRevision ?? 1, true);
   store.setVisible(true);
   await store.load(h.context);
   await h.flush();
@@ -313,15 +313,16 @@ test('seq缺口停止流且保持真实历史；非法帧不重试，手动retry
   store.retry();
   await h.flush();
   h.sockets.at(-1).open();
-  h.sockets.at(-1).emit(toolFrame('connections', 'snapshot', 1, { sessionId: 'session-b', live: [toolConnection('baseline-b')] }));
+  h.sockets.at(-1).emit(toolFrame('connections', 'snapshot', 1, { sessionId: 'session-b',
+    live: [toolConnection('baseline-b')], recent: [toolConnection('canonical')] }));
   assert.equal(store.canAct, true);
-  assert.deepEqual(connectionIds(store), ['seen']);
+  assert.deepEqual(connectionIds(store), ['canonical']);
   h.sockets.at(-1).emit('{broken');
   assert.equal(store.error, 'diagnostics_invalid_data');
   assert.equal(h.timers.size, 0);
 }));
 
-test('断流立即撤销live和动作；重连保留历史但不补baseline，隐藏取消timer且旧回调无效', async () => toolsCase(async h => {
+test('断流撤销live和动作；重连采用完整历史，隐藏取消timer且旧回调无效', async () => toolsCase(async h => {
   const { store, socket } = await onlineTools(h);
   socket.emit(toolFrame('connections', 'delta', 2, { opened: [toolConnection('seen')] }));
   const staleMessage = socket.capture('message');
@@ -337,12 +338,13 @@ test('断流立即撤销live和动作；重连保留历史但不补baseline，�
   const current = h.sockets.at(-1);
   assert.notStrictEqual(current, socket);
   current.open();
-  current.emit(toolFrame('connections', 'snapshot', 1, { sessionId: 'session-b', live: [toolConnection('hidden')] }));
+  current.emit(toolFrame('connections', 'snapshot', 1, { sessionId: 'session-b',
+    live: [toolConnection('hidden')], recent: [toolConnection('seen'), toolConnection('between-streams')] }));
   staleOpen(undefined);
   staleMessage(undefined, JSON.stringify(toolFrame('connections', 'delta', 3, { opened: [toolConnection('stale')] })));
   store.setFeed('recent');
   await h.flush();
-  assert.deepEqual(connectionIds(store), ['seen']);
+  assert.deepEqual(connectionIds(store), ['between-streams', 'seen']);
   store.select('seen');
   store.setQuery('fixture');
   store.toggleFacet('network', 'tcp');
@@ -362,30 +364,40 @@ test('断流立即撤销live和动作；重连保留历史但不补baseline，�
   store.setVisible(true);
   await h.flush();
   h.sockets.at(-1).open();
-  h.sockets.at(-1).emit(toolFrame('connections', 'snapshot', 1, { sessionId: 'session-c' }));
+  h.sockets.at(-1).emit(toolFrame('connections', 'snapshot', 1, {
+    sessionId: 'session-c', recent: [toolConnection('while-hidden')]
+  }));
   store.setFeed('recent');
   await h.flush();
   store.toggleGroup(store.source.getData(0).key);
-  assert.deepEqual(connectionIds(store), ['seen']);
+  assert.deepEqual(connectionIds(store), ['while-hidden']);
 }));
 
-test('configRevision零断开保留历史；相同身份不重连，新boot或配置清空详情和历史', async () => toolsCase(async h => {
+test('普通脱离VPN保留历史和流；未知只暂停订阅，确认停止和身份变更清空历史', async () => toolsCase(async h => {
   const { store, socket } = await onlineTools(h);
   socket.emit(toolFrame('connections', 'delta', 2, { opened: [toolConnection('seen')] }));
   store.select('seen');
-  store.setConnection(true, 'boot-a', 1);
-  assert.equal(h.sockets.length, 1);
-  store.setConnection(false, '', 0);
+  store.setConnection(true, 'boot-a', 1, false);
+  assert.equal(socket.closed, false);
+  assert.equal(store.synced, true);
+  assert.equal(store.canAct, false);
+  await store.closeAll();
+  assert.equal(h.requests.length, 0);
   store.setFeed('recent');
   await h.flush();
   assert.deepEqual(connectionIds(store), ['seen']);
   assert.ok(store.selected);
-  store.setConnection(true, 'boot-a', 1);
+  store.setConnection(false, 'boot-a', 1, false);
+  assert.equal(socket.closed, true);
+  assert.deepEqual(connectionIds(store), ['seen']);
+  store.setConnection(true, 'boot-a', 1, false);
   await h.flush();
   h.sockets.at(-1).open();
-  h.sockets.at(-1).emit(toolFrame('connections', 'snapshot', 1, { sessionId: 'session-b' }));
+  h.sockets.at(-1).emit(toolFrame('connections', 'snapshot', 1, {
+    sessionId: 'session-b', recent: [toolConnection('seen')]
+  }));
   assert.deepEqual(connectionIds(store), ['seen']);
-  store.setConnection(true, 'boot-a', 2);
+  store.setConnection(true, 'boot-a', 2, true);
   assert.equal(store.totalRecords, 0);
   assert.equal(store.selectedId, '');
   assert.equal(store.selected, undefined);
@@ -394,11 +406,13 @@ test('configRevision零断开保留历史；相同身份不重连，新boot或�
   h.sockets.at(-1).emit(toolFrame('connections', 'snapshot', 1, { configRevision: 2, sessionId: 'session-c' }));
   h.sockets.at(-1).emit(toolFrame('connections', 'delta', 2, { configRevision: 2, sessionId: 'session-c', opened: [toolConnection('new')] }));
   assert.equal(store.totalRecords, 1);
-  store.setConnection(true, 'boot-b', 2);
+  store.setConnection(false, 'boot-a', 0, false);
+  assert.equal(store.totalRecords, 0);
+  store.setConnection(true, 'boot-b', 2, true);
   assert.equal(store.totalRecords, 0);
 }));
 
-test('reset替换当前分区而保留旧会话与暂停头；恢复following才回收暂停额外记录', async () => toolsCase(async h => {
+test('reset替换完整canonical并去重，暂停窗口保留锚直到恢复following', async () => toolsCase(async h => {
   const { store, socket } = await onlineTools(h);
   socket.emit(toolFrame('connections', 'delta', 2, { opened: [toolConnection('old-session')], closed: ['old-session'] }));
   store.setVisible(false);
@@ -406,22 +420,29 @@ test('reset替换当前分区而保留旧会话与暂停头；恢复following才
   await h.flush();
   const current = h.sockets.at(-1);
   current.open();
-  current.emit(toolFrame('connections', 'snapshot', 1, { sessionId: 'session-b' }));
+  current.emit(toolFrame('connections', 'snapshot', 1, {
+    sessionId: 'session-b', recent: [toolConnection('old-session')]
+  }));
   current.emit(toolFrame('connections', 'delta', 2, { sessionId: 'session-b', opened: [toolConnection('head'), toolConnection('remove')], closed: ['head', 'remove'] }));
   store.setFeed('recent');
   await h.flush();
   store.setFollowing(false);
   store.setAnchor('head');
-  current.emit(toolFrame('connections', 'reset', 3, { sessionId: 'session-b', recent: [toolConnection('tail')], dropped: 257, evicted: 4 }));
+  const head = store.source.values().find(row => row.key === 'head');
+  current.emit(toolFrame('connections', 'reset', 3, { sessionId: 'session-b',
+    recent: [toolConnection('head', { download: 12 }), toolConnection('tail'), toolConnection('tail')],
+    dropped: 257, evicted: 4 }));
   assert.deepEqual(connectionIds(store), ['tail', 'remove', 'head', 'old-session']);
   assert.equal(store.anchorKey, 'head');
   assert.equal(store.dropped, 257);
   assert.equal(store.evicted, 4);
   store.setFollowing(true);
-  assert.deepEqual(connectionIds(store), ['tail', 'old-session']);
+  assert.deepEqual(connectionIds(store), ['tail', 'head']);
+  assert.strictEqual(store.source.getData(1), head);
+  assert.equal(head.record.connection.download, 12);
   assert.equal(store.anchorKey, '');
   current.emit(toolFrame('connections', 'reset', 4, { sessionId: 'session-b', recent: [], live: [toolConnection('active')], dropped: 258 }));
-  assert.deepEqual(connectionIds(store), ['old-session']);
+  assert.deepEqual(connectionIds(store), []);
   store.setFeed('live');
   await h.flush();
   assert.deepEqual(connectionIds(store), ['active']);
@@ -561,7 +582,7 @@ test('DNS流独立、错误/无upstream保真，重复seq无重复，清缓存�
   assert.equal(store.visibleRecords, 1);
 }));
 
-test('DNS3000/暂停6000边界、reset保留暂停头和旧会话，新配置清空', async () => toolsCase(async h => {
+test('DNS3000/暂停6000边界、reset保留暂停头，新流重建canonical与暂停窗口', async () => toolsCase(async h => {
   const { store, socket } = await onlineTools(h, 'dns');
   socket.emit(toolFrame('dns', 'delta', 2, { added: Array.from({ length: 3001 }, (_, i) => toolDns(`d${i}`)) }));
   assert.equal(store.totalRecords, 3000);
@@ -576,20 +597,31 @@ test('DNS3000/暂停6000边界、reset保留暂停头和旧会话，新配置清
   assert.ok(dnsIds(store).includes('d3'));
   store.setFollowing(true);
   assert.deepEqual(dnsIds(store), ['retained']);
+  store.setFollowing(false);
+  store.setAnchor('retained');
   store.setVisible(false);
-  store.setConnection(false, '', 0);
+  store.setConnection(false, 'boot-a', 1, false);
   assert.deepEqual(dnsIds(store), ['retained']);
-  store.setConnection(true, 'boot-a', 1);
+  store.setConnection(true, 'boot-a', 1, false);
   store.setVisible(true);
   await h.flush();
   const next = h.sockets.at(-1);
   next.open();
-  next.emit(toolFrame('dns', 'snapshot', 1, { sessionId: 'session-b' }));
-  next.emit(toolFrame('dns', 'delta', 2, { sessionId: 'session-b', added: [toolDns('current')] }));
-  next.emit(toolFrame('dns', 'reset', 3, { sessionId: 'session-b', records: [] }));
-  assert.deepEqual(dnsIds(store), ['retained']);
-  store.select('retained');
-  store.setConnection(true, 'boot-a', 2);
+  next.emit(toolFrame('dns', 'snapshot', 1, {
+    sessionId: 'session-b', records: [toolDns('canonical'), toolDns('current'), toolDns('current')], evicted: 7
+  }));
+  assert.deepEqual(dnsIds(store), ['current', 'canonical']);
+  assert.equal(store.anchorKey, 'canonical');
+  assert.equal(store.evicted, 7);
+  assert.equal(store.canAct, false);
+  store.setFollowing(true);
+  next.emit(toolFrame('dns', 'reset', 2, {
+    sessionId: 'session-b', records: [toolDns('current', { domain: 'updated.example' })]
+  }));
+  assert.deepEqual(dnsIds(store), ['current']);
+  store.select('current');
+  assert.equal(store.selected.domain, 'updated.example');
+  store.setConnection(true, 'boot-a', 2, true);
   assert.equal(store.totalRecords, 0);
   assert.equal(store.selectedId, '');
 }));
@@ -603,7 +635,7 @@ test('DNS断流拒绝动作和seq缺口，隐藏或新代次的旧HTTP响应不�
   await h.flush();
   await store.clearCache();
   assert.equal(h.requests.length, 1);
-  store.setConnection(true, 'boot-b', 1);
+  store.setConnection(true, 'boot-b', 1, true);
   gate.resolve();
   await pending;
   assert.equal(store.notice, '');
@@ -631,7 +663,7 @@ test('偏好迟到load不覆盖修改或阻塞采集，保存失败回滚且可�
   h.controls.preferences.set('diagnostics.requestFeed', 'live');
   const { ConnectionRecordsStore } = h.load('features/tools/RecordStores.ets');
   const store = h.track(new ConnectionRecordsStore());
-  store.setConnection(true, 'boot-a', 1);
+  store.setConnection(true, 'boot-a', 1, true);
   store.setVisible(true);
   const loading = store.load(h.context);
   await h.flush();
@@ -767,6 +799,39 @@ test('ControllerSocket隐藏取消pending runtime和connect失败重连，消息
   stream.start(h.context.filesDir);
   await h.flush();
   assert.equal(stream.state, 'closed');
+  assert.equal(h.timers.size, 0);
+}));
+
+test('捕获流只有当前socket的ready确认才会恢复有界重试预算', async () => toolsCase(async h => {
+  const { ControllerSocket } = h.load('client/ControllerSocket.ets');
+  const stream = h.track(new ControllerSocket('/fixture-capture', () => {}, undefined, 'ready'));
+  stream.start(h.context.filesDir);
+  await h.flush();
+  const staleMessage = h.sockets[0].capture('message');
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const socket = h.sockets.at(-1);
+    socket.open();
+    if (attempt > 0) staleMessage(undefined, 'ready');
+    socket.emit('not ready');
+    socket.disconnect();
+    await h.advance(2000);
+  }
+  assert.equal(stream.state, 'failed');
+  assert.equal(h.sockets.length, 6);
+
+  stream.start(h.context.filesDir);
+  await h.flush();
+  h.sockets.at(-1).disconnect();
+  await h.advance(2000);
+  h.sockets.at(-1).open();
+  h.sockets.at(-1).emit('ready');
+  h.sockets.at(-1).disconnect();
+  for (let retry = 0; retry < 5; retry++) {
+    await h.advance(2000);
+    h.sockets.at(-1).disconnect();
+  }
+  assert.equal(stream.state, 'failed');
+  assert.equal(h.sockets.length, 13);
   assert.equal(h.timers.size, 0);
 }));
 
@@ -1161,7 +1226,7 @@ test('旧代次close响应不能覆盖新代次pending动作或通知，clearCac
   h.controls.actionGate = firstGate.promise;
   const oldAction = store.closeAll();
   await h.flush();
-  store.setConnection(true, 'boot-a', 2);
+  store.setConnection(true, 'boot-a', 2, true);
   await h.flush();
   h.sockets.at(-1).open();
   h.sockets.at(-1).emit(toolFrame('connections', 'snapshot', 1, { configRevision: 2, sessionId: 'session-b' }));

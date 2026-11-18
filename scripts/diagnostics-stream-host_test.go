@@ -61,9 +61,12 @@ func newDiagnosticStreamServer(t *testing.T, wrap func(net.Conn, *bufio.ReadWrit
 		if wrap != nil {
 			w = diagnosticStreamHijacker{ResponseWriter: w, wrap: wrap}
 		}
-		if strings.HasPrefix(r.URL.Path, "/dns") {
+		switch r.URL.Path {
+		case "/capture":
+			getDiagnosticCapture(w, r.WithContext(ctx))
+		case "/dns":
 			getDiagnosticDns(w, r.WithContext(ctx))
-		} else {
+		default:
 			getDiagnosticConnections(w, r.WithContext(ctx))
 		}
 	}))
@@ -72,10 +75,11 @@ func newDiagnosticStreamServer(t *testing.T, wrap func(net.Conn, *bufio.ReadWrit
 }
 
 func diagnosticStreamTarget(feed string) string {
-	return "/" + feed + "?" + url.Values{
-		"expectedBootId":         {runtimeBootID},
-		"expectedConfigRevision": {strconv.FormatUint(runtimeConfigRevision, 10)},
-	}.Encode()
+	query := url.Values{"expectedBootId": {runtimeBootID}}
+	if feed != "capture" {
+		query.Set("expectedConfigRevision", strconv.FormatUint(runtimeConfigRevision, 10))
+	}
+	return "/" + feed + "?" + query.Encode()
 }
 
 func diagnosticStreamRequest(target string) *http.Request {
@@ -209,6 +213,19 @@ type diagnosticStreamWireFrame struct {
 
 func readDiagnosticSnapshot(t *testing.T, conn net.Conn, reader *bufio.Reader, feed string) diagnosticStreamWireFrame {
 	t.Helper()
+	snapshot := readDiagnosticCanonicalSnapshot(t, conn, reader, feed)
+	if feed == "dns" {
+		if string(snapshot.Records) != "[]" {
+			t.Fatalf("initial DNS records=%s", snapshot.Records)
+		}
+	} else if string(snapshot.Recent) != "[]" || string(snapshot.Live) != "[]" {
+		t.Fatalf("initial connections live=%s recent=%s", snapshot.Live, snapshot.Recent)
+	}
+	return snapshot
+}
+
+func readDiagnosticCanonicalSnapshot(t *testing.T, conn net.Conn, reader *bufio.Reader, feed string) diagnosticStreamWireFrame {
+	t.Helper()
 	frame := readDiagnosticWSFrame(t, conn, reader)
 	var snapshot diagnosticStreamWireFrame
 	if frame.Header.OpCode != ws.OpText {
@@ -219,13 +236,6 @@ func readDiagnosticSnapshot(t *testing.T, conn net.Conn, reader *bufio.Reader, f
 	}
 	if snapshot.Type != feed || snapshot.Kind != "snapshot" || snapshot.Seq != 1 || snapshot.SessionID == "" || snapshot.BootID != runtimeBootID || snapshot.ConfigRevision != runtimeConfigRevision {
 		t.Fatalf("initial frame=%+v", snapshot)
-	}
-	if feed == "dns" {
-		if string(snapshot.Records) != "[]" {
-			t.Fatalf("initial DNS records=%s", snapshot.Records)
-		}
-	} else if string(snapshot.Recent) != "[]" || string(snapshot.Live) != "[]" {
-		t.Fatalf("initial connections live=%s recent=%s", snapshot.Live, snapshot.Recent)
 	}
 	return snapshot
 }
@@ -253,6 +263,234 @@ func closeDiagnosticClient(t *testing.T, conn net.Conn, reader *bufio.Reader) {
 	code, _ := ws.ParseCloseFrameData(frame.Payload)
 	if frame.Header.OpCode != ws.OpClose || code != ws.StatusNormalClosure {
 		t.Fatalf("close reply opcode=%d code=%d", frame.Header.OpCode, code)
+	}
+}
+
+func readDiagnosticCaptureReady(t *testing.T, conn net.Conn, reader *bufio.Reader) {
+	t.Helper()
+	if frame := readDiagnosticWSFrame(t, conn, reader); frame.Header.OpCode != ws.OpText || string(frame.Payload) != "ready" {
+		t.Fatalf("capture acknowledgement opcode=%d payload=%q", frame.Header.OpCode, frame.Payload)
+	}
+}
+
+func pingDiagnosticCapture(t *testing.T, conn net.Conn, reader *bufio.Reader) {
+	t.Helper()
+	writeDiagnosticClientFrames(t, conn, ws.NewPingFrame([]byte("capture")))
+	if frame := readDiagnosticWSFrame(t, conn, reader); frame.Header.OpCode != ws.OpPong || string(frame.Payload) != "capture" {
+		t.Fatalf("capture sent data instead of pong: opcode=%d payload=%q", frame.Header.OpCode, frame.Payload)
+	}
+}
+
+func diagnosticSnapshotRows[T any](t *testing.T, raw json.RawMessage) []T {
+	t.Helper()
+	var rows []T
+	if err := json.Unmarshal(raw, &rows); err != nil || rows == nil {
+		t.Fatalf("invalid snapshot rows: %s %v", raw, err)
+	}
+	return rows
+}
+
+func TestDiagnosticsCaptureCollectsAndTransfersWithoutPageStreams(t *testing.T) {
+	fixture(t)
+	rs := newDiagnosticTestResolver(t)
+	server := newDiagnosticStreamServer(t, nil)
+	oldCapture, oldReader, oldExecution := dialDiagnosticStream(t, server, "capture", false)
+	readDiagnosticCaptureReady(t, oldCapture, oldReader)
+	mu.Lock()
+	connections, queries := diagnosticConnections, diagnosticDNS
+	mu.Unlock()
+	if connections == nil || queries == nil {
+		t.Fatal("capture did not enable both observers")
+	}
+	first := newDiagnosticStreamTracker(t, "first.diag.test")
+	first.Info().UploadTotal.Add(17)
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	active := newDiagnosticStreamTracker(t, "active.diag.test")
+	active.Info().UploadTotal.Add(23)
+	diagnosticTestQuery(t, rs, "first.diag.test.")
+	connections.mu.Lock()
+	idle := len(connections.sessions) == 0 && connections.sampleDue.IsZero() && connections.timer == nil &&
+		connections.connections[first.ID()].info == nil && connections.connections[active.ID()].dto.Upload == 0
+	connections.mu.Unlock()
+	if !idle {
+		t.Fatal("capture-only observer sampled counters or kept closed tracker references")
+	}
+	pingDiagnosticCapture(t, oldCapture, oldReader)
+
+	failed := diagnosticFailedHijacker{ResponseRecorder: httptest.NewRecorder(), hijack: func() (net.Conn, *bufio.ReadWriter, error) {
+		return nil, nil, errors.New("fixture failure")
+	}}
+	getDiagnosticCapture(failed, diagnosticStreamRequest(diagnosticStreamTarget("capture")))
+	pingDiagnosticCapture(t, oldCapture, oldReader)
+
+	capture, captureReader, captureExecution := dialDiagnosticStream(t, server, "capture", false)
+	readDiagnosticCaptureReady(t, capture, captureReader)
+	waitDiagnosticStream(t, oldExecution.done)
+	mu.Lock()
+	preserved := diagnosticConnections == connections && diagnosticDNS == queries
+	mu.Unlock()
+	if !preserved {
+		t.Fatal("lease transfer retired an active collector")
+	}
+	requests, requestsReader, requestsExecution := dialDiagnosticStream(t, server, "connections", false)
+	snapshot := readDiagnosticCanonicalSnapshot(t, requests, requestsReader, "connections")
+	live := diagnosticSnapshotRows[DiagnosticConnection](t, snapshot.Live)
+	recent := diagnosticSnapshotRows[DiagnosticConnection](t, snapshot.Recent)
+	if len(live) != 1 || live[0].ID != active.ID() || live[0].Upload != 23 ||
+		len(recent) != 2 || recent[0].ID != first.ID() || recent[0].Upload != 17 || recent[1].ID != active.ID() || recent[1].Upload != 23 {
+		t.Fatalf("hidden connection records missing or stale: live=%+v recent=%+v", live, recent)
+	}
+	dnsPage, dnsReader, dnsExecution := dialDiagnosticStream(t, server, "dns", false)
+	dnsSnapshot := readDiagnosticCanonicalSnapshot(t, dnsPage, dnsReader, "dns")
+	records := diagnosticSnapshotRows[DiagnosticDnsRecord](t, dnsSnapshot.Records)
+	if len(records) != 1 || records[0].Domain != "first.diag.test" {
+		t.Fatalf("hidden DNS records missing: %+v", records)
+	}
+	firstDNSID := records[0].ID
+	if err := active.Close(); err != nil {
+		t.Fatal(err)
+	}
+	active.Info().DownloadTotal.Add(19)
+	_ = requests.Close()
+	closeDiagnosticClient(t, dnsPage, dnsReader)
+	waitDiagnosticStream(t, requestsExecution.done)
+	waitDiagnosticStream(t, dnsExecution.done)
+	connections.mu.Lock()
+	closedReleased := connections.sampleDue.IsZero() && connections.connections[active.ID()].info == nil
+	connections.mu.Unlock()
+	if !closedReleased {
+		t.Fatal("last visible stream left closed-counter polling enabled")
+	}
+
+	second := newDiagnosticStreamTracker(t, "second.diag.test")
+	if err := second.Close(); err != nil {
+		t.Fatal(err)
+	}
+	diagnosticTestQuery(t, rs, "second.diag.test.")
+	requests, requestsReader, requestsExecution = dialDiagnosticStream(t, server, "connections", false)
+	snapshot = readDiagnosticCanonicalSnapshot(t, requests, requestsReader, "connections")
+	recent = diagnosticSnapshotRows[DiagnosticConnection](t, snapshot.Recent)
+	if string(snapshot.Live) != "[]" || len(recent) != 3 || recent[0].ID != first.ID() ||
+		recent[1].ID != active.ID() || recent[1].Download != 19 || recent[2].ID != second.ID() {
+		t.Fatalf("reopened connections lost background history: %+v", recent)
+	}
+	dnsPage, dnsReader, dnsExecution = dialDiagnosticStream(t, server, "dns", false)
+	dnsSnapshot = readDiagnosticCanonicalSnapshot(t, dnsPage, dnsReader, "dns")
+	records = diagnosticSnapshotRows[DiagnosticDnsRecord](t, dnsSnapshot.Records)
+	if len(records) != 2 || records[0].ID != firstDNSID || records[1].Domain != "second.diag.test" {
+		t.Fatalf("reopened DNS lost background history: %+v", records)
+	}
+	closeDiagnosticClient(t, requests, requestsReader)
+	closeDiagnosticClient(t, dnsPage, dnsReader)
+	waitDiagnosticStream(t, requestsExecution.done)
+	waitDiagnosticStream(t, dnsExecution.done)
+	pingDiagnosticCapture(t, capture, captureReader)
+	closeDiagnosticClient(t, capture, captureReader)
+	waitDiagnosticStream(t, captureExecution.done)
+	waitDiagnosticStream(t, connections.workerDone)
+	waitDiagnosticStream(t, queries.workerDone)
+	mu.Lock()
+	released := diagnosticCapture == nil && diagnosticConnections == nil && diagnosticDNS == nil
+	mu.Unlock()
+	if !released {
+		t.Fatal("last owner left an active lease or observer")
+	}
+
+	gap := newDiagnosticStreamTracker(t, "gap.diag.test")
+	if err := gap.Close(); err != nil {
+		t.Fatal(err)
+	}
+	diagnosticTestQuery(t, rs, "gap.diag.test.")
+	capture, captureReader, captureExecution = dialDiagnosticStream(t, server, "capture", false)
+	readDiagnosticCaptureReady(t, capture, captureReader)
+	diagnosticTestQuery(t, rs, "restart.diag.test.")
+	requests, requestsReader, requestsExecution = dialDiagnosticStream(t, server, "connections", false)
+	readDiagnosticSnapshot(t, requests, requestsReader, "connections")
+	dnsPage, dnsReader, dnsExecution = dialDiagnosticStream(t, server, "dns", false)
+	dnsSnapshot = readDiagnosticCanonicalSnapshot(t, dnsPage, dnsReader, "dns")
+	records = diagnosticSnapshotRows[DiagnosticDnsRecord](t, dnsSnapshot.Records)
+	if len(records) != 1 || records[0].ID == firstDNSID || records[0].Domain != "restart.diag.test" {
+		t.Fatalf("collector restart replayed gap or reused DNS ID: %+v", records)
+	}
+	closeDiagnosticClient(t, requests, requestsReader)
+	closeDiagnosticClient(t, dnsPage, dnsReader)
+	waitDiagnosticStream(t, requestsExecution.done)
+	waitDiagnosticStream(t, dnsExecution.done)
+	closeDiagnosticClient(t, capture, captureReader)
+	waitDiagnosticStream(t, captureExecution.done)
+}
+
+func TestDiagnosticsCaptureCancellationPreservesOnlyVisibleFeed(t *testing.T) {
+	for _, cause := range []string{"tcp-eof", "request", "boot-stop"} {
+		t.Run(cause, func(t *testing.T) {
+			fixture(t)
+			server := newDiagnosticStreamServer(t, nil)
+			capture, captureReader, captureExecution := dialDiagnosticStream(t, server, "capture", false)
+			readDiagnosticCaptureReady(t, capture, captureReader)
+			requests, requestsReader, requestsExecution := dialDiagnosticStream(t, server, "connections", false)
+			readDiagnosticSnapshot(t, requests, requestsReader, "connections")
+			connections, session := activeDiagnosticStream(t, "connections")
+			mu.Lock()
+			dns := diagnosticDNS
+			mu.Unlock()
+			switch cause {
+			case "tcp-eof":
+				_ = capture.Close()
+			case "request":
+				captureExecution.cancel()
+			case "boot-stop":
+				mu.Lock()
+				wait := stopDiagnosticsLocked()
+				mu.Unlock()
+				wait()
+			}
+			waitDiagnosticStream(t, captureExecution.done)
+			waitDiagnosticStream(t, dns.workerDone)
+			if cause != "boot-stop" {
+				mu.Lock()
+				ownedOnlyByPage := diagnosticCapture == nil && diagnosticDNS == nil && diagnosticConnections == connections
+				mu.Unlock()
+				if !ownedOnlyByPage {
+					t.Fatal("only visible feed should survive capture cancellation")
+				}
+				closeDiagnosticClient(t, requests, requestsReader)
+			}
+			waitDiagnosticStream(t, requestsExecution.done)
+			assertDiagnosticStreamRetired(t, connections, session)
+		})
+	}
+}
+
+func TestDiagnosticsCaptureRejectsInvalidRuntime(t *testing.T) {
+	fixture(t)
+	for _, tc := range []struct {
+		name, target string
+		status       int
+	}{
+		{"missing-boot", "/capture", http.StatusBadRequest},
+		{"duplicate-boot", diagnosticStreamTarget("capture") + "&expectedBootId=x", http.StatusBadRequest},
+		{"malformed-query", "/capture?expectedBootId=%zz", http.StatusBadRequest},
+		{"stale-boot", "/capture?expectedBootId=old", http.StatusConflict},
+		{"stopped", diagnosticStreamTarget("capture"), http.StatusServiceUnavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.name == "stopped" {
+				mu.Lock()
+				running = false
+				mu.Unlock()
+				defer func() { mu.Lock(); running = true; mu.Unlock() }()
+			}
+			response := httptest.NewRecorder()
+			getDiagnosticCapture(response, diagnosticStreamRequest(tc.target))
+			mu.Lock()
+			untouched := diagnosticConnections == nil && diagnosticDNS == nil && diagnosticCapture == nil
+			mu.Unlock()
+			if response.Code != tc.status || !untouched {
+				t.Fatalf("status=%d body=%s registry untouched=%v", response.Code, response.Body, untouched)
+			}
+		})
 	}
 }
 

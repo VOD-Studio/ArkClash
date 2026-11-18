@@ -52,7 +52,7 @@ create/attach/detach/destroy 共用一条队列。onDestroy 立即作废宿主�
 
 ### 配置与界面
 
-`coreReady/coreStarting` 与 VPN 状态分开。核心运行且前台时订阅运行事件；流量、出口/服务探测、连接和 DNS 诊断继续要求实际连接及原有可见性。
+`coreReady/coreStarting` 与 VPN 状态分开。核心运行且前台时订阅运行事件；流量、出口和服务探测仍要求实际连接。连接与 DNS 诊断的采集和显示条件见 [ADR-0019](0019-app-diagnostics-capture.md)。
 
 首个配置提交并释放存储锁后，若核心仍为空，加载最新 current。reload 的 `expectedProfile` 区分省略与空串：省略不约束，空串只允许激活空核心，防止迟到激活覆盖新选择。删除最后一个配置先断开并清空运行配置，再删除文件，保留空核心。节点页、分组和 picker 共用核心就绪条件；拒绝授权后仍可从现有空态或菜单显式启动核心。
 
