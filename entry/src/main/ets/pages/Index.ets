@@ -9,7 +9,7 @@ import { ConnectionBar } from '../features/home/ConnectionBar';
 import { ProfileItem, ProfileStore } from '../features/profiles/Profiles';
 import { ProfilesPage } from '../features/profiles/ProfilesPage';
 import { ProxiesPage } from '../features/proxies/ProxiesPage';
-import { ToolPage } from '../features/tools/ToolPages';
+import { AboutPage } from '../features/tools/AboutPage';
 import { ToolRoute } from '../features/tools/ToolRoutes';
 import { ToolsPage } from '../features/tools/ToolsPage';
 import { ResourcesPage } from '../features/resources/ResourcesPage';
@@ -153,8 +153,8 @@ struct Index {
       ConnectionsPage({ foreground: this.foreground })
     } else if (name === ToolRoute.Dns) {
       DnsPage({ foreground: this.foreground })
-    } else {
-      ToolPage({ route: name })
+    } else if (name === ToolRoute.About) {
+      AboutPage()
     }
   }
 

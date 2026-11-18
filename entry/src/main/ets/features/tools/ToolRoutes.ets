@@ -2,8 +2,6 @@
 export enum ToolRoute {
   Connections = 'connections',
   Dns = 'dns',
-  Logs = 'logs',
   Resources = 'resources',
-  Settings = 'settings',
   About = 'about'
 }

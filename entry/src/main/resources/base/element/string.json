@@ -309,24 +309,12 @@
       "value": "Connections"
     },
     {
-      "name": "tools_logs",
-      "value": "Logs"
-    },
-    {
-      "name": "tools_settings",
-      "value": "Settings"
-    },
-    {
       "name": "tools_about",
       "value": "About"
     },
     {
       "name": "coming_soon",
       "value": "Under construction"
-    },
-    {
-      "name": "coming_soon_hint",
-      "value": "This page arrives in a later build."
     },
     {
       "name": "about_version",

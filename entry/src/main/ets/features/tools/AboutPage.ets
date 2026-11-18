@@ -1,45 +1,21 @@
 import { bundleManager, common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
-import { EmptyState } from '../../components/EmptyState';
 import { DestinationTitle, DESTINATION_TITLE_OPTIONS } from '../../components/DestinationTitle';
 import { ListRow } from '../../components/ListRow';
 import { CARD_RADIUS, PAGE_GUTTER } from '../../components/Theme';
-import { ToolRoute } from './ToolRoutes';
 
 const SOURCE_URL = 'https://github.com/VOD-Studio/ArkClash';
 
-function titleOf(route: string): Resource {
-  switch (route) {
-    case ToolRoute.Logs:
-      return $r('app.string.tools_logs');
-    case ToolRoute.Settings:
-      return $r('app.string.tools_settings');
-    default:
-      return $r('app.string.tools_about');
-  }
-}
-
-/** 工具页的二级页面，由页面层的 navDestination 按路由名创建。 */
 @ComponentV2
-export struct ToolPage {
-  @Param route: string = ToolRoute.About;
-
+export struct AboutPage {
   @Builder
   HeaderTitle() {
-    DestinationTitle({ titleText: titleOf(this.route) })
+    DestinationTitle({ titleText: $r('app.string.tools_about') })
   }
 
   build() {
     NavDestination() {
-      if (this.route === ToolRoute.About) {
-        AboutContent()
-      } else {
-        EmptyState({
-          icon: $r('sys.symbol.wrench_and_screwdriver'),
-          title: $r('app.string.coming_soon'),
-          hint: $r('app.string.coming_soon_hint')
-        })
-      }
+      AboutContent()
     }
     .title(this.HeaderTitle, DESTINATION_TITLE_OPTIONS)
     .backgroundColor($r('app.color.page_background'))

@@ -289,24 +289,12 @@
       "value": "连接"
     },
     {
-      "name": "tools_logs",
-      "value": "日志"
-    },
-    {
-      "name": "tools_settings",
-      "value": "设置"
-    },
-    {
       "name": "tools_about",
       "value": "关于"
     },
     {
       "name": "coming_soon",
       "value": "开发中"
-    },
-    {
-      "name": "coming_soon_hint",
-      "value": "这个页面会在之后的版本里提供。"
     },
     {
       "name": "about_version",
