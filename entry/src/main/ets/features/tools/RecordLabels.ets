@@ -64,6 +64,7 @@ export function recordErrorText(code: string): ResourceStr {
 }
 
 export function recordFacetText(field: string, value: string): ResourceStr {
+  if (field === 'network' && value !== '') { return value.toUpperCase(); }
   if (field === 'initiator') { return recordInitiatorText(value); }
   if (field === 'cache' && value === 'true') { return $r('app.string.diagnostics_cached'); }
   if (field === 'cache' && value === 'false') { return $r('app.string.diagnostics_network_query'); }

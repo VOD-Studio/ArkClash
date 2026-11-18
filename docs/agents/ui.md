@@ -45,5 +45,6 @@ UI 是"打开快、不耗电"这两个指标的主要承担者（见 AGENTS.md�
 - 保存、切换、更新、测速等操作结果使用原生 Toast，不向列表或卡片插入临时提示条，不因此改变内容高度或滚动位置；同次结果只提示一次，页面不可见时不打断用户。
 - 进行中的反馈放在已有按钮或状态位，不为“正在更新”“部分测速失败”等消息新增布局。
 - 禁止 Alert 类弹窗。多项动作选择使用原生底部 ActionSheet；需要异步执行和进度反馈的确认使用原生底部 Sheet，保留取消、返回和脏数据保护。
-- 诊断筛选、分组菜单使用原生底部 Sheet：API 26 的 [`ActionSheet.SheetInfo`](https://developer.huawei.com/consumer/cn/doc/harmonyos-references/ts-methods-action-sheet#sheetinfo对象说明) 仅支持标题、图片和回调，无法设置无图标选项的行高。选项至少 56vp、文字上下各 16vp、分隔线避开文字，长列表懒加载并可滚动；取消和返回不执行动作，下一层菜单仅在 `onDisappear` 后打开，保留系统材质和转场。
+- 连接页「更多」对齐 FlClash v0.9.3，使用锚定按钮的原生 Popup。有候选值才显示筛选；一次展开所有筛选维度，勾选更新列表但不关闭菜单，分组显示当前选项且选中后收起，新分组默认折叠。只展示内核实际提供的数据：不以 DNS 来源冒充应用，不以 HTTPS 冒充 MITM。
+- 其余诊断选择菜单使用原生底部 Sheet：API 26 的 [`ActionSheet.SheetInfo`](https://developer.huawei.com/consumer/cn/doc/harmonyos-references/ts-methods-action-sheet#sheetinfo对象说明) 仅支持标题、图片和回调，无法设置无图标选项的行高。选项至少 56vp、文字上下各 16vp、分隔线避开文字，长列表懒加载并可滚动；取消和返回不执行动作，下一层菜单仅在 `onDisappear` 后打开，保留系统材质和转场。
 - 真正的运行状态、表单错误和批量失败明细不能被伪装或吞掉；操作提示也不能冒充已经应用成功的业务状态。

@@ -350,6 +350,8 @@ test('断流立即撤销live和动作；重连保留历史但不补baseline，�
   store.setFeed('live');
   await h.flush();
   assert.equal(h.sockets.length, 2, 'feed, filters and detail never restart collection');
+  assert.deepEqual(connectionIds(store), []);
+  store.toggleGroup(store.source.getData(0).key);
   assert.deepEqual(connectionIds(store), ['hidden']);
   current.disconnect();
   assert.equal(h.timers.size, 1);
@@ -363,6 +365,7 @@ test('断流立即撤销live和动作；重连保留历史但不补baseline，�
   h.sockets.at(-1).emit(toolFrame('connections', 'snapshot', 1, { sessionId: 'session-c' }));
   store.setFeed('recent');
   await h.flush();
+  store.toggleGroup(store.source.getData(0).key);
   assert.deepEqual(connectionIds(store), ['seen']);
 }));
 
@@ -461,11 +464,14 @@ test('同一内容保留行对象，查询筛选分组跨feed共享，各feed排
   store.setGrouping('host');
   store.setSort({ column: 'target', direction: 'asc' });
   assert.equal(store.visibleRecords, 1);
-  assert.equal(store.source.totalCount(), 2);
   const header = store.source.getData(0);
-  store.toggleGroup(header.key.slice('group:'.length));
   assert.equal(store.source.totalCount(), 1);
-  store.toggleGroup(header.key.slice('group:'.length));
+  assert.equal(header.expanded, false);
+  store.toggleGroup(header.key);
+  assert.equal(store.source.totalCount(), 2);
+  assert.equal(store.source.getData(1).key, 'a');
+  store.toggleGroup(header.key);
+  assert.equal(store.source.totalCount(), 1);
   store.setFeed('live');
   await h.flush();
   assert.equal(store.sort.column, '');
@@ -898,30 +904,35 @@ function registerToolsLogicTests(createHarness) {
     const c = row('c', { chains: ['third'] });
     assert.deepEqual(ids(l.filterConnections([a, b, c], '', { network: ['tcp', 'udp'], proxy: ['middle', 'other'] })),
       ['a', 'b']);
-    assert.deepEqual(ids(l.filterConnections([a, b], '', { rule: [l.connectionRule(a.connection)] })), ['a']);
+    const sameRule = row('same-kind', { rule: 'DOMAIN', rulePayload: 'another.test' });
+    assert.deepEqual(ids(l.filterConnections([a, b, sameRule], '', { rule: ['DOMAIN'] })), ['a', 'same-kind']);
+    assert.deepEqual(l.connectionFacetOptions([sameRule, a, b], 'rule', []), ['DOMAIN', 'MATCH']);
+    assert.deepEqual(l.connectionFacetOptions([b, b, a], 'network', []), ['tcp', 'udp']);
     assert.deepEqual(l.filterConnections([], '', { network: ['tcp'] }), []);
     const many = Array.from({ length: 15 }, (_, i) => row(`${i}`, { metadata: { network: `n${i}` } }));
     const frequent = row('frequent', { metadata: { network: 'n14' } });
     const options = l.connectionFacetOptions([...many, frequent], 'network', ['n13', 'missing']);
-    assert.equal(options[0], 'n14');
     assert.equal(options.length, 14);
+    assert.ok(options.includes('n14') && !options.includes('n12'));
+    assert.deepEqual(options, [...options].sort());
     assert.ok(options.includes('n13') && options.includes('missing'));
     assert.deepEqual(l.connectionFacetOptions([a], 'proxy', []), ['exit', 'middle']);
   });
 
-  run('IPv6 endpoints and grouping retain raw host, full rule, chain exit and first appearance', (h, l) => {
+  run('IPv6 endpoints and grouping use host or destination IP, full rule and first chain exit', (h, l) => {
     assert.equal(l.diagnosticEndpoint('2001:db8::1', '443'), '[2001:db8::1]:443');
     assert.equal(l.diagnosticEndpoint('[::1]', '80'), '[::1]:80');
     assert.equal(l.diagnosticEndpoint('192.0.2.1', ''), '192.0.2.1');
     assert.equal(l.diagnosticEndpoint('', '443'), '');
     const a = row('a', { metadata: { host: '' }, rule: 'DOMAIN', rulePayload: 'example.test', chains: ['EXIT', 'INNER'] });
     const b = row('b', { metadata: { host: 'Raw.Host' }, chains: ['EXIT'] });
-    const c = row('c', { metadata: { host: '' } });
+    const c = row('c', { metadata: { host: '', destinationIP: '203.0.113.9' } });
+    const d = row('d', { metadata: { host: '' } });
     assert.equal(l.connectionRule(a.connection), 'DOMAIN(example.test)');
-    const groups = l.groupConnections([a, b, c], 'host');
-    assert.deepEqual(groups.map(group => group.title), ['', 'Raw.Host']);
-    assert.deepEqual(ids(groups[0].items), ['a', 'c']);
-    assert.equal(groups[0].key, 'host:');
+    const groups = l.groupConnections([a, b, c, d], 'host');
+    assert.deepEqual(groups.map(group => group.title), ['2001:db8::1', 'Raw.Host', '203.0.113.9']);
+    assert.deepEqual(ids(groups[0].items), ['a', 'd']);
+    assert.equal(groups[0].key, 'host:2001:db8::1');
     assert.deepEqual(l.groupConnections([a, b], 'exit').map(group => ids(group.items)), [['a', 'b']]);
     assert.equal(l.groupConnections([a], 'rule')[0].title, 'DOMAIN(example.test)');
     assert.deepEqual(ids(l.groupConnections([a, b, c], 'none')[0].items), ['a', 'b', 'c']);

@@ -5,6 +5,7 @@ import { connection, Connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DestinationTitle, DESTINATION_TITLE_OPTIONS } from '../../components/DestinationTitle';
 import { EmptyState } from '../../components/EmptyState';
+import { uiResourceText } from '../../components/ResourceText';
 import {
   COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE,
   PAGE_GUTTER, sheetMaterial
@@ -15,6 +16,15 @@ import { ConnectionRecordView, diagnosticEndpoint, RecordGrouping, RequestFeed }
 import { recordColumnTitle, recordErrorText, recordFacetText } from './RecordLabels';
 import { ConnectionRecordList, RECORD_LIST_ANIMATION, recordListTransition } from './RecordList';
 import { connectionRecords, ConnectionRecordsStore } from './RecordStores';
+
+const CONNECTION_GROUPINGS: RecordGrouping[] = ['none', 'host', 'rule', 'exit'];
+const MORE_MENU_WIDTH = 200;
+type ConnectionMenuLevel = 'root' | 'filters' | 'grouping';
+
+interface ConnectionFilterSection {
+  field: string;
+  options: string[];
+}
 
 @ComponentV2
 export struct ConnectionsPage {
@@ -27,6 +37,10 @@ export struct ConnectionsPage {
   @Local confirmShown: boolean = false;
   @Local preferencePending: boolean = false;
   @Local menuState: RecordMenuState = new RecordMenuState();
+  @Local moreShown: boolean = false;
+  @Local moreLevel: ConnectionMenuLevel = 'root';
+  @Local networkOptions: string[] = [];
+  @Local ruleOptions: string[] = [];
   @Local reduceMotion: boolean = true;
   private active: boolean = false;
   private generation: number = 0;
@@ -64,6 +78,7 @@ export struct ConnectionsPage {
     this.runtimeReady = ready;
     if (changed) { this.runtimeBoot = this.conn.bootId; this.runtimeRevision = this.conn.configRevision; }
     if (!visible || changed) {
+      this.dismissMore();
       this.detailsShown = false;
       this.confirmShown = false;
       this.store.select('');
@@ -151,7 +166,7 @@ export struct ConnectionsPage {
   }
 
   private menu(title: ResourceStr, options: RecordMenuOption[], onSelect: (choice: string) => void): void {
-    if (!this.active || this.actionOpen || this.detailsShown || this.confirmShown ||
+    if (!this.active || this.moreShown || this.actionOpen || this.detailsShown || this.confirmShown ||
       this.detailOpen || this.confirmationOpen) { return; }
     const generation = this.generation;
     this.actionOpen = true;
@@ -169,36 +184,41 @@ export struct ConnectionsPage {
     this.menu(this.feedTitle, choices, (choice: string): void => { this.store.setFeed(choice as RequestFeed); });
   }
 
-  private moreActions(): void {
-    const choices: RecordMenuOption[] = [
-      { key: 'filters', title: $r('app.string.diagnostics_filters') },
-      { key: 'grouping', title: $r('app.string.diagnostics_grouping') }
-    ];
-    this.menu($r('app.string.diagnostics_more'), choices, (choice: string): void => {
-      if (choice === 'filters') { this.filterFields(); }
-      else if (choice === 'grouping') { this.groupingMenu(); }
-    });
+  private openMore(): void {
+    if (!this.active || this.moreShown || this.actionOpen || this.detailsShown || this.confirmShown ||
+      this.detailOpen || this.confirmationOpen) { return; }
+    this.moreLevel = 'root';
+    this.moreShown = true;
+    this.syncMoreFilters();
   }
 
-  private filterFields(): void {
-    const fields: RecordMenuOption[] = [
-      { key: 'network', title: recordColumnTitle('network') },
-      { key: 'rule', title: recordColumnTitle('rule') }
-    ];
-    this.menu($r('app.string.diagnostics_filters'), fields, (field: string): void => {
-      const choices: RecordMenuOption[] = this.store.facetOptions(field).map<RecordMenuOption>(
-        (option: string): RecordMenuOption => { return { key: option, title: recordFacetText(field, option) }; });
-      this.menu(recordColumnTitle(field), choices, (option: string): void => { this.store.toggleFacet(field, option); });
-    });
+  private dismissMore(): void {
+    if (!this.moreShown) { return; }
+    this.moreShown = false;
   }
 
-  private groupingMenu(): void {
-    const groups: RecordGrouping[] = ['none', 'host', 'rule', 'exit'];
-    const choices: RecordMenuOption[] = groups.map<RecordMenuOption>((group: RecordGrouping): RecordMenuOption => {
-      return { key: group, title: recordGroupingText(group) };
-    });
-    this.menu($r('app.string.diagnostics_grouping'), choices,
-      (choice: string): void => { this.store.setGrouping(choice as RecordGrouping); });
+  @Monitor('store.version')
+  syncMoreFilters(): void {
+    if (!this.moreShown) { return; }
+    const networks = this.store.facetOptions('network');
+    const rules = this.store.facetOptions('rule');
+    if (networks.length !== this.networkOptions.length ||
+      networks.some((option: string, index: number): boolean => option !== this.networkOptions[index])) {
+      this.networkOptions = networks;
+    }
+    if (rules.length !== this.ruleOptions.length ||
+      rules.some((option: string, index: number): boolean => option !== this.ruleOptions[index])) {
+      this.ruleOptions = rules;
+    }
+    if (this.moreLevel === 'filters' && networks.length === 0 && rules.length === 0) {
+      this.moreLevel = 'root';
+    }
+  }
+
+  private selectGrouping(grouping: RecordGrouping): void {
+    if (!this.active || !this.moreShown) { return; }
+    this.dismissMore();
+    this.store.setGrouping(grouping);
   }
 
   private openDetails(id: string): void {
@@ -269,6 +289,57 @@ export struct ConnectionsPage {
   }
 
   @Builder
+  FilterSection($$: ConnectionFilterSection) {
+    if ($$.options.length > 0) {
+      Text(recordColumnTitle($$.field === 'network' ? 'protocol' : $$.field))
+        .fontSize(13).fontWeight(600).fontColor($r('sys.color.font_secondary'))
+        .width('100%').padding({ left: 12, right: 12, top: 8, bottom: 4 })
+      ForEach($$.options, (option: string) => {
+        ConnectionMenuRow({
+          title: recordFacetText($$.field, option),
+          selected: this.store.facets[$$.field]?.includes(option) ?? false,
+          onPress: (): void => {
+            if (this.active && this.moreShown) { this.store.toggleFacet($$.field, option); }
+          }
+        })
+      }, (option: string): string => option)
+    }
+  }
+
+  @Builder
+  MorePopup() {
+    Column() {
+      if (this.moreLevel === 'root') {
+        if (this.networkOptions.length > 0 || this.ruleOptions.length > 0) {
+          ConnectionMenuRow({ title: $r('app.string.diagnostics_filters'), glyph: 'rules', endGlyph: 'chevronForward',
+            onPress: (): void => { this.moreLevel = 'filters'; } })
+        }
+        ConnectionMenuRow({ title: $r('app.string.diagnostics_grouping'), glyph: 'layers', endGlyph: 'chevronForward',
+          onPress: (): void => { this.moreLevel = 'grouping'; } })
+      } else if (this.moreLevel === 'filters') {
+        ConnectionMenuRow({ title: $r('app.string.diagnostics_filters'), glyph: 'rules', endGlyph: 'chevronUp',
+          onPress: (): void => { this.moreLevel = 'root'; } })
+        Scroll() {
+          Column() {
+            this.FilterSection({ field: 'network', options: this.networkOptions })
+            this.FilterSection({ field: 'rule', options: this.ruleOptions })
+          }
+          .width('100%')
+        }
+        .width('100%').constraintSize({ maxHeight: 320 }).scrollBar(BarState.Auto)
+      } else {
+        ConnectionMenuRow({ title: $r('app.string.diagnostics_grouping'), glyph: 'layers', endGlyph: 'chevronUp',
+          onPress: (): void => { this.moreLevel = 'root'; } })
+        ForEach(CONNECTION_GROUPINGS, (grouping: RecordGrouping) => {
+          ConnectionMenuRow({ title: recordGroupingText(grouping), selected: this.store.grouping === grouping,
+            onPress: (): void => { this.selectGrouping(grouping); } })
+        }, (grouping: RecordGrouping): string => grouping)
+      }
+    }
+    .width(MORE_MENU_WIDTH).padding(8)
+  }
+
+  @Builder
   HeaderMenus() {
     Row({ space: HEADER_GAP }) {
       if (this.store.feed === 'live') {
@@ -295,7 +366,13 @@ export struct ConnectionsPage {
       }
       .attributeModifier(HEADER_ACTION)
       .accessibilityText($r('app.string.diagnostics_more'))
-      .onClick((): void => { this.moreActions(); })
+      .onClick((): void => { this.openMore(); })
+      .bindPopup(this.moreShown, {
+        builder: this.MorePopup, placement: Placement.BottomRight, enableArrow: false, autoCancel: true,
+        focusable: true, mask: true, targetSpace: 8, width: MORE_MENU_WIDTH, radius: 24,
+        popupColor: $r('app.color.card_background'), systemMaterial: sheetMaterial(),
+        onStateChange: (event: PopupStateChangeParam): void => { if (!event.isVisible) { this.dismissMore(); } }
+      })
     }
     .height('100%')
     .alignItems(VerticalAlign.Center)
@@ -427,5 +504,33 @@ export struct ConnectionsPage {
     .backgroundColor($r('app.color.page_background'))
     .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })
     .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); })
+  }
+}
+
+@ComponentV2
+struct ConnectionMenuRow {
+  @Param @Require title: ResourceStr;
+  @Param glyph: string = '';
+  @Param endGlyph: string = '';
+  @Param selected: boolean = false;
+  @Event onPress: () => void = () => {};
+
+  build() {
+    Button() {
+      Row({ space: 8 }) {
+        if (this.glyph !== '') { AppGlyph({ name: this.glyph, iconSize: 20 }) }
+        Text(this.title).fontSize(15).fontColor($r('sys.color.font_primary'))
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+        if (this.endGlyph !== '' || this.selected) {
+          AppGlyph({ name: this.endGlyph || 'check', iconSize: 16 })
+        }
+      }
+      .width('100%')
+    }
+    .width('100%').constraintSize({ minHeight: 44 })
+    .padding({ left: 12, right: 12, top: 10, bottom: 10 }).borderRadius(16)
+    .buttonStyle(ButtonStyleMode.NORMAL).backgroundColor(Color.Transparent)
+    .accessibilityText(uiResourceText(this.getUIContext(), this.title)).accessibilitySelected(this.selected)
+    .onClick((): void => { this.onPress(); })
   }
 }

@@ -69,7 +69,7 @@ function connectionFacet(record: DiagnosticConnection, field: string): string[] 
     return [record.metadata.network];
   }
   if (field === 'rule') {
-    return [connectionRule(record)];
+    return [record.rule];
   }
   return field === 'proxy' ? record.chains : [];
 }
@@ -112,22 +112,17 @@ interface RecordFacetCount {
   order: number;
 }
 
-function facetOptions(values: string[][], selected: string[]): string[] {
-  const counts = new Map<string, RecordFacetCount>();
-  for (const entries of values) {
-    const unique = new Set<string>(entries);
-    unique.forEach((text: string): void => {
-      if (text === '') {
-        return;
-      }
-      const previous = counts.get(text);
-      if (previous === undefined) {
-        counts.set(text, { text: text, count: 1, order: counts.size });
-      } else {
-        previous.count++;
-      }
-    });
+function countFacetOption(counts: Map<string, RecordFacetCount>, text: string): void {
+  if (text === '') { return; }
+  const previous = counts.get(text);
+  if (previous === undefined) {
+    counts.set(text, { text: text, count: 1, order: counts.size });
+  } else {
+    previous.count++;
   }
+}
+
+function rankedFacetOptions(counts: Map<string, RecordFacetCount>, selected: string[]): string[] {
   const ranked: RecordFacetCount[] = [];
   counts.forEach((entry: RecordFacetCount): void => { ranked.push(entry); });
   ranked.sort((a: RecordFacetCount, b: RecordFacetCount): number => b.count - a.count || a.order - b.order);
@@ -140,14 +135,39 @@ function facetOptions(values: string[][], selected: string[]): string[] {
   return result;
 }
 
-export function connectionFacetOptions(records: ConnectionRecordView[], field: string,
+function networkFacetOrder(value: string): number {
+  return value === 'tcp' ? 0 : value === 'udp' ? 1 : 2;
+}
+
+export function connectionFacetOptions(records: Iterable<ConnectionRecordView>, field: string,
   selected: string[]): string[] {
-  return facetOptions(records.map<string[]>((row: ConnectionRecordView): string[] => connectionFacet(row.connection, field)),
-    selected);
+  const counts = new Map<string, RecordFacetCount>();
+  for (const row of records) {
+    if (field === 'network') {
+      countFacetOption(counts, row.connection.metadata.network);
+    } else if (field === 'rule') {
+      countFacetOption(counts, row.connection.rule);
+    } else if (field === 'proxy') {
+      for (const proxy of new Set<string>(row.connection.chains)) { countFacetOption(counts, proxy); }
+    }
+  }
+  return rankedFacetOptions(counts, selected).sort((a: string, b: string): number => {
+    if (field === 'network') {
+      const order = networkFacetOrder(a) - networkFacetOrder(b);
+      if (order !== 0) { return order; }
+    }
+    const left = a.toLowerCase();
+    const right = b.toLowerCase();
+    return left < right ? -1 : left > right ? 1 : 0;
+  });
 }
 
 export function dnsFacetOptions(records: DiagnosticDnsRecord[], field: string, selected: string[]): string[] {
-  return facetOptions(records.map<string[]>((row: DiagnosticDnsRecord): string[] => dnsFacet(row, field)), selected);
+  const counts = new Map<string, RecordFacetCount>();
+  for (const row of records) {
+    for (const text of new Set<string>(dnsFacet(row, field))) { countFacetOption(counts, text); }
+  }
+  return rankedFacetOptions(counts, selected);
 }
 
 export function groupConnections(records: ConnectionRecordView[], grouping: RecordGrouping): RecordGroup[] {
@@ -156,7 +176,7 @@ export function groupConnections(records: ConnectionRecordView[], grouping: Reco
   for (const row of records) {
     let title = '';
     switch (grouping) {
-      case 'host': title = row.connection.metadata.host; break;
+      case 'host': title = row.connection.metadata.host || row.connection.metadata.destinationIP; break;
       case 'rule': title = connectionRule(row.connection); break;
       case 'exit': title = row.connection.chains[0] ?? ''; break;
     }

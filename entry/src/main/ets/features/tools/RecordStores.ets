@@ -291,7 +291,7 @@ export class ConnectionRecordsStore {
   private liveViews: ConnectionRecordView[] = [];
   private historyViews: Map<string, ConnectionRecordView> = new Map<string, ConnectionRecordView>();
   private rows: Map<string, ConnectionListRow> = new Map<string, ConnectionListRow>();
-  private collapsed: Set<string> = new Set<string>();
+  private expanded: Set<string> = new Set<string>();
   @Trace private filteredCount: number = 0;
   @Trace private liveCount: number = 0;
   @Trace private historyCount: number = 0;
@@ -386,16 +386,18 @@ export class ConnectionRecordsStore {
   clearNotice(): void { this.notice = ''; this.noticeError = ''; }
   toggleGroup(key: string): void {
     const group = key.startsWith('group:') ? key.slice(6) : key;
-    if (this.collapsed.has(group)) { this.collapsed.delete(group); } else { this.collapsed.add(group); }
+    if (this.expanded.has(group)) { this.expanded.delete(group); } else { this.expanded.add(group); }
     this.refresh();
   }
   facetOptions(field: string): string[] {
-    return connectionFacetOptions(this.currentViews(), field, this.facets[field] ?? []);
+    return connectionFacetOptions(this.feed === 'live' ? this.liveViews : this.historyViews.values(),
+      field, this.facets[field] ?? []);
   }
 
   setFeed(feed: RequestFeed): void {
     if (feed === this.feed) { return; }
     this.feed = feed;
+    this.expanded.clear();
     const version = ++this.feedVersion;
     this.refresh();
     this.persistFeed(feed, version).catch((): void => {});
@@ -404,6 +406,7 @@ export class ConnectionRecordsStore {
   setGrouping(grouping: RecordGrouping): void {
     if (grouping === this.grouping) { return; }
     this.grouping = grouping;
+    this.expanded.clear();
     const version = ++this.groupingVersion;
     this.refresh();
     this.persistGrouping(grouping, version).catch((): void => {});
@@ -504,7 +507,7 @@ export class ConnectionRecordsStore {
   private clearLive(): void { this.live.clear(); this.liveViews = []; this.ranker.reset(); }
 
   private clearRecords(): void {
-    this.history.clear(); this.historyViews.clear(); this.clearLive(); this.collapsed.clear();
+    this.history.clear(); this.historyViews.clear(); this.clearLive(); this.expanded.clear();
     this.baselineReady = false;
     this.rows.clear(); this.selectedId = ''; this.sampledAt = 0; this.dropped = 0; this.evicted = 0;
     this.interruptions = 0; this.following = true; this.actionPending = false; this.error = '';
@@ -582,6 +585,9 @@ export class ConnectionRecordsStore {
     const nextRows: Map<string, ConnectionListRow> = new Map<string, ConnectionListRow>();
     const entries: ConnectionListRow[] = [];
     for (const group of groups) { this.appendGroup(group, nextRows, entries); }
+    for (const key of this.expanded) {
+      if (!nextRows.has(`group:${key}`)) { this.expanded.delete(key); }
+    }
     this.rows = nextRows;
     const present = animate ? this.animateList : undefined;
     this.source.replace(entries, present === undefined ? undefined : (apply: () => void): void => {
@@ -599,7 +605,7 @@ export class ConnectionRecordsStore {
   }
 
   private appendGroup(group: RecordGroup, next: Map<string, ConnectionListRow>, entries: ConnectionListRow[]): void {
-    const expanded = !this.collapsed.has(group.key);
+    const expanded = this.expanded.has(group.key);
     if (this.grouping !== 'none') {
       const key = `group:${group.key}`;
       const row = this.rows.get(key) ?? new ConnectionListRow(key);
