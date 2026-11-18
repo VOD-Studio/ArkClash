@@ -1,6 +1,7 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { UIContext } from '@kit.ArkUI';
 import { formatDateTime } from '../../components/Format';
-import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { PAGE_GUTTER } from '../../components/Theme';
 import { errorString } from '../../shared/profiles/Errors';
 import { describeError } from './ProfileErrors';
 import { ProfileDraft } from './ProfileDraft';
@@ -15,7 +16,7 @@ export function confirmProfileEditorDismiss(context: UIContext, draft: ProfileDr
   let choice: 'save' | 'discard' | undefined = undefined;
   context.showActionSheet({
     title: $r('app.string.profile_unsaved_title'), message: $r('app.string.profile_unsaved_message'),
-    alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+    alignment: DialogAlignment.Bottom, systemMaterial: appAppearance.sheetMaterial(), autoCancel: true,
     sheets: [
       { title: $r('app.string.action_save'), action: (): void => { choice = 'save'; } },
       { title: $r('app.string.profile_discard'), action: (): void => { choice = 'discard'; } }
@@ -33,6 +34,7 @@ export function confirmProfileEditorDismiss(context: UIContext, draft: ProfileDr
 
 @ComponentV2
 export struct ProfileEditor {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require store: ProfileStore;
   @Param @Require draft: ProfileDraft;
   @Param @Require visible: boolean;
@@ -133,7 +135,7 @@ export struct ProfileEditor {
     let choice: 'save' | 'discard' | undefined = undefined;
     this.getUIContext().showActionSheet({
       title: $r('app.string.profile_unsaved_title'), message: $r('app.string.profile_unsaved_message'),
-      alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+      alignment: DialogAlignment.Bottom, systemMaterial: this.appStyle.sheetMaterial(), autoCancel: true,
       sheets: [
         { title: $r('app.string.action_save'), action: (): void => { choice = 'save'; } },
         { title: $r('app.string.profile_discard'), action: (): void => { choice = 'discard'; } }
@@ -191,7 +193,7 @@ export struct ProfileEditor {
       this.cancelAutoUpdateChoice = (): void => finish(undefined);
       this.getUIContext().showActionSheet({
         title: $r('app.string.profile_source_title'), message: $r('app.string.profile_manual_auto_update'),
-        alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+        alignment: DialogAlignment.Bottom, systemMaterial: this.appStyle.sheetMaterial(), autoCancel: true,
         sheets: [
           { title: $r('app.string.profile_keep_auto_update'), action: (): void => finish(false) },
           { title: $r('app.string.profile_disable_auto_update'), action: (): void => finish(true) }
@@ -244,8 +246,9 @@ export struct ProfileEditor {
         Column({ space: 24 }) {
           Column() {
             Row({ space: 16 }) {
-              Text($r('app.string.field_name')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+              Text($r('app.string.field_name')).fontFamily(this.appStyle.fontFamily).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
               TextInput({ text: this.draft.name, placeholder: $r('app.string.profile_field_required') })
+                .fontFamily(this.appStyle.fontFamily)
                 .maxLength(64).fontSize(17).height(56).layoutWeight(1).textAlign(TextAlign.End).padding(0)
                 .fontColor($r('sys.color.font_primary')).backgroundColor(Color.Transparent)
                 .enterKeyType(EnterKeyType.Next)
@@ -253,10 +256,11 @@ export struct ProfileEditor {
             }
             .padding({ left: 16, right: 16 }).width('100%')
             if (this.draft.subscription) {
-              Row().height(0.5).width('100%').backgroundColor($r('app.color.divider')).margin({ left: 16, right: 14 })
+              Row().height(0.5).width('100%').backgroundColor(this.appStyle.palette.divider).margin({ left: 16, right: 14 })
               Row({ space: 16 }) {
-                Text($r('app.string.field_link')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+                Text($r('app.string.field_link')).fontFamily(this.appStyle.fontFamily).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
                 TextInput({ text: this.draft.link, placeholder: $r('app.string.profile_field_required') })
+                  .fontFamily(this.appStyle.fontFamily)
                   .maxLength(2048).fontSize(17).height(56).layoutWeight(1).textAlign(TextAlign.End).padding(0)
                   .fontColor($r('sys.color.font_primary')).backgroundColor(Color.Transparent)
                   .enterKeyType(EnterKeyType.Next)
@@ -265,58 +269,60 @@ export struct ProfileEditor {
               .padding({ left: 16, right: 16 }).width('100%')
             }
           }
-          .backgroundColor($r('app.color.card_background'))
+          .backgroundColor(this.appStyle.palette.cardBackground)
           .borderRadius(24).clip(true)
           if (this.draft.subscription) {
             Column() {
               Row({ space: 16 }) {
-                Text($r('app.string.field_auto_update')).fontSize(17).lineHeight(22).layoutWeight(1)
+                Text($r('app.string.field_auto_update')).fontFamily(this.appStyle.fontFamily).fontSize(17).lineHeight(22).layoutWeight(1)
                   .fontColor($r('sys.color.font_primary'))
                 Toggle({ type: ToggleType.Switch, isOn: this.draft.autoUpdate })
-                  .selectedColor($r('app.color.brand'))
+                  .selectedColor(this.appStyle.palette.brand)
                   .onChange((enabled: boolean): void => { this.draft.autoUpdate = enabled; })
               }
               .height(56).padding({ left: 16, right: 16 }).width('100%')
               if (this.draft.autoUpdate) {
-                Row().height(0.5).width('100%').backgroundColor($r('app.color.divider')).margin({ left: 16, right: 14 })
+                Row().height(0.5).width('100%').backgroundColor(this.appStyle.palette.divider).margin({ left: 16, right: 14 })
                 Row({ space: 16 }) {
-                  Text($r('app.string.profile_update_interval')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+                  Text($r('app.string.profile_update_interval')).fontFamily(this.appStyle.fontFamily).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
                   Row({ space: 4 }) {
                     TextInput({ text: this.draft.interval, placeholder: $r('app.string.profile_field_required') })
+                      .fontFamily(this.appStyle.fontFamily)
                       .type(InputType.Number).fontSize(17).height(56).layoutWeight(1).textAlign(TextAlign.End).padding(0)
                       .fontColor($r('sys.color.font_primary')).backgroundColor(Color.Transparent)
                       .onChange((text: string): void => { this.draft.interval = text; })
-                    Text($r('app.string.profile_minutes')).fontSize(15).lineHeight(20).fontColor($r('sys.color.font_secondary'))
+                    Text($r('app.string.profile_minutes')).fontFamily(this.appStyle.fontFamily).fontSize(15).lineHeight(20).fontColor($r('sys.color.font_secondary'))
                   }
                   .layoutWeight(1)
                 }
                 .padding({ left: 16, right: 16 }).width('100%')
               }
             }
-            .backgroundColor($r('app.color.card_background'))
+            .backgroundColor(this.appStyle.palette.cardBackground)
             .borderRadius(24).clip(true)
           }
           Row({ space: 8 }) {
             Column({ space: 4 }) {
-              Text($r('app.string.profile_source_title')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+              Text($r('app.string.profile_source_title')).fontFamily(this.appStyle.fontFamily).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
               if (this.draft.content !== undefined) {
-                Text($r('app.string.profile_source_draft')).fontSize(13).lineHeight(18).fontColor($r('sys.color.font_secondary'))
+                Text($r('app.string.profile_source_draft')).fontFamily(this.appStyle.fontFamily).fontSize(13).lineHeight(18).fontColor($r('sys.color.font_secondary'))
               } else if ((this.store.find(this.draft.id)?.updatedAt ?? 0) > 0) {
                 Text($r('app.string.profile_updated', formatDateTime(this.store.find(this.draft.id)?.updatedAt ?? 0)))
+                  .fontFamily(this.appStyle.fontFamily)
                   .fontSize(13).lineHeight(18)
                   .fontColor($r('sys.color.font_secondary'))
               }
             }
             .layoutWeight(1).alignItems(HorizontalAlign.Start)
             if (this.loadingSource) {
-              LoadingProgress().width(20).height(20).color($r('app.color.brand'))
+              LoadingProgress().width(20).height(20).color(this.appStyle.palette.brand)
             } else {
               SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(16).fontColor([$r('sys.color.font_secondary')])
             }
           }
           .width('100%').padding({ left: 16, right: 16, top: 10, bottom: 10 })
           .constraintSize({ minHeight: 56 })
-          .backgroundColor($r('app.color.card_background')).borderRadius(24)
+          .backgroundColor(this.appStyle.palette.cardBackground).borderRadius(24)
           .enabled(!this.loadingSource)
           .onClick((): void => { this.openSource(); })
           .bindContextMenu(this.FileMenu(), ResponseType.LongPress)
@@ -325,7 +331,7 @@ export struct ProfileEditor {
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 24, bottom: 16 })
         .width('100%')
         .bindSheet($$this.sourceShown, this.SourceEditor(), {
-          height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
+          height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
           onWillDismiss: (action: DismissSheetAction): void => this.closeSource((): void => action.dismiss())
         })
       }

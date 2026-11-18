@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { traffic, Traffic } from '../../client/Traffic';
@@ -9,6 +10,7 @@ import { DashboardSpeedTile } from './DashboardSpeedTile';
 
 @ComponentV2
 export struct DashboardSpeed {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param visible: boolean = false;
   @Local conn: Connection = connection;
   @Local stats: Traffic = traffic;
@@ -49,6 +51,7 @@ export struct DashboardSpeed {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .accessibilityDescription(this.stats.stale && this.conn.connected ?
       uiResourceText(this.getUIContext(), $r('app.string.dash_traffic_stale')) : '')
   }

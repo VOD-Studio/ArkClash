@@ -1,7 +1,9 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { AppGlyph } from '../../components/AppGlyph';
 
 @ComponentV2
 export struct DashboardCardHeader {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param title: ResourceStr = '';
   @Param glyph: string = 'profiles';
   @Param chevron: boolean = false;
@@ -10,6 +12,7 @@ export struct DashboardCardHeader {
     Row({ space: 8 }) {
       AppGlyph({ name: this.glyph, iconSize: 18, iconColor: $r('sys.color.font_secondary') })
       Text(this.title)
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(15)
         .lineHeight(20)
         .fontWeight(600)

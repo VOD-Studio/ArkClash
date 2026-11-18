@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { EmptyState } from '../../components/EmptyState';
 import { FLOATING_BAR_INSET, PAGE_GUTTER } from '../../components/Theme';
 import { ProxyBrowser } from './Proxies';
@@ -7,6 +8,7 @@ import { ProxyGroupView, ProxyNodeRow } from './ProxyView';
 
 @ComponentV2
 export struct ProxyTabGrid {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require browser: ProxyBrowser;
   @Param @Require group: ProxyGroupView;
   @Param @Require scroller: Scroller;
@@ -31,7 +33,7 @@ export struct ProxyTabGrid {
       ProxyGroupTabs({ browser: this.browser, active: this.active, motionEnabled: this.motionEnabled })
     }
     .padding({ bottom: 16 })
-    .backgroundColor($r('app.color.page_background'))
+    .backgroundColor(this.appStyle.palette.pageBackground)
   }
 
   build() {
@@ -41,9 +43,11 @@ export struct ProxyTabGrid {
           ListItem() {
             Column({ space: 4 }) {
               Text(this.group.now)
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(12)
                 .fontColor($r('sys.color.font_secondary'))
               Text($r('app.string.proxy_actual_retired'))
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(12)
                 .fontColor($r('app.color.warning'))
             }
@@ -81,7 +85,7 @@ export struct ProxyTabGrid {
     .height('100%')
     .safeAreaPadding({ top: this.contentInset })
     .contentStartOffset(12)
-    .contentEndOffset(FLOATING_BAR_INSET)
+    .contentEndOffset((this.appStyle.floating ? FLOATING_BAR_INSET : 16))
     .clipContent(ContentClipMode.BOUNDARY)
     .sticky(StickyStyle.Header)
     .cachedCount(2)

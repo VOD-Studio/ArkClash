@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DiagnosticConnection, DiagnosticDnsRecord } from '../../client/Diagnostics';
 import { AppGlyph } from '../../components/AppGlyph';
 import { formatBytes } from '../../components/Format';
@@ -79,6 +80,7 @@ function connectionDetailRow() {
 
 @ComponentV2
 struct ConnectionDetailSection {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param titleText: ResourceStr = '';
   @Param fields: RecordDetailField[] = [];
   @Param chains: string[] | undefined = undefined;
@@ -87,6 +89,7 @@ struct ConnectionDetailSection {
   build() {
     Column() {
       Text(this.titleText)
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(17)
         .lineHeight(22)
         .fontWeight(600)
@@ -98,12 +101,13 @@ struct ConnectionDetailSection {
       Column() {
         ForEach(this.fields, (field: RecordDetailField, index: number) => {
           if (index > 0) {
-            Divider().color($r('app.color.divider')).margin({ left: 16, right: 14 })
+            Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 14 })
           }
           Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.TEXTUAL }) {
             Row({ space: 20 }) {
-              Text(field.title).connectionDetailLabel()
+              Text(field.title).fontFamily(this.appStyle.fontFamily).connectionDetailLabel()
               Text(field.text)
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(15)
                 .lineHeight(20)
                 .fontColor($r('sys.color.font_secondary'))
@@ -119,17 +123,18 @@ struct ConnectionDetailSection {
         }, (field: RecordDetailField): string => field.key)
         if (this.chains !== undefined) {
           if (this.fields.length > 0) {
-            Divider().color($r('app.color.divider')).margin({ left: 16, right: 14 })
+            Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 14 })
           }
           Row({ space: 20 }) {
-            Text($r('app.string.diagnostics_chains')).connectionDetailLabel()
+            Text($r('app.string.diagnostics_chains')).fontFamily(this.appStyle.fontFamily).connectionDetailLabel()
             Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.End, alignItems: ItemAlign.Center }) {
               ForEach(this.chains, (hop: string, index: number) => {
                 Row({ space: 6 }) {
                   if (index > 0) {
-                    Text('→').fontSize(12).fontColor($r('sys.color.font_secondary'))
+                    Text('→').fontFamily(this.appStyle.fontFamily).fontSize(12).fontColor($r('sys.color.font_secondary'))
                   }
                   Text(hop)
+                    .fontFamily(this.appStyle.fontFamily)
                     .fontSize(11)
                     .lineHeight(13)
                     .fontWeight(600)
@@ -138,7 +143,7 @@ struct ConnectionDetailSection {
                     .flexShrink(1)
                     .padding({ left: 4, right: 4, top: 2, bottom: 2 })
                     .borderRadius(8)
-                    .backgroundColor($r('app.color.surface_block'))
+                    .backgroundColor(this.appStyle.palette.surfaceBlock)
                 }
                 .constraintSize({ maxWidth: '100%' })
                 .margin({ left: 6, top: 2, bottom: 2 })
@@ -150,7 +155,7 @@ struct ConnectionDetailSection {
         }
       }
       .width('100%')
-      .backgroundColor($r('app.color.card_background'))
+      .backgroundColor(this.appStyle.palette.cardBackground)
       .borderRadius(24)
       .clip(true)
     }
@@ -178,6 +183,7 @@ function dnsDetailFields(record: DiagnosticDnsRecord): RecordDetailField[] {
 
 @ComponentV2
 struct RecordDetailValues {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param fields: RecordDetailField[] = [];
   @Param interruptions: number = 0;
   @Param dropped: number = 0;
@@ -188,14 +194,15 @@ struct RecordDetailValues {
     Scroll() {
       Column({ space: 16 }) {
         Text($r('app.string.diagnostics_details'))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(COMPACT_TITLE_SIZE).lineHeight(COMPACT_TITLE_LINE_HEIGHT).fontWeight(600)
           .fontColor($r('sys.color.font_primary'))
         Column() {
           ForEach(this.fields, (field: RecordDetailField) => {
             Row({ space: 12 }) {
               Column({ space: 6 }) {
-                Text(field.title).fontSize(13).fontColor($r('sys.color.font_secondary'))
-                Text(field.text).fontSize(16).fontColor($r('sys.color.font_primary'))
+                Text(field.title).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
+                Text(field.text).fontFamily(this.appStyle.fontFamily).fontSize(16).fontColor($r('sys.color.font_primary'))
                   .wordBreak(WordBreak.BREAK_ALL)
               }
               .alignItems(HorizontalAlign.Start)
@@ -215,11 +222,12 @@ struct RecordDetailValues {
             .padding(16)
           }, (field: RecordDetailField): string => field.key)
         }
-        .width('100%').borderRadius(22).backgroundColor($r('app.color.card_background'))
-        Text($r('app.string.diagnostics_collect_hint')).fontSize(13)
+        .width('100%').borderRadius(22).backgroundColor(this.appStyle.palette.cardBackground)
+        Text($r('app.string.diagnostics_collect_hint')).fontFamily(this.appStyle.fontFamily).fontSize(13)
           .fontColor($r('sys.color.font_secondary'))
         if (this.interruptions > 0 || this.dropped > 0 || this.evicted > 0) {
           Text($r('app.string.diagnostics_gap', this.interruptions, this.dropped, this.evicted))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(13).fontColor($r('sys.color.font_secondary'))
         }
       }

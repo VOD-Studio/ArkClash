@@ -1,11 +1,12 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { accessibility } from '@kit.AccessibilityKit';
 import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { connection, Connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
-import { DestinationTitle, DESTINATION_TITLE_OPTIONS } from '../../components/DestinationTitle';
+import { DestinationTitle } from '../../components/DestinationTitle';
 import { EmptyState } from '../../components/EmptyState';
-import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { DnsRecordDetails } from './RecordDetails';
 import { RecordActionMenu, RecordFilterChips, RecordMenuOption, RecordMenuState } from './RecordFilters';
 import { recordColumnTitle, recordErrorText, recordFacetText } from './RecordLabels';
@@ -14,6 +15,7 @@ import { dnsRecords, DnsRecordsStore } from './RecordStores';
 
 @ComponentV2
 export struct DnsPage {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Local store: DnsRecordsStore = dnsRecords;
   @Local conn: Connection = connection;
@@ -208,6 +210,7 @@ export struct DnsPage {
         }
       }
       .attributeModifier(HEADER_ACTION)
+      .systemMaterial(this.appStyle.headerMaterial())
       .enabled(this.store.canAct)
       .accessibilityText($r('app.string.diagnostics_clear_cache'))
       .onClick((): void => { this.clearCache(); })
@@ -215,6 +218,7 @@ export struct DnsPage {
         AppGlyph({ name: 'search', iconSize: HEADER_ICON_SIZE })
       }
       .attributeModifier(HEADER_ACTION)
+      .systemMaterial(this.appStyle.headerMaterial())
       .accessibilityText($r('app.string.diagnostics_search'))
       .onClick((): void => { this.searchShown = !this.searchShown; })
       Button({ type: ButtonType.Circle }) {
@@ -222,6 +226,7 @@ export struct DnsPage {
           .fontColor([$r('sys.color.font_primary')])
       }
       .attributeModifier(HEADER_ACTION)
+      .systemMaterial(this.appStyle.headerMaterial())
       .accessibilityText($r('app.string.diagnostics_filters'))
       .onClick((): void => { this.filtersMenu(); })
     }
@@ -241,26 +246,27 @@ export struct DnsPage {
   StatusContent() {
     if (this.store.visibleRecords > 0) {
       if (!this.store.ready) {
-        Text($r('app.string.diagnostics_disconnected')).fontSize(13).fontColor($r('sys.color.font_secondary'))
+        Text($r('app.string.diagnostics_disconnected')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
       } else if (this.store.error !== '' || this.store.streamState === 'failed') {
         Row({ space: 8 }) {
-          Text(this.emptyTitle).fontSize(13).fontColor($r('app.color.status_error')).layoutWeight(1)
-          Button($r('app.string.diagnostics_retry')).buttonStyle(ButtonStyleMode.NORMAL)
+          Text(this.emptyTitle).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('app.color.status_error')).layoutWeight(1)
+          Button($r('app.string.diagnostics_retry')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
             .onClick((): void => { this.store.retry(); })
         }
       } else if (this.store.streamState !== 'open' || (!this.store.canAct && !this.store.actionPending)) {
-        Text($r('app.string.diagnostics_connecting')).fontSize(13).fontColor($r('sys.color.font_secondary'))
+        Text($r('app.string.diagnostics_connecting')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
       }
     }
     if (this.store.interruptions > 0 || this.store.dropped > 0 || this.store.evicted > 0) {
       Text($r('app.string.diagnostics_gap', this.store.interruptions, this.store.dropped, this.store.evicted))
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(12).fontColor($r('sys.color.font_secondary'))
     }
     if (this.store.preferenceError !== '') {
       Row({ space: 8 }) {
-        Text(recordErrorText(this.store.preferenceError)).fontSize(13)
+        Text(recordErrorText(this.store.preferenceError)).fontFamily(this.appStyle.fontFamily).fontSize(13)
           .fontColor($r('app.color.status_error')).layoutWeight(1)
-        Button($r('app.string.diagnostics_retry_preferences')).buttonStyle(ButtonStyleMode.NORMAL)
+        Button($r('app.string.diagnostics_retry_preferences')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
           .enabled(!this.preferencePending).onClick((): void => { this.retryPreferences(); })
       }
     }
@@ -272,7 +278,7 @@ export struct DnsPage {
         Column({ space: 8 }) {
           if (this.searchShown || this.store.query !== '') {
             Search({ value: this.store.query, placeholder: $r('app.string.diagnostics_search_hint') })
-              .textFont({ size: 16 }).placeholderFont({ size: 16 })
+              .textFont({ size: 16, family: this.appStyle.fontFamily }).placeholderFont({ size: 16, family: this.appStyle.fontFamily })
               .accessibilityText($r('app.string.diagnostics_search'))
               .onChange((query: string): void => { this.store.setQuery(query); })
           }
@@ -297,23 +303,23 @@ export struct DnsPage {
         }
         .layoutWeight(1).width('100%')
         if (!this.store.following && this.store.visibleRecords === 0) {
-          Button($r('app.string.diagnostics_latest')).buttonStyle(ButtonStyleMode.NORMAL)
+          Button($r('app.string.diagnostics_latest')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
             .accessibilityDescription($r('app.string.diagnostics_paused'))
             .onClick((): void => { this.store.setFollowing(true); })
             .margin({ bottom: 8 })
         }
         RecordActionMenu({ menuState: this.menuState })
         Column().bindSheet($$this.detailsShown, this.DetailSheet, {
-          height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true,
+          height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
           onWillAppear: (): void => { this.detailOpen = true; },
           onDisappear: (): void => { this.detailOpen = false; this.store.select(''); }
         })
       }
       .width('100%').height('100%')
     }
-    .title(this.HeaderTitle, DESTINATION_TITLE_OPTIONS)
+    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
     .menus(this.HeaderMenus)
-    .backgroundColor($r('app.color.page_background'))
+    .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })
     .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); })
   }

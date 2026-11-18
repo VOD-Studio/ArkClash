@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { SymbolGlyphModifier } from '@kit.ArkUI';
 import { formatBytes, formatDate } from '../../components/Format';
 import { hostOf } from '../../shared/profiles/Download';
@@ -7,6 +8,7 @@ import { ProfileItem } from './ProfileModels';
 @ComponentV2
 @ReusableV2
 export struct ProfileCard {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require item: ProfileItem;
   @Param selected: boolean = false;
   @Param applying: boolean = false;
@@ -110,6 +112,7 @@ export struct ProfileCard {
       Column({ space: 4 }) {
         Row({ space: 8 }) {
           Text(this.titleText)
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(17)
             .lineHeight(22)
             .fontWeight(600)
@@ -119,12 +122,13 @@ export struct ProfileCard {
             .constraintSize({ maxWidth: this.titleMaximum })
           if (this.showsExpiry) {
             Text(formatDate(this.expiry()))
+              .fontFamily(this.appStyle.fontFamily)
               .fontSize(12)
               .lineHeight(16)
               .fontWeight(600)
-              .fontColor(this.expired() ? $r('app.color.status_error') : $r('app.color.brand'))
+              .fontColor(this.expired() ? $r('app.color.status_error') : this.appStyle.palette.brand)
               .padding({ left: 8, right: 8, top: 2, bottom: 2 })
-              .backgroundColor(this.expired() ? $r('app.color.profile_expiry_error_tonal') : $r('app.color.profile_expiry_tonal'))
+              .backgroundColor(this.expired() ? $r('app.color.profile_expiry_error_tonal') : this.appStyle.palette.profileExpiryTonal)
               .borderRadius(1000)
               .maxLines(1)
               .accessibilityText($r('app.string.usage_expire', formatDate(this.expiry())))
@@ -133,6 +137,7 @@ export struct ProfileCard {
         .width('100%')
         .onSizeChange((_previous: SizeOptions, next: SizeOptions): void => { this.titleRoom = Number(next.width ?? 0); })
         Text(this.item.state.error !== undefined ? describeError(this.item.state.error ?? 'network') : this.subtitle())
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(13)
           .lineHeight(18)
           .fontColor(this.item.state.error !== undefined ? $r('app.color.status_error') : $r('sys.color.font_secondary'))
@@ -143,24 +148,25 @@ export struct ProfileCard {
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
       if (this.applying || this.item.updating) {
-        LoadingProgress().width(24).height(24).color($r('app.color.brand'))
+        LoadingProgress().width(24).height(24).color(this.appStyle.palette.brand)
       } else {
         Text(this.running && !this.selected ? $r('app.string.profile_running') : this.updated())
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(13)
           .lineHeight(18)
-          .fontColor(this.running && !this.selected ? $r('app.color.brand') : $r('sys.color.font_secondary'))
+          .fontColor(this.running && !this.selected ? this.appStyle.palette.brand : $r('sys.color.font_secondary'))
           .maxLines(1)
       }
       if (this.selected) {
         Row() {
           SymbolGlyph($r('sys.symbol.checkmark'))
             .fontSize(18)
-            .fontColor([$r('app.color.on_brand')])
+            .fontColor([this.appStyle.palette.onBrand])
         }
         .width(24)
         .height(24)
         .justifyContent(FlexAlign.Center)
-        .backgroundColor($r('app.color.brand'))
+        .backgroundColor(this.appStyle.palette.brand)
         .borderRadius(12)
         .accessibilityText($r('app.string.profile_current'))
       }
@@ -175,7 +181,7 @@ export struct ProfileCard {
     .width('100%')
     .padding({ left: 16, right: 16, top: 10, bottom: 10 })
     .constraintSize({ minHeight: 64 })
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .borderRadius(24)
     .accessibilitySelected(this.selected)
     .onClick((): void => { if (!this.contextMenuOpen) { this.onSelect(); } })

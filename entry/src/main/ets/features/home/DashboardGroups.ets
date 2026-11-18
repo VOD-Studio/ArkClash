@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { getMainGroup, GroupSummary } from '../../client/Controller';
@@ -8,6 +9,7 @@ import { DashboardGroupAvatar } from './DashboardGroupAvatar';
 
 @ComponentV2
 export struct DashboardGroups {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param visible: boolean = false;
   @Param interactive: boolean = true;
   @Param profileReady: boolean = false;
@@ -122,12 +124,13 @@ export struct DashboardGroups {
           .layoutWeight(1)
         if (this.summary !== undefined && this.summary.delay < 0) {
           Text($r('app.string.dash_delay_timeout'))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(11)
             .fontWeight(600)
             .fontColor($r('app.color.warning'))
             .padding({ left: 7, right: 7, top: 3, bottom: 3 })
             .borderRadius(7)
-            .backgroundColor($r('app.color.tile_background'))
+            .backgroundColor(this.appStyle.palette.tileBackground)
         }
       }
       .width('100%')
@@ -135,11 +138,14 @@ export struct DashboardGroups {
         Row({ space: 8 }) {
           Text() {
             Span(`${this.names().length}`)
+              .fontFamily(this.appStyle.fontFamily)
               .fontSize(40)
               .fontWeight(FontWeight.Bold)
               .letterSpacing(-0.8)
             Span(' ')
+              .fontFamily(this.appStyle.fontFamily)
             Span($r('app.string.group_count_unit'))
+              .fontFamily(this.appStyle.fontFamily)
               .fontSize(15)
               .fontWeight(600)
               .fontColor($r('sys.color.font_secondary'))
@@ -156,6 +162,7 @@ export struct DashboardGroups {
             }, (name: string): string => name)
             if (this.names().length > 4) {
               Text(`+${this.names().length - 4}`)
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(this.avatarSize() * 0.3)
                 .fontWeight(600)
                 .textAlign(TextAlign.Center)
@@ -163,8 +170,8 @@ export struct DashboardGroups {
                 .width(this.avatarSize())
                 .height(this.avatarSize())
                 .borderRadius(this.avatarSize() * 0.35)
-                .backgroundColor($r('app.color.tile_background'))
-                .border({ width: this.avatarSize() * 0.075, color: $r('app.color.card_background') })
+                .backgroundColor(this.appStyle.palette.tileBackground)
+                .border({ width: this.avatarSize() * 0.075, color: this.appStyle.palette.cardBackground })
                 .position({ x: 4 * this.avatarSize() * 0.8, y: 0 })
             }
           }
@@ -181,8 +188,9 @@ export struct DashboardGroups {
           .width(64)
           .height(64)
           .borderRadius(22)
-          .backgroundColor($r('app.color.tile_background'))
+          .backgroundColor(this.appStyle.palette.tileBackground)
           Text(this.hint())
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(15)
             .lineHeight(20)
             .fontWeight(600)
@@ -190,6 +198,7 @@ export struct DashboardGroups {
             .textAlign(TextAlign.Center)
           if (this.failed) {
             Button($r('app.string.dash_retry'))
+              .fontFamily(this.appStyle.fontFamily)
               .enabled(this.interactive && !this.loading)
               .onClick((): void => { this.refresh(); })
           }
@@ -200,6 +209,7 @@ export struct DashboardGroups {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .onClick((): void => { if (this.interactive && this.names().length > 0) { this.onOpen(); } })
   }
 }

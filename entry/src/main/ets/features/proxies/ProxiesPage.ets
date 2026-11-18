@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { accessibility } from '@kit.AccessibilityKit';
 import { common } from '@kit.AbilityKit';
 import { Connection, connection } from '../../client/Connection';
@@ -12,6 +13,7 @@ import { ProxyToolbar } from './ProxyToolbar';
 
 @ComponentV2
 export struct ProxiesPage {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require scroller: Scroller;
   @Param topInset: number = 0;
   @Param visible: boolean = false;
@@ -249,9 +251,10 @@ export struct ProxiesPage {
                 LoadingProgress()
                   .width(32)
                   .height(32)
-                  .color($r('app.color.brand'))
+                  .color(this.appStyle.palette.brand)
                   .enableLoading(this.visible)
                 Text($r('app.string.proxy_loading'))
+                  .fontFamily(this.appStyle.fontFamily)
                   .fontSize(14)
                   .fontColor($r('sys.color.font_secondary'))
               }
@@ -267,7 +270,7 @@ export struct ProxiesPage {
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
         .safeAreaPadding({ top: this.pickerMode ? 0 : this.topInset + TAB_HEADER_HEIGHT })
         .contentStartOffset(12)
-        .contentEndOffset(FLOATING_BAR_INSET)
+        .contentEndOffset((this.appStyle.floating ? FLOATING_BAR_INSET : 16))
         .clipContent(ContentClipMode.BOUNDARY)
         .edgeEffect(EdgeEffect.Spring)
         .onWillScroll((offset: number, _state: ScrollState, source: ScrollSource): void => {
@@ -323,6 +326,6 @@ export struct ProxiesPage {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.page_background'))
+    .backgroundColor(this.appStyle.palette.pageBackground)
   }
 }

@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { SymbolGlyphModifier } from '@kit.ArkUI';
 import { Connection, connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
@@ -10,6 +11,7 @@ import { copyProxyStyle, ProxyDensity, ProxyIconStyle, ProxySort } from './Proxy
 
 @ComponentV2
 export struct ProxyToolbar {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require browser: ProxyBrowser;
   @Param pickerMode: boolean = false;
   @Param active: boolean = true;
@@ -184,6 +186,7 @@ export struct ProxyToolbar {
       }
     }
     .attributeModifier(HEADER_ACTION)
+    .systemMaterial(this.appStyle.headerMaterial())
     .accessibilityText(this.link.coreReady ?
       $r('app.string.proxy_test_current_group') : $r('app.string.proxy_start_core'))
     .enabled(this.active && !this.link.coreStarting &&
@@ -201,10 +204,11 @@ export struct ProxyToolbar {
     Row({ space: HEADER_GAP }) {
       if (this.searchShown || this.pickerMode) {
         TextInput({ text: this.browser.query, placeholder: $r('app.string.proxy_search') })
+          .fontFamily(this.appStyle.fontFamily)
           .layoutWeight(1)
           .height(44)
           .fontSize(17)
-          .backgroundColor($r('app.color.card_background'))
+          .backgroundColor(this.appStyle.palette.cardBackground)
           .borderRadius(22)
           .enterKeyType(EnterKeyType.Search)
           .onChange((query: string) => this.browser.setQuery(query))
@@ -216,11 +220,13 @@ export struct ProxyToolbar {
             AppGlyph({ name: 'close', iconSize: HEADER_ICON_SIZE })
           }
           .attributeModifier(HEADER_ACTION)
+          .systemMaterial(this.appStyle.headerMaterial())
           .accessibilityText($r('app.string.proxy_search_close'))
           .onClick(() => this.closeSearch())
         }
       } else {
         Text($r('app.string.tab_proxies'))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(TAB_TITLE_SIZE)
           .lineHeight(TAB_TITLE_LINE_HEIGHT)
           .fontWeight(600)
@@ -233,6 +239,7 @@ export struct ProxyToolbar {
             AppGlyph({ name: 'search', iconSize: HEADER_ICON_SIZE })
           }
           .attributeModifier(HEADER_ACTION)
+          .systemMaterial(this.appStyle.headerMaterial())
           .accessibilityText($r('app.string.proxy_search'))
           .onClick(() => { this.searchShown = true; })
         }
@@ -240,6 +247,7 @@ export struct ProxyToolbar {
           AppGlyph({ name: 'more', iconSize: HEADER_ICON_SIZE })
         }
         .attributeModifier(HEADER_ACTION)
+        .systemMaterial(this.appStyle.headerMaterial())
         .accessibilityText($r('app.string.proxy_style'))
         .bindMenu(this.styleMenu, {
           placement: Placement.BottomRight,

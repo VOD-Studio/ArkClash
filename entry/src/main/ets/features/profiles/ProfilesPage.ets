@@ -1,9 +1,10 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { EmptyState } from '../../components/EmptyState';
 import { ListSource } from '../../components/ListSource';
 import { TabPage } from '../../components/TabPage';
-import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { PAGE_GUTTER } from '../../components/Theme';
 import { ProfileCard } from './ProfileCard';
 import { ProfileDetails } from './ProfileDetails';
 import { ProfileDraft } from './ProfileDraft';
@@ -16,6 +17,7 @@ import { ProfileSortSheet } from './ProfileSortSheet';
 
 @ComponentV2
 export struct ProfilesPage {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require store: ProfileStore;
   @Param @Require scroller: Scroller;
   @Event onScrollDirection: (down: boolean) => void = (): void => {};
@@ -216,9 +218,11 @@ export struct ProfilesPage {
     if (this.removeItem !== undefined) {
       Column({ space: 16 }) {
         Text($r('app.string.delete_confirm_title', this.removeItem.name))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(20).fontWeight(600).fontColor($r('sys.color.font_primary'))
           .width('100%')
         Text($r('app.string.delete_confirm_message'))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(15).fontColor($r('sys.color.font_secondary'))
           .width('100%')
         Button({ type: ButtonType.Normal, role: ButtonRole.ERROR, stateEffect: true }) {
@@ -226,7 +230,7 @@ export struct ProfilesPage {
             if (this.removing) {
               LoadingProgress().width(20).height(20).color($r('app.color.status_error'))
             }
-            Text($r('app.string.action_delete')).fontSize(17).fontColor($r('app.color.status_error'))
+            Text($r('app.string.action_delete')).fontFamily(this.appStyle.fontFamily).fontSize(17).fontColor($r('app.color.status_error'))
           }
           .justifyContent(FlexAlign.Center)
         }
@@ -235,6 +239,7 @@ export struct ProfilesPage {
         .enabled(!this.removing && this.store.canRemove(this.removeItem.id))
         .onClick((): void => { this.remove(); })
         Button($r('app.string.action_cancel'))
+          .fontFamily(this.appStyle.fontFamily)
           .buttonStyle(ButtonStyleMode.NORMAL)
           .width('100%').height(48)
           .enabled(!this.removing)
@@ -269,13 +274,14 @@ export struct ProfilesPage {
   @Builder
   ProfileList() {
       if (!this.store.loaded) {
-        ListItem() { LoadingProgress().width(32).height(32).color($r('app.color.brand')) }
+        ListItem() { LoadingProgress().width(32).height(32).color(this.appStyle.palette.brand) }
       } else if (this.store.loadError !== '') {
         ListItem() {
           Column({ space: 12 }) {
             Text($r('app.string.profile_load_error', describeError(this.store.loadError)))
+              .fontFamily(this.appStyle.fontFamily)
               .fontColor($r('app.color.status_error'))
-            Button($r('app.string.action_update')).onClick((): void => this.store.retryLoad())
+            Button($r('app.string.action_update')).fontFamily(this.appStyle.fontFamily).onClick((): void => this.store.retryLoad())
           }.width('100%').padding(16)
         }
       } else if (this.store.items.length === 0) {
@@ -317,12 +323,12 @@ export struct ProfilesPage {
     Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.NORMAL, stateEffect: true }) {
       Row({ space: 12 }) {
         SymbolGlyph(icon).fontSize(24).fontColor([$r('sys.color.font_primary')])
-        Text(label).fontSize(17).fontColor($r('sys.color.font_primary')).layoutWeight(1)
+        Text(label).fontFamily(this.appStyle.fontFamily).fontSize(17).fontColor($r('sys.color.font_primary')).layoutWeight(1)
       }
       .width('100%')
     }
     .width('100%').height(56).padding({ left: 16, right: 16 })
-    .backgroundColor($r('app.color.card_background')).borderRadius(24)
+    .backgroundColor(this.appStyle.palette.cardBackground).borderRadius(24)
     .onClick((): void => { this.addChoice = choice; this.addMenuShown = false; })
   }
 
@@ -373,22 +379,22 @@ export struct ProfilesPage {
           Column() { this.Content() }
             .width('100%').height('100%')
             .bindSheet($$this.editShown, this.EditSheet(), {
-              height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
+              height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
               onWillDismiss: (action: DismissSheetAction): void =>
                 confirmProfileEditorDismiss(this.getUIContext(), this.draft, (): void => action.dismiss()),
               onDisappear: (): void => { this.draft = undefined; } })
           }
           .width('100%').height('100%')
           .bindSheet($$this.detailShown, this.DetailSheet(), { title: { title: $r('app.string.profile_details_title') },
-            height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true })
+            height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: true })
         }
         .width('100%').height('100%')
         .bindSheet($$this.sortShown, this.SortSheet(), {
-          height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false })
+          height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false })
       }
       .width('100%').height('100%')
       .bindSheet($$this.resultShown, this.ResultSheet(), { title: { title: $r('app.string.action_update_all') },
-        height: SheetSize.FIT_CONTENT, systemMaterial: sheetMaterial(), showClose: true })
+        height: SheetSize.FIT_CONTENT, systemMaterial: this.appStyle.sheetMaterial(), showClose: true })
     }
     .width('100%').height('100%')
     .onSizeChange((_previous: SizeOptions, next: SizeOptions): void => {
@@ -396,7 +402,7 @@ export struct ProfilesPage {
     })
     .onVisibleAreaChange([0.0, 1.0], (visible: boolean, ratio: number): void => this.clockVisible(visible && ratio > 0))
     .bindSheet($$this.addShown, this.AddSheet(), {
-      height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
+      height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
       onWillDismiss: (action: DismissSheetAction): void => { if (!this.adding) { action.dismiss(); } } })
   }
 
@@ -407,14 +413,14 @@ export struct ProfilesPage {
       .bindSheet($$this.addMenuShown, this.AddMenu(), {
         title: { title: $r('app.string.action_add') },
         height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
-        systemMaterial: sheetMaterial(), showClose: true,
+        systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
         onDisappear: (): void => this.finishAddMenu()
       })
     }
     .width('100%').height('100%')
     .bindSheet($$this.removeShown, this.RemoveSheet(), {
       height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
-      systemMaterial: sheetMaterial(), showClose: false, enableOutsideInteractive: false,
+      systemMaterial: this.appStyle.sheetMaterial(), showClose: false, enableOutsideInteractive: false,
       onWillDismiss: (action: DismissSheetAction): void => { if (!this.removing) { action.dismiss(); } },
       onDisappear: (): void => { if (!this.removeShown) { this.removeItem = undefined; } }
     })

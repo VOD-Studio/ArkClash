@@ -1,14 +1,15 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { accessibility } from '@kit.AccessibilityKit';
 import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { connection, Connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
-import { DestinationTitle, DESTINATION_TITLE_OPTIONS } from '../../components/DestinationTitle';
+import { DestinationTitle } from '../../components/DestinationTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { uiResourceText } from '../../components/ResourceText';
 import {
   COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE,
-  PAGE_GUTTER, sheetMaterial
+  PAGE_GUTTER
 } from '../../components/Theme';
 import { ConnectionRecordDetails } from './RecordDetails';
 import { RecordActionMenu, RecordFilterChips, RecordMenuOption, RecordMenuState, recordGroupingText } from './RecordFilters';
@@ -28,6 +29,7 @@ interface ConnectionFilterSection {
 
 @ComponentV2
 export struct ConnectionsPage {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Local store: ConnectionRecordsStore = connectionRecords;
   @Local conn: Connection = connection;
@@ -292,6 +294,7 @@ export struct ConnectionsPage {
   FilterSection($$: ConnectionFilterSection) {
     if ($$.options.length > 0) {
       Text(recordColumnTitle($$.field === 'network' ? 'protocol' : $$.field))
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(13).fontWeight(600).fontColor($r('sys.color.font_secondary'))
         .width('100%').padding({ left: 12, right: 12, top: 8, bottom: 4 })
       ForEach($$.options, (option: string) => {
@@ -351,6 +354,7 @@ export struct ConnectionsPage {
           }
         }
         .attributeModifier(HEADER_ACTION)
+        .systemMaterial(this.appStyle.headerMaterial())
         .enabled(this.store.canAct)
         .accessibilityText($r('app.string.diagnostics_close_all'))
         .onClick((): void => { this.openCloseAll(); })
@@ -359,18 +363,20 @@ export struct ConnectionsPage {
         AppGlyph({ name: 'search', iconSize: HEADER_ICON_SIZE })
       }
       .attributeModifier(HEADER_ACTION)
+      .systemMaterial(this.appStyle.headerMaterial())
       .accessibilityText($r('app.string.diagnostics_search'))
       .onClick((): void => { this.searchShown = !this.searchShown; })
       Button({ type: ButtonType.Circle }) {
         AppGlyph({ name: 'more', iconSize: HEADER_ICON_SIZE })
       }
       .attributeModifier(HEADER_ACTION)
+      .systemMaterial(this.appStyle.headerMaterial())
       .accessibilityText($r('app.string.diagnostics_more'))
       .onClick((): void => { this.openMore(); })
       .bindPopup(this.moreShown, {
         builder: this.MorePopup, placement: Placement.BottomRight, enableArrow: false, autoCancel: true,
         focusable: true, mask: true, targetSpace: 8, width: MORE_MENU_WIDTH, radius: 24,
-        popupColor: $r('app.color.card_background'), systemMaterial: sheetMaterial(),
+        popupColor: this.appStyle.palette.cardBackground, systemMaterial: this.appStyle.sheetMaterial(),
         onStateChange: (event: PopupStateChangeParam): void => { if (!event.isVisible) { this.dismissMore(); } }
       })
     }
@@ -389,20 +395,21 @@ export struct ConnectionsPage {
   CloseAllSheet() {
     Scroll() {
     Column({ space: 20 }) {
-      Text($r('app.string.diagnostics_close_all')).fontSize(COMPACT_TITLE_SIZE)
+      Text($r('app.string.diagnostics_close_all')).fontFamily(this.appStyle.fontFamily).fontSize(COMPACT_TITLE_SIZE)
         .lineHeight(COMPACT_TITLE_LINE_HEIGHT).fontWeight(600)
-      Text($r('app.string.diagnostics_close_all_hint')).fontSize(16)
+      Text($r('app.string.diagnostics_close_all_hint')).fontFamily(this.appStyle.fontFamily).fontSize(16)
         .fontColor($r('sys.color.font_secondary'))
       Button() {
         Row({ space: 8 }) {
           if (this.store.actionPending) { LoadingProgress().width(20).height(20) }
-          Text($r('app.string.diagnostics_close_all')).fontSize(16)
+          Text($r('app.string.diagnostics_close_all')).fontFamily(this.appStyle.fontFamily).fontSize(16)
         }
       }
       .width('100%').enabled(this.store.canAct)
       .accessibilityText($r('app.string.diagnostics_close_all'))
       .onClick((): void => { this.closeAll(); })
       Button($r('app.string.diagnostics_cancel'))
+        .fontFamily(this.appStyle.fontFamily)
         .width('100%').buttonStyle(ButtonStyleMode.NORMAL).enabled(!this.store.actionPending)
         .onClick((): void => { this.confirmShown = false; })
     }
@@ -416,26 +423,27 @@ export struct ConnectionsPage {
   StatusContent() {
     if (this.store.visibleRecords > 0) {
       if (!this.store.ready) {
-        Text($r('app.string.diagnostics_disconnected')).fontSize(13).fontColor($r('sys.color.font_secondary'))
+        Text($r('app.string.diagnostics_disconnected')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
       } else if (this.store.error !== '' || this.store.streamState === 'failed') {
         Row({ space: 8 }) {
-          Text(this.emptyTitle).fontSize(13).fontColor($r('app.color.status_error')).layoutWeight(1)
-          Button($r('app.string.diagnostics_retry')).buttonStyle(ButtonStyleMode.NORMAL)
+          Text(this.emptyTitle).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('app.color.status_error')).layoutWeight(1)
+          Button($r('app.string.diagnostics_retry')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
             .onClick((): void => { this.store.retry(); })
         }
       } else if (this.store.streamState !== 'open' || (!this.store.canAct && !this.store.actionPending)) {
-        Text($r('app.string.diagnostics_connecting')).fontSize(13).fontColor($r('sys.color.font_secondary'))
+        Text($r('app.string.diagnostics_connecting')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
       }
     }
     if (this.store.interruptions > 0 || this.store.dropped > 0 || this.store.evicted > 0) {
       Text($r('app.string.diagnostics_gap', this.store.interruptions, this.store.dropped, this.store.evicted))
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(12).fontColor($r('sys.color.font_secondary'))
     }
     if (this.store.preferenceError !== '') {
       Row({ space: 8 }) {
-        Text(recordErrorText(this.store.preferenceError)).fontSize(13)
+        Text(recordErrorText(this.store.preferenceError)).fontFamily(this.appStyle.fontFamily).fontSize(13)
           .fontColor($r('app.color.status_error')).layoutWeight(1)
-        Button($r('app.string.diagnostics_retry_preferences')).buttonStyle(ButtonStyleMode.NORMAL)
+        Button($r('app.string.diagnostics_retry_preferences')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
           .enabled(!this.preferencePending).onClick((): void => { this.retryPreferences(); })
       }
     }
@@ -447,7 +455,7 @@ export struct ConnectionsPage {
         Column({ space: 8 }) {
           if (this.searchShown || this.store.query !== '') {
             Search({ value: this.store.query, placeholder: $r('app.string.diagnostics_search_hint') })
-              .textFont({ size: 16 }).placeholderFont({ size: 16 })
+              .textFont({ size: 16, family: this.appStyle.fontFamily }).placeholderFont({ size: 16, family: this.appStyle.fontFamily })
               .accessibilityText($r('app.string.diagnostics_search'))
               .onChange((query: string): void => { this.store.setQuery(query); })
           }
@@ -475,21 +483,21 @@ export struct ConnectionsPage {
         }
         .layoutWeight(1).width('100%')
         if (!this.store.following && this.store.feed === 'recent' && this.store.visibleRecords === 0) {
-          Button($r('app.string.diagnostics_latest')).buttonStyle(ButtonStyleMode.NORMAL)
+          Button($r('app.string.diagnostics_latest')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
             .accessibilityDescription($r('app.string.diagnostics_paused'))
             .onClick((): void => { this.store.setFollowing(true); })
             .margin({ bottom: 8 })
         }
         RecordActionMenu({ menuState: this.menuState })
         Column().bindSheet($$this.detailsShown, this.DetailSheet, {
-          height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true,
+          height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
           title: { title: this.store.feed === 'live' ? $r('app.string.diagnostics_connection_details') :
             $r('app.string.diagnostics_request_details') },
           onWillAppear: (): void => { this.detailOpen = true; },
           onDisappear: (): void => { this.detailOpen = false; this.store.select(''); }
         })
         Column().bindSheet($$this.confirmShown, this.CloseAllSheet, {
-          height: SheetSize.MEDIUM, systemMaterial: sheetMaterial(), showClose: false,
+          height: SheetSize.MEDIUM, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
           onWillAppear: (): void => { this.confirmationOpen = true; },
           onDisappear: (): void => { this.confirmationOpen = false; },
           onWillDismiss: (action: DismissSheetAction): void => {
@@ -499,9 +507,9 @@ export struct ConnectionsPage {
       }
       .width('100%').height('100%')
     }
-    .title(this.FeedTitle, DESTINATION_TITLE_OPTIONS)
+    .title(this.FeedTitle, { systemMaterial: this.appStyle.regularMaterial() })
     .menus(this.HeaderMenus)
-    .backgroundColor($r('app.color.page_background'))
+    .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })
     .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); })
   }
@@ -509,6 +517,7 @@ export struct ConnectionsPage {
 
 @ComponentV2
 struct ConnectionMenuRow {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require title: ResourceStr;
   @Param glyph: string = '';
   @Param endGlyph: string = '';
@@ -519,7 +528,7 @@ struct ConnectionMenuRow {
     Button() {
       Row({ space: 8 }) {
         if (this.glyph !== '') { AppGlyph({ name: this.glyph, iconSize: 20 }) }
-        Text(this.title).fontSize(15).fontColor($r('sys.color.font_primary'))
+        Text(this.title).fontFamily(this.appStyle.fontFamily).fontSize(15).fontColor($r('sys.color.font_primary'))
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
         if (this.endGlyph !== '' || this.selected) {
           AppGlyph({ name: this.endGlyph || 'check', iconSize: 16 })

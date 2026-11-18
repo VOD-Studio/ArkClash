@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { AppGlyph } from '../../components/AppGlyph';
 import { ProxyBrowser } from './Proxies';
 import { ProxyGroupView } from './ProxyView';
@@ -5,6 +6,7 @@ import { ProxyGroupView } from './ProxyView';
 @ReusableV2
 @ComponentV2
 export struct ProxyGroupJumpItem {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require browser: ProxyBrowser;
   @Param @Require group: ProxyGroupView;
   @Param rowExtent: number = 44;
@@ -14,6 +16,7 @@ export struct ProxyGroupJumpItem {
     Button({ type: ButtonType.Normal }) {
       Row({ space: 8 }) {
         Text(this.group.name)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(15)
           .lineHeight(20)
           .fontColor($r('sys.color.font_primary'))

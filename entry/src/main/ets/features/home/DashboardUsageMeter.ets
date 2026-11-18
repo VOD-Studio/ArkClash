@@ -1,5 +1,7 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 @ComponentV2
 export struct DashboardUsageMeter {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param share: number = 0;
   @Local meterWidth: number = 0;
   @Local wavePath: string = '';
@@ -22,20 +24,20 @@ export struct DashboardUsageMeter {
       Path({ width: '100%', height: 12 })
         .commands(this.wavePath)
         .fillOpacity(0)
-        .stroke(this.share >= 0.9 ? $r('app.color.warning') : $r('app.color.brand'))
+        .stroke(this.share >= 0.9 ? $r('app.color.warning') : this.appStyle.palette.brand)
         .strokeWidth(4)
         .strokeLineCap(LineCapStyle.Round)
       if ((this.share > 0 ? 2 + Math.max(0, this.meterWidth - 4) * this.share + 10 : 2) < this.meterWidth - 6) {
         Line()
           .startPoint([this.share > 0 ? 2 + Math.max(0, this.meterWidth - 4) * this.share + 10 : 2, 6])
           .endPoint([Math.max(2, this.meterWidth - 12), 6])
-          .stroke($r('app.color.track'))
+          .stroke(this.appStyle.palette.track)
           .strokeWidth(4)
           .strokeLineCap(LineCapStyle.Round)
       }
       if (this.share < 1) {
         Circle({ width: 4, height: 4 })
-          .fill(this.share >= 0.9 ? $r('app.color.warning') : $r('app.color.brand'))
+          .fill(this.share >= 0.9 ? $r('app.color.warning') : this.appStyle.palette.brand)
           .strokeWidth(0)
           .position({ x: Math.max(0, this.meterWidth - 6), y: 4 })
       }

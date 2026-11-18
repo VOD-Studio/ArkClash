@@ -1,8 +1,10 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DASHBOARD_CLOVER4 } from './DashboardShapePaths';
 
 @ComponentV2
 export struct DashboardCountryBadge {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param countryCode: string = '';
   @Param busy: boolean = false;
   @Param running: boolean = false;
@@ -20,7 +22,7 @@ export struct DashboardCountryBadge {
     Button({ type: ButtonType.Circle }) {
       Stack() {
         Shape() {
-          Path().commands(DASHBOARD_CLOVER4).fill($r('app.color.tile_background')).strokeWidth(0)
+          Path().commands(DASHBOARD_CLOVER4).fill(this.appStyle.palette.tileBackground).strokeWidth(0)
         }
         .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
         .width(48)
@@ -34,6 +36,7 @@ export struct DashboardCountryBadge {
             iconColor: this.running ? $r('sys.color.font_primary') : $r('sys.color.font_secondary') })
         } else {
           Text(this.countryCode.toUpperCase())
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(13)
             .lineHeight(18)
             .fontWeight(600)

@@ -1,10 +1,11 @@
 import { common } from '@kit.AbilityKit';
 import { accessibility } from '@kit.AccessibilityKit';
 import { AppStorageV2, SymbolGlyphModifier } from '@kit.ArkUI';
-import { HdsBarStyle, HdsTabs, HdsTabsBarChangeMode, HdsTabsController, hdsMaterial } from '@kit.UIDesignKit';
+import { HdsBarStyle, HdsTabs, HdsTabsBarChangeMode, HdsTabsController, HdsTabsFloatingStyle } from '@kit.UIDesignKit';
 import { connection, Connection } from '../client/Connection';
 import { traffic } from '../client/Traffic';
-import { sheetMaterial } from '../components/Theme';
+import { AppearanceState, appAppearance } from '../components/AppearanceState';
+import { hdsGlass } from '../components/Theme';
 import { ConnectionBar } from '../features/home/ConnectionBar';
 import { ProfileItem, ProfileStore } from '../features/profiles/Profiles';
 import { ProfilesPage } from '../features/profiles/ProfilesPage';
@@ -25,16 +26,19 @@ enum Tab {
   Tools
 }
 
-function tabBar(icon: Resource, selectedIcon: Resource, label: Resource): BottomTabBarStyle {
+function tabBar(icon: Resource, selectedIcon: Resource, label: Resource, accent: number,
+  family: string): BottomTabBarStyle {
   return new BottomTabBarStyle({
     normal: new SymbolGlyphModifier(icon),
-    selected: new SymbolGlyphModifier(selectedIcon)
-  }, label);
+    selected: new SymbolGlyphModifier(selectedIcon).fontColor([accent])
+  }, label).labelStyle({ selectedColor: accent, font: { family: family } });
 }
 
 @Entry
 @ComponentV2
 struct Index {
+  @Local private appStyle: AppearanceState = appAppearance;
+  @Local private tabAlpha: number = 1;
   @Local stack: NavPathStack = new NavPathStack();
   @Local tab: number = Tab.Home;
   @Local foreground: boolean = true;
@@ -49,6 +53,9 @@ struct Index {
   @Local reduceMotion: boolean = true;
   private reductionListener: (enabled: boolean) => void = (enabled: boolean): void => {
     this.reduceMotion = enabled;
+    if (enabled && this.tabAlpha !== 1) {
+      this.getUIContext().animateTo({ duration: 0 }, () => { this.tabAlpha = 1; });
+    }
   };
   private tabs: HdsTabsController = new HdsTabsController();
   private pickerScroller: ListScroller = new ListScroller();
@@ -136,13 +143,48 @@ struct Index {
 
   // 往下看内容时展开连接条、收起页签栏，往回滚时恢复。滚动不会自动触发，要应用自己调控制器。
   private onScrollDirection(down: boolean): void {
-    if (down !== this.miniBarExpanded) {
+    if (this.appStyle.floating && down !== this.miniBarExpanded) {
       this.tabs.applyMiniBarStyle(down ? HdsBarStyle.EXPAND : HdsBarStyle.COLLAPSE);
     }
   }
 
   private topInset(): number {
     return this.getUIContext().px2vp(this.insets.top);
+  }
+
+  private floatingStyle(): HdsTabsFloatingStyle | undefined {
+    if (!this.appStyle.floating) { return undefined; }
+    return {
+      // 悬浮页签保持原来的位置、系统材质及滚动迷你栏。
+      barBottomMargin: 28,
+      adaptToHandedness: true,
+      systemMaterialEffect: hdsGlass(this.appStyle.glass),
+      miniBar: {
+        miniBarBuilder: () => this.MiniBar(),
+        onBarStyleChange: (miniBarStyle: HdsBarStyle, _tabBarStyle: HdsBarStyle, _miniBarWidth: number,
+          _tabBarWidth: number, _mode: HdsTabsBarChangeMode) => {
+          this.miniBarExpanded = this.appStyle.floating && miniBarStyle === HdsBarStyle.EXPAND;
+        }
+      }
+    };
+  }
+
+  private switchTab(index: number): void {
+    if (index === this.tab) { return; }
+    if (this.appStyle.motion === 'fade' && !this.reduceMotion) {
+      const ui = this.getUIContext();
+      ui.animateTo({ duration: 0 }, () => { this.tabAlpha = 0; this.tab = index; });
+      ui.animateTo({ duration: 220, curve: Curve.EaseOut }, () => { this.tabAlpha = 1; });
+    } else {
+      this.tab = index;
+    }
+    if (index !== Tab.Home && this.homeEditing) { ++this.closeEditSignal; }
+    this.onScrollDirection(false);
+  }
+
+  @Monitor('appStyle.floating')
+  resetMiniBar(): void {
+    this.miniBarExpanded = false;
   }
 
   @Builder
@@ -176,7 +218,9 @@ struct Index {
               onOpenProxies: () => { this.proxyPicker = true; }
             })
           }
-          .tabBar(tabBar($r('sys.symbol.house'), $r('sys.symbol.house_fill'), $r('app.string.tab_home')))
+          .tabBar(tabBar($r('sys.symbol.house'), $r('sys.symbol.house_fill'), $r('app.string.tab_home'),
+            this.appStyle.palette.brand, this.appStyle.fontFamily))
+          .opacity(this.tabAlpha)
 
           TabContent() {
             ProxiesPage({
@@ -192,7 +236,9 @@ struct Index {
               onScrollDirection: (down: boolean) => this.onScrollDirection(down)
             })
           }
-          .tabBar(tabBar($r('sys.symbol.paperplane'), $r('sys.symbol.paperplane_fill'), $r('app.string.tab_proxies')))
+          .tabBar(tabBar($r('sys.symbol.paperplane'), $r('sys.symbol.paperplane_fill'), $r('app.string.tab_proxies'),
+            this.appStyle.palette.brand, this.appStyle.fontFamily))
+          .opacity(this.tabAlpha)
 
           TabContent() {
             ProfilesPage({
@@ -203,7 +249,9 @@ struct Index {
               visible: this.foreground && this.tab === Tab.Profiles,
             })
           }
-          .tabBar(tabBar($r('sys.symbol.doc_text'), $r('sys.symbol.doc_text_fill'), $r('app.string.tab_profiles')))
+          .tabBar(tabBar($r('sys.symbol.doc_text'), $r('sys.symbol.doc_text_fill'), $r('app.string.tab_profiles'),
+            this.appStyle.palette.brand, this.appStyle.fontFamily))
+          .opacity(this.tabAlpha)
 
           TabContent() {
             ToolsPage({
@@ -216,47 +264,27 @@ struct Index {
             })
           }
           .tabBar(tabBar($r('sys.symbol.square_grid_2x2'), $r('sys.symbol.square_grid_2x2'),
-            $r('app.string.tab_tools')))
+            $r('app.string.tab_tools'), this.appStyle.palette.brand, this.appStyle.fontFamily))
+          .opacity(this.tabAlpha)
         }
         .scrollable(false)
-        // 有 BottomTabBarStyle 页签时切换动画默认是 0（没有动画），按其他样式的默认值给 300ms。
-        .animationDuration(this.reduceMotion ? 0 : 300)
-        // 悬浮样式只在 barOverlap(true)、barPosition 为 End、横向页签时生效。
-        .barOverlap(true)
+        .animationDuration(this.reduceMotion || this.appStyle.motion === 'fade' ? 0 : 300)
+        .barOverlap(this.appStyle.floating)
+        .barBackgroundColor(this.appStyle.floating ? Color.Transparent : this.appStyle.palette.cardBackground)
         .vertical(false)
-        .barFloatingStyle({
-          // HdsTabs 默认贴底（0vp），官方示例和原生 Tabs 都是离屏幕底边 28vp，刚好在手势条上方。
-          barBottomMargin: 28,
-          adaptToHandedness: true,
-          systemMaterialEffect: {
-            materialType: hdsMaterial.MaterialType.IMMERSIVE,
-            materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-          },
-          miniBar: {
-            miniBarBuilder: () => this.MiniBar(),
-            onBarStyleChange: (miniBarStyle: HdsBarStyle, _tabBarStyle: HdsBarStyle, _miniBarWidth: number,
-              _tabBarWidth: number, _mode: HdsTabsBarChangeMode) => {
-              this.miniBarExpanded = miniBarStyle === HdsBarStyle.EXPAND;
-            }
-          }
-        })
-        .onChange((index: number) => {
-          this.tab = index;
-          if (index !== Tab.Home && this.homeEditing) {
-            ++this.closeEditSignal;
-          }
-          // 换页签时恢复页签栏，新页面从它当前的滚动位置开始。
-          this.onScrollDirection(false);
-        })
+        .barFloatingStyle(this.floatingStyle())
+        .onChange((index: number) => this.switchTab(index))
         // 不避让键盘：输入法弹出时页签栏留在键盘后面，不被顶到屏幕中间。
         .expandSafeArea([SafeAreaType.KEYBOARD])
         .height(LayoutPolicy.matchParent)
+        .safeAreaPadding({ bottom: this.appStyle.floating ? 0 : this.getUIContext().px2vp(this.insets.bottom) })
         // 仅首页页签铺满窗口；原生子页的标题栏仍由 Navigation 避让系统区域。
-        .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+        .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], this.appStyle.floating ?
+          [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM] : [LayoutSafeAreaEdge.TOP])
         .bindSheet($$this.profilePicker, this.ProfilePicker(), {
           title: { title: $r('app.string.tab_profiles') },
           height: SheetSize.LARGE,
-          systemMaterial: sheetMaterial(),
+          systemMaterial: this.appStyle.sheetMaterial(),
           showClose: true
         })
       }
@@ -275,7 +303,7 @@ struct Index {
     .bindSheet($$this.proxyPicker, this.ProxyPicker(), {
       title: { title: $r('app.string.tab_proxies') },
       detents: [SheetSize.LARGE],
-      systemMaterial: sheetMaterial(),
+      systemMaterial: this.appStyle.sheetMaterial(),
       showClose: true,
       onDisappear: () => { this.proxyPicker = false; }
     })
@@ -322,6 +350,6 @@ struct Index {
     Column()
       .width('100%')
       .height('100%')
-      .backgroundColor($r('app.color.page_background'))
+      .backgroundColor(this.appStyle.palette.pageBackground)
   }
 }

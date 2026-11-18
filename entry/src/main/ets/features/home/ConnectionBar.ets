@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { connection, Connection, ConnectionState } from '../../client/Connection';
 import { getMainGroup, GroupSummary } from '../../client/Controller';
@@ -15,6 +16,7 @@ const BUTTON_SIZE = 40;
  */
 @ComponentV2
 export struct ConnectionBar {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param expanded: boolean = false;
   @Event onOpen: () => void = () => {};
   @Local conn: Connection = connection;
@@ -44,16 +46,16 @@ export struct ConnectionBar {
           LoadingProgress()
             .width(22)
             .height(22)
-            .color(this.connectedLike() ? $r('app.color.on_brand') : $r('app.color.brand'))
+            .color(this.connectedLike() ? this.appStyle.palette.onBrand : this.appStyle.palette.brand)
         } else {
           SymbolGlyph(this.connectedLike() ? $r('sys.symbol.pause') : $r('sys.symbol.power'))
             .fontSize(20)
-            .fontColor([this.connectedLike() ? $r('app.color.on_brand') : $r('app.color.brand')])
+            .fontColor([this.connectedLike() ? this.appStyle.palette.onBrand : this.appStyle.palette.brand])
         }
       }
       .width(BUTTON_SIZE)
       .height(BUTTON_SIZE)
-      .backgroundColor(this.connectedLike() ? $r('app.color.brand') : $r('app.color.brand_soft'))
+      .backgroundColor(this.connectedLike() ? this.appStyle.palette.brand : this.appStyle.palette.brandSoft)
       .enabled(this.conn.state !== ConnectionState.Disconnecting)
       .accessibilityText(homeRunActionLabel(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
         this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState))
@@ -69,12 +71,14 @@ export struct ConnectionBar {
       if (this.expanded) {
         Column({ space: 2 }) {
           Text(this.primaryText())
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('sys.color.font_primary'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
           Text(this.secondaryText())
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(12)
             .fontColor($r('sys.color.font_secondary'))
             .fontFeature('"tnum" on')

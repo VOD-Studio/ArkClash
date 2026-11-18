@@ -1367,8 +1367,9 @@ test('real acknowledged reload compensates a conflicting disk commit through HTT
     });
   });
 
+const testAppearance = { sheetMaterial: () => undefined, fontFamily: '', palette: {} };
 const confirmEditorDismiss = exportedFunction(path.join(featureDir, 'ProfileEditor.ets'), 'confirmProfileEditorDismiss',
-  'const $r = (key: string): string => key; const DialogAlignment = { Bottom: 0 }; const sheetMaterial = (): undefined => undefined;');
+  'const $r = (key: string): string => key; const DialogAlignment = { Bottom: 0 }; const appAppearance = { sheetMaterial: (): undefined => undefined };');
 
 test('dirty editor dismissal keeps the draft on cancellation and discards only after the chosen sheet closes', () => {
   let panel;
@@ -1416,7 +1417,7 @@ test('配置批量失败在后台保留，恢复可见后只展示一次', async
   const resources = (key) => key;
   const { describeError } = load(path.join(featureDir, 'ProfileErrors.ets'), undefined, { $r: resources });
   const Page = componentControl('ProfilesPage', {
-    ListSource, describeError, $r: resources, setInterval: () => 1, clearInterval: () => {}
+    ListSource, describeError, $r: resources, appAppearance: testAppearance, setInterval: () => 1, clearInterval: () => {}
   });
   for (const count of [1, 2]) {
     let finish;
@@ -1455,7 +1456,7 @@ test('编辑保存失败在后台不提前消费，返回前台只提示一次�
   const resources = (key) => key;
   const { describeError } = load(path.join(featureDir, 'ProfileErrors.ets'), undefined, { $r: resources });
   const { errorString } = load(path.join(etsDir, 'shared/profiles/Errors.ets'));
-  const Editor = componentControl('ProfileEditor', { describeError, errorString, $r: resources });
+  const Editor = componentControl('ProfileEditor', { describeError, errorString, $r: resources, appAppearance: testAppearance });
   await sandbox(async (dir) => {
     const fixture = await actualProfileConsumer(dir);
     const editor = new Editor();

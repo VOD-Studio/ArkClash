@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { ListRow } from '../../components/ListRow';
 import { TabPage } from '../../components/TabPage';
 import { CARD_RADIUS } from '../../components/Theme';
@@ -5,6 +6,7 @@ import { ToolRoute } from './ToolRoutes';
 
 @ComponentV2
 export struct ToolsPage {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require scroller: Scroller;
   @Event onScrollDirection: (down: boolean) => void = () => {};
   @Param topInset: number = 0;
@@ -38,7 +40,7 @@ export struct ToolsPage {
       ForEach(entries, (entry: Entry, index: number) => {
         if (index > 0) {
           Divider()
-            .color($r('app.color.divider'))
+            .color(this.appStyle.palette.divider)
             .margin({ left: 50, right: 16 })
         }
         ListRow({ icon: entry.icon, title: entry.title, onTap: () => this.onOpen(entry.route) })
@@ -47,7 +49,7 @@ export struct ToolsPage {
     .width('100%')
     .borderRadius(CARD_RADIUS)
     .clip(true)
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.appStyle.palette.cardBackground)
   }
 }
 

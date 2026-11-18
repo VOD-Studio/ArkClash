@@ -1,7 +1,8 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { AppGlyph } from '../../components/AppGlyph';
 import { ListSource } from '../../components/ListSource';
 import { uiResourceText } from '../../components/ResourceText';
-import { COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { RecordFacets, RecordGrouping } from './RecordLogic';
 import { recordColumnTitle, recordFacetText } from './RecordLabels';
 
@@ -64,12 +65,13 @@ export class RecordMenuState {
 
 @ComponentV2
 export struct RecordActionMenu {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require menuState: RecordMenuState;
 
   @Builder
   MenuContent() {
     Column() {
-      Text(this.menuState.title).fontSize(COMPACT_TITLE_SIZE).lineHeight(COMPACT_TITLE_LINE_HEIGHT).fontWeight(600)
+      Text(this.menuState.title).fontFamily(this.appStyle.fontFamily).fontSize(COMPACT_TITLE_SIZE).lineHeight(COMPACT_TITLE_LINE_HEIGHT).fontWeight(600)
         .fontColor($r('sys.color.font_primary')).width('100%').margin({ bottom: 16 })
       List() {
         LazyForEach(this.menuState.rows, (option: RecordMenuOption) => {
@@ -79,8 +81,9 @@ export struct RecordActionMenu {
         }, (option: RecordMenuOption): string => option.key)
       }
       .width('100%').layoutWeight(1).scrollBar(BarState.Auto).cachedCount(2)
-      .divider({ strokeWidth: 0.5, color: $r('app.color.divider'), startMargin: 16, endMargin: 16 })
+      .divider({ strokeWidth: 0.5, color: this.appStyle.palette.divider, startMargin: 16, endMargin: 16 })
       Button($r('app.string.diagnostics_cancel'))
+        .fontFamily(this.appStyle.fontFamily)
         .width('100%').constraintSize({ minHeight: 48 }).margin({ top: 16 })
         .buttonStyle(ButtonStyleMode.NORMAL)
         .onClick((): void => { this.menuState.select(''); })
@@ -93,7 +96,7 @@ export struct RecordActionMenu {
     Column()
       .bindSheet($$this.menuState.shown, this.MenuContent, {
         height: this.menuState.optionCount * 56 + 180, preferType: SheetType.BOTTOM,
-        systemMaterial: sheetMaterial(), showClose: false,
+        systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
         onDisappear: (): void => { this.menuState.finish(); }
       })
   }
@@ -102,12 +105,13 @@ export struct RecordActionMenu {
 @ComponentV2
 @ReusableV2
 struct RecordMenuRow {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require option: RecordMenuOption;
   @Event onSelect: (key: string) => void = () => {};
 
   build() {
     Button() {
-      Text(this.option.title).fontSize(17).lineHeight(24).fontColor($r('sys.color.font_primary'))
+      Text(this.option.title).fontFamily(this.appStyle.fontFamily).fontSize(17).lineHeight(24).fontColor($r('sys.color.font_primary'))
         .width('100%').textAlign(TextAlign.Start)
     }
     .width('100%').constraintSize({ minHeight: 56 })
@@ -120,6 +124,7 @@ struct RecordMenuRow {
 
 @ComponentV2
 export struct RecordFilterChips {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param facets: RecordFacets = {};
   @Event onRemove: (field: string, option: string) => void = () => {};
 
@@ -143,8 +148,8 @@ export struct RecordFilterChips {
           ForEach(this.chips, (chip: RecordFilterChip) => {
             Button({ type: ButtonType.Capsule }) {
               Row({ space: 6 }) {
-                Text(chip.title).fontSize(13).fontColor($r('sys.color.font_secondary'))
-                Text(chip.text).fontSize(14).fontColor($r('sys.color.font_primary'))
+                Text(chip.title).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
+                Text(chip.text).fontFamily(this.appStyle.fontFamily).fontSize(14).fontColor($r('sys.color.font_primary'))
                   .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                 AppGlyph({ name: 'close', iconSize: 12 })
               }
@@ -152,7 +157,7 @@ export struct RecordFilterChips {
             }
             .constraintSize({ maxWidth: 320 })
             .buttonStyle(ButtonStyleMode.NORMAL)
-            .backgroundColor($r('app.color.surface_block'))
+            .backgroundColor(this.appStyle.palette.surfaceBlock)
             .accessibilityText(uiResourceText(this.getUIContext(), chip.text))
             .accessibilityDescription($r('app.string.diagnostics_filters'))
             .onClick((): void => { this.onRemove(chip.field, chip.option); })

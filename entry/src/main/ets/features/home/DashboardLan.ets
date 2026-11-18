@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { connection, Connection } from '../../client/Connection';
@@ -10,6 +11,7 @@ import { DASHBOARD_COOKIE6 } from './DashboardShapePaths';
 
 @ComponentV2
 export struct DashboardLan {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param visible: boolean = false;
   @Param interactive: boolean = true;
   @Param routeRevision: string = '';
@@ -114,6 +116,7 @@ export struct DashboardLan {
       Row({ space: 8 }) {
         AppGlyph({ name: 'devices', iconSize: 18, iconColor: $r('sys.color.font_secondary') })
         Text($r('app.string.card_lan_ip'))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(15)
           .lineHeight(20)
           .fontWeight(600)
@@ -126,6 +129,7 @@ export struct DashboardLan {
       .constraintSize({ minHeight: 26 })
       Text(this.loading ? $r('app.string.dash_groups_loading') : this.failed ? $r('app.string.dash_lan_failed') :
         this.address || $r('app.string.no_network'))
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(28)
         .minFontSize(21)
         .maxFontSize(28)
@@ -139,13 +143,13 @@ export struct DashboardLan {
         Stack() {
           if (this.desired()) {
             Shape() {
-              Path().commands(DASHBOARD_COOKIE6).fill($r('app.color.brand')).strokeWidth(0)
+              Path().commands(DASHBOARD_COOKIE6).fill(this.appStyle.palette.brand).strokeWidth(0)
             }
             .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
             .width(38)
             .height(38)
           } else {
-            Circle({ width: 38, height: 38 }).fill($r('app.color.card_background')).strokeWidth(0)
+            Circle({ width: 38, height: 38 }).fill(this.appStyle.palette.cardBackground).strokeWidth(0)
           }
           AppGlyph({ name: 'wifi', iconSize: 19,
             iconColor: this.desired() ? Color.White : $r('sys.color.font_secondary') })
@@ -154,11 +158,13 @@ export struct DashboardLan {
         .height(38)
         Column() {
           Text($r('app.string.lan_proxy'))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(15)
             .lineHeight(20)
             .fontWeight(600)
           Text(this.proxyReady() ? `${this.address}:${this.port}` : this.desired() ?
             $r('app.string.lan_proxy_pending') : $r('app.string.lan_proxy_off'))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(12)
             .lineHeight(16)
             .fontColor($r('sys.color.font_secondary'))
@@ -174,10 +180,11 @@ export struct DashboardLan {
       .width('100%')
       .padding({ left: 10, right: 12, top: 10, bottom: 10 })
       .borderRadius(20)
-      .backgroundColor($r('app.color.tile_background'))
+      .backgroundColor(this.appStyle.palette.tileBackground)
       .margin({ top: 14 })
       if (this.failed) {
         Button($r('app.string.dash_retry'))
+          .fontFamily(this.appStyle.fontFamily)
           .enabled(this.interactive && !this.loading)
           .onClick((): void => { this.refresh(); })
           .margin({ top: 8 })
@@ -185,5 +192,6 @@ export struct DashboardLan {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
+    .backgroundColor(this.appStyle.palette.cardBackground)
   }
 }

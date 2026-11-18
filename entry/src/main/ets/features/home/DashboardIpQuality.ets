@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { ExitIpQuality } from '../../client/ExitIpQuality';
 
 export function exitIpTypeLabel(quality: ExitIpQuality | undefined, busy: boolean = false): ResourceStr {
@@ -25,6 +26,7 @@ export function exitIpQualityLabel(quality: ExitIpQuality | undefined, busy: boo
 
 @ComponentV2
 export struct DashboardIpQuality {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param quality: ExitIpQuality | undefined = undefined;
   @Param busy: boolean = false;
 
@@ -40,6 +42,7 @@ export struct DashboardIpQuality {
   Labels() {
     Row({ space: 6 }) {
       Text(exitIpTypeLabel(this.quality, this.busy))
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(10.5)
         .fontWeight(500)
         .fontColor($r('sys.color.font_secondary'))
@@ -47,13 +50,16 @@ export struct DashboardIpQuality {
         .height(24)
         .constraintSize({ maxWidth: '48%' })
         .borderRadius(7)
-        .backgroundColor($r('app.color.tile_background'))
+        .backgroundColor(this.appStyle.palette.tileBackground)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
       Text() {
         Span($r('app.string.dash_ip_quality'))
+          .fontFamily(this.appStyle.fontFamily)
         Span(' ')
+          .fontFamily(this.appStyle.fontFamily)
         Span(exitIpQualityLabel(this.quality, this.busy))
+          .fontFamily(this.appStyle.fontFamily)
       }
       .fontSize(10.5)
       .fontWeight(500)
@@ -63,7 +69,7 @@ export struct DashboardIpQuality {
       .constraintSize({ maxWidth: '48%' })
       .borderRadius(7)
       .backgroundColor(this.quality?.level === 'good' ? $r('app.color.success_soft') :
-        this.quality?.level === 'risky' ? $r('app.color.error_soft') : $r('app.color.tile_background'))
+        this.quality?.level === 'risky' ? $r('app.color.error_soft') : this.appStyle.palette.tileBackground)
       .maxLines(1)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
@@ -78,12 +84,12 @@ export struct DashboardIpQuality {
           .width('38%')
           .height(24)
           .borderRadius(7)
-          .backgroundColor($r('app.color.track'))
+          .backgroundColor(this.appStyle.palette.track)
         Row()
           .width('44%')
           .height(24)
           .borderRadius(7)
-          .backgroundColor($r('app.color.track'))
+          .backgroundColor(this.appStyle.palette.track)
       }
       .width('100%')
       .height(24)

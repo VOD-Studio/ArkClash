@@ -1,17 +1,14 @@
-import { uiMaterial } from '@kit.ArkUI';
+import { AppearanceState, appAppearance } from './AppearanceState';
 import { AppGlyph } from './AppGlyph';
 import { uiResourceText } from './ResourceText';
 import { COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, HEADER_GAP } from './Theme';
-
-export const DESTINATION_TITLE_OPTIONS: NavigationTitleOptions = {
-  systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR })
-};
 
 // 自定义标题不继承原生文字标题与返回按钮之间的留白。
 const BACK_TITLE_GAP = 12;
 
 @ComponentV2
 export struct DestinationTitle {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param titleText: ResourceStr = '';
   @Param selectable: boolean = false;
   @Event onSelect: () => void = (): void => {};
@@ -19,6 +16,7 @@ export struct DestinationTitle {
   @Builder
   TitleText() {
     Text(this.titleText)
+      .fontFamily(this.appStyle.fontFamily)
       .fontSize(COMPACT_TITLE_SIZE)
       .lineHeight(COMPACT_TITLE_LINE_HEIGHT)
       .fontWeight(600)

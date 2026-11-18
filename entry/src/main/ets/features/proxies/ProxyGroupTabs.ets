@@ -1,5 +1,5 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { AppGlyph } from '../../components/AppGlyph';
-import { sheetMaterial } from '../../components/Theme';
 import { ProxyBrowser } from './Proxies';
 import { ProxyGroupJumpList } from './ProxyGroupJumpList';
 import { proxyTextScale } from './ProxyMetrics';
@@ -7,6 +7,7 @@ import { ProxyGroupView } from './ProxyView';
 
 @ComponentV2
 export struct ProxyGroupTabs {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require browser: ProxyBrowser;
   @Param active: boolean = false;
   @Param motionEnabled: boolean = false;
@@ -131,14 +132,15 @@ export struct ProxyGroupTabs {
           LazyForEach(this.browser.source, (group: ProxyGroupView) => {
             ListItem() {
               Button(group.name, { type: ButtonType.Capsule })
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(15)
                 .fontWeight(600)
                 .labelStyle({ maxLines: 1, overflow: TextOverflow.Ellipsis })
                 .width(this.widths.get(group.name) ?? 64)
                 .height(36)
                 .padding({ left: 16, right: 16 })
-                .fontColor(this.browser.currentGroup === group.name ? $r('app.color.on_brand') : $r('sys.color.font_secondary'))
-                .backgroundColor(this.browser.currentGroup === group.name ? $r('app.color.brand') : $r('app.color.card_background'))
+                .fontColor(this.browser.currentGroup === group.name ? this.appStyle.palette.onBrand : $r('sys.color.font_secondary'))
+                .backgroundColor(this.browser.currentGroup === group.name ? this.appStyle.palette.brand : this.appStyle.palette.cardBackground)
                 .animation({ duration: this.active && this.motionEnabled ? 160 : 0, curve: Curve.EaseOut })
                 .accessibilitySelected(this.browser.currentGroup === group.name)
                 .enabled(this.active)
@@ -161,7 +163,7 @@ export struct ProxyGroupTabs {
         Row()
           .width(24)
           .height(36)
-          .linearGradient({ direction: GradientDirection.Right, colors: [['#00000000', 0], [$r('app.color.page_background'), 1]] })
+          .linearGradient({ direction: GradientDirection.Right, colors: [['#00000000', 0], [this.appStyle.palette.pageBackground, 1]] })
           .opacity(this.fadeAmount)
           .hitTestBehavior(HitTestMode.None)
       }
@@ -174,7 +176,7 @@ export struct ProxyGroupTabs {
         .width(36)
         .height(36)
         .padding(0)
-        .backgroundColor($r('app.color.card_background'))
+        .backgroundColor(this.appStyle.palette.cardBackground)
         .margin({ left: 8, right: 16 })
         .accessibilityText($r('app.string.proxy_groups'))
         .enabled(this.active)
@@ -189,8 +191,8 @@ export struct ProxyGroupTabs {
           targetSpace: 8,
           width: this.popupWidth,
           radius: 24,
-          popupColor: $r('app.color.card_background'),
-          systemMaterial: sheetMaterial(),
+          popupColor: this.appStyle.palette.cardBackground,
+          systemMaterial: this.appStyle.sheetMaterial(),
           onStateChange: (event: PopupStateChangeParam): void => {
             if (!event.isVisible) {
               this.groupsShown = false;

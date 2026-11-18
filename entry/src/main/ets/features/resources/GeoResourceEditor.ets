@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { GeoResourceId, validateGeoUrl } from '../../shared/GeoResources';
 import { COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE } from '../../components/Theme';
 
@@ -54,6 +55,7 @@ export class GeoEditorDraft {
 
 @ComponentV2
 export struct GeoResourceEditor {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require draft: GeoEditorDraft;
   @Param saving: boolean = false;
   @Event onSave: () => void = () => {};
@@ -65,16 +67,19 @@ export struct GeoResourceEditor {
       Column({ space: 20 }) {
         Text(this.draft.mode === 'url' ? $r('app.string.geo_edit_url', this.draft.resourceId.toUpperCase()) :
           $r('app.string.geo_interval'))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(COMPACT_TITLE_SIZE)
           .lineHeight(COMPACT_TITLE_LINE_HEIGHT)
           .fontWeight(600)
           .width('100%')
         Text(this.draft.mode === 'url' ? $r('app.string.geo_url_hint') : $r('app.string.geo_interval_hint'))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(13)
           .fontColor($r('sys.color.font_secondary'))
           .width('100%')
         TextInput({ text: this.draft.text, placeholder: this.draft.mode === 'url' ?
           $r('app.string.geo_url') : $r('app.string.geo_interval_hours') })
+          .fontFamily(this.appStyle.fontFamily)
           .type(this.draft.mode === 'url' ? InputType.Normal : InputType.Number)
           .fontSize(16)
           .enabled(!this.saving)
@@ -83,23 +88,27 @@ export struct GeoResourceEditor {
           .onChange((text: string): void => { this.draft.text = text; this.draft.error = ''; })
         if (this.draft.error !== '') {
           Text(geoErrorText(this.draft.error))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(13)
             .fontColor($r('app.color.status_error'))
             .width('100%')
         }
         if (this.draft.mode === 'url') {
           Button($r('app.string.geo_restore_default'))
+            .fontFamily(this.appStyle.fontFamily)
             .buttonStyle(ButtonStyleMode.NORMAL)
             .enabled(!this.saving)
             .onClick((): void => { this.onRestore(); })
         }
         Row({ space: 12 }) {
           Button($r('app.string.action_cancel'))
+            .fontFamily(this.appStyle.fontFamily)
             .buttonStyle(ButtonStyleMode.NORMAL)
             .layoutWeight(1)
             .enabled(!this.saving)
             .onClick((): void => { this.onClose(); })
           Button($r('app.string.action_save'))
+            .fontFamily(this.appStyle.fontFamily)
             .layoutWeight(1)
             .enabled(!this.saving)
             .onClick((): void => { this.onSave(); })

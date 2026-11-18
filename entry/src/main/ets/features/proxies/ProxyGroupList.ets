@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { curves, UIUtils } from '@kit.ArkUI';
 import { EmptyState } from '../../components/EmptyState';
 import { FLOATING_BAR_INSET, PAGE_GUTTER } from '../../components/Theme';
@@ -27,6 +28,7 @@ interface ProxyBodyBinding {
 
 @ComponentV2
 export struct ProxyGroupList {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require browser: ProxyBrowser;
   @Param @Require scroller: Scroller;
   @Param active: boolean = false;
@@ -269,7 +271,7 @@ export struct ProxyGroupList {
           .width('100%')
           .height(this.viewportHeight + 24)
           .position({ x: 0, y: -this.viewportHeight })
-          .backgroundColor($r('app.color.page_background'))
+          .backgroundColor(this.appStyle.palette.pageBackground)
           .hitTestBehavior(HitTestMode.None)
       }
       ProxyGroupHeader({
@@ -325,7 +327,7 @@ export struct ProxyGroupList {
             .proxyPanelHeight(group.reveal.extent)
             .animation(this.foldAnimation(group))
             .align(Alignment.TopStart)
-            .backgroundColor($r('app.color.card_background'))
+            .backgroundColor(this.appStyle.palette.cardBackground)
             .borderRadius({ bottomLeft: 24, bottomRight: 24 })
             .clip(true)
             .transition(TransitionEffect.IDENTITY)
@@ -334,7 +336,7 @@ export struct ProxyGroupList {
               EmptyState({ title: $r('app.string.proxy_group_empty'),
                 hint: group.dynamic ? $r('app.string.proxy_dynamic_offline') : $r('app.string.proxy_group_empty_hint') })
             }
-            .backgroundColor($r('app.color.card_background'))
+            .backgroundColor(this.appStyle.palette.cardBackground)
             .borderRadius({ bottomLeft: 24, bottomRight: 24 })
             .transition(TransitionEffect.IDENTITY)
           } else {
@@ -343,13 +345,13 @@ export struct ProxyGroupList {
                 this.nodeLine({ group: group, row: row })
               }
               .padding({ bottom: row.last ? 2 : 0 })
-              .backgroundColor($r('app.color.card_background'))
+              .backgroundColor(this.appStyle.palette.cardBackground)
               .borderRadius({ bottomLeft: row.last ? 24 : 0, bottomRight: row.last ? 24 : 0 })
               .transition(TransitionEffect.IDENTITY)
             }, (row: ProxyNodeRow): string => row.key)
           }
         }
-        .backgroundColor($r('app.color.card_background'))
+        .backgroundColor(this.appStyle.palette.cardBackground)
         .borderRadius(24)
         .clip(true)
         .transition(TransitionEffect.IDENTITY)
@@ -362,7 +364,7 @@ export struct ProxyGroupList {
     .safeAreaPadding({ top: this.contentInset })
     .contentStartOffset(0)
     .clipContent(ContentClipMode.BOUNDARY)
-    .contentEndOffset(FLOATING_BAR_INSET)
+    .contentEndOffset((this.appStyle.floating ? FLOATING_BAR_INSET : 16))
     .cachedCount(2)
     .sticky(StickyStyle.Header)
     .scrollBar(BarState.Auto)

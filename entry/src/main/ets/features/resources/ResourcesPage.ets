@@ -1,10 +1,11 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { connection, Connection } from '../../client/Connection';
-import { DestinationTitle, DESTINATION_TITLE_OPTIONS } from '../../components/DestinationTitle';
+import { DestinationTitle } from '../../components/DestinationTitle';
 import {
   COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE,
-  PAGE_GUTTER, sheetMaterial
+  PAGE_GUTTER
 } from '../../components/Theme';
 import { GEO_DEFAULT_URLS, GEO_RESOURCE_IDS, GeoResourceId, GeoResourceStatus, GeoUrls } from '../../shared/GeoResources';
 import { GeoEditorDraft, GeoResourceEditor, geoErrorText } from './GeoResourceEditor';
@@ -13,6 +14,7 @@ import { GeoResourceItem, ResourcesStore } from './Resources';
 
 @ComponentV2
 export struct ResourcesPage {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Local store: ResourcesStore = new ResourcesStore();
   @Local conn: Connection = connection;
@@ -161,7 +163,7 @@ export struct ResourcesPage {
     this.actionOpen = true;
     this.getUIContext().showActionSheet({
       title: $r('app.string.geo_unsaved_title'), message: $r('app.string.geo_unsaved_message'),
-      alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+      alignment: DialogAlignment.Bottom, systemMaterial: this.appStyle.sheetMaterial(), autoCancel: true,
       sheets: [{ title: $r('app.string.geo_discard'), action: (): void => { discard = true; } }],
       confirm: { value: $r('app.string.geo_keep_editing'), defaultFocus: true, action: (): void => {} },
       onWillDismiss: (action: DismissDialogAction): void => action.dismiss(),
@@ -213,7 +215,7 @@ export struct ResourcesPage {
     this.getUIContext().showActionSheet({
       title: item.id.toUpperCase(), sheets: sheets,
       message: this.store.canSync ? $r('app.string.geo_row_actions') : $r('app.string.geo_connect_to_update'),
-      alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+      alignment: DialogAlignment.Bottom, systemMaterial: this.appStyle.sheetMaterial(), autoCancel: true,
       confirm: { value: $r('app.string.action_cancel'), action: (): void => {} },
       onDidDisappear: (): void => {
         this.actionOpen = false;
@@ -255,7 +257,7 @@ export struct ResourcesPage {
     this.actionOpen = true;
     this.getUIContext().showActionSheet({
       title: $r('app.string.geo_reset_settings'), message: $r('app.string.geo_reset_message'),
-      alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+      alignment: DialogAlignment.Bottom, systemMaterial: this.appStyle.sheetMaterial(), autoCancel: true,
       sheets: [{ title: $r('app.string.geo_reset_settings'), action: (): void => { reset = true; } }],
       confirm: { value: $r('app.string.action_cancel'), defaultFocus: true, action: (): void => {} },
       onDidDisappear: (): void => {
@@ -291,6 +293,7 @@ export struct ResourcesPage {
         }
       }
       .attributeModifier(HEADER_ACTION)
+      .systemMaterial(this.appStyle.headerMaterial())
       .enabled(this.store.canSync && !this.updating())
       .accessibilityText($r('app.string.action_update_all'))
       .accessibilityDescription(this.updating() ? $r('app.string.geo_updating') :
@@ -316,19 +319,20 @@ export struct ResourcesPage {
   FailureSheet() {
     Scroll() {
       Column({ space: 16 }) {
-        Text($r('app.string.geo_failures')).fontSize(COMPACT_TITLE_SIZE)
+        Text($r('app.string.geo_failures')).fontFamily(this.appStyle.fontFamily).fontSize(COMPACT_TITLE_SIZE)
           .lineHeight(COMPACT_TITLE_LINE_HEIGHT).fontWeight(600)
         ForEach(this.failures, (item: GeoResourceStatus) => {
           Column({ space: 4 }) {
-            Text(item.id.toUpperCase()).fontSize(17)
+            Text(item.id.toUpperCase()).fontFamily(this.appStyle.fontFamily).fontSize(17)
             Text(geoErrorText(item.outcome === 'canceled' ? 'geo_canceled' : item.error))
+              .fontFamily(this.appStyle.fontFamily)
               .fontSize(13)
               .fontColor($r('app.color.status_error'))
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
         }, (item: GeoResourceStatus): string => item.id)
-        Button($r('app.string.action_close')).onClick((): void => { this.failuresShown = false; })
+        Button($r('app.string.action_close')).fontFamily(this.appStyle.fontFamily).onClick((): void => { this.failuresShown = false; })
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)
@@ -348,7 +352,7 @@ export struct ResourcesPage {
             } else {
               Column() {
                 Row({ space: 16 }) {
-                  Text($r('app.string.geo_auto_update')).fontSize(17)
+                  Text($r('app.string.geo_auto_update')).fontFamily(this.appStyle.fontFamily).fontSize(17)
                     .fontColor($r('sys.color.font_primary')).layoutWeight(1)
                   Toggle({ type: ToggleType.Switch,
                     isOn: this.automaticDraft ?? this.store.settings.autoUpdate })
@@ -360,12 +364,12 @@ export struct ResourcesPage {
                 .constraintSize({ minHeight: 64 })
                 .padding({ left: 16, right: 16, top: 12, bottom: 12 })
                 if (this.automaticDraft ?? this.store.settings.autoUpdate) {
-                  Divider().color($r('app.color.divider')).margin({ left: 16, right: 16 })
+                  Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 16 })
                   Button({ type: ButtonType.Normal }) {
                     Row({ space: 12 }) {
-                      Text($r('app.string.geo_interval')).fontSize(17)
+                      Text($r('app.string.geo_interval')).fontFamily(this.appStyle.fontFamily).fontSize(17)
                         .fontColor($r('sys.color.font_primary')).layoutWeight(1)
-                      Text($r('app.string.geo_interval_value', this.store.settings.intervalHours)).fontSize(14)
+                      Text($r('app.string.geo_interval_value', this.store.settings.intervalHours)).fontFamily(this.appStyle.fontFamily).fontSize(14)
                         .fontColor($r('sys.color.font_secondary'))
                       SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(16)
                         .fontColor([$r('sys.color.font_tertiary')])
@@ -381,13 +385,13 @@ export struct ResourcesPage {
                   .onClick((): void => { this.openInterval(); })
                 }
               }
-              .width('100%').borderRadius(22).clip(true).backgroundColor($r('app.color.card_background'))
-              Text($r('app.string.geo_section_title')).fontSize(14).fontWeight(FontWeight.Medium)
+              .width('100%').borderRadius(22).clip(true).backgroundColor(this.appStyle.palette.cardBackground)
+              Text($r('app.string.geo_section_title')).fontFamily(this.appStyle.fontFamily).fontSize(14).fontWeight(FontWeight.Medium)
                 .fontColor($r('sys.color.font_secondary')).padding({ left: 16, right: 16 })
               Column() {
                 ForEach(this.store.items, (item: GeoResourceItem, index: number) => {
                   if (index > 0) {
-                    Divider().color($r('app.color.divider')).margin({ left: 16, right: 16 })
+                    Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 16 })
                   }
                   GeoResourceRow({ item: item, now: this.store.now, canSync: this.store.canSync,
                     onEdit: (): void => { this.openUrl(item.id); },
@@ -397,12 +401,13 @@ export struct ResourcesPage {
               .width('100%')
               .borderRadius(22)
               .clip(true)
-              .backgroundColor($r('app.color.card_background'))
+              .backgroundColor(this.appStyle.palette.cardBackground)
             }
             if (this.store.settingsError !== '') {
               Column({ space: 12 }) {
-                Text(geoErrorText(this.store.settingsError)).fontSize(13).fontColor($r('app.color.status_error'))
+                Text(geoErrorText(this.store.settingsError)).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('app.color.status_error'))
                 Button($r('app.string.geo_reset_settings'))
+                  .fontFamily(this.appStyle.fontFamily)
                   .buttonStyle(ButtonStyleMode.NORMAL)
                   .enabled(!this.store.saving)
                   .onClick((): void => { this.confirmReset(); })
@@ -411,13 +416,13 @@ export struct ResourcesPage {
               .alignItems(HorizontalAlign.Start)
             }
             if (this.store.error !== '') {
-              Text(geoErrorText(this.store.error)).fontSize(13).fontColor($r('app.color.status_error')).width('100%')
+              Text(geoErrorText(this.store.error)).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('app.color.status_error')).width('100%')
             }
             if (this.store.pendingApply) {
-              Text($r('app.string.geo_saved_pending')).fontSize(13).fontColor($r('sys.color.font_secondary')).width('100%')
+              Text($r('app.string.geo_saved_pending')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary')).width('100%')
             }
             if (!this.store.canSync) {
-              Text($r('app.string.geo_connect_to_update')).fontSize(13).fontColor($r('sys.color.font_secondary')).width('100%')
+              Text($r('app.string.geo_connect_to_update')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary')).width('100%')
             }
           }
           .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 32 })
@@ -428,22 +433,22 @@ export struct ResourcesPage {
         .width('100%')
         .align(Alignment.Top)
         .bindSheet($$this.editing, this.EditorSheet, {
-          height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
+          height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
           keyboardAvoidMode: SheetKeyboardAvoidMode.RESIZE_ONLY,
           onWillDismiss: (action: DismissSheetAction): void => this.dismissEditor((): void => action.dismiss()),
           onDisappear: (): void => { this.draft = undefined; this.presentFailures(); }
         })
         Column().bindSheet($$this.failuresShown, this.FailureSheet, {
-          height: SheetSize.MEDIUM, systemMaterial: sheetMaterial(), showClose: true,
+          height: SheetSize.MEDIUM, systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
           onDisappear: (): void => { this.failures = []; }
         })
       }
       .width('100%')
       .height('100%')
     }
-    .title(this.HeaderTitle, DESTINATION_TITLE_OPTIONS)
+    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
     .menus(this.HeaderMenus)
-    .backgroundColor($r('app.color.page_background'))
+    .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })
     .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); })
   }

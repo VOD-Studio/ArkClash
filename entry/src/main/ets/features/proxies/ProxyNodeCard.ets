@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { SymbolGlyphModifier } from '@kit.ArkUI';
 import { uiResourceText } from '../../components/ResourceText';
 import { AppGlyph } from '../../components/AppGlyph';
@@ -10,6 +11,7 @@ import { ProxyPressFeedback, ProxyPressState } from './ProxyPressFeedback';
 @ReusableV2
 @ComponentV2
 export struct ProxyNodeCard {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require node: ProxyNodeView;
   @Param cardType: ProxyDensity = 'standard';
   @Param active: boolean = true;
@@ -123,6 +125,7 @@ export struct ProxyNodeCard {
       Column() {
         Row({ space: 4 }) {
           Text(this.node.name)
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(15)
             .lineHeight(20)
             .fontWeight(FontWeight.Normal)
@@ -138,19 +141,19 @@ export struct ProxyNodeCard {
                 LoadingProgress()
                   .width(16)
                   .height(16)
-                  .color($r('app.color.on_brand'))
+                  .color(this.appStyle.palette.onBrand)
                   .enableLoading(this.active)
                   .hitTestBehavior(HitTestMode.None)
               } else {
                 AppGlyph({ name: this.node.pinned ? 'pin' : 'check', iconSize: 16,
-                  iconColor: this.node.pinned && !this.node.selected ? $r('app.color.brand') : $r('app.color.on_brand') })
+                  iconColor: this.node.pinned && !this.node.selected ? this.appStyle.palette.brand : this.appStyle.palette.onBrand })
                   .hitTestBehavior(HitTestMode.None)
               }
             }
             .width(22)
             .height(22)
             .borderRadius(11)
-            .backgroundColor(this.node.pinned && !this.node.selected ? $r('app.color.selection_tonal') : $r('app.color.brand'))
+            .backgroundColor(this.node.pinned && !this.node.selected ? this.appStyle.palette.selectionTonal : this.appStyle.palette.brand)
             .hitTestBehavior(HitTestMode.None)
             .transition(this.active && this.motionEnabled ? TransitionEffect.OPACITY : TransitionEffect.IDENTITY)
           }
@@ -161,6 +164,7 @@ export struct ProxyNodeCard {
         .hitTestBehavior(HitTestMode.None)
         Row({ space: 8 }) {
           Text(this.description())
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(13)
             .lineHeight(18)
             .fontColor(this.node.leafRetired ? $r('app.color.warning') : $r('sys.color.font_secondary'))
@@ -189,8 +193,8 @@ export struct ProxyNodeCard {
     .width('100%')
     .height(proxyCardHeight(this.cardType, this.textScale))
     .borderRadius(20)
-    .border({ width: this.node.located ? 2 : 0, color: $r('app.color.brand') })
-    .backgroundColor(this.nestedSurface ? $r('app.color.proxy_node_background') : $r('app.color.card_background'))
+    .border({ width: this.node.located ? 2 : 0, color: this.appStyle.palette.brand })
+    .backgroundColor(this.nestedSurface ? this.appStyle.palette.proxyNodeBackground : this.appStyle.palette.cardBackground)
     .animation({ duration: this.active && this.motionEnabled ? 160 : 0, curve: Curve.EaseOut })
     .bindContextMenu(this.nodeMenu, ResponseType.LongPress)
   }

@@ -1,11 +1,13 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { connection, Connection } from '../../client/Connection';
 import { LabeledValue } from '../../components/Labels';
-import { DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { DASHBOARD_CARD, PAGE_GUTTER } from '../../components/Theme';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DASHBOARD_COOKIE6 } from './DashboardShapePaths';
 
 @ComponentV2
 export struct DashboardVpn {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param visible: boolean = false;
   @Param interactive: boolean = true;
   @Local conn: Connection = connection;
@@ -22,6 +24,7 @@ export struct DashboardVpn {
       Column({ space: 16 }) {
         Text(this.conn.sessionMode === 'tun' ? $r('app.string.dash_vpn_mode_tun') :
           $r('app.string.dash_vpn_mode_proxy'))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(17)
           .lineHeight(22)
           .fontWeight(600)
@@ -39,7 +42,7 @@ export struct DashboardVpn {
         .alignItems(HorizontalAlign.Start)
         .padding(16)
         .borderRadius(22)
-        .backgroundColor($r('app.color.tile_background'))
+        .backgroundColor(this.appStyle.palette.tileBackground)
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)
@@ -57,13 +60,13 @@ export struct DashboardVpn {
         Stack() {
           if (this.conn.tunAttached) {
             Shape() {
-              Path().commands(DASHBOARD_COOKIE6).fill($r('app.color.brand')).strokeWidth(0)
+              Path().commands(DASHBOARD_COOKIE6).fill(this.appStyle.palette.brand).strokeWidth(0)
             }
             .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
             .width(48)
             .height(48)
           } else {
-            Circle({ width: 48, height: 48 }).fill($r('app.color.tile_background')).strokeWidth(0)
+            Circle({ width: 48, height: 48 }).fill(this.appStyle.palette.tileBackground).strokeWidth(0)
           }
           AppGlyph({ name: 'vpn', iconSize: 22,
             iconColor: this.conn.tunAttached ? Color.White : $r('sys.color.font_secondary') })
@@ -72,10 +75,12 @@ export struct DashboardVpn {
         .height(48)
         Column() {
           Text($r('app.string.dash_vpn'))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(16)
             .lineHeight(21)
             .fontWeight(600)
           Text(this.conn.tunAttached ? $r('app.string.dash_vpn_attached') : $r('app.string.dash_vpn_detached'))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(13)
             .lineHeight(18)
             .fontColor($r('sys.color.font_secondary'))
@@ -91,11 +96,12 @@ export struct DashboardVpn {
       .width('100%')
     }
     .attributeModifier(DASHBOARD_CARD)
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .padding({ left: 20, right: 20, top: 16, bottom: 16 })
     .onClick((): void => { if (this.interactive) { this.details = true; } })
     .bindSheet($$this.details, this.Details, {
       title: { title: $r('app.string.dash_vpn') }, detents: [SheetSize.MEDIUM, SheetSize.LARGE],
-      systemMaterial: sheetMaterial(), showClose: true
+      systemMaterial: this.appStyle.sheetMaterial(), showClose: true
     })
   }
 }

@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { ServiceResult } from '../../client/ServiceCheck';
 import { ServiceAvailability } from '../../client/ServiceRuleTypes';
 import { uiResourceText } from '../../components/ResourceText';
@@ -51,6 +52,7 @@ export function serviceConnectivityLabel(result: ServiceResult | undefined, chec
 
 @ComponentV2
 export struct DashboardServiceRow {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param slot: ServiceSlot = { id: '', visible: false, legacy: false, raw: {} };
   @Param result: ServiceResult | undefined = undefined;
   @Param checking: boolean = false;
@@ -97,7 +99,7 @@ export struct DashboardServiceRow {
             .height(24)
             .objectFit(ImageFit.Contain)
         } else {
-          Text(this.slot.id.slice(0, 1).toUpperCase()).fontSize(18)
+          Text(this.slot.id.slice(0, 1).toUpperCase()).fontFamily(this.appStyle.fontFamily).fontSize(18)
         }
       }
       .width(40)
@@ -106,6 +108,7 @@ export struct DashboardServiceRow {
       .backgroundColor($r('app.color.service_icon_background'))
       Column({ space: 2 }) {
         Text(serviceInfo(this.slot.id)?.name ?? this.slot.id)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(16)
           .lineHeight(22)
           .fontWeight(500)
@@ -115,6 +118,7 @@ export struct DashboardServiceRow {
           .width('100%')
         if (this.managing) {
           Text(this.shownOnDashboard ? $r('app.string.dash_service_shown') : '')
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(11)
             .lineHeight(16)
             .height(16)
@@ -122,6 +126,7 @@ export struct DashboardServiceRow {
             .maxLines(1)
         } else if (this.result !== undefined && this.result.region !== '') {
           Text(this.result.region)
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(12)
             .lineHeight(16)
             .fontColor($r('sys.color.font_secondary'))
@@ -141,9 +146,10 @@ export struct DashboardServiceRow {
       } else {
         Stack({ alignContent: Alignment.End }) {
           if (this.checking) {
-            LoadingProgress().width(20).height(20).color($r('app.color.brand'))
+            LoadingProgress().width(20).height(20).color(this.appStyle.palette.brand)
           } else {
             Text(this.statusLabel())
+              .fontFamily(this.appStyle.fontFamily)
               .fontSize(12)
               .lineHeight(16)
               .fontWeight(500)

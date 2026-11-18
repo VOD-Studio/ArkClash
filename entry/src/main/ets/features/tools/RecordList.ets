@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { FrameCallback, LengthMetrics, UIContext } from '@kit.ArkUI';
 import { DiagnosticDnsRecord } from '../../client/Diagnostics';
 import { AppGlyph } from '../../components/AppGlyph';
@@ -334,6 +335,7 @@ class RecordListViewport {
 
 @ComponentV2
 struct RecordTableHeader {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require layout: RecordTableLayout;
   @Param active: boolean = false;
   @Event onSort: (column: RecordColumn) => void = () => {};
@@ -352,6 +354,7 @@ struct RecordTableHeader {
           Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.TEXTUAL }) {
             Row({ space: 4 }) {
               Text(slot.title)
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(16)
                 .lineHeight('16fp')
                 .fontWeight(FontWeight.Medium)
@@ -378,7 +381,7 @@ struct RecordTableHeader {
           Column()
             .width(1)
             .height('60%')
-            .backgroundColor($r('app.color.divider'))
+            .backgroundColor(this.appStyle.palette.divider)
         }
         .width(12)
         .height(this.layout.headerExtent)
@@ -399,7 +402,7 @@ struct RecordTableHeader {
     }
     .width('100%')
     .height(this.layout.headerExtent)
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .clip(true)
   }
 }
@@ -438,6 +441,7 @@ function recordConnectionCell(view: ConnectionRecordView, field: string): Resour
 @ReusableV2
 @ComponentV2
 struct ConnectionRecordLine {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require row: ConnectionListRow;
   @Param @Require layout: RecordTableLayout;
   @Param live: boolean = false;
@@ -512,7 +516,7 @@ struct ConnectionRecordLine {
       if (changed || cell.text === '') {
         cell.text = recordConnectionCell(view, slot.key);
         cell.proxy = slot.key === 'exit' ? (record.chains[0] ?? '') : '';
-        cell.color = slot.key === 'downloadSpeed' ? $r('app.color.download') :
+        cell.color = slot.key === 'downloadSpeed' ? this.appStyle.palette.brand :
           (slot.key === 'uploadSpeed' ? $r('app.color.upload') : $r('sys.color.font_primary'));
       }
       cell.extent = slot.extent;
@@ -538,6 +542,7 @@ struct ConnectionRecordLine {
       AppGlyph({ name: 'chevronDown', iconSize: 16, iconColor: $r('sys.color.icon_secondary') })
         .rotate({ angle: this.row.expanded ? 0 : -90 })
       Text(this.groupText)
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(16)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('sys.color.font_primary'))
@@ -545,13 +550,14 @@ struct ConnectionRecordLine {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .layoutWeight(1)
       Text(`${this.row.groupCount}`)
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(14)
         .fontColor($r('sys.color.font_secondary'))
     }
     .width('100%')
     .constraintSize({ minHeight: this.layout.rowExtent })
     .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-    .backgroundColor($r('app.color.surface_block'))
+    .backgroundColor(this.appStyle.palette.surfaceBlock)
     .borderRadius(22)
     .accessibilityText(uiResourceText(this.getUIContext(), this.groupText))
     .accessibilityLevel('yes')
@@ -565,9 +571,10 @@ struct ConnectionRecordLine {
         if (cell.proxy !== '') {
           Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.TEXTUAL }) {
             Text(cell.text)
+              .fontFamily(this.appStyle.fontFamily)
               .fontSize(20)
               .lineHeight('20fp')
-              .fontColor($r('app.color.brand'))
+              .fontColor(this.appStyle.palette.brand)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .width('100%')
@@ -580,6 +587,7 @@ struct ConnectionRecordLine {
           .onClick((): void => this.onProxy(cell.proxy))
         } else {
           Text(cell.text)
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(20)
             .lineHeight('20fp')
             .fontColor(cell.color)
@@ -594,7 +602,7 @@ struct ConnectionRecordLine {
     }
     .width('100%')
     .height(this.layout.rowExtent)
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .onClick((): void => this.open())
     .gesture(LongPressGesture({ repeat: false }).onAction((): void => this.actions()))
   }
@@ -604,6 +612,7 @@ struct ConnectionRecordLine {
     Column({ space: 8 }) {
       Row({ space: 8 }) {
         Text(this.targetText)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('sys.color.font_primary'))
@@ -612,16 +621,18 @@ struct ConnectionRecordLine {
           .layoutWeight(1)
         if (this.networkText !== '') {
           Text(this.networkText)
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(12)
-            .fontColor($r('app.color.brand'))
+            .fontColor(this.appStyle.palette.brand)
             .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-            .backgroundColor($r('app.color.brand_soft'))
+            .backgroundColor(this.appStyle.palette.brandSoft)
             .borderRadius(10)
         }
       }
       .width('100%')
       if (this.destinationText !== '') {
         Text(this.destinationText)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(13)
           .fontColor($r('sys.color.font_secondary'))
           .width('100%')
@@ -630,6 +641,7 @@ struct ConnectionRecordLine {
       }
       if (this.ruleText !== '') {
         Text(this.ruleText)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(13)
           .fontColor($r('sys.color.font_secondary'))
           .width('100%')
@@ -641,14 +653,15 @@ struct ConnectionRecordLine {
           ForEach(this.chainChips, (chip: RecordProxyChip) => {
             Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.TEXTUAL }) {
               Text(chip.name)
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(12)
-                .fontColor($r('app.color.brand'))
+                .fontColor(this.appStyle.palette.brand)
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
             }
             .padding({ left: 8, right: 8, top: 4, bottom: 4 })
             .constraintSize({ maxWidth: '100%' })
-            .backgroundColor($r('app.color.surface_block'))
+            .backgroundColor(this.appStyle.palette.surfaceBlock)
             .borderRadius(10)
             .margin({ right: 6, bottom: 4 })
             .onClick((): void => this.onProxy(chip.name))
@@ -659,9 +672,11 @@ struct ConnectionRecordLine {
       if (this.sourceText !== '') {
         Row({ space: 6 }) {
           Text($r('app.string.diagnostics_source'))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(12)
             .fontColor($r('sys.color.font_tertiary'))
           Text(this.sourceText)
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(12)
             .fontColor($r('sys.color.font_secondary'))
             .maxLines(2)
@@ -673,19 +688,22 @@ struct ConnectionRecordLine {
       if (this.live) {
         Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
           Text(this.durationText)
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(12)
             .fontColor($r('sys.color.font_secondary'))
             .accessibilityDescription($r('app.string.diagnostics_duration'))
           Row({ space: 4 }) {
-            AppGlyph({ name: 'arrowDown', iconSize: 12, iconColor: $r('app.color.download') })
+            AppGlyph({ name: 'arrowDown', iconSize: 12, iconColor: this.appStyle.palette.brand })
             Text(this.downloadText)
+              .fontFamily(this.appStyle.fontFamily)
               .fontSize(12)
-              .fontColor($r('app.color.download'))
+              .fontColor(this.appStyle.palette.brand)
           }
           .accessibilityDescription($r('app.string.diagnostics_download_speed'))
           Row({ space: 4 }) {
             AppGlyph({ name: 'arrowUp', iconSize: 12, iconColor: $r('app.color.upload') })
             Text(this.uploadText)
+              .fontFamily(this.appStyle.fontFamily)
               .fontSize(12)
               .fontColor($r('app.color.upload'))
           }
@@ -694,6 +712,7 @@ struct ConnectionRecordLine {
         .width('100%')
       } else {
         Text(this.clockText)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(12)
           .fontColor($r('sys.color.font_secondary'))
           .width('100%')
@@ -703,7 +722,7 @@ struct ConnectionRecordLine {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .padding(16)
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .borderRadius(22)
     .onClick((): void => this.open())
     .gesture(LongPressGesture({ repeat: false }).onAction((): void => this.actions()))
@@ -745,6 +764,7 @@ function recordDnsCell(record: DiagnosticDnsRecord, field: string): ResourceStr 
 @ReusableV2
 @ComponentV2
 struct DnsRecordLine {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require row: DnsListRow;
   @Param @Require layout: RecordTableLayout;
   @Param active: boolean = false;
@@ -796,6 +816,7 @@ struct DnsRecordLine {
     Row() {
       ForEach(this.cells, (cell: RecordTableCell) => {
         Text(cell.text)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(20)
           .lineHeight('20fp')
           .fontColor(cell.color)
@@ -809,7 +830,7 @@ struct DnsRecordLine {
     }
     .width('100%')
     .height(this.layout.rowExtent)
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.appStyle.palette.cardBackground)
   }
 
   @Builder
@@ -817,6 +838,7 @@ struct DnsRecordLine {
     Column({ space: 8 }) {
       Row({ space: 8 }) {
         Text(this.row.record.domain)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('sys.color.font_primary'))
@@ -824,14 +846,16 @@ struct DnsRecordLine {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
         Text(this.row.record.type)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(12)
-          .fontColor($r('app.color.brand'))
+          .fontColor(this.appStyle.palette.brand)
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .backgroundColor($r('app.color.brand_soft'))
+          .backgroundColor(this.appStyle.palette.brandSoft)
           .borderRadius(10)
       }
       .width('100%')
       Text(this.resultText)
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(14)
         .fontColor(this.resultColor)
         .width('100%')
@@ -839,25 +863,28 @@ struct DnsRecordLine {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
       Flex({ wrap: FlexWrap.Wrap }) {
         Text(this.initiatorText)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(12)
           .fontColor($r('sys.color.font_secondary'))
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .backgroundColor($r('app.color.surface_block'))
+          .backgroundColor(this.appStyle.palette.surfaceBlock)
           .borderRadius(10)
           .margin({ right: 6, bottom: 4 })
         Text(this.cacheText)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(12)
           .fontColor($r('sys.color.font_secondary'))
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .backgroundColor($r('app.color.surface_block'))
+          .backgroundColor(this.appStyle.palette.surfaceBlock)
           .borderRadius(10)
           .margin({ right: 6, bottom: 4 })
         if (this.row.record.rcode !== '') {
           Text(this.row.record.rcode)
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(12)
             .fontColor(this.resultColor)
             .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-            .backgroundColor($r('app.color.surface_block'))
+            .backgroundColor(this.appStyle.palette.surfaceBlock)
             .borderRadius(10)
             .margin({ bottom: 4 })
         }
@@ -865,9 +892,11 @@ struct DnsRecordLine {
       .width('100%')
       Row({ space: 6 }) {
         Text($r('app.string.diagnostics_upstream'))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(12)
           .fontColor($r('sys.color.font_tertiary'))
         Text(this.upstreamText)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(12)
           .fontColor($r('sys.color.font_secondary'))
           .maxLines(2)
@@ -877,10 +906,12 @@ struct DnsRecordLine {
       .width('100%')
       Row({ space: 8 }) {
         Text(this.clockText)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(12)
           .fontColor($r('sys.color.font_secondary'))
           .layoutWeight(1)
         Text(this.elapsedText)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(12)
           .fontColor($r('sys.color.font_secondary'))
       }
@@ -889,7 +920,7 @@ struct DnsRecordLine {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .padding(16)
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .borderRadius(22)
   }
 
@@ -909,6 +940,7 @@ struct DnsRecordLine {
 
 @ComponentV2
 export struct ConnectionRecordList {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require store: ConnectionRecordsStore;
   @Param active: boolean = false;
   @Param reduceMotion: boolean = true;
@@ -1041,6 +1073,7 @@ export struct ConnectionRecordList {
       })
       if (this.store.feed === 'recent' && !this.store.following && this.store.visibleRecords > 0) {
         Button($r('app.string.diagnostics_latest'), { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .fontFamily(this.appStyle.fontFamily)
           .margin({ top: 8, bottom: 8 })
           .accessibilityDescription($r('app.string.diagnostics_paused'))
           .enabled(this.active)
@@ -1055,6 +1088,7 @@ export struct ConnectionRecordList {
 
 @ComponentV2
 export struct DnsRecordList {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require store: DnsRecordsStore;
   @Param active: boolean = false;
   @Param reduceMotion: boolean = true;
@@ -1159,6 +1193,7 @@ export struct DnsRecordList {
       })
       if (!this.store.following && this.store.visibleRecords > 0) {
         Button($r('app.string.diagnostics_latest'), { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .fontFamily(this.appStyle.fontFamily)
           .margin({ top: 8, bottom: 8 })
           .accessibilityDescription($r('app.string.diagnostics_paused'))
           .enabled(this.active)

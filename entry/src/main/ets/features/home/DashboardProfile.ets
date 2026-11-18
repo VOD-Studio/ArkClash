@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { dashboardCount, dashboardTraffic } from './DashboardFormat';
 import { formatUpdatedAgo } from '../../components/Format';
 import { DASHBOARD_CARD } from '../../components/Theme';
@@ -10,6 +11,7 @@ const DASHBOARD_DAY_MS = 24 * 60 * 60 * 1000;
 
 @ComponentV2
 export struct DashboardProfile {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param visible: boolean = false;
   @Param interactive: boolean = true;
   @Param profileReady: boolean = false;
@@ -78,10 +80,13 @@ export struct DashboardProfile {
       Row({ space: 12 }) {
         Text() {
           Span(`${Math.round(this.usedRatio() * 100)}%`)
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(20)
             .fontWeight(600)
           Span(' ')
+            .fontFamily(this.appStyle.fontFamily)
           Span($r('app.string.dash_used_short'))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(13)
             .fontWeight(600)
             .fontColor($r('sys.color.font_secondary'))
@@ -89,6 +94,7 @@ export struct DashboardProfile {
         .lineHeight(25)
         .fontFeature('"tnum" on')
         Text(`${dashboardTraffic(Math.max(0, this.usedBytes))} / ${dashboardTraffic(this.totalBytes)}`)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(13)
           .lineHeight(18)
           .fontFeature('"tnum" on')
@@ -110,6 +116,7 @@ export struct DashboardProfile {
       Row({ space: 8 }) {
         AppGlyph({ name: 'profiles', iconSize: 18, iconColor: $r('sys.color.font_secondary') })
         Text($r('app.string.card_profile'))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(15)
           .lineHeight(20)
           .fontWeight(600)
@@ -124,6 +131,7 @@ export struct DashboardProfile {
       .constraintSize({ minHeight: 26 })
       Row() {
         Text(this.profileReady ? this.profileName : $r('app.string.action_add_subscription'))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(17)
           .lineHeight(22)
           .fontWeight(600)
@@ -151,9 +159,12 @@ export struct DashboardProfile {
           Text() {
             if (this.profileUpdatedAt > 0) {
               Span($r('app.string.dash_profile_updated_prefix'))
+                .fontFamily(this.appStyle.fontFamily)
               Span(formatUpdatedAgo(this.profileUpdatedAt, this.clock))
+                .fontFamily(this.appStyle.fontFamily)
             } else {
               Span('—')
+                .fontFamily(this.appStyle.fontFamily)
             }
           }
             .accessibilityDescription(this.profileUpdatedAt > 0 ? new Date(this.profileUpdatedAt).toLocaleString() : '—')
@@ -164,6 +175,7 @@ export struct DashboardProfile {
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
           Text(this.expireAt > 0 ? $r('app.string.days_left', this.daysLeft()) : this.source())
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(12)
             .lineHeight(16)
             .fontColor(this.expireAt > 0 && this.daysLeft() <= 7 ? $r('app.color.warning') :
@@ -193,6 +205,7 @@ export struct DashboardProfile {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .onClick((): void => {
       if (this.interactive) {
         if (this.profileReady) { this.onOpen(); } else { this.onAdd(); }

@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { UIContext, UIUtils } from '@kit.ArkUI';
 
 @ObservedV2
@@ -75,6 +76,7 @@ export class ProxyPressState {
 
 @ComponentV2
 export struct ProxyPressFeedback {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require feedback: ProxyPressState;
 
   build() {
@@ -84,7 +86,7 @@ export struct ProxyPressFeedback {
           .width(this.feedback.diameter)
           .height(this.feedback.diameter)
           .radialGradient({ center: ['50%', '50%'], radius: '50%',
-            colors: [[$r('app.color.proxy_press_feedback'), 0], [$r('app.color.proxy_press_feedback'), 0.7],
+            colors: [[this.appStyle.palette.proxyPressFeedback, 0], [this.appStyle.palette.proxyPressFeedback, 0.7],
               [Color.Transparent, 1]] })
           .position({ x: this.feedback.originX - this.feedback.diameter / 2,
             y: this.feedback.originY - this.feedback.diameter / 2 })

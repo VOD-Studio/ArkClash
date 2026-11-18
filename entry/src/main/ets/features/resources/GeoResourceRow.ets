@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { formatBytes, formatUpdatedAgo } from '../../components/Format';
 import { uiResourceText } from '../../components/ResourceText';
 import { GeoResourceItem } from './Resources';
@@ -5,6 +6,7 @@ import { geoErrorText } from './GeoResourceEditor';
 
 @ComponentV2
 export struct GeoResourceRow {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require item: GeoResourceItem;
   @Param now: number = 0;
   @Param canSync: boolean = false;
@@ -15,15 +17,18 @@ export struct GeoResourceRow {
     Row({ space: 16 }) {
       Column({ space: 4 }) {
         Text(this.item.id.toUpperCase())
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(17)
           .fontColor($r('sys.color.font_primary'))
         Text(this.item.exists ? formatUpdatedAgo(this.item.modifiedAt, this.now) : $r('app.string.geo_not_downloaded'))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(13)
           .fontColor($r('sys.color.font_secondary'))
           .accessibilityDescription(uiResourceText(this.getUIContext(),
             this.item.exists ? new Date(this.item.modifiedAt).toLocaleString() : $r('app.string.geo_not_downloaded')))
         if (this.item.error !== '') {
           Text(geoErrorText(this.item.error))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(13)
             .fontColor($r('app.color.status_error'))
         }
@@ -39,11 +44,12 @@ export struct GeoResourceRow {
             $r('app.string.geo_updating'))
       } else if (this.item.exists) {
         Text(formatBytes(this.item.size))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(13)
           .fontColor($r('sys.color.font_secondary'))
           .fontFeature('"tnum" on')
           .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-          .backgroundColor($r('app.color.surface_block'))
+          .backgroundColor(this.appStyle.palette.surfaceBlock)
           .borderRadius(10)
       }
     }

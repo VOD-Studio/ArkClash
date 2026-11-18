@@ -1,9 +1,11 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { uiResourceText } from '../../components/ResourceText';
 import { AppGlyph } from '../../components/AppGlyph';
 import { ProxyNodeView } from './ProxyView';
 
 @ComponentV2
 export struct ProxyDelay {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require node: ProxyNodeView;
   @Param active: boolean = true;
   @Param textScale: number = 1;
@@ -46,14 +48,15 @@ export struct ProxyDelay {
         LoadingProgress()
           .width(13 * this.textScale)
           .height(13 * this.textScale)
-          .color($r('app.color.brand'))
+          .color(this.appStyle.palette.brand)
           .enableLoading(this.active)
       } else if (this.node.phase !== 'idle') {
         AppGlyph({ name: 'clock', iconSize: 13 * this.textScale, iconColor: $r('sys.color.font_tertiary') })
       } else if (this.node.delay === 0) {
-        AppGlyph({ name: 'bolt', iconSize: 13 * this.textScale, iconColor: $r('app.color.brand') })
+        AppGlyph({ name: 'bolt', iconSize: 13 * this.textScale, iconColor: this.appStyle.palette.brand })
       } else {
         Text(this.delayLabel())
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(11)
           .lineHeight(13)
           .fontWeight(600)

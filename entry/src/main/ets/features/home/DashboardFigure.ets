@@ -1,5 +1,7 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 @ComponentV2
 export struct DashboardFigure {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param figureText: string = '—';
   @Param label: ResourceStr = '';
   @Param figureSize: number = 20;
@@ -10,6 +12,7 @@ export struct DashboardFigure {
   build() {
     Column({ space: this.centered ? 2 : 0 }) {
       Text(this.figureText)
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(this.figureSize)
         .lineHeight(this.figureLeading)
         .fontWeight(this.figureWeight)
@@ -17,6 +20,7 @@ export struct DashboardFigure {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
       Text(this.label)
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(12)
         .lineHeight(16)
         .fontColor($r('sys.color.font_secondary'))

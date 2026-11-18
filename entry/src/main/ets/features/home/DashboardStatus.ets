@@ -1,8 +1,9 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { curves } from '@kit.ArkUI';
 import { connection, Connection, ConnectionState } from '../../client/Connection';
 import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
-import { DASHBOARD_CARD, sheetMaterial } from '../../components/Theme';
+import { DASHBOARD_CARD } from '../../components/Theme';
 import { dashboardSettings, DashboardSettings } from './DashboardSettings';
 import { DASHBOARD_COOKIE12 } from './DashboardShapePaths';
 import { homeHasPendingCleanup, homeRunActionLabel, homeRuntimeAppearsStarted, homeShouldStopRuntime } from './HomeRunControls';
@@ -26,6 +27,7 @@ function dashboardUptime(milliseconds: number): string {
 
 @ComponentV2
 export struct DashboardStatus {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param visible: boolean = false;
   @Param interactive: boolean = true;
   @Param motionEnabled: boolean = false;
@@ -172,7 +174,7 @@ export struct DashboardStatus {
         sideLength: 240, duration: 6000 }) {
         Shape() {
           Path().commands(DASHBOARD_COOKIE12)
-            .fill(this.conn.connected ? $r('app.color.dash_status_decoration') : $r('app.color.dash_status_idle_decoration'))
+            .fill(this.conn.connected ? this.appStyle.palette.dashStatusDecoration : this.appStyle.palette.dashStatusIdleDecoration)
             .strokeWidth(0)
             .animation({ duration: this.motionEnabled && this.visible ? 450 : 0, curve: Curve.EaseOut })
         }
@@ -200,6 +202,7 @@ export struct DashboardStatus {
             Row({ space: 8 }) {
               AppGlyph({ name: 'status', iconSize: 18, iconColor: $r('sys.color.font_secondary') })
               Text($r('app.string.card_status'))
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(15)
                 .lineHeight(20)
                 .fontWeight(600)
@@ -208,6 +211,7 @@ export struct DashboardStatus {
                   Circle({ width: 5, height: 5 }).fill($r('app.color.success_foreground')).strokeWidth(0)
                 }
                 Text(this.conn.connected ? $r('app.string.chip_running') : this.statusText())
+                  .fontFamily(this.appStyle.fontFamily)
                   .fontSize(11)
                   .lineHeight(13)
                   .fontWeight(600)
@@ -218,7 +222,7 @@ export struct DashboardStatus {
               .padding({ left: 7, right: 7, top: 3, bottom: 3 })
               .borderRadius(7)
               .backgroundColor(this.conn.connected ? $r('app.color.success_soft') :
-                $r('app.color.tile_background'))
+                this.appStyle.palette.tileBackground)
               .accessibilityDescription(this.conn.error)
               .onClick((): void => {
                 if (this.interactive && this.conn.error !== '') { this.showRuntimeError(this.conn.error); }
@@ -236,11 +240,12 @@ export struct DashboardStatus {
                     .width('100%')
                     .height(22)
                     .borderRadius(4)
-                    .backgroundColor($r('app.color.track'))
+                    .backgroundColor(this.appStyle.palette.track)
                     .opacity(0.55)
                     .margin({ top: 3, bottom: 3 })
                 } else {
                   Text(this.address())
+                    .fontFamily(this.appStyle.fontFamily)
                     .fontSize(22)
                     .minFontSize(16.5)
                     .maxFontSize(22)
@@ -267,11 +272,13 @@ export struct DashboardStatus {
             Row({ space: 24 }) {
               Column({ space: 2 }) {
                 Text($r('app.string.uptime_label'))
+                  .fontFamily(this.appStyle.fontFamily)
                   .fontSize(12)
                   .lineHeight(16)
                   .fontColor($r('sys.color.font_secondary'))
                 Text(this.conn.connected && this.conn.connectedAt > 0 ?
                   dashboardUptime(this.clock - this.conn.connectedAt) : '—')
+                  .fontFamily(this.appStyle.fontFamily)
                   .fontSize(15)
                   .lineHeight(20)
                   .fontWeight(600)
@@ -281,12 +288,14 @@ export struct DashboardStatus {
               .layoutWeight(1)
               Column({ space: 2 }) {
                 Text($r('app.string.dash_ip_organization'))
+                  .fontFamily(this.appStyle.fontFamily)
                   .fontSize(12)
                   .lineHeight(16)
                   .fontColor($r('sys.color.font_secondary'))
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                 Text(this.probe.result?.org || this.probe.result?.asn || '—')
+                  .fontFamily(this.appStyle.fontFamily)
                   .fontSize(15)
                   .lineHeight(20)
                   .fontWeight(600)
@@ -321,10 +330,11 @@ export struct DashboardStatus {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .padding(0)
     .bindSheet($$this.details, this.Details, {
       title: { title: $r('app.string.dash_exit_details') }, detents: [SheetSize.MEDIUM, SheetSize.LARGE],
-      systemMaterial: sheetMaterial(), showClose: true
+      systemMaterial: this.appStyle.sheetMaterial(), showClose: true
     })
   }
 }

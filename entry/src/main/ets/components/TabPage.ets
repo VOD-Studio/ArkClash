@@ -1,11 +1,12 @@
+import { AppearanceState, appAppearance } from './AppearanceState';
 import { LengthMetrics } from '@kit.ArkUI';
 import { uiResourceText } from './ResourceText';
 import {
-  HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, HdsTitleBarContentStyle, hdsMaterial,
+  HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, HdsTitleBarContentStyle,
   ScrollEffectType, TitleBarContentOptions
 } from '@kit.UIDesignKit';
 import {
-  FLOATING_BAR_INSET, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER, SECTION_GAP,
+  FLOATING_BAR_INSET, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER, SECTION_GAP, hdsGlass,
   TAB_HEADER_HEIGHT, TAB_TITLE_LINE_HEIGHT, TAB_TITLE_SIZE
 } from './Theme';
 
@@ -31,6 +32,7 @@ interface TabPageHeaderState {
  */
 @ComponentV2
 export struct TabPage {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param title: ResourceStr = '';
   @Param menus: HdsNavigationMenuItemOptions[] = [];
   @Param topInset: number = 0; // 状态栏高度，vp
@@ -86,6 +88,7 @@ export struct TabPage {
     } else {
       Row({ space: HEADER_GAP }) {
         Text($$.title)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(TAB_TITLE_SIZE)
           .lineHeight(TAB_TITLE_LINE_HEIGHT)
           .fontWeight(600)
@@ -102,6 +105,7 @@ export struct TabPage {
             }
           }
           .attributeModifier(HEADER_ACTION)
+          .systemMaterial(this.appStyle.headerMaterial())
           .enabled(menu.item.content?.isEnabled ?? true)
           .accessibilityText(uiResourceText(this.getUIContext(), menu.item.content?.label ?? ''))
           .onClick((): void => { menu.item.content?.action?.(); })
@@ -125,7 +129,7 @@ export struct TabPage {
         .height('100%')
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
         .contentStartOffset(this.topInset + TAB_HEADER_HEIGHT + 12)
-        .contentEndOffset(FLOATING_BAR_INSET)
+        .contentEndOffset((this.appStyle.floating ? FLOATING_BAR_INSET : 16))
         .cachedCount(2)
         .lanes(this.listLanes, this.listGutter)
         .scrollBar(BarState.Off)
@@ -143,7 +147,7 @@ export struct TabPage {
           left: PAGE_GUTTER,
           right: PAGE_GUTTER,
           top: this.topInset + TAB_HEADER_HEIGHT + 12,
-          bottom: FLOATING_BAR_INSET
+          bottom: (this.appStyle.floating ? FLOATING_BAR_INSET : 16)
         })
       }
       .width('100%')
@@ -165,10 +169,7 @@ export struct TabPage {
           enableScrollEffect: true,
           scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
         },
-        systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-        },
+        systemMaterialEffect: hdsGlass(this.appStyle.glass),
         originalStyle: { contentStyle: CONTENT_STYLE },
         scrollEffectStyle: { contentStyle: CONTENT_STYLE }
       },
