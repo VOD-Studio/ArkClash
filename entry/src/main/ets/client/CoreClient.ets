@@ -14,7 +14,6 @@ const READY_TIMEOUT_MS = 30000;
 const READY_POLL_MS = 200;
 
 let pendingStart: Promise<RuntimeStatus> | undefined = undefined;
-let pendingLaunch: Promise<void> | undefined = undefined;
 let hostGeneration: number = 0;
 
 function vpnWant(context: common.UIAbilityContext): Want {
@@ -99,18 +98,18 @@ export interface CoreHostSnapshot {
 /** 启动交接期间没有进程不等于停止，查询途中发生的启停也使旧证据失效。 */
 export async function readCoreHostStatus(context: common.UIAbilityContext): Promise<CoreHostSnapshot> {
   const generation = hostGeneration;
-  if (pendingStart !== undefined || pendingLaunch !== undefined) {
+  if (pendingStart !== undefined) {
     return { state: 'unknown' };
   }
   const active = await runtimeMayBeActive(context.filesDir);
-  if (generation !== hostGeneration || pendingStart !== undefined || pendingLaunch !== undefined) {
+  if (generation !== hostGeneration || pendingStart !== undefined) {
     return { state: 'unknown' };
   }
   if (!active) {
     return { state: 'stopped' };
   }
   const status = await probeCore(context);
-  if (generation !== hostGeneration || pendingStart !== undefined || pendingLaunch !== undefined) {
+  if (generation !== hostGeneration || pendingStart !== undefined) {
     return { state: 'unknown' };
   }
   return status?.running === true ? { state: 'running', status: status } : { state: 'unknown' };
@@ -136,9 +135,6 @@ export function startCore(context: common.UIAbilityContext, mode: string,
       return status;
     });
   }
-  if (pendingLaunch !== undefined) {
-    return Promise.reject(new CoreStartError('系统启动尚未结束，请稍后重试', true));
-  }
   const generation = hostGeneration;
   const pending = performStartCore(context, mode, allowLan,
     (): boolean => generation === hostGeneration && isCurrent());
@@ -153,18 +149,6 @@ export function startCore(context: common.UIAbilityContext, mode: string,
 async function performStartCore(context: common.UIAbilityContext, mode: string,
   allowLan: boolean | undefined, isCurrent: () => boolean): Promise<RuntimeStatus> {
   let extensionStarted = false;
-  const observer = vpnExtension.createVpnObserver();
-  let denied = false;
-  let rejectAuthorization: (error: Error) => void = (_error: Error): void => {};
-  const authorization = new Promise<never>((_resolve, reject): void => { rejectAuthorization = reject; });
-  authorization.catch((): void => {});
-  const authorizationResult = (allowed: boolean): void => {
-    if (!allowed) {
-      denied = true;
-      rejectAuthorization(new Error('VPN 授权被拒绝，请显式重试'));
-    }
-  };
-  observer.onAuthorizationResult(authorizationResult);
   try {
     const filesDir = context.filesDir;
     if (!isCurrent()) {
@@ -203,31 +187,25 @@ async function performStartCore(context: common.UIAbilityContext, mode: string,
     if (!isCurrent()) {
       throw new Error('启动已取消');
     }
-    // Shows the system authorization dialog the first time.
-    const launch = vpnExtension.startVpnExtensionAbility(vpnWant(context)).then(async (): Promise<void> => {
-      if ((denied || !isCurrent()) && (await readRuntime(filesDir))?.secret === secret) {
-        await stopRuntimeResources(context);
-        throw new Error(denied ? 'VPN 授权被拒绝，请显式重试' : '启动已取消');
+    // 系统 Promise 已报告授权结果；部分固件回收 VpnObserver 时会使 UI 进程崩溃。
+    try {
+      await vpnExtension.startVpnExtensionAbility(vpnWant(context));
+    } catch (error) {
+      if (error === undefined) {
+        throw new Error('VPN 授权被拒绝，请显式重试');
       }
-    });
-    pendingLaunch = launch;
-    launch.finally((): void => {
-      if (pendingLaunch === launch) {
-        pendingLaunch = undefined;
-      }
-    }).catch((): void => {});
-    await Promise.race([launch, authorization]);
+      throw error as Error;
+    }
     extensionStarted = true;
     if (!isCurrent()) {
-      await stopRuntimeResources(context);
+      if ((await readRuntime(filesDir))?.secret === secret) {
+        await stopRuntimeResources(context);
+      }
       throw new Error('启动已取消');
     }
 
     const deadline = Date.now() + READY_TIMEOUT_MS;
     while (Date.now() < deadline) {
-      if (denied) {
-        throw new Error('VPN 授权被拒绝，请显式重试');
-      }
       if (!isCurrent()) {
         await stopRuntimeResources(context);
         throw new Error('启动已取消');
@@ -244,14 +222,12 @@ async function performStartCore(context: common.UIAbilityContext, mode: string,
       if (status?.running === true) {
         return status;
       }
-      await Promise.race([sleep(READY_POLL_MS), authorization]);
+      await sleep(READY_POLL_MS);
     }
     await stopRuntimeResources(context);
     throw new Error('代理启动超时，请重试');
   } catch (error) {
     throw new CoreStartError((error as Error).message, extensionStarted);
-  } finally {
-    observer.offAuthorizationResult(authorizationResult);
   }
 }
 
@@ -380,7 +356,6 @@ export async function stopCore(context: common.UIAbilityContext): Promise<void> 
     failure = error as Error;
   }
   await pending?.catch((): void => {});
-  await pendingLaunch?.catch((): void => {});
   if (!await runtimeMayBeActive(context.filesDir)) {
     return;
   }

@@ -52,24 +52,10 @@ const kits = {
       })
     },
     vpnExtension: {
-      createVpnObserver() {
-        return {
-          onAuthorizationResult(callback) { state.authorization = callback; state.observers++; },
-          offAuthorizationResult(callback) {
-            assert.equal(state.authorization, callback);
-            state.authorization = undefined;
-            state.observers--;
-          }
-        };
-      },
       async startVpnExtensionAbility() {
         state.started++;
-        assert.equal(typeof state.authorization, 'function');
-        if (state.denyAuthorization) {
-          state.authorization(false);
-          return;
-        }
         await state.startGate;
+        if (state.denyAuthorization) { throw undefined; }
         if (state.startError) { throw state.startError; }
         state.active = true;
         state.instance = { secret: state.runtime.secret, instance: `instance.${state.started}` };
@@ -177,7 +163,7 @@ beforeEach(() => {
     active: false, flushError: false, saved: {}, writingRuntime: false,
     instance: { secret: 'fixture-session', instance: 'fixture.instance' },
     random: 0, commands: [], commandGate: Promise.resolve(), commandTimeout: false, commandError: undefined,
-    denyAuthorization: false, observers: 0, authorization: undefined,
+    denyAuthorization: false,
     requestingStatus: false, statusGate: Promise.resolve(), startGate: Promise.resolve(),
     runtimeWriteGate: Promise.resolve(), storageGate: Promise.resolve(),
     geoText: undefined, geoTemporary: undefined, geoWriting: false, geoSaveError: false, geoSaveGate: Promise.resolve() });
@@ -596,7 +582,6 @@ function runtimeConsumers() {
   const localContext = { ...context, filesDir: '/fixture' };
   Object.assign(fixture, { starts: 0, stops: 0, stopCleans: true, stopError: undefined });
   const network = { ...kits['@kit.NetworkKit'], vpnExtension: {
-    createVpnObserver: kits['@kit.NetworkKit'].vpnExtension.createVpnObserver,
     async startVpnExtensionAbility() {
       fixture.starts++;
       fixture.processes = [{ pid: 41 }, { pid: 87 }];
@@ -773,7 +758,6 @@ test('预热允许空配置，不连接VPN且复用同一认证实例', async ()
   await connection.ensureReady(context);
   assert.equal(state.started, 1);
   assert.equal(state.runtime.secret, secret);
-  assert.equal(state.observers, 0);
 });
 
 test('预热单飞，连接和普通断开保持同一核心', async () => {
@@ -799,22 +783,17 @@ test('预热单飞，连接和普通断开保持同一核心', async () => {
   assert.deepEqual(state.commands.map(command => command.url.split('/').at(-1)), ['connect', 'disconnect']);
 });
 
-test('授权拒绝立即打断未完成系统启动，移除观察并清理迟到启动', async () => {
-  let release;
-  state.startGate = new Promise(resolve => { release = resolve; });
-  state.stopCleans = true;
-  state.status = warm;
+test('系统 Promise 拒绝授权后立即结束启动，不等待 controller 或销毁不存在的 VPN', async () => {
+  let deny;
+  state.startGate = new Promise((_resolve, reject) => { deny = reject; });
   const pending = core.startCore(context, 'rule', undefined, () => true);
   while (state.started === 0) await Promise.resolve();
-  state.authorization(false);
-  await assert.rejects(pending, /授权被拒绝/);
-  assert.equal(state.observers, 0);
-  assert.equal(state.now, 1000);
   assert.equal((await core.readCoreHostStatus(context)).state, 'unknown');
-  await assert.rejects(core.startCore(context, 'rule', undefined, () => true), /尚未结束/);
-  release();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(state.active, false);
+  deny();
+  await assert.rejects(pending, /授权被拒绝/);
+  assert.equal((await core.readCoreHostStatus(context)).state, 'stopped');
+  assert.equal(state.stopped, 0);
+  assert.equal(state.now, 1000);
 });
 
 test('自动预热拒绝本会话不重弹，显式动作可重试', async () => {
@@ -867,7 +846,6 @@ test('宿主未知时预热不覆盖secret、不拉起扩展', async () => {
   await assert.rejects(core.startCore(context, 'rule', undefined, () => true), /尚未确认/);
   assert.equal(state.runtime.secret, secret);
   assert.equal(state.started, 0);
-  assert.equal(state.observers, 0);
 });
 
 test('自动预热等待本地设置时进入后台不启动、不进入Connecting', async () => {

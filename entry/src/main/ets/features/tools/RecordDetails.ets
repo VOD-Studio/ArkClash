@@ -3,7 +3,7 @@ import { AppGlyph } from '../../components/AppGlyph';
 import { formatBytes } from '../../components/Format';
 import { uiResourceText } from '../../components/ResourceText';
 import { COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, PAGE_GUTTER } from '../../components/Theme';
-import { ConnectionRecordView, diagnosticEndpoint } from './RecordLogic';
+import { connectionRule, ConnectionRecordView, diagnosticEndpoint } from './RecordLogic';
 import { recordColumnTitle, recordFacetText, recordInitiatorText } from './RecordLabels';
 
 interface RecordDetailField {
@@ -19,34 +19,143 @@ function appendRecordDetail(fields: RecordDetailField[], key: string, text: stri
   }
 }
 
-function connectionDetailFields(view: ConnectionRecordView): RecordDetailField[] {
-  const record: DiagnosticConnection = view.connection;
+function connectionCreationTime(start: string): string {
+  const date = new Date(start);
+  if (!Number.isFinite(date.getTime())) { return start; }
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day} ${date.toTimeString().slice(0, 8)}`;
+}
+
+function connectionBasicFields(record: DiagnosticConnection): RecordDetailField[] {
   const fields: RecordDetailField[] = [];
-  appendRecordDetail(fields, 'time', record.start);
-  appendRecordDetail(fields, 'host', record.metadata.host);
-  appendRecordDetail(fields, 'network', record.metadata.network);
-  appendRecordDetail(fields, 'type', record.metadata.type);
-  appendRecordDetail(fields, 'source', diagnosticEndpoint(record.metadata.sourceIP, record.metadata.sourcePort));
-  appendRecordDetail(fields, 'destination', diagnosticEndpoint(
-    record.metadata.destinationIP === '' ? record.metadata.host : record.metadata.destinationIP,
-    record.metadata.destinationPort));
-  appendRecordDetail(fields, 'rule', record.rule);
-  appendRecordDetail(fields, 'rulePayload', record.rulePayload);
-  appendRecordDetail(fields, 'download', formatBytes(record.download));
+  const start = connectionCreationTime(record.start);
+  fields.push({ key: 'creationTime', title: $r('app.string.diagnostics_creation_time'), text: start, copyText: start });
+  if (record.metadata.network !== '') {
+    fields.push({ key: 'network', title: $r('app.string.diagnostics_network_type'),
+      text: record.metadata.network, copyText: record.metadata.network });
+  }
+  appendRecordDetail(fields, 'rule', connectionRule(record));
   appendRecordDetail(fields, 'upload', formatBytes(record.upload));
-  if (view.duration > 0) { appendRecordDetail(fields, 'duration', `${Math.floor(view.duration / 1000)} s`); }
-  appendRecordDetail(fields, 'sourceGeoIP', record.metadata.sourceGeoIP.join(', '));
-  appendRecordDetail(fields, 'destinationGeoIP', record.metadata.destinationGeoIP.join(', '));
-  appendRecordDetail(fields, 'sourceIPASN', record.metadata.sourceIPASN);
-  appendRecordDetail(fields, 'destinationIPASN', record.metadata.destinationIPASN);
-  appendRecordDetail(fields, 'dnsMode', record.metadata.dnsMode);
-  appendRecordDetail(fields, 'remoteDestination', record.metadata.remoteDestination);
+  appendRecordDetail(fields, 'download', formatBytes(record.download));
+  return fields;
+}
+
+function connectionAddressFields(record: DiagnosticConnection): RecordDetailField[] {
+  const fields: RecordDetailField[] = [];
+  const metadata = record.metadata;
+  appendRecordDetail(fields, 'host', metadata.host);
+  appendRecordDetail(fields, 'source', diagnosticEndpoint(metadata.sourceIP, metadata.sourcePort));
+  appendRecordDetail(fields, 'destination', diagnosticEndpoint(metadata.destinationIP, metadata.destinationPort));
+  appendRecordDetail(fields, 'destinationGeoIP', metadata.destinationGeoIP.join(' '));
+  appendRecordDetail(fields, 'destinationIPASN', metadata.destinationIPASN);
+  appendRecordDetail(fields, 'remoteDestination', metadata.remoteDestination);
+  return fields;
+}
+
+function connectionProxyFields(record: DiagnosticConnection): RecordDetailField[] {
+  const fields: RecordDetailField[] = [];
   appendRecordDetail(fields, 'specialProxy', record.metadata.specialProxy);
   appendRecordDetail(fields, 'specialRules', record.metadata.specialRules);
-  appendRecordDetail(fields, 'sniffHost', record.metadata.sniffHost);
-  appendRecordDetail(fields, 'chains', record.chains.slice().reverse().join(' → '));
-  appendRecordDetail(fields, 'providerChains', record.providerChains.slice().reverse().join(' → '));
+  appendRecordDetail(fields, 'dnsMode', record.metadata.dnsMode);
   return fields;
+}
+
+@Extend(Text)
+function connectionDetailLabel() {
+  .fontSize(17)
+  .lineHeight(22)
+  .fontColor($r('sys.color.font_primary'))
+  .constraintSize({ maxWidth: '45%' })
+}
+
+@Extend(Row)
+function connectionDetailRow() {
+  .width('100%')
+  .constraintSize({ minHeight: 56 })
+  .alignItems(VerticalAlign.Center)
+  .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+}
+
+@ComponentV2
+struct ConnectionDetailSection {
+  @Param titleText: ResourceStr = '';
+  @Param fields: RecordDetailField[] = [];
+  @Param chains: string[] | undefined = undefined;
+  @Event onCopy: (text: string) => void = () => {};
+
+  build() {
+    Column() {
+      Text(this.titleText)
+        .fontSize(17)
+        .lineHeight(22)
+        .fontWeight(600)
+        .fontColor($r('sys.color.font_secondary'))
+        .width('100%')
+        .constraintSize({ minHeight: 32 })
+        .padding({ left: 16, right: 16 })
+        .margin({ top: 19, bottom: 6 })
+      Column() {
+        ForEach(this.fields, (field: RecordDetailField, index: number) => {
+          if (index > 0) {
+            Divider().color($r('app.color.divider')).margin({ left: 16, right: 14 })
+          }
+          Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.TEXTUAL }) {
+            Row({ space: 20 }) {
+              Text(field.title).connectionDetailLabel()
+              Text(field.text)
+                .fontSize(15)
+                .lineHeight(20)
+                .fontColor($r('sys.color.font_secondary'))
+                .textAlign(TextAlign.End)
+                .wordBreak(WordBreak.BREAK_WORD)
+                .layoutWeight(1)
+            }
+            .connectionDetailRow()
+          }
+          .width('100%')
+          .padding(0)
+          .onClick((): void => { this.onCopy(field.copyText); })
+        }, (field: RecordDetailField): string => field.key)
+        if (this.chains !== undefined) {
+          if (this.fields.length > 0) {
+            Divider().color($r('app.color.divider')).margin({ left: 16, right: 14 })
+          }
+          Row({ space: 20 }) {
+            Text($r('app.string.diagnostics_chains')).connectionDetailLabel()
+            Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.End, alignItems: ItemAlign.Center }) {
+              ForEach(this.chains, (hop: string, index: number) => {
+                Row({ space: 6 }) {
+                  if (index > 0) {
+                    Text('→').fontSize(12).fontColor($r('sys.color.font_secondary'))
+                  }
+                  Text(hop)
+                    .fontSize(11)
+                    .lineHeight(13)
+                    .fontWeight(600)
+                    .fontColor($r('sys.color.font_secondary'))
+                    .wordBreak(WordBreak.BREAK_WORD)
+                    .flexShrink(1)
+                    .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+                    .borderRadius(8)
+                    .backgroundColor($r('app.color.surface_block'))
+                }
+                .constraintSize({ maxWidth: '100%' })
+                .margin({ left: 6, top: 2, bottom: 2 })
+              }, (hop: string, index: number): string => `${index}:${hop}`)
+            }
+            .layoutWeight(1)
+          }
+          .connectionDetailRow()
+        }
+      }
+      .width('100%')
+      .backgroundColor($r('app.color.card_background'))
+      .borderRadius(24)
+      .clip(true)
+    }
+    .width('100%')
+  }
 }
 
 function dnsDetailFields(record: DiagnosticDnsRecord): RecordDetailField[] {
@@ -123,20 +232,49 @@ struct RecordDetailValues {
 
 @ComponentV2
 export struct ConnectionRecordDetails {
-  @Param record: ConnectionRecordView | undefined = undefined;
-  @Param interruptions: number = 0;
-  @Param dropped: number = 0;
-  @Param evicted: number = 0;
+  @Param @Once record: ConnectionRecordView | undefined = undefined;
   @Event onCopy: (text: string) => void = () => {};
 
   @Computed
-  get fields(): RecordDetailField[] {
-    return this.record === undefined ? [] : connectionDetailFields(this.record);
+  get basicFields(): RecordDetailField[] {
+    return this.record === undefined ? [] : connectionBasicFields(this.record.connection);
+  }
+
+  @Computed
+  get addressFields(): RecordDetailField[] {
+    return this.record === undefined ? [] : connectionAddressFields(this.record.connection);
+  }
+
+  @Computed
+  get proxyFields(): RecordDetailField[] {
+    return this.record === undefined ? [] : connectionProxyFields(this.record.connection);
+  }
+
+  @Computed
+  get chains(): string[] {
+    return this.record?.connection.chains.slice().reverse() ?? [];
   }
 
   build() {
-    RecordDetailValues({ fields: this.fields, interruptions: this.interruptions,
-      dropped: this.dropped, evicted: this.evicted, onCopy: (text: string): void => { this.onCopy(text); } })
+    Scroll() {
+      Column() {
+        if (this.record !== undefined) {
+          ConnectionDetailSection({ titleText: $r('app.string.diagnostics_basic_info'), fields: this.basicFields,
+            onCopy: (text: string): void => { this.onCopy(text); } })
+          if (this.addressFields.length > 0) {
+            ConnectionDetailSection({ titleText: $r('app.string.diagnostics_address'), fields: this.addressFields,
+              onCopy: (text: string): void => { this.onCopy(text); } })
+          }
+          ConnectionDetailSection({ titleText: $r('app.string.tab_proxies'), fields: this.proxyFields,
+            chains: this.chains, onCopy: (text: string): void => { this.onCopy(text); } })
+        }
+      }
+      .width('100%')
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 20 })
+    }
+    .width('100%')
+    .height('100%')
+    .align(Alignment.TopStart)
   }
 }
 

@@ -20,7 +20,7 @@ const logicUrl = await sourceModule('../entry/src/main/ets/features/proxies/Prox
   `import { isProxyGroup, proxyMemberNode, PROXY_TEST_URL } from ${JSON.stringify(clientUrl)};\n`);
 const logic = await import(logicUrl);
 const listUrl = await sourceModule('../entry/src/main/ets/components/KeyedListSource.ets',
-  `const DataOperationType = { ADD: 'add', DELETE: 'delete', CHANGE: 'change', RELOAD: 'reload' };\n`);
+  `const DataOperationType = { ADD: 'add', DELETE: 'delete', CHANGE: 'change', EXCHANGE: 'exchange' };\n`);
 const proxyList = await import(listUrl);
 const viewUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyView.ets',
   `import { KeyedListSource } from ${JSON.stringify(listUrl)};\n` +

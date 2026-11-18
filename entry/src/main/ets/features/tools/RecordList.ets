@@ -3,7 +3,6 @@ import { DiagnosticDnsRecord } from '../../client/Diagnostics';
 import { AppGlyph } from '../../components/AppGlyph';
 import { formatBytes, formatDateTime, formatSpeed } from '../../components/Format';
 import { KeyedListSource } from '../../components/KeyedListSource';
-import { animationsEnabled } from '../../components/Motion';
 import { uiResourceText } from '../../components/ResourceText';
 import {
   ConnectionRecordView, RecordColumn, RecordSort, RecordView, connectionRule, diagnosticEndpoint,
@@ -11,6 +10,14 @@ import {
 } from './RecordLogic';
 import { recordColumnTitle, recordInitiatorText } from './RecordLabels';
 import { ConnectionListRow, ConnectionRecordsStore, DnsListRow, DnsRecordsStore } from './RecordStores';
+
+export const RECORD_LIST_ANIMATION: AnimateParam = { duration: 220, curve: Curve.EaseOut };
+
+export function recordListTransition(offsetY: number = 0): TransitionEffect {
+  const fade = TransitionEffect.opacity(0);
+  const effect = offsetY === 0 ? fade : fade.combine(TransitionEffect.translate({ y: offsetY }));
+  return effect.animation({ duration: 180, curve: Curve.EaseOut });
+}
 
 @ObservedV2
 class RecordTableSlot {
@@ -297,13 +304,15 @@ class RecordListViewport {
       if (!this.bound || !this.active || generation !== this.generation) { return; }
       this.scheduled = false;
       if (source.totalCount() === 0) { return; }
-      const toTop = following || this.topRequested;
+      const resetTop = this.topRequested;
       this.topRequested = false;
-      if (toTop) {
+      if (following || resetTop) {
         this.anchor = '';
         this.anchorY = 0;
-        this.offset = 0;
-        this.scroller.scrollToIndex(0, false, ScrollAlign.START);
+        if (this.offset !== 0 || resetTop) {
+          this.offset = 0;
+          this.scroller.scrollToIndex(0, false, ScrollAlign.START);
+        }
         return;
       }
       const key = anchor === '' ? this.anchor : anchor;
@@ -462,7 +471,7 @@ struct ConnectionRecordLine {
   }
   aboutToRecycle(): void { this.consumed = false; }
 
-  @Monitor('row', 'layout.revision', 'live')
+  @Monitor('row', 'row.record', 'row.group', 'layout.revision', 'live')
   updatePresentation(): void { this.present(); }
 
   private present(): void {
@@ -902,25 +911,24 @@ struct DnsRecordLine {
 export struct ConnectionRecordList {
   @Param @Require store: ConnectionRecordsStore;
   @Param active: boolean = false;
+  @Param reduceMotion: boolean = true;
   @Event onOpen: (id: string) => void = () => {};
   @Event onActions: (row: ConnectionRecordView) => void = () => {};
   @Event onProxy: (name: string) => void = () => {};
   private layout: RecordTableLayout = new RecordTableLayout();
   private viewport: RecordListViewport = new RecordListViewport();
   private contentWidth: number = 0;
-  @Local motionEnabled: boolean = false;
-  @Local itemTransition: TransitionEffect = TransitionEffect.IDENTITY;
+  private readonly itemTransition: TransitionEffect = recordListTransition(-8);
   @Local rowSpacing: number = 8;
   private feedChanged: boolean = false;
 
-  aboutToAppear(): void { this.updateMotion(); this.configure(); }
+  aboutToAppear(): void { this.configure(); }
   aboutToDisappear(): void { this.viewport.release(); this.layout.cancel(); }
 
   @Monitor('active')
   visibilityChanged(): void {
     this.viewport.activate(this.active);
     this.layout.cancel();
-    this.updateMotion();
     this.configure();
     if (this.active) { this.restore(); }
   }
@@ -936,12 +944,6 @@ export struct ConnectionRecordList {
     this.layout.configure(ui, this.store.feed === 'live' ? 'connections' : 'requests',
       this.contentWidth, this.store.columnWidths, this.store.sort);
     this.rowSpacing = this.layout.tableMode ? 0 : 8;
-  }
-
-  private updateMotion(): void {
-    this.motionEnabled = this.active && animationsEnabled(this.getUIContext().getHostContext());
-    this.itemTransition = this.motionEnabled ? TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }) :
-      TransitionEffect.IDENTITY;
   }
 
   private resizeContent(area: Area): void {
@@ -970,7 +972,7 @@ export struct ConnectionRecordList {
 
   private toggleGroup(key: string): void {
     if (!this.active) { return; }
-    if (this.motionEnabled) {
+    if (this.active && !this.reduceMotion) {
       this.getUIContext().animateTo({ duration: 200, curve: Curve.EaseOut }, (): void => this.store.toggleGroup(key));
     } else { this.store.toggleGroup(key); }
   }
@@ -989,7 +991,7 @@ export struct ConnectionRecordList {
 
   build() {
     Column() {
-      if (this.layout.tableMode) {
+      if (this.layout.tableMode && this.store.visibleRecords > 0) {
         Row() {
           RecordTableHeader({ layout: this.layout, active: this.active,
             onSort: (column: RecordColumn): void => this.sortBy(column),
@@ -1010,7 +1012,7 @@ export struct ConnectionRecordList {
               onGroup: (key: string): void => this.toggleGroup(key) })
           }
           .width('100%')
-          .transition(this.itemTransition)
+          .transition(this.active && !this.reduceMotion ? this.itemTransition : TransitionEffect.IDENTITY)
         }, (row: ConnectionListRow): string => row.key)
       }
       .width('100%')
@@ -1037,7 +1039,7 @@ export struct ConnectionRecordList {
           }
         }
       })
-      if (this.store.feed === 'recent' && !this.store.following) {
+      if (this.store.feed === 'recent' && !this.store.following && this.store.visibleRecords > 0) {
         Button($r('app.string.diagnostics_latest'), { buttonStyle: ButtonStyleMode.TEXTUAL })
           .margin({ top: 8, bottom: 8 })
           .accessibilityDescription($r('app.string.diagnostics_paused'))
@@ -1055,21 +1057,21 @@ export struct ConnectionRecordList {
 export struct DnsRecordList {
   @Param @Require store: DnsRecordsStore;
   @Param active: boolean = false;
+  @Param reduceMotion: boolean = true;
   @Event onOpen: (id: string) => void = () => {};
   private layout: RecordTableLayout = new RecordTableLayout();
   private viewport: RecordListViewport = new RecordListViewport();
   private contentWidth: number = 0;
-  @Local itemTransition: TransitionEffect = TransitionEffect.IDENTITY;
+  private readonly itemTransition: TransitionEffect = recordListTransition(-8);
   @Local rowSpacing: number = 8;
 
-  aboutToAppear(): void { this.updateMotion(); this.configure(); }
+  aboutToAppear(): void { this.configure(); }
   aboutToDisappear(): void { this.viewport.release(); this.layout.cancel(); }
 
   @Monitor('active')
   visibilityChanged(): void {
     this.viewport.activate(this.active);
     this.layout.cancel();
-    this.updateMotion();
     this.configure();
     if (this.active) { this.restore(); }
   }
@@ -1081,12 +1083,6 @@ export struct DnsRecordList {
     const ui = this.getUIContext();
     this.layout.configure(ui, 'dns', this.contentWidth, this.store.columnWidths, this.store.sort);
     this.rowSpacing = this.layout.tableMode ? 0 : 8;
-  }
-
-  private updateMotion(): void {
-    const motion = this.active && animationsEnabled(this.getUIContext().getHostContext());
-    this.itemTransition = motion ? TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }) :
-      TransitionEffect.IDENTITY;
   }
 
   private resizeContent(area: Area): void {
@@ -1117,7 +1113,7 @@ export struct DnsRecordList {
 
   build() {
     Column() {
-      if (this.layout.tableMode) {
+      if (this.layout.tableMode && this.store.visibleRecords > 0) {
         Row() {
           RecordTableHeader({ layout: this.layout, active: this.active,
             onSort: (column: RecordColumn): void => this.sortBy(column),
@@ -1135,7 +1131,8 @@ export struct DnsRecordList {
               onOpen: (id: string): void => this.onOpen(id) })
           }
           .width('100%')
-          .transition(this.itemTransition)
+          .transition(this.active && this.store.following && !this.reduceMotion ?
+            this.itemTransition : TransitionEffect.IDENTITY)
         }, (row: DnsListRow): string => row.key)
       }
       .width('100%')
@@ -1160,7 +1157,7 @@ export struct DnsRecordList {
           this.store.setFollowing(false);
         }
       })
-      if (!this.store.following) {
+      if (!this.store.following && this.store.visibleRecords > 0) {
         Button($r('app.string.diagnostics_latest'), { buttonStyle: ButtonStyleMode.TEXTUAL })
           .margin({ top: 8, bottom: 8 })
           .accessibilityDescription($r('app.string.diagnostics_paused'))

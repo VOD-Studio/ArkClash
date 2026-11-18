@@ -1,3 +1,4 @@
+import { accessibility } from '@kit.AccessibilityKit';
 import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { connection, Connection } from '../../client/Connection';
@@ -8,7 +9,7 @@ import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER, sheetMaterial
 import { DnsRecordDetails } from './RecordDetails';
 import { RecordActionMenu, RecordFilterChips, RecordMenuOption, RecordMenuState } from './RecordFilters';
 import { recordColumnTitle, recordErrorText, recordFacetText } from './RecordLabels';
-import { DnsRecordList } from './RecordList';
+import { DnsRecordList, RECORD_LIST_ANIMATION, recordListTransition } from './RecordList';
 import { dnsRecords, DnsRecordsStore } from './RecordStores';
 
 @ComponentV2
@@ -21,6 +22,7 @@ export struct DnsPage {
   @Local detailsShown: boolean = false;
   @Local preferencePending: boolean = false;
   @Local menuState: RecordMenuState = new RecordMenuState();
+  @Local reduceMotion: boolean = true;
   private active: boolean = false;
   private generation: number = 0;
   private consumedNotice: number = 0;
@@ -29,8 +31,16 @@ export struct DnsPage {
   private runtimeBoot: string = '';
   private runtimeRevision: number = 0;
   private runtimeReady: boolean = false;
+  private readonly reduceMotionChanged = (enabled: boolean): void => { this.reduceMotion = enabled; };
+  private readonly emptyTransition: TransitionEffect = recordListTransition();
+
+  aboutToAppear(): void {
+    this.reduceMotion = accessibility.isAnimationReduceEnabledSync();
+    accessibility.onAnimationReduceStateChange(this.reduceMotionChanged);
+  }
 
   aboutToDisappear(): void {
+    accessibility.offAnimationReduceStateChange(this.reduceMotionChanged);
     this.shown = false;
     this.syncLifecycle();
   }
@@ -52,7 +62,17 @@ export struct DnsPage {
       this.store.select('');
       this.store.clearNotice();
     }
-    if (!visible) { this.store.setVisible(false); }
+    if (entering) {
+      this.store.setListAnimation((apply: () => void): void => {
+        if (this.active && !this.reduceMotion) {
+          this.getUIContext().animateTo(RECORD_LIST_ANIMATION, apply);
+        } else { apply(); }
+      });
+    }
+    if (!visible) {
+      this.store.setListAnimation();
+      this.store.setVisible(false);
+    }
     this.store.setConnection(ready, this.conn.bootId, this.conn.configRevision);
     if (visible) { this.store.setVisible(true); }
     if (entering) { this.restore(this.generation); }
@@ -262,17 +282,20 @@ export struct DnsPage {
         }
         .width('100%').alignItems(HorizontalAlign.Start)
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
-        if (this.store.visibleRecords > 0) {
-          DnsRecordList({ store: this.store, active: this.shown && this.foreground,
+        Stack() {
+          DnsRecordList({ store: this.store, active: this.shown && this.foreground, reduceMotion: this.reduceMotion,
             onOpen: (id: string): void => { this.openDetails(id); } })
-            .layoutWeight(1).width('100%')
-        } else {
-          Scroll() {
-            EmptyState({ icon: $r('sys.symbol.connection'), title: this.emptyTitle, hint: this.emptyHint,
-              actionLabel: this.emptyAction, onAction: (): void => { this.store.retry(); } })
+            .width('100%').height('100%')
+          if (this.store.visibleRecords === 0) {
+            Scroll() {
+              EmptyState({ icon: $r('sys.symbol.connection'), title: this.emptyTitle, hint: this.emptyHint,
+                actionLabel: this.emptyAction, onAction: (): void => { this.store.retry(); } })
+            }
+            .width('100%').height('100%')
+            .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.emptyTransition)
           }
-          .layoutWeight(1).width('100%')
         }
+        .layoutWeight(1).width('100%')
         if (!this.store.following && this.store.visibleRecords === 0) {
           Button($r('app.string.diagnostics_latest')).buttonStyle(ButtonStyleMode.NORMAL)
             .accessibilityDescription($r('app.string.diagnostics_paused'))

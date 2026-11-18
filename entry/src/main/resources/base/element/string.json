@@ -1961,6 +1961,30 @@
       "value": "Details"
     },
     {
+      "name": "diagnostics_connection_details",
+      "value": "Connection details"
+    },
+    {
+      "name": "diagnostics_request_details",
+      "value": "Request details"
+    },
+    {
+      "name": "diagnostics_basic_info",
+      "value": "Basic info"
+    },
+    {
+      "name": "diagnostics_address",
+      "value": "Address"
+    },
+    {
+      "name": "diagnostics_creation_time",
+      "value": "Creation time"
+    },
+    {
+      "name": "diagnostics_network_type",
+      "value": "Network type"
+    },
+    {
       "name": "diagnostics_time",
       "value": "Time"
     },

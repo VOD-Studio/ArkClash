@@ -16,12 +16,15 @@ import {
   saveRecordColumnWidths
 } from './RecordPreferences';
 
-export interface ConnectionListRow {
-  key: string;
-  group: string;
-  groupCount: number;
-  expanded: boolean;
-  record?: ConnectionRecordView;
+@ObservedV2
+export class ConnectionListRow {
+  readonly key: string;
+  @Trace group: string = '';
+  @Trace groupCount: number = 0;
+  @Trace expanded: boolean = true;
+  @Trace record?: ConnectionRecordView;
+
+  constructor(key: string) { this.key = key; }
 }
 
 export interface DnsListRow {
@@ -280,6 +283,7 @@ export class ConnectionRecordsStore {
   @Trace feed: RequestFeed = 'live';
   @Trace grouping: RecordGrouping = 'none';
   readonly source: KeyedListSource<ConnectionListRow> = new KeyedListSource<ConnectionListRow>();
+  private animateList?: (apply: () => void) => void;
   private session: RecordStreamSession = new RecordStreamSession();
   private history: RecordHistory<DiagnosticConnection> = new RecordHistory<DiagnosticConnection>(2000, 4000);
   private live: Map<string, DiagnosticConnection> = new Map<string, DiagnosticConnection>();
@@ -334,6 +338,8 @@ export class ConnectionRecordsStore {
     this.syncStream();
     await this.readPreferences();
   }
+
+  setListAnimation(animate?: (apply: () => void) => void): void { this.animateList = animate; }
 
   setVisible(visible: boolean): void {
     if (visible === this.session.visible) { return; }
@@ -536,7 +542,7 @@ export class ConnectionRecordsStore {
       for (const id of frame.closed) { this.live.delete(id); }
     }
     this.liveViews = this.ranker.rank(Array.from<DiagnosticConnection>(this.live.values()), frame.sampledAt);
-    this.refresh();
+    this.refresh(frame.kind === 'delta' && (this.feed === 'live' || this.following));
   }
 
   private applyTraffic(traffic: DiagnosticTraffic): void {
@@ -561,7 +567,7 @@ export class ConnectionRecordsStore {
     return records;
   }
 
-  private refresh(): void {
+  private refresh(animate: boolean = false): void {
     // 即使当前显示 live，也保持详情所引用的 recent 统计同步且有界。
     if (this.feed === 'live') {
       const next: Map<string, ConnectionRecordView> = new Map<string, ConnectionRecordView>();
@@ -571,14 +577,20 @@ export class ConnectionRecordsStore {
       this.historyViews = next;
     }
     const filtered = filterConnections(this.currentViews(), this.query, this.facets);
-    this.filteredCount = filtered.length;
     const ordered = sortConnections(filtered, this.sort);
     const groups = groupConnections(ordered, this.grouping);
     const nextRows: Map<string, ConnectionListRow> = new Map<string, ConnectionListRow>();
     const entries: ConnectionListRow[] = [];
     for (const group of groups) { this.appendGroup(group, nextRows, entries); }
     this.rows = nextRows;
-    this.source.replace(entries);
+    const present = animate ? this.animateList : undefined;
+    this.source.replace(entries, present === undefined ? undefined : (apply: () => void): void => {
+      present((): void => {
+        this.filteredCount = filtered.length;
+        apply();
+      });
+    });
+    this.filteredCount = filtered.length;
     this.liveCount = this.live.size;
     this.historyCount = this.history.count;
     this.selectedRecord = this.liveViews.find((record: ConnectionRecordView): boolean => record.key === this.selectedId) ??
@@ -590,19 +602,17 @@ export class ConnectionRecordsStore {
     const expanded = !this.collapsed.has(group.key);
     if (this.grouping !== 'none') {
       const key = `group:${group.key}`;
-      const previous = this.rows.get(key);
-      const row: ConnectionListRow = previous !== undefined && previous.groupCount === group.items.length &&
-        previous.expanded === expanded && previous.group === group.title ? previous :
-        { key: key, group: group.title, groupCount: group.items.length, expanded: expanded };
+      const row = this.rows.get(key) ?? new ConnectionListRow(key);
+      row.group = group.title;
+      row.groupCount = group.items.length;
+      row.expanded = expanded;
       next.set(key, row); entries.push(row);
     }
     if (!expanded && this.grouping !== 'none') { return; }
     for (const record of group.items) {
       const key = record.key;
-      const previous = this.rows.get(key);
-      const row: ConnectionListRow = previous !== undefined && previous.record === record &&
-        previous.group === group.title ? previous :
-        { key: key, group: group.title, groupCount: 0, expanded: true, record: record };
+      const row = this.rows.get(key) ?? new ConnectionListRow(key);
+      row.record = record;
       next.set(key, row); entries.push(row);
     }
   }
@@ -736,6 +746,7 @@ export class DnsRecordsStore {
   @Trace version: number = 0;
   @Trace selectedId: string = '';
   readonly source: KeyedListSource<DnsListRow> = new KeyedListSource<DnsListRow>();
+  private animateList?: (apply: () => void) => void;
   private session: RecordStreamSession = new RecordStreamSession();
   private history: RecordHistory<DiagnosticDnsRecord> = new RecordHistory<DiagnosticDnsRecord>(3000, 6000);
   private rows: Map<string, DnsListRow> = new Map<string, DnsListRow>();
@@ -773,6 +784,8 @@ export class DnsRecordsStore {
     this.syncStream();
     await this.readPreferences();
   }
+
+  setListAnimation(animate?: (apply: () => void) => void): void { this.animateList = animate; }
 
   setVisible(visible: boolean): void {
     if (visible === this.session.visible) { return; }
@@ -894,13 +907,12 @@ export class DnsRecordsStore {
       (record: DiagnosticDnsRecord): DiagnosticDnsRecord => this.history.get(record.id) ?? record);
     if (frame.kind === 'reset') { this.history.reset(records, frame.sessionId); }
     else { this.history.append(records, frame.sessionId); }
-    this.refresh();
+    this.refresh(frame.kind === 'delta' && this.following);
   }
 
-  private refresh(): void {
+  private refresh(animate: boolean = false): void {
     const ordered = this.history.values().slice().reverse();
     const filtered = filterDns(ordered, this.query, this.facets);
-    this.filteredCount = filtered.length;
     const records = sortDns(filtered, this.tableSort);
     const next: Map<string, DnsListRow> = new Map<string, DnsListRow>();
     const rows: DnsListRow[] = [];
@@ -909,7 +921,16 @@ export class DnsRecordsStore {
       const row: DnsListRow = previous !== undefined && previous.record === record ? previous : { key: record.id, record: record };
       next.set(row.key, row); rows.push(row);
     }
-    this.rows = next; this.source.replace(rows); ++this.version;
+    this.rows = next;
+    const present = animate ? this.animateList : undefined;
+    this.source.replace(rows, present === undefined ? undefined : (apply: () => void): void => {
+      present((): void => {
+        this.filteredCount = filtered.length;
+        apply();
+      });
+    });
+    this.filteredCount = filtered.length;
+    ++this.version;
     this.historyCount = this.history.count;
     this.selectedRecord = this.history.get(this.selectedId);
   }

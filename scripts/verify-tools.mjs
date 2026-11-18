@@ -143,7 +143,7 @@ export function createToolsHarness() {
     modules.set(absolute, module);
     const bindings = {
       module, exports: module.exports, console, ...clock,
-      DataOperationType: { ADD: 'add', DELETE: 'delete', CHANGE: 'change', RELOAD: 'reload' },
+      DataOperationType: { ADD: 'add', DELETE: 'delete', CHANGE: 'change', EXCHANGE: 'exchange' },
       require(name) {
         if (name in kits) return kits[name];
         assert.ok(name.startsWith('.'), `unexpected platform dependency ${name}`);
@@ -266,6 +266,35 @@ test('baseline只进live；同tick短请求保留recent，关闭后累计值仍�
   await h.flush();
   assert.deepEqual(connectionIds(store), ['baseline']);
   assert.equal(h.sockets.length, 1);
+}));
+
+test('活跃连接的流量原地更新；一帧内关闭、新增和换位不会重建存活行', async () => toolsCase(async h => {
+  const { store, socket } = await onlineTools(h, 'connections', {
+    live: ['a', 'b', 'c', 'd'].map(id => toolConnection(id))
+  });
+  const [a, b, c] = store.source.values();
+  const batches = [];
+  store.source.registerDataChangeListener({
+    onDatasetChange(operations) { batches.push(plain(operations)); }
+  });
+  socket.emit(toolFrame('connections', 'delta', 2, { traffic: [{ id: 'a', upload: 0, download: 20 }] }));
+  assert.strictEqual(store.source.getData(0), a);
+  assert.equal(a.record.downloadSpeed, 20);
+  assert.deepEqual(batches, []);
+
+  socket.emit(toolFrame('connections', 'delta', 3, {
+    opened: [toolConnection('e')], closed: ['d'],
+    traffic: [{ id: 'b', upload: 0, download: 1000 }, { id: 'c', upload: 0, download: 500 }]
+  }));
+  assert.deepEqual(connectionIds(store), ['b', 'c', 'a', 'e']);
+  assert.strictEqual(store.source.getData(0), b);
+  assert.strictEqual(store.source.getData(1), c);
+  assert.strictEqual(store.source.getData(2), a);
+  assert.equal(b.record.downloadSpeed, 1000);
+  assert.ok(batches.length > 0, 'native list must receive the new structure');
+  for (const operation of batches.flat()) {
+    assert.ok(['add', 'delete', 'move', 'exchange'].includes(operation.type), 'no full reload or row rebuild');
+  }
 }));
 
 test('seq缺口停止流且保持真实历史；非法帧不重试，手动retry取得新baseline', async () => toolsCase(async h => {

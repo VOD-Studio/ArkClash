@@ -1941,6 +1941,30 @@
       "value": "详情"
     },
     {
+      "name": "diagnostics_connection_details",
+      "value": "连接详情"
+    },
+    {
+      "name": "diagnostics_request_details",
+      "value": "请求详情"
+    },
+    {
+      "name": "diagnostics_basic_info",
+      "value": "基础信息"
+    },
+    {
+      "name": "diagnostics_address",
+      "value": "地址"
+    },
+    {
+      "name": "diagnostics_creation_time",
+      "value": "创建时间"
+    },
+    {
+      "name": "diagnostics_network_type",
+      "value": "网络类型"
+    },
+    {
       "name": "diagnostics_time",
       "value": "时间"
     },
