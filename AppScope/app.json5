@@ -6,6 +6,7 @@
     "versionCode": 1000,
     "versionName": "0.5.1", // x-release-please-version
     "icon": "$media:layered_image",
+    "configuration": "$profile:configuration",
     "label": "$string:app_name"
   }
 }

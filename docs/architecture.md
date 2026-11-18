@@ -85,6 +85,7 @@ sequenceDiagram
 | `geo-settings.json`（四类 URL、自动更新与小时间隔） | 应用沙箱 | UI 串行原子保存、revision 冲突保护 | Go 启动/热应用、UI |
 | `geo.version`（内置资源版本） | 应用沙箱 | VPN 安装器全部复制成功后 | VPN 安装器 |
 | 用户设置（出站模式、局域网代理等） | UI 的 preferences | UI | UI |
+| 应用主题（深浅色、色板、导航及字体） | UI 的 `appearance` preferences | UI | UI；不进入 VPN 进程 |
 | 运行时状态（节点选择、连接、流量、正在运行的配置） | 内核内存 | 内核 | UI，经 controller |
 | 连接 recent/live 与 DNS 诊断历史 | 内核与 UI 内存，不落盘 | 对应可见订阅的内核观察 hook；UI 合并已观察的同代次历史 | 对应工具页，经独立诊断 WebSocket |
 
@@ -103,7 +104,7 @@ Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/
 | `shared/` | 两个进程共用的代码：路径、文件读写，以及订阅更新（`shared/profiles/`，[ADR-0009](adr/0009-arkclash-commands-on-controller.md)） | 系统 Kit、`yaml` |
 | `client/` | UI 访问内核的唯一入口：核心预热与取证、VPN 命令、controller 请求、数据模型 | `shared/` |
 | `features/<功能>/` | 一个功能的状态、页面片段和组件（订阅、代理组、连接、日志、设置） | `client/`、`shared/`、`components/` |
-| `components/` | 跨功能复用的界面组件，不带业务逻辑 | `shared/` |
+| `components/` | 跨功能复用的界面组件及 UI 专属外观状态，不带网络或代理业务逻辑 | `shared/` |
 | `pages/` | 路由入口，只负责把 feature 组装成页面 | 上面所有 UI 层 |
 | `entryability/` | UI 进程入口 | `pages/` |
 | `vpn/` | VPN 进程：核心宿主、可选 TUN、Geo、核心运行期间的订阅更新与统一命令队列 | `shared/`、`libarkclash.so` |

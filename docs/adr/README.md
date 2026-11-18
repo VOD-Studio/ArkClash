@@ -22,3 +22,4 @@
 | [0015](0015-geo-resource-management.md) | Geo 设置、任务与数据库按进程明确所有权 | 已采纳，设备和性能门禁独立验收 |
 | [0016](0016-visible-diagnostics.md) | 连接与 DNS 记录只在对应工具页可见时采集 | 已采纳，宿主 race 通过，设备与性能门禁独立验收 |
 | [0017](0017-core-ready-without-vpn.md) | 一个核心预热，系统 VPN 转发独立启停 | 已采纳，宿主与 Linux fd 回归通过，手机驻留和性能待验收 |
+| [0018](0018-ui-appearance.md) | 应用外观只由 UI 进程管理 | 已采纳 |
