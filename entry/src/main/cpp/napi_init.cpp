@@ -166,7 +166,7 @@ napi_value AttachTun(napi_env env, napi_callback_info info) {
       !GetString(env, args[3], w->arg1) ||
       !GetInteger(env, args[4], 1, 9007199254740991.0, revision)) {
     delete w;
-    napi_throw_type_error(env, nullptr, "attachTun(fd, stack, bootId, profile, configRevision)");
+    napi_throw_type_error(env, nullptr, "attachTun(fd, optionsJson, bootId, profile, configRevision)");
     return nullptr;
   }
   w->call = CoreCall::AttachTun;

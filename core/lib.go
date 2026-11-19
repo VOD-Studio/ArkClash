@@ -40,8 +40,12 @@ func ArkClashStop() *C.char {
 }
 
 //export ArkClashAttachTun
-func ArkClashAttachTun(fd C.int, stack, bootID, profile *C.char, configRevision C.ulonglong) *C.char {
-	return errorString(attachTun(int(fd), C.GoString(stack), attachIdentity{
+func ArkClashAttachTun(fd C.int, optionsJSON, bootID, profile *C.char, configRevision C.ulonglong) *C.char {
+	var network tunNetworkOptions
+	if err := json.Unmarshal([]byte(C.GoString(optionsJSON)), &network); err != nil {
+		return errorString(err)
+	}
+	return errorString(attachTun(int(fd), network, attachIdentity{
 		BootID: C.GoString(bootID), Profile: C.GoString(profile), ConfigRevision: uint64(configRevision),
 	}))
 }

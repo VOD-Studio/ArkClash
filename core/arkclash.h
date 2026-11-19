@@ -11,7 +11,7 @@ extern "C" {
 char *ArkClashStart(char *optionsJSON);
 char *ArkClashStop(void);
 // 成功返回 NULL；错误与状态 JSON 均由调用方用 ArkClashFree 释放。
-char *ArkClashAttachTun(int fd, char *stack, char *bootId, char *profile,
+char *ArkClashAttachTun(int fd, char *optionsJSON, char *bootId, char *profile,
                        unsigned long long configRevision);
 char *ArkClashDetachTun(void);
 char *ArkClashUpdateVpnState(char *intent, char *forward, int vpnCreated);

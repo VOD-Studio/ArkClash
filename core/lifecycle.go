@@ -343,7 +343,15 @@ type attachIdentity struct {
 	ConfigRevision uint64
 }
 
-func attachTun(fd int, stack string, expected attachIdentity) error {
+type tunNetworkOptions struct {
+	Stack                string
+	IPv6                 bool
+	DNSHijacking         bool
+	MTU                  int
+	CongestionController string
+}
+
+func attachTun(fd int, network tunNetworkOptions, expected attachIdentity) error {
 	lifecycle.Lock()
 	defer lifecycle.Unlock()
 	mu.Lock()
@@ -371,7 +379,7 @@ func attachTun(fd int, stack string, expected attachIdentity) error {
 	if cleanupFailure != nil {
 		return cleanupFailure
 	}
-	if err := startTun(fd, stack); err != nil {
+	if err := startTun(fd, network); err != nil {
 		// 平台构造器必须自行回滚未发布资源；已发布的 listener 仍由这里收尾。
 		var cleanupErr error
 		if tunListener != nil {

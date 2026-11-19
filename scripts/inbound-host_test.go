@@ -63,7 +63,7 @@ tunnels:
 	if !desiredInbound.inbound.AllowLan { t.Fatal("detached LAN setting lost") }
 	if err := reload(opts.ConfigPath, opts.Profile, new(opts.Profile)); err != nil { t.Fatal(err) }
 	for _, p := range ports { inboundReachable(t, p, false) }
-	if err := attachTun(11, "gvisor", hostAttachIdentity()); err != nil { t.Fatal(err) }
+	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil { t.Fatal(err) }
 	for _, p := range ports { inboundReachable(t, p, true) }
 	if !runtimeSnapshot.Load().ListenersOpen { t.Fatal("actual listeners not reported") }
 	originalTun := tunListener
@@ -144,10 +144,10 @@ func TestInboundPartialAttachRollsBack(t *testing.T) {
 	opts.ConfigPath = lifecycleWriteProfile(t, opts, opts.Profile, fmt.Sprintf("%s\nport: %d\nmixed-port: %d\n", lifecycleProfile, free, busy.Addr().(*net.TCPAddr).Port))
 	if err := start(opts); err != nil { t.Fatal(err) }
 	t.Cleanup(func() { stop() })
-	if err := attachTun(11, "gvisor", hostAttachIdentity()); err == nil { t.Fatal("partial bind failure accepted") }
+	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err == nil { t.Fatal("partial bind failure accepted") }
 	if tunListener != nil || businessListenersOpen() { t.Fatal("partial attach left resources open") }
 	inboundReachable(t, free, false)
 	if err := busy.Close(); err != nil { t.Fatal(err) }
-	if err := attachTun(11, "gvisor", hostAttachIdentity()); err != nil { t.Fatal(err) }
+	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil { t.Fatal(err) }
 	if err := detachTun(); err != nil { t.Fatal(err) }
 }

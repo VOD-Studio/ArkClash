@@ -114,7 +114,7 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(options.HomeDir, "config.yaml")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("warm start created a fake configuration: %v", err)
 	}
-	if err := attachTun(11, "gvisor", hostAttachIdentity()); err == nil {
+	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err == nil {
 		t.Fatal("empty core accepted a TUN")
 	}
 	if err := start(options); err == nil {
@@ -143,12 +143,12 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 	if mapper == nil {
 		t.Fatal("warm core has no fake-IP mapper")
 	}
-	if err := attachTun(0, "gvisor", hostAttachIdentity()); err == nil {
+	if err := attachTun(0, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err == nil {
 		t.Fatal("invalid TUN fd accepted")
 	}
 	attachFailure := errors.New("fixture attach failure")
 	hostTunStartError = attachFailure
-	if err := attachTun(11, "gvisor", hostAttachIdentity()); !errors.Is(err, attachFailure) || tunListener != nil {
+	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); !errors.Is(err, attachFailure) || tunListener != nil {
 		t.Fatalf("failed attach changed resource facts: %v", err)
 	}
 	hostTunStartError = nil
@@ -158,14 +158,14 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 		t.Fatal(err)
 	}
 	lifecycleVpnState(t, "started", "preparing", true)
-	if err := attachTun(11, "gvisor", hostAttachIdentity()); err != nil {
+	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
 	attached := tunListener
 	if attached == nil {
 		t.Fatal("successful attach did not publish a TUN")
 	}
-	if err := attachTun(11, "gvisor", hostAttachIdentity()); err != nil || tunListener != attached {
+	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil || tunListener != attached {
 		t.Fatal("duplicate attach rebuilt the TUN")
 	}
 	lifecycleVpnState(t, "started", "running", true)
@@ -197,7 +197,7 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 	}
 
 	lifecycleVpnState(t, "started", "preparing", true)
-	if err := attachTun(12, "system", hostAttachIdentity()); err != nil {
+	if err := attachTun(12, tunNetworkOptions{Stack: "system", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
 	attached = tunListener
@@ -216,7 +216,7 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 		t.Fatal("connected reload rebuilt the platform TUN")
 	}
 	stale := attachIdentity{BootID: loaded.BootID, Profile: "one", ConfigRevision: loaded.ConfigRevision}
-	if err := attachTun(12, "system", stale); err == nil || tunListener != attached {
+	if err := attachTun(12, tunNetworkOptions{Stack: "system", MTU: 1500, DNSHijacking: true}, stale); err == nil || tunListener != attached {
 		t.Fatal("same-profile reload accepted stale attach identity")
 	}
 	if err := detachTun(); err != nil {
@@ -299,7 +299,7 @@ func TestLifecycleSelectedConfigurationErrorsDoNotWarmFallback(t *testing.T) {
 			}
 		})
 	}
-	if err := attachTun(11, "gvisor", hostAttachIdentity()); err == nil {
+	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err == nil {
 		t.Fatal("stopped core accepted a TUN")
 	}
 }
@@ -380,7 +380,7 @@ func TestLifecycleEmptyProfileExpectationCannotOverwriteNewSelection(t *testing.
 	if err := reload(path, "first", nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := attachTun(11, "gvisor", hostAttachIdentity()); err != nil {
+	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
 	if err := reload("", "", new("first")); err == nil {

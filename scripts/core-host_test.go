@@ -31,7 +31,7 @@ var tunListener *int
 var hostTunStartError error
 var hostTunStopError error
 
-func startTun(fd int, stack string) error {
+func startTun(fd int, network tunNetworkOptions) error {
 	if hostTunStartError != nil {
 		return hostTunStartError
 	}

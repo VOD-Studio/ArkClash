@@ -114,7 +114,7 @@ rules: ['MATCH,Blocked']
 		_ = stop()
 	})
 	lifecycleVpnState(t, "started", "preparing", true)
-	if err := attachTun(11, "gvisor", hostAttachIdentity()); err != nil {
+	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
 	lifecycleVpnState(t, "started", "running", true)
