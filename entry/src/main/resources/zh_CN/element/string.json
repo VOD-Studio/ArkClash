@@ -2639,6 +2639,62 @@
     {
       "name": "added_rules_discard",
       "value": "放弃修改"
+    },
+    {
+      "name": "dns_override_use_hosts",
+      "value": "使用 Hosts"
+    },
+    {
+      "name": "dns_override_system_hosts",
+      "value": "使用系统 Hosts"
+    },
+    {
+      "name": "dns_override_ipv6_timeout",
+      "value": "IPv6 超时（毫秒）"
+    },
+    {
+      "name": "dns_override_respect_rules",
+      "value": "遵循分流规则"
+    },
+    {
+      "name": "dns_override_cache_algorithm",
+      "value": "缓存算法"
+    },
+    {
+      "name": "dns_override_cache_size",
+      "value": "缓存条目上限"
+    },
+    {
+      "name": "dns_override_fake_range",
+      "value": "Fake-IP IPv4 地址池"
+    },
+    {
+      "name": "dns_override_fake_range6",
+      "value": "Fake-IP IPv6 地址池"
+    },
+    {
+      "name": "dns_override_fallback_lazy",
+      "value": "按需查询 Fallback"
+    },
+    {
+      "name": "dns_override_direct_policy",
+      "value": "直连 DNS 遵循上游策略"
+    },
+    {
+      "name": "dns_override_fallback_filter",
+      "value": "Fallback 筛选"
+    },
+    {
+      "name": "dns_override_domain",
+      "value": "域名"
+    },
+    {
+      "name": "dns_override_policy_hint",
+      "value": "每行填写「域名匹配项 = 上游服务器」。同一匹配项可以填写多行。"
+    },
+    {
+      "name": "dns_override_proxy_servers_required",
+      "value": "请先配置 Proxy Server Nameserver，再启用此覆写。"
     }
   ]
 }

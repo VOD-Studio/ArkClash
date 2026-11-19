@@ -1,11 +1,13 @@
 import { common } from '@kit.AbilityKit';
 import {
-  DnsOverrideSettings, DnsOverrideValue, emptyDnsOverrides, readDnsOverrides, saveDnsOverrides
+  DnsOverrideSettings, DnsOverrideValue, DnsPolicyRow, dnsPolicyText, emptyDnsOverrides, parseDnsPolicyText,
+  readDnsOverrides, saveDnsOverrides
 } from '../../client/DnsOverrides';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { ListRow } from '../../components/ListRow';
+import { uiResourceText } from '../../components/ResourceText';
 import { HEADER_ACTION, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { DNS_OVERRIDE_SECTIONS, DnsOverrideField, DnsOverrideSection } from './DnsOverrideFields';
 import { SettingsSection } from './SettingsSection';
@@ -24,6 +26,7 @@ export struct DnsOverridesPage {
   @Local private field?: DnsOverrideField;
   @Local private draft: string = '';
   @Local private editorError: ResourceStr = '';
+  private pendingEditor?: DnsOverrideField;
   private shown: boolean = false;
 
   private context(): common.UIAbilityContext {
@@ -54,6 +57,7 @@ export struct DnsOverridesPage {
       case 'dns_override_conflict': return $r('app.string.dns_override_conflict');
       case 'dns_override_listen_failed': return $r('app.string.dns_override_listen_failed');
       case 'dns_override_unavailable': return $r('app.string.dns_override_unavailable');
+      case 'dns_override_proxy_servers_required': return $r('app.string.dns_override_proxy_servers_required');
       default: return $r('app.string.dns_override_save_failed');
     }
   }
@@ -71,6 +75,7 @@ export struct DnsOverridesPage {
     if (Array.isArray(entry)) {
       return $r('app.string.dns_override_count', entry.length);
     }
+    if (typeof entry === 'number') { return entry.toString(); }
     return typeof entry === 'string' && entry !== '' ? entry : $r('app.string.dns_override_empty_value');
   }
 
@@ -79,8 +84,8 @@ export struct DnsOverridesPage {
       return;
     }
     const oldEntry = this.entry(field.key);
-    if (oldEntry === entry || (Array.isArray(oldEntry) && Array.isArray(entry) && oldEntry.length === entry.length &&
-      oldEntry.every((item: string, index: number): boolean => item === entry[index]))) {
+    if (oldEntry === entry || (Array.isArray(oldEntry) && Array.isArray(entry) &&
+      JSON.stringify(oldEntry) === JSON.stringify(entry))) {
       this.editorShown = false;
       return;
     }
@@ -130,9 +135,39 @@ export struct DnsOverridesPage {
   private openEditor(field: DnsOverrideField): void {
     const source = this.entry(field.key) ?? field.initial;
     this.field = field;
-    this.draft = Array.isArray(source) ? source.join('\n') : typeof source === 'string' ? source : '';
+    if (field.kind === 'policy') {
+      this.draft = dnsPolicyText(source as DnsPolicyRow[]);
+    } else {
+      this.draft = Array.isArray(source) ? (source as string[]).join('\n') :
+        typeof source === 'number' ? source.toString() : typeof source === 'string' ? source : '';
+    }
     this.editorError = '';
     this.editorShown = true;
+  }
+
+  private addField(field: DnsOverrideField): void {
+    if (field.kind === 'toggle') {
+      this.commit(field, field.initial);
+      return;
+    }
+    this.pendingEditor = field;
+    this.pickerShown = false;
+  }
+
+  private openPendingEditor(): void {
+    const pending = this.pendingEditor;
+    this.pendingEditor = undefined;
+    if (pending !== undefined && this.shown) { this.openEditor(pending); }
+  }
+
+  private textPlaceholder(field?: DnsOverrideField): ResourceStr {
+    switch (field?.key) {
+      case 'listen': return '127.0.0.1:1053';
+      case 'fake-ip-range': return '198.18.0.1/16';
+      case 'fake-ip-range6': return 'fdfe:dcba:9876::1/64';
+      case 'fallback-filter.geoip-code': return 'CN';
+      default: return '';
+    }
   }
 
   private saveEditor(): void {
@@ -140,10 +175,20 @@ export struct DnsOverridesPage {
     if (field === undefined) {
       return;
     }
-    const entry = field.kind === 'list' ?
-      this.draft.split(/\r?\n/).map((line: string): string => line.trim()).filter((line: string): boolean => line !== '') :
-      this.draft.trim();
-    this.commit(field, entry);
+    try {
+      if (field.kind === 'policy') {
+        this.commit(field, parseDnsPolicyText(this.draft));
+      } else if (field.kind === 'list') {
+        this.commit(field, this.draft.split(/\r?\n/).map((line: string): string => line.trim())
+          .filter((line: string): boolean => line !== ''));
+      } else if (field.kind === 'number') {
+        const value = this.draft.trim();
+        if (!/^\d+$/.test(value)) { throw new Error('dns_override_invalid'); }
+        this.commit(field, Number(value));
+      } else {
+        this.commit(field, this.draft.trim());
+      }
+    } catch (error) { this.editorError = this.errorText(error as Error); }
   }
 
   @Builder
@@ -196,7 +241,7 @@ export struct DnsOverridesPage {
           .layoutWeight(1)
           .padding({ left: 12 })
         Toggle({ type: ToggleType.Switch, isOn: this.entry(field.key) === true })
-          .accessibilityText(field.key === 'ipv6' ? 'IPv6' : 'Prefer H3')
+          .accessibilityText(uiResourceText(this.getUIContext(), field.label))
           .selectedColor(this.appStyle.palette.brand)
           .enabled(!this.saving)
           .onChange((checked: boolean): void => { this.commit(field, checked); })
@@ -222,7 +267,7 @@ export struct DnsOverridesPage {
       if (added) {
         this.SettingRow(field)
       } else {
-        ListRow({ title: field.label, chevron: false, onTap: (): void => { this.commit(field, field.initial); } })
+        ListRow({ title: field.label, chevron: field.kind !== 'toggle', onTap: (): void => this.addField(field) })
           .enabled(!this.saving)
       }
     }, (field: DnsOverrideField): string => field.key)
@@ -262,12 +307,14 @@ export struct DnsOverridesPage {
               .enabled(!this.saving)
           }, (choice: string): string => choice)
         } else {
-          if (this.field?.kind === 'text') {
-            TextInput({ text: this.draft, placeholder: '127.0.0.1:1053' })
-              .maxLength(320)
+          if (this.field?.kind === 'text' || this.field?.kind === 'number') {
+            TextInput({ text: this.draft, placeholder: this.textPlaceholder(this.field) })
+              .type(this.field?.kind === 'number' ? InputType.Number : InputType.Normal)
+              .maxLength(this.field?.kind === 'number' ? 10 : 320)
               .onChange((text: string): void => { this.draft = text; this.editorError = ''; })
           } else {
-            Text($r('app.string.dns_override_list_hint')).fontSize(14).fontColor($r('sys.color.font_secondary'))
+            Text(this.field?.kind === 'policy' ? $r('app.string.dns_override_policy_hint') :
+              $r('app.string.dns_override_list_hint')).fontSize(14).fontColor($r('sys.color.font_secondary'))
             TextArea({ text: this.draft })
               .height(168)
               .maxLength(40 * 1024)
@@ -340,12 +387,13 @@ export struct DnsOverridesPage {
           .bindSheet($$this.pickerShown, this.Picker, {
             title: { title: $r('app.string.dns_override_add') }, height: SheetSize.LARGE,
             preferType: SheetType.BOTTOM, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
-            onWillDismiss: (action: DismissSheetAction): void => { if (!this.saving) { action.dismiss(); } }
+            onWillDismiss: (action: DismissSheetAction): void => { if (!this.saving) { action.dismiss(); } },
+            onDisappear: (): void => this.openPendingEditor()
           })
         Column()
           .bindSheet($$this.editorShown, this.Editor, {
             title: { title: this.field?.label ?? 'DNS' },
-            height: this.field?.kind === 'list' ? SheetSize.LARGE : SheetSize.MEDIUM,
+            height: this.field?.kind === 'list' || this.field?.kind === 'policy' ? SheetSize.LARGE : SheetSize.MEDIUM,
             preferType: SheetType.BOTTOM, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
             onWillDismiss: (action: DismissSheetAction): void => { if (!this.saving) { action.dismiss(); } }
           })

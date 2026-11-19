@@ -205,9 +205,21 @@ test('DNS 覆写离线按版本提交，在线超时只凭落盘版本确认', a
   });
   const initial = await dns.readDnsOverrides(context.filesDir);
   await assert.rejects(dns.saveDnsOverrides(context, initial.revision, { nameserver: [] }), /dns_override_invalid/);
-  const saved = await dns.saveDnsOverrides(context, initial.revision,
-    { ipv6: false, 'default-nameserver': ['2001:4860:4860::8888'], fallback: [] });
-  assert.deepEqual(JSON.parse(disk).entries, { ipv6: false, 'default-nameserver': ['2001:4860:4860::8888'], fallback: [] });
+  await assert.rejects(dns.saveDnsOverrides(context, initial.revision, { 'fake-ip-range6': '198.18.0.1/16' }),
+    /dns_override_invalid/);
+  const policy = dns.parseDnsPolicyText('+.example.test = 1.1.1.1\n+.other.test = 9.9.9.9\n' +
+    '+.example.test = https://dns.example.test/dns-query?flag=1');
+  assert.throws(() => dns.parseDnsPolicyText('+.example.test'), /dns_override_invalid/);
+  assert.deepEqual(JSON.parse(JSON.stringify(policy)), [
+    { pattern: '+.example.test', servers: ['1.1.1.1', 'https://dns.example.test/dns-query?flag=1'] },
+    { pattern: '+.other.test', servers: ['9.9.9.9'] }
+  ]);
+  assert.equal(dns.dnsPolicyText(policy),
+    '+.example.test = 1.1.1.1\n+.example.test = https://dns.example.test/dns-query?flag=1\n+.other.test = 9.9.9.9');
+  const entries = { ipv6: false, 'default-nameserver': ['2001:4860:4860::8888'], fallback: [],
+    'nameserver-policy': policy, 'cache-max-size': 0, 'fake-ip-range6': 'fd00::1/64', 'fallback-filter.geoip': false };
+  const saved = await dns.saveDnsOverrides(context, initial.revision, entries);
+  assert.deepEqual(JSON.parse(disk).entries, JSON.parse(JSON.stringify(entries)));
   await assert.rejects(dns.saveDnsOverrides(context, initial.revision, {}), /dns_override_conflict/);
   active = true;
   const removed = await dns.saveDnsOverrides(context, saved.revision, {});

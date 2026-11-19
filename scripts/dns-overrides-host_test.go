@@ -29,6 +29,46 @@ func TestDNSOverridesOnlyReplaceAddedFields(t *testing.T) {
 	}
 }
 
+func TestDNSExtraOverridesKeepPolicyOrderAndUnsetFallbackFields(t *testing.T) {
+	raw := config.DefaultRawConfig()
+	raw.DNS.FallbackFilter.GeoIPCode = "US"
+	raw.DNS.FallbackFilter.Domain = []string{"+.example.test"}
+	settings := dnsOverrideSettings{Revision: "sample", Entries: dnsOverrideEntries{
+		IPv6Timeout: new(uint(10)), UseSystemHosts: new(false), CacheAlgorithm: new("arc"),
+		CacheMaxSize: new(0), FakeIPRange: new("198.19.0.1/16"), FakeIPRange6: new("fd00::1/64"),
+		FakeIPTTL: new(23), Policy: new([]dnsPolicyRow{
+			{Pattern: "+.example.test", Servers: []string{"1.1.1.1", "8.8.8.8"}},
+			{Pattern: "test.example", Servers: []string{"9.9.9.9"}},
+		}),
+		FallbackGeoIP: new(false), FallbackIPCIDR: new([]string{"192.0.2.0/24"}),
+		DirectFollowPolicy: new(true),
+	}}
+	if err := settings.validate(); err != nil {
+		t.Fatal(err)
+	}
+	settings.Entries.apply(&raw.DNS)
+	first := raw.DNS.NameServerPolicy.Oldest()
+	if first == nil || first.Key != "+.example.test" || len(first.Value.([]string)) != 2 ||
+		first.Next() == nil || first.Next().Key != "test.example" {
+		t.Fatal("DNS policy rows lost their order or servers")
+	}
+	if raw.DNS.FallbackFilter.GeoIP || raw.DNS.FallbackFilter.GeoIPCode != "US" ||
+		len(raw.DNS.FallbackFilter.Domain) != 1 || len(raw.DNS.FallbackFilter.IPCIDR) != 1 ||
+		raw.DNS.UseSystemHosts || raw.DNS.FakeIPTTL != 23 || raw.DNS.CacheAlgorithm != "arc" ||
+		raw.DNS.CacheMaxSize != 0 || !raw.DNS.DirectNameServerFollowPolicy {
+		t.Fatal("DNS settings lost an explicit value or replaced inherited fields")
+	}
+	settings.Entries.Policy = new([]dnsPolicyRow{})
+	settings.Entries.apply(&raw.DNS)
+	if raw.DNS.NameServerPolicy.Len() != 0 {
+		t.Fatal("an explicit empty policy must clear the profile policy")
+	}
+	settings.Entries.FakeIPRange6 = new("192.0.2.0/24")
+	if !errors.Is(settings.validate(), errDNSInvalid) {
+		t.Fatal("IPv4 prefix accepted in the IPv6 field")
+	}
+}
+
 func TestDNSOverridesLiveApplyAndBindConflictPreserveTun(t *testing.T) {
 	opts := lifecycleOptions(t)
 	opts.Profile = "dns"
@@ -85,8 +125,21 @@ func TestDNSOverridesLiveApplyAndBindConflictPreserveTun(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
+	next.Settings.Revision = "missing-proxy-dns"
+	next.Settings.Entries.RespectRules = new(true)
+	if err := updateDNSOverrides(next); !errors.Is(err, errDNSProxyServersRequired) ||
+		current.DNS.Revision != "default" || tunListener != originalTun {
+		t.Fatalf("missing proxy DNS did not preserve the running configuration: %v", err)
+	}
 	next.Settings.Revision = "committed"
 	next.Settings.Entries.EnhancedMode = new(constant.DNSFakeIP)
+	next.Settings.Entries.CacheAlgorithm = new("arc")
+	next.Settings.Entries.CacheMaxSize = new(128)
+	next.Settings.Entries.FakeIPRange = new("198.19.0.1/16")
+	next.Settings.Entries.FakeIPTTL = new(5)
+	next.Settings.Entries.Policy = new([]dnsPolicyRow{{Pattern: "+.example.test", Servers: []string{"1.1.1.1"}}})
+	next.Settings.Entries.ProxyServers = new([]string{"9.9.9.9"})
+	next.Settings.Entries.RespectRules = new(true)
 	if err := updateDNSOverrides(next); err != nil {
 		t.Fatal(err)
 	}

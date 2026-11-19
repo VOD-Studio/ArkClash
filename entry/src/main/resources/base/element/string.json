@@ -2659,6 +2659,62 @@
     {
       "name": "added_rules_discard",
       "value": "Discard changes"
+    },
+    {
+      "name": "dns_override_use_hosts",
+      "value": "Use Hosts"
+    },
+    {
+      "name": "dns_override_system_hosts",
+      "value": "Use system Hosts"
+    },
+    {
+      "name": "dns_override_ipv6_timeout",
+      "value": "IPv6 timeout (ms)"
+    },
+    {
+      "name": "dns_override_respect_rules",
+      "value": "Respect routing rules"
+    },
+    {
+      "name": "dns_override_cache_algorithm",
+      "value": "Cache algorithm"
+    },
+    {
+      "name": "dns_override_cache_size",
+      "value": "Maximum cache entries"
+    },
+    {
+      "name": "dns_override_fake_range",
+      "value": "Fake-IP IPv4 range"
+    },
+    {
+      "name": "dns_override_fake_range6",
+      "value": "Fake-IP IPv6 range"
+    },
+    {
+      "name": "dns_override_fallback_lazy",
+      "value": "Query Fallback on demand"
+    },
+    {
+      "name": "dns_override_direct_policy",
+      "value": "Direct follows Nameserver Policy"
+    },
+    {
+      "name": "dns_override_fallback_filter",
+      "value": "Fallback Filter"
+    },
+    {
+      "name": "dns_override_domain",
+      "value": "Domain"
+    },
+    {
+      "name": "dns_override_policy_hint",
+      "value": "Enter one pattern = server per line. Repeat the pattern for multiple servers."
+    },
+    {
+      "name": "dns_override_proxy_servers_required",
+      "value": "Set Proxy Server Nameserver to use this override."
     }
   ]
 }
