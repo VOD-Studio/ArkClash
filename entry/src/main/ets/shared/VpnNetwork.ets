@@ -6,6 +6,7 @@ export const TUN_STACKS: string[] = ['gvisor', 'system', 'mixed', 'mips'];
 export const TUN_CONGESTION_CONTROLLERS: string[] = ['cubic', 'reno', 'bbr', 'bbr3'];
 export const MAX_TUN_MTU = 1500;
 export const MAX_ROUTE_ENTRIES = 64;
+export const MAX_VPN_EXCLUDED_APPS = 255;
 
 const MAX_VPN_ROUTES = 1024;
 const PRIVATE_ROUTES = ['0.0.0.0/8', '10.0.0.0/8', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12',
@@ -20,6 +21,7 @@ export class VpnNetworkSettings {
   bypassPrivateRoute: boolean = false;
   routeAddress: string[] = [];
   routeExcludeAddress: string[] = [];
+  excludedApplications: string[] = [];
 
   copy(): VpnNetworkSettings {
     const next = new VpnNetworkSettings();
@@ -31,8 +33,28 @@ export class VpnNetworkSettings {
     next.bypassPrivateRoute = this.bypassPrivateRoute;
     next.routeAddress = this.routeAddress.slice();
     next.routeExcludeAddress = this.routeExcludeAddress.slice();
+    next.excludedApplications = this.excludedApplications.slice();
     return next;
   }
+}
+
+export function vpnExcludedApplications(apps: string[] | undefined, own: string): string[] {
+  if (apps !== undefined && !Array.isArray(apps)) { throw new Error('invalid_bundle_name'); }
+  const entries = new Set<string>();
+  for (const name of apps ?? []) {
+    if (name === own) { continue; }
+    if (typeof name !== 'string' || name.length < 7 || name.length > 128 || !/^[a-z]/i.test(name)) {
+      throw new Error('invalid_bundle_name');
+    }
+    const segments = name.split('.');
+    if (segments.length < 3 ||
+      !segments.every((segment: string): boolean => /^[a-z0-9](?:[a-z0-9_]*[a-z0-9])?$/i.test(segment))) {
+      throw new Error('invalid_bundle_name');
+    }
+    entries.add(name);
+  }
+  if (entries.size > MAX_VPN_EXCLUDED_APPS) { throw new Error('too_many_apps'); }
+  return Array.from(entries);
 }
 
 export function minTunMtu(ipv6: boolean): number {

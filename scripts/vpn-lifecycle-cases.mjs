@@ -335,7 +335,8 @@ test('VPN 将同一份网络设置用于系统接口和内核，旧配置保留�
   f.replaceRuntime({ network: {
     stack: 'mips', mtu: 1400, ipv6: true, dnsHijacking: false, congestionController: 'bbr',
     bypassPrivateRoute: true, routeAddress: ['192.0.2.0/24', '2001:db8::/32'],
-    routeExcludeAddress: ['192.0.2.0/25', '2001:db8::/33']
+    routeExcludeAddress: ['192.0.2.0/25', '2001:db8::/33'],
+    excludedApplications: ['com.example.direct', 'fixture.application', 'com.example.direct', 'com.example.reader']
   } });
   assert.equal((await f.request('connect', 'connect-advanced').result).status, 200);
   const config = f.calls.filter(call => call.name === 'create').at(-1).args[0];
@@ -343,7 +344,8 @@ test('VPN 将同一份网络设置用于系统接口和内核，旧配置保留�
   assert.equal(config.isIPv6Accepted, true);
   assert.equal(config.addresses[1].address.family, 2);
   assert.ok(config.dnsAddresses.includes('fdfe:dcba:9876::2'));
-  assert.equal(config.blockedApplications[0], 'fixture.application');
+  assert.deepEqual(Array.from(config.blockedApplications),
+    ['fixture.application', 'com.example.direct', 'com.example.reader']);
   assert.equal(config.mtu, 1400);
   assert.equal(core.mtu, config.mtu);
   assert.equal(core.ipv6, config.isIPv6Accepted);

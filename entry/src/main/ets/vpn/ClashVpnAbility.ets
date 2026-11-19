@@ -10,7 +10,7 @@ import { UpdateEnv, UpdateScheduler } from '../shared/profiles/Updater';
 import { beginRuntimeInstance, CONTROLLER_ADDRESS, readRuntime, RuntimeConfig, writeCoreError,
   writeRuntime, writeRuntimeStopped } from '../shared/Runtime';
 import {
-  TUN_IPV4, TUN_IPV4_DNS, TUN_IPV6, TUN_IPV6_DNS, VpnNetworkSettings, VpnRoutePrefix, vpnRoutePrefixes
+  TUN_IPV4, TUN_IPV4_DNS, TUN_IPV6, TUN_IPV6_DNS, vpnExcludedApplications, VpnNetworkSettings, VpnRoutePrefix, vpnRoutePrefixes
 } from '../shared/VpnNetwork';
 import { serveCommands, VpnCommandError } from './Commands';
 import { installGeoData } from './GeoData';
@@ -385,6 +385,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
   }
 
   private vpnConfig(network: VpnNetworkSettings): vpnExtension.VpnConfig {
+    const ownBundle = this.context.applicationInfo.name;
     const config: vpnExtension.VpnConfig = {
       // 地址、前缀长度和 DNS 地址须与 core/tun.go 一致。
       addresses: [{ address: { address: TUN_IPV4, family: FAMILY_IPV4 }, prefixLength: 30 }],
@@ -402,7 +403,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       isIPv6Accepted: network.ipv6,
       mtu: network.mtu,
       // 界面进程保持直连；出口与服务探测经 controller 交给内核按当前规则拨号。
-      blockedApplications: [this.context.applicationInfo.name]
+      blockedApplications: [ownBundle].concat(vpnExcludedApplications(network.excludedApplications, ownBundle))
     };
     if (network.ipv6) {
       config.addresses.push({ address: { address: TUN_IPV6, family: FAMILY_IPV6 }, prefixLength: 126 });

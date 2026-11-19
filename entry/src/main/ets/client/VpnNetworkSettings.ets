@@ -1,7 +1,8 @@
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import {
-  MAX_TUN_MTU, minTunMtu, TUN_CONGESTION_CONTROLLERS, TUN_STACKS, VpnNetworkSettings, vpnRoutePrefixes
+  MAX_TUN_MTU, minTunMtu, TUN_CONGESTION_CONTROLLERS, TUN_STACKS, vpnExcludedApplications, VpnNetworkSettings,
+  vpnRoutePrefixes
 } from '../shared/VpnNetwork';
 
 const STORE = 'vpn_network';
@@ -25,6 +26,7 @@ export async function readVpnNetworkSettings(context: common.UIAbilityContext): 
   settings.bypassPrivateRoute = saved.bypassPrivateRoute ?? settings.bypassPrivateRoute;
   settings.routeAddress = saved.routeAddress ?? settings.routeAddress;
   settings.routeExcludeAddress = saved.routeExcludeAddress ?? settings.routeExcludeAddress;
+  settings.excludedApplications = vpnExcludedApplications(saved.excludedApplications, context.applicationInfo.name);
   return settings;
 }
 
@@ -37,9 +39,11 @@ export function saveVpnNetworkSettings(context: common.UIAbilityContext, setting
       throw new Error('invalid_option');
     }
     vpnRoutePrefixes(settings);
+    const normalized = settings.copy();
+    normalized.excludedApplications = vpnExcludedApplications(settings.excludedApplications, context.applicationInfo.name);
     const store = await preferences.getPreferences(context, { name: STORE });
     const previous = await store.get(KEY, '');
-    await store.put(KEY, JSON.stringify(settings));
+    await store.put(KEY, JSON.stringify(normalized));
     try {
       await store.flush();
     } catch (error) {

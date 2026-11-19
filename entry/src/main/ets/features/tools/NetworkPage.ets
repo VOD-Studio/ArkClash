@@ -6,7 +6,8 @@ import { DestinationTitle } from '../../components/DestinationTitle';
 import { ListRow } from '../../components/ListRow';
 import { PAGE_GUTTER } from '../../components/Theme';
 import {
-  MAX_ROUTE_ENTRIES, MAX_TUN_MTU, minTunMtu, TUN_CONGESTION_CONTROLLERS, TUN_STACKS, VpnNetworkSettings
+  MAX_ROUTE_ENTRIES, MAX_TUN_MTU, MAX_VPN_EXCLUDED_APPS, minTunMtu, TUN_CONGESTION_CONTROLLERS, TUN_STACKS,
+  vpnExcludedApplications, VpnNetworkSettings
 } from '../../shared/VpnNetwork';
 import { SettingsSection } from './SettingsSection';
 
@@ -15,7 +16,8 @@ enum NetworkEditor {
   Mtu,
   Congestion,
   Routes,
-  Exclusions
+  Exclusions,
+  ExcludedApps
 }
 
 @ComponentV2
@@ -106,6 +108,8 @@ export struct NetworkPage {
       case 'invalid_cidr': return $r('app.string.network_invalid_cidr');
       case 'too_many_entries': return $r('app.string.network_route_limit', MAX_ROUTE_ENTRIES);
       case 'too_many_routes': return $r('app.string.network_route_expansion');
+      case 'invalid_bundle_name': return $r('app.string.network_invalid_bundle');
+      case 'too_many_apps': return $r('app.string.network_app_limit', MAX_VPN_EXCLUDED_APPS);
       default: return $r('app.string.network_save_failed');
     }
   }
@@ -136,6 +140,7 @@ export struct NetworkPage {
       case NetworkEditor.Mtu: return 'MTU';
       case NetworkEditor.Routes: return $r('app.string.network_routes');
       case NetworkEditor.Exclusions: return $r('app.string.network_exclusions');
+      case NetworkEditor.ExcludedApps: return $r('app.string.network_excluded_apps');
     }
   }
 
@@ -164,6 +169,13 @@ export struct NetworkPage {
       const entries = this.draft.split(/\s+/).filter((entry: string): boolean => entry !== '');
       if (this.editKind === NetworkEditor.Routes) {
         next.routeAddress = entries;
+      } else if (this.editKind === NetworkEditor.ExcludedApps) {
+        try {
+          next.excludedApplications = vpnExcludedApplications(entries, this.context().applicationInfo.name);
+        } catch (error) {
+          this.editError = this.errorText((error as Error).message);
+          return;
+        }
       } else {
         next.routeExcludeAddress = entries;
       }
@@ -194,12 +206,16 @@ export struct NetworkPage {
 
   @Builder
   VpnRows() {
-    NetworkToggleRow({ label: $r('app.string.network_system_proxy'), available: false })
+    ListRow({ title: $r('app.string.network_system_proxy'),
+      value: $r('app.string.network_platform_unsupported'), chevron: false }).enabled(false)
     this.Rule()
-    ListRow({ title: $r('app.string.network_bypass_domains'), chevron: true })
+    ListRow({ title: $r('app.string.network_bypass_domains'),
+      value: $r('app.string.network_platform_unsupported'), chevron: false })
       .enabled(false)
     this.Rule()
-    NetworkToggleRow({ label: $r('app.string.network_allow_bypass'), available: false })
+    ListRow({ title: $r('app.string.network_excluded_apps'), value: this.settings.excludedApplications.length.toString(),
+      onTap: (): void => this.openEditor(NetworkEditor.ExcludedApps, this.settings.excludedApplications.join('\n')) })
+      .enabled(this.editable())
     this.Rule()
     NetworkToggleRow({
       label: $r('app.string.network_ipv6'), checked: this.settings.ipv6, available: this.editable(),
@@ -278,12 +294,14 @@ export struct NetworkPage {
               .maxLength(4)
               .onChange((input: string): void => { this.draft = input; this.editError = ''; })
           } else {
-            Text($r('app.string.network_route_hint'))
+            Text(this.editKind === NetworkEditor.ExcludedApps ?
+              $r('app.string.network_excluded_apps_hint') : $r('app.string.network_route_hint'))
               .fontFamily(this.appStyle.fontFamily)
               .fontSize(14)
               .fontColor($r('sys.color.font_secondary'))
-            TextArea({ text: this.draft, placeholder: '192.0.2.0/24\n2001:db8::/32' })
-              .maxLength(4096)
+            TextArea({ text: this.draft, placeholder: this.editKind === NetworkEditor.ExcludedApps ?
+              'com.example.app' : '192.0.2.0/24\n2001:db8::/32' })
+              .maxLength(this.editKind === NetworkEditor.ExcludedApps ? 129 * MAX_VPN_EXCLUDED_APPS : 4096)
               .height(160)
               .onChange((input: string): void => { this.draft = input; this.editError = ''; })
           }
