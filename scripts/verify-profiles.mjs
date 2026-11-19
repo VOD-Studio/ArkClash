@@ -43,6 +43,10 @@ const fileIo = {
     return { fd: handle.fd, handle, async lock() {}, tryLock() {} };
   },
   close: (file) => file.handle.close(),
+  stat: (value) => typeof value === 'string' ? fsp.stat(value) :
+    new Promise((resolve, reject) => fs.fstat(value, (error, stat) => error ? reject(error) : resolve(stat))),
+  read: (fd, bytes) => new Promise((resolve, reject) => fs.read(fd, Buffer.from(bytes), (error, length) =>
+    error ? reject(error) : resolve(length))),
   async write(fd, bytes) {
     return await new Promise((resolve, reject) => fs.write(fd, Buffer.from(bytes), (error, written) => {
       if (error) { reject(error); } else { resolve(written); }
@@ -57,8 +61,9 @@ const kits = {
   '@kit.BasicServicesKit': {},
   '@kit.CoreFileKit': { fileIo },
   '@kit.NetworkKit': { http: {} },
-  '@kit.ArkTS': { url: { URL }, util: {
+  '@kit.ArkTS': { taskpool: { execute: async (operation, ...args) => operation(...args) }, url: { URL }, util: {
     TextEncoder: class { encodeInto(text) { return new TextEncoder().encode(text); } },
+    TextDecoder: class extends TextDecoder { decodeToString(bytes) { return this.decode(bytes); } },
     Base64Helper: class { async encodeToString(bytes) { return Buffer.from(bytes).toString('base64'); } }
   } }
 };
@@ -76,6 +81,7 @@ function load(file, selectedSource, overrides = {}) {
   modules.set(key, module);
   const localRequire = (name) => {
     if (kits[name]) { return kits[name]; }
+    if (name === 'yaml') { return require(path.resolve(scriptDir, '../entry/oh_modules/yaml/dist/index.js')); }
     return load(path.resolve(path.dirname(absolute), `${name}.ets`));
   };
   vm.runInNewContext(compiled, { module, exports: module.exports, require: localRequire, console, URL,
@@ -1486,4 +1492,267 @@ test('编辑保存失败在后台不提前消费，返回前台只提示一次�
       await fixture.close();
     }
   });
+});
+
+
+const scriptsPath = path.join(etsDir, 'shared/profiles/Scripts.ets');
+const scripts = load(scriptsPath, fs.readFileSync(scriptsPath, 'utf8').replace(/^@Concurrent\s*$/gm, ''));
+
+test('配置脚本创建、导入重名、排序、单选绑定和删除可跨读取恢复', async () => {
+  await sandbox(async (dir) => {
+    await store.writeList(dir, { version: 1, current: 'p1', profiles: [
+      { id: 'p1', name: 'One', nameEdited: true, subscription: '' },
+      { id: 'p2', name: 'Two', nameEdited: true, subscription: '' },
+    ], subscriptions: [] });
+    assert.equal(scripts.scriptIdentity(await scripts.readConfigScripts(dir), 'p1'), '');
+    const created = await scripts.saveConfigScript(dir, undefined, 'Test', scripts.SCRIPT_TEMPLATE);
+    await assert.rejects(scripts.saveConfigScript(dir, undefined, 'Test', 'const main = c => c'), /name_taken/);
+    const imported = await scripts.saveConfigScript(dir, undefined, 'Test.js', 'const main = c => c', '', true);
+    assert.equal(imported.scripts[1].name, 'Test(1)');
+    await scripts.reorderConfigScripts(dir, imported.scripts[1], imported.scripts[0]);
+    let state = await scripts.readConfigScripts(dir);
+    assert.equal(state.scripts[0].name, 'Test(1)');
+    const first = created.scripts[0];
+    for (const profile of ['p1', 'p2']) {
+      state = await scripts.saveScriptBinding(dir, scripts.scriptBinding(state, profile),
+        { profile, mode: 'script', scriptId: first.id });
+    }
+    assert.equal(scripts.scriptIdentity(state, 'p2'), `script:${first.id}:${first.revision}`);
+    state = await scripts.saveScriptBinding(dir, scripts.scriptBinding(state, 'p2'),
+      { profile: 'p2', mode: 'standard', scriptId: first.id });
+    assert.equal(scripts.scriptIdentity(state, 'p2'), '');
+    state = await scripts.removeConfigScript(dir, first);
+    assert.equal(scripts.scriptIdentity(state, 'p1'), undefined);
+    const saved = scripts.scriptBinding(await scripts.readConfigScripts(dir), 'p1');
+    assert.equal(saved.scriptId, first.id);
+    state = await scripts.saveScriptBinding(dir, saved, { profile: 'p1', mode: 'script', scriptId: '' });
+    assert.equal(scripts.scriptIdentity(state, 'p1'), 'script');
+  });
+});
+
+test('同步错误保留脚本与 URL，旧下载不能覆盖用户更晚的编辑', async () => {
+  await sandbox(async (dir) => {
+    const source = 'https://example.test/original.js';
+    const created = await scripts.saveConfigScript(dir, undefined, 'Script', scripts.SCRIPT_TEMPLATE, source);
+    const original = created.scripts[0];
+    await assert.rejects(scripts.downloadConfigScript(dir, { download: async (_url, file) => {
+      await fsp.writeFile(file, Buffer.from([0xf0, 0x28, 0x8c, 0x28]));
+    } }, 'https://example.test/edited.js', original), /script_encoding/);
+    assert.equal((await scripts.readConfigScripts(dir)).scripts[0].url, source);
+    await assert.rejects(scripts.downloadConfigScript(dir, { download: async (_url, file) => {
+      await fsp.writeFile(file, 'const main = c => ({remote: true})');
+      await scripts.saveConfigScript(dir, original, original.name, 'const main = c => ({local: true})', source);
+    } }, source, original), /script_conflict/);
+    const persisted = (await scripts.readConfigScripts(dir)).scripts[0];
+    assert.equal(persisted.source, 'const main = c => ({local: true})');
+    assert.equal(persisted.url, source);
+    assert.ok((await fsp.readdir(store.profilesDir(dir))).every(name => !name.endsWith('.candidate')));
+  });
+});
+
+const localProxyModel = load(path.join(etsDir, 'shared/profiles/LocalProxies.ets'));
+const localProxySchema = load(path.join(etsDir, 'shared/profiles/LocalProxySchema.ets'));
+const localProxyStore = load(path.join(etsDir, 'shared/profiles/LocalProxyStore.ets'));
+
+test('自定义节点切换协议时清理失效选项并保留兼容值和未知字段', () => {
+  const schema = localProxySchema;
+  const ss = { name: '边缘', type: 'ss', server: '192.0.2.4', port: 443, password: 'placeholder',
+    cipher: 'aes-256-gcm', plugin: 'v2ray-plugin', 'plugin-opts': { host: 'example.invalid' }, 'custom-key': [1, 2] };
+  const vmess = schema.changeProxyType(ss, 'vmess');
+  assert.equal(schema.PROXY_TYPES.length, 28);
+  assert.equal(vmess.cipher, 'auto');
+  assert.equal(vmess.alterId, 0);
+  assert.equal(vmess.password, undefined);
+  assert.equal(vmess['plugin-opts'], undefined);
+  assert.equal(vmess.server, ss.server);
+  assert.deepEqual(vmess['custom-key'], [1, 2]);
+
+  const byId = (id) => schema.PROXY_FIELDS.find((field) => field.id === id);
+  const ws = { ...vmess, network: 'ws',
+    'ws-opts': { headers: { host: 'example.invalid', 'X-First': 'one' }, 'v2ray-http-upgrade': true,
+      'v2ray-http-upgrade-fast-open': true } };
+  assert.ok(schema.proxyOptions(ws).includes(byId('wsHttpUpgradeFastOpen')));
+  const inGrpc = schema.changeProxyOption(ws, byId('network'), 'grpc');
+  assert.equal(inGrpc['ws-opts'], undefined);
+  assert.ok(schema.proxyOptions(inGrpc).includes(byId('grpcServiceName')));
+
+  const http = { ...vmess, network: 'http', 'http-opts': { headers: { Host: ['example.invalid'],
+    'X-Multi': ['one', 'two'], 'X-Old': ['old'] } } };
+  const parsed = schema.parseProxyMap(http, byId('httpHeaders'), 'X-Multi: one, two\nX-New: three');
+  assert.deepEqual(JSON.parse(JSON.stringify(parsed)), { Host: ['example.invalid'], 'X-Multi': ['one', 'two'],
+    'X-New': ['three'] });
+  assert.throws(() => schema.parseProxyMap(http, byId('httpHeaders'), 'Host: example.com'), /local_proxy_map/);
+});
+
+test('批量快编复用已有节点 ID，保留非分享字段与不可编码节点，并支持改名预览', async () => {
+  const m = localProxyModel;
+  const first = m.newLocalProxy({ name: '一', type: 'http', server: '192.0.2.10', port: 443,
+    tls: true, headers: { 'X-Custom': ['a', 'b'] } }, ['sni']);
+  const opaque = m.newLocalProxy({ name: '不可编码', type: 'direct' });
+  const last = m.newLocalProxy({ name: '末尾', type: 'socks5', server: '192.0.2.20', port: 1080 });
+  const previous = { version: 1, revision: 'r1', proxies: [first, opaque, last] };
+  const links = ['https://192.0.2.10:443#一', '', 'socks5://192.0.2.20:1080#末尾'];
+  const plan = await localProxyStore.readProxyLinkPlan(previous, links,
+    'https://192.0.2.11:443#一\n\nsocks5://192.0.2.20:1080#新名');
+  assert.deepEqual(Array.from(plan.lines, (line) => line.number), [1, 3]);
+  const next = await localProxyStore.buildProxyLinkEdit(previous, links, plan, new Map([
+    [1, [{ name: '一', type: 'http', server: '192.0.2.11', port: 443, tls: true }]],
+    [3, [{ name: '新名', type: 'socks5', server: '192.0.2.20', port: 1080 }]]
+  ]), new Map([[first.id, { name: '一', type: 'http', server: '192.0.2.10', port: 443, tls: true }]]));
+  assert.deepEqual(Array.from(next, m.localProxyName), ['不可编码', '一', '新名']);
+  assert.equal(next[1].id, first.id);
+  assert.equal(next[1].definition.server, '192.0.2.11');
+  assert.deepEqual(next[1].definition.headers, first.definition.headers);
+  assert.deepEqual(next[1].emptyOptions, first.emptyOptions);
+  assert.notEqual(next[2].id, last.id);
+  assert.equal(m.localProxyMatches(next[1], 'HTTP 192.0.2.11'), true);
+  assert.equal(m.localProxyProblem({ ...first.definition, port: 65536 }), 'local_proxy_port');
+});
+
+test('节点库原子提交拒绝旧版本与重名，保留已有顺序和空选项', async () => {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'arkclash-local-proxy-'));
+  try {
+    const storage = localProxyStore;
+    const base = await storage.readLocalProxies(dir);
+    const first = await storage.saveLocalProxy(dir, base, '',
+      { name: '局部', type: 'direct', 'opaque-value': ['opaque'] }, ['interfaceName']);
+    await assert.rejects(storage.saveLocalProxy(dir, base, '', { name: '过期', type: 'direct' }, []), /local_proxy_conflict/);
+    await assert.rejects(storage.saveLocalProxy(dir, first, '', { name: '局部', type: 'direct' }, []), /local_proxy_name_taken/);
+    const second = await storage.saveLocalProxy(dir, first, '', { name: '域名', type: 'dns' }, []);
+    const moved = await storage.commitLocalProxies(dir, second, second.proxies.slice().reverse());
+    const reopened = await storage.readLocalProxies(dir);
+    assert.equal(reopened.revision, moved.revision);
+    assert.deepEqual(Array.from(reopened.proxies, localProxyModel.localProxyName), ['域名', '局部']);
+    assert.deepEqual(Array.from(reopened.proxies[1].emptyOptions), ['interfaceName']);
+    assert.deepEqual(Array.from(reopened.proxies[1].definition['opaque-value']), ['opaque']);
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+const proxyFilterStoragePath = path.join(etsDir, 'shared/profiles/ProxyFilters.ets');
+const filterLibrary = load(proxyFilterStoragePath, fs.readFileSync(proxyFilterStoragePath, 'utf8')
+  .replace(/^@Concurrent\s*$/gm, ''));
+const filterYaml = load(path.join(etsDir, 'shared/profiles/ProxyFilterYaml.ets'));
+const testYaml = require(path.resolve(scriptDir, '../entry/oh_modules/yaml/dist/index.js'));
+
+test('筛选预设可搜索、重排和清空，旧修订不能覆盖已保存的库', async () => {
+  await sandbox(async (dir) => {
+    const defaults = await filterLibrary.readProxyFilters(dir);
+    assert.equal(defaults.presets.length, 11);
+    assert.deepEqual(Array.from(filterLibrary.searchProxyFilters(defaults.presets, 'hong 港'), item => item.id), ['hk']);
+    const custom = filterLibrary.newProxyFilter('  名称  ', '  (?i)hk  ');
+    const first = await filterLibrary.commitProxyFilters(dir, defaults.revision, [custom, ...defaults.presets]);
+    assert.equal((await filterLibrary.readProxyFilters(dir)).presets[0].label, '名称');
+    assert.equal(filterLibrary.proxyFilterProblem(filterLibrary.newProxyFilter('名称', 'ok'), first.presets), 'proxy_filter_duplicate');
+    await assert.rejects(filterLibrary.commitProxyFilters(dir, defaults.revision, []), /proxy_filter_conflict/);
+    await filterLibrary.commitProxyFilters(dir, first.revision, []);
+    assert.equal((await filterLibrary.readProxyFilters(dir)).presets.length, 0);
+  });
+});
+
+test('筛选能追加到代理组、代理集合，也保留已有匹配、注释和 YAML 合并字段', () => {
+  const source = [
+    '# keep this comment',
+    "template: &base {filter: '(?i)keep'}",
+    'proxy-groups:',
+    '  - name: Select',
+    '    <<: *base',
+    '    type: select',
+    '    use: [source]',
+    'proxy-providers:',
+    '  source: {type: file, path: ./source.yaml}',
+    'rules: [MATCH,DIRECT]',
+    ''
+  ].join('\r\n');
+  const [group, provider] = filterYaml.filterTargets(source);
+  assert.equal(group.name, 'Select');
+  assert.equal(provider.name, 'source');
+  const updated = filterYaml.filterIntoYaml(source, group, 'filter', "(?i)keep`HK'flag");
+  const actual = testYaml.parse(updated, { merge: true });
+  assert.equal(actual['proxy-groups'][0].filter, "(?i)keep`HK'flag");
+  assert.equal(actual.template.filter, '(?i)keep');
+  assert.match(updated, /^# keep this comment\r\n/);
+  assert.match(updated, /<<: \*base/);
+  assert.equal(filterYaml.filterIntoYaml(updated, group, 'filter', "HK'flag"), updated);
+  const excluded = filterYaml.filterIntoYaml(updated, provider, 'exclude-filter', 'quota|reset');
+  assert.equal(testYaml.parse(excluded)['proxy-providers'].source['exclude-filter'], 'quota|reset');
+  assert.match(excluded, /rules: \[MATCH,DIRECT\]/);
+});
+
+test('筛选拒绝改写其他 YAML 对象正在共用的锚点', () => {
+  const source = 'proxy-groups:\n  - &group { name: Base, type: select }\n  - { <<: *group, name: Other }\n';
+  assert.throws(() => filterYaml.filterIntoYaml(source, filterYaml.filterTargets(source)[0], 'filter', 'HK'),
+    /proxy_filter_yaml_value/);
+});
+
+const iconSetModel = load(path.join(etsDir, 'shared/profiles/IconSetModel.ets'));
+const iconSetsFile = path.join(etsDir, 'shared/profiles/IconSets.ets');
+const iconSetStore = load(iconSetsFile, fs.readFileSync(iconSetsFile, 'utf8').replace(/^@Concurrent\s*$/gm, ''));
+const iconYaml = load(path.join(etsDir, 'shared/profiles/ProfileGroupIcons.ets'));
+
+test('FlClash 图标集保留 HTTP(S) 图片、去重和文件名标签，并按代理组名称推荐', () => {
+  const parsed = iconSetModel.parseIconSetManifest(JSON.stringify({ name: ' Icons ', icons: [
+    { name: ' HK.png ', url: 'https://example.test/hk.png' },
+    { name: 'Duplicate', url: 'https://example.test/hk.png' },
+    { url: 'https://example.test/Hong_Kong.svg?ver=1' },
+    { url: 'file:///settings.json' }, { url: 'ftp://example.test/other.png' }, null
+  ] }));
+  assert.equal(parsed.name, 'Icons');
+  assert.deepEqual(Array.from(parsed.icons, icon => icon.name), ['HK.png', 'Hong_Kong.svg']);
+  assert.equal(iconSetModel.iconSetLabel(parsed.icons[1].name), 'Hong Kong');
+  const ranked = iconSetModel.rankIconSetImages(parsed.icons, '🇭🇰 Hong Kong');
+  assert.deepEqual(Array.from(ranked, icon => icon.name), ['Hong_Kong.svg']);
+  assert.throws(() => iconSetModel.parseIconSetManifest('{"name":"no icons"}'), /icon_set_invalid/);
+});
+
+test('图标集本地导入、重复 URL 同步、下载失败和并发修订保留原数据', async () => {
+  await sandbox(async (dir) => {
+    const manifest = (name, file) => JSON.stringify({ name, icons: [{ url: `https://example.test/${file}` }] });
+    const localPath = path.join(dir, 'Local Icons.json');
+    await fsp.writeFile(localPath, manifest('', 'local.svg'));
+    const defaults = await iconSetStore.readIconSets(dir);
+    const local = await iconSetStore.importIconSetFile(dir, defaults, localPath, path.basename(localPath));
+    assert.equal(local.sets[0].name, 'Local Icons');
+    const source = 'https://example.test/remote.json';
+    const remote = { expectedRevision: local.revision, revision: 'remote-1', id: '', name: '', url: source };
+    const downloader = { download: async (_source, target, identity) => {
+      assert.ok(identity.maxBytes > 0);
+      await fsp.writeFile(target, manifest('Remote', 'old.svg'));
+    } };
+    const saved = await iconSetStore.downloadIconSet(dir, downloader, remote);
+    const failing = { download: async (_source, target) => { await fsp.writeFile(target, '<html>'); } };
+    const update = { ...remote, expectedRevision: saved.revision, revision: 'remote-2' };
+    await assert.rejects(iconSetStore.downloadIconSet(dir, failing, update), /icon_set_invalid/);
+    assert.equal((await iconSetStore.readIconSets(dir)).revision, saved.revision);
+    const newManifest = { download: async (_source, target) => { await fsp.writeFile(target, manifest('Renamed', 'new.svg')); } };
+    const synced = await iconSetStore.downloadIconSet(dir, newManifest, update);
+    assert.equal(synced.sets.length, 2);
+    assert.equal(synced.sets[1].name, 'Remote');
+    assert.equal(synced.sets[1].id, saved.sets[1].id);
+    assert.match(synced.sets[1].icons[0].url, /new\.svg$/);
+    await assert.rejects(iconSetStore.downloadIconSet(dir, downloader, remote), /icon_set_conflict/);
+    const reordered = await iconSetStore.commitIconSets(dir, synced.revision, synced.sets.slice().reverse());
+    assert.equal((await iconSetStore.readIconSets(dir)).sets[0].id, reordered.sets[0].id);
+    assert.ok((await fsp.readdir(store.profilesDir(dir))).every(name => !name.endsWith('.candidate')));
+  });
+});
+
+test('给代理组设置和清除图标只修改该组的 YAML 字段', () => {
+  const source = [
+    'proxy-groups:',
+    '  - name: First',
+    '    type: select # keep',
+    '  - {name: Second, type: select, icon: "https://example.test/old.svg"}',
+    'rules: [MATCH,DIRECT]',
+    ''
+  ].join('\n');
+  const [first] = iconYaml.profileGroupIcons(source);
+  const updated = iconYaml.setProfileGroupIcon(source, first, 'https://example.test/new.svg?x=1&y=2');
+  const cleared = iconYaml.setProfileGroupIcon(updated, iconYaml.profileGroupIcons(updated)[1], '');
+  assert.equal(testYaml.parse(cleared)['proxy-groups'][0].icon, 'https://example.test/new.svg?x=1&y=2');
+  assert.equal(testYaml.parse(cleared)['proxy-groups'][1].icon, '');
+  assert.match(cleared, /type: select # keep/);
+  assert.match(cleared, /rules: \[MATCH,DIRECT\]/);
+  assert.throws(() => iconYaml.setProfileGroupIcon(source, first, 'file:///secret'), /icon_set_input/);
 });

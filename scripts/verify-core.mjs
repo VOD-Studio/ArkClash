@@ -9,7 +9,7 @@ import test, { before, after } from 'node:test';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const goVersion = (await readFile(join(root, '.go-version'), 'utf8')).trim();
 const race = process.env.CORE_RACE === '1';
-const goEnv = { ...process.env, CGO_ENABLED: race ? '1' : '0', GOTOOLCHAIN: `go${goVersion}` };
+const goEnv = { ...process.env, CGO_ENABLED: '1', GOTOOLCHAIN: `go${goVersion}` };
 const sandbox = await mkdtemp(join(tmpdir(), 'arkclash-core-host-'));
 const executable = join(sandbox, 'core.test');
 const linuxFdEnabled = process.platform === 'linux' || process.env.CORE_LINUX_FD === '1';
@@ -23,8 +23,8 @@ after(() => rm(sandbox, { recursive: true, force: true }));
 before(async () => {
   for (const file of ['go.mod', 'go.sum', 'lifecycle.go', 'inbound.go', 'runtime.go', 'selection.go', 'delay.go', 'probe.go', 'probe_body.go', 'proxies.go',
     'geo_settings.go', 'geo.go', 'geo_download.go', 'geo_events.go', 'diagnostics.go', 'dns_overrides.go',
-    'added_rules.go', 'profile_settings.go',
-    'diagnostics_connections.go', 'diagnostics_dns.go', 'diagnostics_stream.go']) {
+    'added_rules.go', 'rule_set_data.go', 'rule_sets.go', 'profile_settings.go', 'profile_scripts.go', 'local_proxies.go', 'local_proxy_links.go',
+    'proxy_filters.go', 'diagnostics_connections.go', 'diagnostics_dns.go', 'diagnostics_stream.go']) {
     await copyFile(join(root, 'core', file), join(sandbox, file));
   }
   for (const file of ['core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go',
@@ -32,9 +32,13 @@ before(async () => {
     'diagnostics-stream-host_test.go', 'diagnostics-lifecycle-host_test.go', 'diagnostics-control-host_test.go',
     'lifecycle-host_test.go', 'runtime-lifecycle-host_test.go', 'disconnected-delay-host_test.go', 'inbound-host_test.go',
     'controller-lifecycle-host_test.go', 'forwarding-lifecycle-host_test.go', 'dns-overrides-host_test.go',
-    'added-rules-host_test.go']) {
+    'added-rules-host_test.go', 'proxy-filters-host_test.go', 'rule-sets-host_test.go', 'profile-scripts-host_test.go', 'local-proxies-host_test.go']) {
     await copyFile(new URL(`./${file}`, import.meta.url), join(sandbox, file));
   }
+  await cp(join(root, 'core/internal'), join(sandbox, 'internal'), { recursive: true });
+  const quickjs = spawnSync('bash', [join(root, 'scripts/prepare-quickjs.sh')], { encoding: 'utf8', timeout: 120000 });
+  assert.equal(quickjs.status, 0, quickjs.stderr);
+  goEnv.CGO_CPPFLAGS = `${process.env.CGO_CPPFLAGS ?? ''} -I ${JSON.stringify(quickjs.stdout.trim())}`;
   await cp(join(root, 'scripts/testdata/geo'), join(sandbox, 'testdata/geo'), { recursive: true });
   const prepare = spawnSync('bash', [join(root, 'scripts/prepare-mihomo.sh'), join(sandbox, 'mihomo')], {
     encoding: 'utf8', timeout: 300000, env: goEnv
@@ -95,7 +99,15 @@ before(async () => {
   }
 }, { timeout: 900000 });
 
-// 编译产品的纯 Go 控制层，原生 TUN 生命周期由宿主夹具提供；不加载手机共享库。
+test('QuickJS 配置脚本与执行限额', { timeout: 90000 }, () => {
+  const result = spawnSync('go', ['test', '-mod=readonly', '-count=1', '-v', './internal/script'], {
+    cwd: sandbox, encoding: 'utf8', timeout: 85000, env: goEnv
+  });
+  assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
+  console.log(result.stdout.trim());
+});
+
+// 原生 TUN 生命周期由宿主夹具提供；脚本执行使用与手机相同的 QuickJS 源码。
 test('核心选择持久化、回滚、规则探测与实际请求取消', { timeout: 240000 }, () => {
   const result = spawnSync(executable, ['-test.count=1', '-test.timeout=90s', '-test.v',
     ...(process.env.CORE_TEST_RUN ? [`-test.run=${process.env.CORE_TEST_RUN}`] : [])], {
