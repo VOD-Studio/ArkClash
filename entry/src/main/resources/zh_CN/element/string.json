@@ -3575,6 +3575,90 @@
     {
       "name": "proxy_filter_already_present",
       "value": "该字段已包含所选筛选。"
+    },
+    {
+      "name": "icon_sets_title",
+      "value": "图标集"
+    },
+    {
+      "name": "icon_sets_empty",
+      "value": "暂无图标"
+    },
+    {
+      "name": "icon_set_embedded",
+      "value": "内嵌图片"
+    },
+    {
+      "name": "icon_set_input",
+      "value": "请检查名称或 HTTP/HTTPS 地址。"
+    },
+    {
+      "name": "icon_set_invalid",
+      "value": "此 JSON 未包含可用的图标集。"
+    },
+    {
+      "name": "icon_set_size",
+      "value": "图标集或图标库超过大小上限。"
+    },
+    {
+      "name": "icon_set_download_error",
+      "value": "无法下载图标集。"
+    },
+    {
+      "name": "icon_set_conflict",
+      "value": "图标库已更新，请重新打开该项目后重试。"
+    },
+    {
+      "name": "icon_set_error",
+      "value": "无法读取或保存图标集。"
+    },
+    {
+      "name": "icon_set_saved",
+      "value": "图标集已保存"
+    },
+    {
+      "name": "icon_set_synced",
+      "value": "图标集已同步"
+    },
+    {
+      "name": "icon_set_delete",
+      "value": "删除「%s」？"
+    },
+    {
+      "name": "icon_set_name_optional",
+      "value": "名称（选填）"
+    },
+    {
+      "name": "icon_set_search",
+      "value": "搜索图标"
+    },
+    {
+      "name": "icon_set_recommended",
+      "value": "推荐"
+    },
+    {
+      "name": "icon_set_target",
+      "value": "无法修改该代理组的图标字段。"
+    },
+    {
+      "name": "icon_set_icon_url",
+      "value": "图标 URL"
+    },
+    {
+      "name": "icon_set_choose_group",
+      "value": "选择代理组"
+    },
+    {
+      "name": "icon_set_remove_icon",
+      "value": "移除图标"
+    },
+    {
+      "name": "icon_set_choose_icon",
+      "value": "选择图标"
+    },
+    {
+      "name": "icon_set_no_groups",
+      "value": "暂无可编辑的代理组"
     }
   ]
 }

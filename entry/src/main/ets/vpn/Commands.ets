@@ -29,6 +29,7 @@ async function routeCommand(scheduler: UpdateScheduler, env: UpdateEnv,
     case 'profiles/add':
     case 'profiles/changed':
     case 'profiles/script-download':
+    case 'profiles/icon-set-download':
       return handleProfileCommand(scheduler, env, name.substring('profiles/'.length), body);
     case 'vpn/connect':
     case 'vpn/disconnect':
@@ -49,7 +50,8 @@ export function serveCommands(scheduler: UpdateScheduler, env: UpdateEnv,
       if (error instanceof VpnCommandError) {
         status = error.status;
         message = error.message;
-      } else if (message === 'conflict' || message === 'canceled' || message === 'busy') {
+      } else if (message === 'conflict' || message === 'canceled' || message === 'busy' ||
+        message === 'icon_set_conflict') {
         status = 409;
       } else if (message === 'not_found') {
         status = 404;

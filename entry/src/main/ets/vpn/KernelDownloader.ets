@@ -9,6 +9,7 @@ interface FetchRequest {
   header: Record<string, string>;
   path: string;
   timeoutMs: number;
+  maxBytes?: number;
 }
 
 interface FetchResult {
@@ -29,7 +30,7 @@ export class KernelDownloader implements Downloader {
       url: address.address,
       header: address.headers,
       path: path,
-      timeoutMs: DOWNLOAD_TIMEOUT_MS
+      timeoutMs: DOWNLOAD_TIMEOUT_MS, maxBytes: identity?.maxBytes
     };
     try {
       const pending: Promise<string> = core.fetch(JSON.stringify(request));

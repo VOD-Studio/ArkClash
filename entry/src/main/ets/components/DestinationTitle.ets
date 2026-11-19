@@ -11,6 +11,7 @@ export struct DestinationTitle {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param titleText: ResourceStr = '';
   @Param selectable: boolean = false;
+  @Param actionGlyph: string = 'chevronDown';
   @Event onSelect: () => void = (): void => {};
 
   @Builder
@@ -32,7 +33,7 @@ export struct DestinationTitle {
         Button() {
           Row({ space: HEADER_GAP }) {
             this.TitleText()
-            AppGlyph({ name: 'chevronDown', iconSize: 16 })
+            AppGlyph({ name: this.actionGlyph, iconSize: 16 })
           }
         }
         .constraintSize({ maxWidth: '100%' })

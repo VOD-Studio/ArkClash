@@ -3595,6 +3595,90 @@
     {
       "name": "proxy_filter_already_present",
       "value": "The selected filter is already present."
+    },
+    {
+      "name": "icon_sets_title",
+      "value": "Icon Sets"
+    },
+    {
+      "name": "icon_sets_empty",
+      "value": "No icons"
+    },
+    {
+      "name": "icon_set_embedded",
+      "value": "Embedded image"
+    },
+    {
+      "name": "icon_set_input",
+      "value": "Check the name or HTTP/HTTPS address."
+    },
+    {
+      "name": "icon_set_invalid",
+      "value": "This JSON does not contain a supported icon set."
+    },
+    {
+      "name": "icon_set_size",
+      "value": "The icon set or library exceeds its size limit."
+    },
+    {
+      "name": "icon_set_download_error",
+      "value": "Could not download the icon set."
+    },
+    {
+      "name": "icon_set_conflict",
+      "value": "The icon library changed. Reopen the item and try again."
+    },
+    {
+      "name": "icon_set_error",
+      "value": "Could not load or save the icon set."
+    },
+    {
+      "name": "icon_set_saved",
+      "value": "Icon sets saved"
+    },
+    {
+      "name": "icon_set_synced",
+      "value": "Icon set synced"
+    },
+    {
+      "name": "icon_set_delete",
+      "value": "Delete “%s”?"
+    },
+    {
+      "name": "icon_set_name_optional",
+      "value": "Name (optional)"
+    },
+    {
+      "name": "icon_set_search",
+      "value": "Search icons"
+    },
+    {
+      "name": "icon_set_recommended",
+      "value": "Recommended"
+    },
+    {
+      "name": "icon_set_target",
+      "value": "Could not edit this group’s icon field."
+    },
+    {
+      "name": "icon_set_icon_url",
+      "value": "Icon URL"
+    },
+    {
+      "name": "icon_set_choose_group",
+      "value": "Choose a proxy group"
+    },
+    {
+      "name": "icon_set_remove_icon",
+      "value": "Remove icon"
+    },
+    {
+      "name": "icon_set_choose_icon",
+      "value": "Choose icon"
+    },
+    {
+      "name": "icon_set_no_groups",
+      "value": "No editable proxy groups"
     }
   ]
 }

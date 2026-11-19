@@ -6,6 +6,7 @@ import { errorString } from '../../shared/profiles/Errors';
 import { describeError } from './ProfileErrors';
 import { ProfileDraft } from './ProfileDraft';
 import { ProfileFilterPicker } from './ProfileFilterPicker';
+import { ProfileIconPicker } from './ProfileIconPicker';
 import { ProfileEdit, ProfileStore } from './Profiles';
 import { ProfileSheetHeader } from './ProfileSheetHeader';
 
@@ -42,7 +43,7 @@ export struct ProfileEditor {
   @Event onSaved: () => void = (): void => {};
   @Event onClose: () => void = (): void => {};
   @Local sourceShown: boolean = false;
-  @Local private sourcePanel: 'text' | 'filter' = 'text';
+  @Local private sourcePanel: 'text' | 'filter' | 'icon' = 'text';
   @Local sourceText: string = '';
   @Local sourceOriginal: string = '';
   @Local loadingSource: boolean = false;
@@ -224,6 +225,12 @@ export struct ProfileEditor {
     .attributeModifier(HEADER_ACTION).systemMaterial(this.appStyle.headerMaterial())
     .accessibilityText($r('app.string.proxy_filter_insert')).enabled(!this.validating)
     .onClick((): void => { this.sourcePanel = 'filter'; })
+    Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL }) {
+      SymbolGlyph($r('sys.symbol.picture')).fontSize(HEADER_ICON_SIZE).fontColor([$r('sys.color.font_primary')])
+    }
+    .attributeModifier(HEADER_ACTION).systemMaterial(this.appStyle.headerMaterial())
+    .accessibilityText($r('app.string.icon_set_choose_icon')).enabled(!this.validating)
+    .onClick((): void => { this.sourcePanel = 'icon'; })
   }
 
   @Builder
@@ -231,6 +238,13 @@ export struct ProfileEditor {
     Column({ space: 12 }) {
       if (this.sourcePanel === 'filter') {
         ProfileFilterPicker({ sourceText: this.sourceText,
+          onApply: (updated: string): void => {
+            this.sourceText = updated;
+            this.sourcePanel = 'text';
+          },
+          onClose: (): void => { this.sourcePanel = 'text'; } })
+      } else if (this.sourcePanel === 'icon') {
+        ProfileIconPicker({ sourceText: this.sourceText,
           onApply: (updated: string): void => {
             this.sourceText = updated;
             this.sourcePanel = 'text';

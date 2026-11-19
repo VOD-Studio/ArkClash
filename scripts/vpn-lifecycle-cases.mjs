@@ -154,6 +154,7 @@ function fixture(t, { empty = false, historicalIntent = 'stopped' } = {}) {
     OpenMode: { CREATE: 1, WRITE_ONLY: 2, TRUNC: 4, READ_WRITE: 8 },
     accessSync: path => files.has(path), async access(path) { return files.has(path); },
     readTextSync: read, async readText(path) { return read(path); },
+    async stat(path) { return { size: Buffer.byteLength(read(path)) }; },
     openSync: open, async open(path) { return open(path); },
     writeSync: write, async write(fd, text) { return write(fd, text); },
     closeSync: file => openFiles.delete(file.fd), async close(file) { openFiles.delete(file.fd); },
@@ -165,7 +166,9 @@ function fixture(t, { empty = false, historicalIntent = 'stopped' } = {}) {
   const bindings = new Map([
     ['@kit.AbilityKit', { appManager: {} }],
     ['@kit.BasicServicesKit', {}],
-    ['@kit.ArkTS', { process: { pid: 20 }, util: { TextEncoder } }],
+    ['@kit.ArkTS', { process: { pid: 20 },
+      util: { TextEncoder: class { encodeInto(value) { return new TextEncoder().encode(value); } } }, url: { URL },
+      taskpool: { execute: async (operation, ...args) => operation(...args) } }],
     ['@kit.CoreFileKit', { fileIo: fs }],
     ['@kit.PerformanceAnalysisKit', { hilog: { info() {}, error() {}, warn() {} } }],
     ['@kit.NetworkKit', { VpnExtensionAbility: class { constructor() { this.context = context; } },
@@ -177,7 +180,12 @@ function fixture(t, { empty = false, historicalIntent = 'stopped' } = {}) {
     [new URL('shared/profiles/Updater.ets', root).href, { UpdateScheduler: Scheduler,
       async downloadNewSubscription() { throw new Error('unexpected subscription download'); } }],
     [new URL('vpn/GeoData.ets', root).href, { async installGeoData() { await invoke('installGeoData'); } }],
-    [new URL('vpn/KernelDownloader.ets', root).href, { KernelDownloader: class {} }]
+    [new URL('vpn/KernelDownloader.ets', root).href, { KernelDownloader: class {
+      async download(source, path, identity) {
+        await invoke('downloadIconSet', [source, identity.maxBytes]);
+        json(path, { name: 'Fixture icons', icons: [{ url: 'https://example.test/Proxy.svg' }] });
+      }
+    } }]
   ]);
   const modules = new Map();
   class Clock extends Date { static now() { return 1000; } }
@@ -329,6 +337,7 @@ test('VPN 将同一份网络设置用于系统接口和内核，旧配置保留�
   assert.equal(initial.isIPv6Accepted, false);
   assert.equal(initial.routes.length, 1);
   assert.equal(initial.routes[0].destination.address.address, '0.0.0.0');
+  assert.deepEqual(Array.from(initial.blockedApplications), ['fixture.application']);
   assert.equal(f.calls.find(call => call.name === 'attachTun').args[1].dnsHijacking, true);
   assert.equal((await f.request('disconnect', 'disconnect-advanced').result).status, 200);
 
@@ -664,4 +673,19 @@ test('单一原生命令注册仍路由真实profiles/changed处理器，普通�
   assert.equal(f.schedulers[0].reschedules, 2);
   assert.equal(f.registrations, 1);
   assert.equal(f.schedulers[0].running, true);
+});
+
+test('在线图标集命令经 VPN 下载，成功提交后只返回回执', async t => {
+  const f = fixture(t);
+  await f.warm();
+  await connect(f);
+  const request = { expectedRevision: 'default', revision: 'icons.1', id: '', name: '',
+    url: 'https://example.test/icons.json' };
+  assert.deepEqual(await f.command('profiles/icon-set-download', request).result, { status: 200, body: { ok: true } });
+  assert.equal(f.count('downloadIconSet'), 1);
+  const catalog = JSON.parse(f.files.get(`${filesDir}/profiles/icon-sets.json`));
+  assert.equal(catalog.revision, 'icons.1');
+  assert.equal(catalog.sets[0].name, 'Fixture icons');
+  assert.equal((await f.command('profiles/icon-set-download', request).result).status, 409);
+  assert.equal(f.count('downloadIconSet'), 1);
 });

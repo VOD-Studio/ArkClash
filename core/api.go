@@ -389,6 +389,7 @@ type fetchRequest struct {
 	Header    map[string]string `json:"header"`
 	Path      string            `json:"path"`      // 响应体写到这里，必须在配置目录下
 	TimeoutMs int               `json:"timeoutMs"` // 整个请求的上限
+	MaxBytes  int64             `json:"maxBytes"`
 }
 
 type fetchResult struct {
@@ -446,22 +447,26 @@ func fetch(req fetchRequest) fetchResult {
 	if resp.StatusCode != http.StatusOK {
 		return result
 	}
-	if err := writeBody(req.Path, resp.Body); err != nil {
+	limit := int64(fetchLimit)
+	if req.MaxBytes > 0 && req.MaxBytes < limit {
+		limit = req.MaxBytes
+	}
+	if err := writeBody(req.Path, resp.Body, limit); err != nil {
 		return fetchResult{Error: err.Error()}
 	}
 	return result
 }
 
-func writeBody(path string, body io.Reader) error {
+func writeBody(path string, body io.Reader, limit int64) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	n, err := io.Copy(f, io.LimitReader(body, fetchLimit+1))
+	n, err := io.Copy(f, io.LimitReader(body, limit+1))
 	if closeErr := f.Close(); err == nil {
 		err = closeErr
 	}
-	if err == nil && n > fetchLimit {
+	if err == nil && n > limit {
 		err = errors.New("response too large")
 	}
 	if err != nil {

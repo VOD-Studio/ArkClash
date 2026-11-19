@@ -1,6 +1,8 @@
 import core from 'libarkclash.so';
 import { handleScriptDownload } from './ScriptUpdates';
 import { ProfileError } from '../shared/profiles/Errors';
+import { IconSetDownloadCommand } from '../shared/profiles/IconSetModel';
+import { downloadIconSet } from '../shared/profiles/IconSets';
 import { checkProfileCommit, findProfile, readListAsync, readStateAsync, validProfileId } from '../shared/profiles/Store';
 import { downloadNewSubscription, UpdateEnv, UpdateOutcome, UpdateScheduler } from '../shared/profiles/Updater';
 
@@ -54,6 +56,11 @@ export async function handleProfileCommand(scheduler: UpdateScheduler, env: Upda
     }
     case 'script-download':
       return handleScriptDownload(env.filesDir, env.downloader, body, eligible);
+    case 'icon-set-download': {
+      await downloadIconSet(env.filesDir, env.downloader, JSON.parse(body) as IconSetDownloadCommand, eligible);
+      const reply: VpnProfileOkReply = { ok: true };
+      return reply;
+    }
     case 'changed': {
       scheduler.reschedule();
       const reply: VpnProfileOkReply = { ok: true };
