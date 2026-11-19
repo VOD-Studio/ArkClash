@@ -3,7 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OHOS_SDK="${OHOS_SDK:-/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony}"
+# shellcheck source=scripts/env.sh
+source "$ROOT/scripts/env.sh"
 LLVM="$OHOS_SDK/native/llvm/bin"
 ABI="${ABI:-arm64-v8a}"
 case "$ABI" in
@@ -77,6 +78,9 @@ cp go.sum "$PATCHED_DIR/go.sum"
 echo "replace github.com/metacubex/gvisor => $PATCHED_DIR/gvisor" >> "$PATCHED_DIR/go.mod"
 bash "$ROOT/scripts/prepare-mihomo.sh" "$PATCHED_DIR/mihomo"
 "$GO" mod edit -modfile "$PATCHED_DIR/go.mod" "-replace=github.com/metacubex/mihomo=$PATCHED_DIR/mihomo"
+
+quickjs_dir="$(bash "$ROOT/scripts/prepare-quickjs.sh")"
+export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$quickjs_dir\""
 
 # HarmonyOS uses musl, so this is a GOOS=linux build linked by the OHOS clang.
 CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH" \

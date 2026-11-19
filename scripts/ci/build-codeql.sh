@@ -25,6 +25,9 @@ go mod edit -modfile "$WORK/go.mod" \
   "-replace=github.com/metacubex/mihomo=$WORK/mihomo" \
   "-replace=github.com/metacubex/gvisor=$WORK/gvisor"
 
+quickjs_dir="$(bash "$ROOT/scripts/prepare-quickjs.sh")"
+export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$quickjs_dir\""
+
 # 不使用补丁版 Go，也不覆盖手机构建产物；-a 防止编译缓存跳过代码提取。
 CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
   CC="$LLVM/aarch64-unknown-linux-ohos-clang" \

@@ -29,6 +29,7 @@ fi
 OUTPUTS=entry/build/default/outputs/default
 # 清掉上次的产物，避免把旧的签名包当成这次的。
 rm -rf "$OUTPUTS"
+bash "$ROOT/scripts/build-script-editor.sh"
 "$OHPM" install --all
 "$HVIGORW" assembleHap --mode module -p product=default -p buildMode="$MODE" --no-daemon
 

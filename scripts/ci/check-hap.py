@@ -23,6 +23,11 @@ REQUIRED = [
     "resources/rawfile/geo/geoip.metadb",
     "resources/rawfile/geo/geosite.dat",
     "resources/rawfile/geo/VERSION",
+    "resources/rawfile/licenses/quickjs.txt",
+    "resources/rawfile/script-editor/index.html",
+    "resources/rawfile/script-editor/style.css",
+    "resources/rawfile/script-editor/editor.js",
+    "resources/rawfile/script-editor/third-party.txt",
 ]
 # 字节。2026-11 时 HAP 约 78.1 MB、libclash.so 约 63.9 MB，留 10% 左右余量。
 BUDGET = {

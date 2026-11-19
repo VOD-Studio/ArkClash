@@ -35,3 +35,8 @@
 
 # 发版产物（make release）
 /dist/
+
+# 代码编辑器的构建依赖与生成资源
+/scripts/script-editor/node_modules/
+/entry/src/main/resources/rawfile/script-editor/editor.js
+/entry/src/main/resources/rawfile/script-editor/third-party.txt
