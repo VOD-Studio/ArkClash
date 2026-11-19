@@ -176,6 +176,48 @@ beforeEach(() => {
     geoText: undefined, geoTemporary: undefined, geoWriting: false, geoSaveError: false, geoSaveGate: Promise.resolve() });
 });
 
+test('DNS 覆写离线按版本提交，在线超时只凭落盘版本确认', async () => {
+  let disk;
+  let active = false;
+  let request;
+  let timeoutAfterCommit = true;
+  const dns = loadConsumer('../entry/src/main/ets/client/DnsOverrides.ets', {
+    '@kit.AbilityKit': {}, '@kit.BasicServicesKit': {},
+    '@kit.ArkTS': { url: { URL: { parseURL: value => new URL(value) } },
+      util: { TextEncoder: class { encodeInto(value) { return Buffer.from(value); } } } },
+    '@kit.NetworkKit': { http: { RequestMethod: { POST: 'POST' } } },
+    '@kit.CoreFileKit': { fileIo: { async readText() {
+      if (disk === undefined) throw Object.assign(new Error('missing'), { code: 13900002 });
+      return disk;
+    } } },
+    '../shared/Files': { async writeTextAsync(_path, value) { disk = value; } },
+    '../shared/Runtime': { async runtimeMayBeActive() { return active; } },
+    '../shared/profiles/Store': { newId: prefix => prefix + ++state.random, withProfileStorage: (_dir, op) => op() },
+    './CoreClient': { async readCoreHostStatus() {
+      return active ? { state: 'running', status: { bootId: 'dns.boot' } } : { state: 'stopped' };
+    } },
+    './Controller': { async call(_dir, _method, route, body) {
+      assert.equal(route, '/arkclash/dns/settings');
+      request = JSON.parse(body);
+      if (timeoutAfterCommit) disk = JSON.stringify(request.settings);
+      throw new Error('timeout');
+    } }
+  });
+  const initial = await dns.readDnsOverrides(context.filesDir);
+  await assert.rejects(dns.saveDnsOverrides(context, initial.revision, { nameserver: [] }), /dns_override_invalid/);
+  const saved = await dns.saveDnsOverrides(context, initial.revision,
+    { ipv6: false, 'default-nameserver': ['2001:4860:4860::8888'], fallback: [] });
+  assert.deepEqual(JSON.parse(disk).entries, { ipv6: false, 'default-nameserver': ['2001:4860:4860::8888'], fallback: [] });
+  await assert.rejects(dns.saveDnsOverrides(context, initial.revision, {}), /dns_override_conflict/);
+  active = true;
+  const removed = await dns.saveDnsOverrides(context, saved.revision, {});
+  assert.equal(request.bootId, 'dns.boot');
+  assert.equal(request.expectedRevision, saved.revision);
+  assert.deepEqual(JSON.parse(disk), { revision: removed.revision, entries: {} });
+  timeoutAfterCommit = false;
+  await assert.rejects(dns.saveDnsOverrides(context, removed.revision, { 'prefer-h3': true }), /timeout/);
+});
+
 test('连接等待已进入提交的离线配置，取消不会启动扩展', async () => {
   let release;
   let current = true;

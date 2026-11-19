@@ -3,6 +3,8 @@ export enum ToolRoute {
   Theme = 'theme',
   AdvancedConfig = 'advancedConfig',
   Network = 'network',
+  DnsOverrides = 'dnsOverrides',
+  AddedRules = 'addedRules',
   Connections = 'connections',
   Dns = 'dns',
   Resources = 'resources',

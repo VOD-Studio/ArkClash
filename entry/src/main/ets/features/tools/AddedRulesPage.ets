@@ -1,0 +1,495 @@
+import { common } from '@kit.AbilityKit';
+import { AddedRule, AddedRulesSettings, addedRuleText, emptyAddedRules, newAddedRule, readAddedRules,
+  saveAddedRules, validAddedRule } from '../../client/AddedRules';
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
+import { DestinationTitle } from '../../components/DestinationTitle';
+import { EmptyState } from '../../components/EmptyState';
+import { KeyedListSource } from '../../components/KeyedListSource';
+import { HEADER_ACTION, HEADER_ICON_SIZE, HEADER_GAP, PAGE_GUTTER } from '../../components/Theme';
+import { AddedRuleDraft, AddedRuleEditor } from './AddedRuleEditor';
+import { AddedRulePresets } from './AddedRulePresets';
+
+class AddedRuleListItem {
+  readonly key: string;
+  readonly rule: AddedRule;
+
+  constructor(rule: AddedRule) {
+    this.key = rule.id;
+    this.rule = rule;
+  }
+}
+
+@ComponentV2
+export struct AddedRulesPage {
+  @Param foreground: boolean = true;
+  @Param reduceMotion: boolean = true;
+  @Local private appStyle: AppearanceState = appAppearance;
+  @Local private settings: AddedRulesSettings = emptyAddedRules();
+  @Local private loading: boolean = true;
+  @Local private loadFailed: boolean = false;
+  @Local private saving: boolean = false;
+  @Local private query: string = '';
+  @Local private searchShown: boolean = false;
+  @Local private selecting: boolean = false;
+  @Local private selectedIds: string[] = [];
+  @Local private visibleIds: string[] = [];
+  @Local private visibleCount: number = 0;
+  @Local private firstId: string = '';
+  @Local private lastId: string = '';
+  @Local private draft?: AddedRuleDraft;
+  @Local private editingExisting: boolean = false;
+  @Local private editShown: boolean = false;
+  @Local private presetsShown: boolean = false;
+  @Local private deleteShown: boolean = false;
+  @Local private discardRequested: boolean = false;
+  @Local private editIssue: ResourceStr = '';
+  private shown: boolean = false;
+  private rows: KeyedListSource<AddedRuleListItem> = new KeyedListSource<AddedRuleListItem>();
+
+  private context(): common.UIAbilityContext {
+    return this.getUIContext().getHostContext() as common.UIAbilityContext;
+  }
+
+  private toast(message: ResourceStr): void {
+    if (this.shown && this.foreground) {
+      this.getUIContext().getPromptAction().showToast({ message: message });
+    }
+  }
+
+  private async load(): Promise<void> {
+    this.loading = true;
+    try {
+      this.settings = await readAddedRules(this.context().filesDir);
+      this.refreshRows();
+      this.loadFailed = false;
+    } catch (_error) {
+      this.loadFailed = true;
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private refreshRows(animate: boolean = false): void {
+    const words = this.query.trim().toLowerCase().split(/\s+/).filter((word: string): boolean => word !== '');
+    const rows: AddedRuleListItem[] = [];
+    for (const rule of this.settings.rules) {
+      const text = addedRuleText(rule).toLowerCase();
+      if (words.every((word: string): boolean => text.includes(word))) {
+        rows.push(new AddedRuleListItem(rule));
+      }
+    }
+    this.visibleCount = rows.length;
+    this.visibleIds = rows.map((row: AddedRuleListItem): string => row.key);
+    this.firstId = rows[0]?.key ?? '';
+    this.lastId = rows[rows.length - 1]?.key ?? '';
+    this.rows.replace(rows, animate && this.shown && this.foreground && !this.reduceMotion ?
+      (apply: () => void): void => this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, apply) :
+      undefined);
+  }
+
+  private updateSearch(value: string): void {
+    this.query = value;
+    this.refreshRows();
+  }
+
+  private toggleSearch(): void {
+    this.searchShown = !this.searchShown;
+    if (!this.searchShown) {
+      this.updateSearch('');
+    }
+  }
+
+  private openEdit(rule?: AddedRule): void {
+    if (this.saving || this.loading || this.loadFailed) {
+      return;
+    }
+    this.editingExisting = rule !== undefined;
+    this.draft = new AddedRuleDraft(rule ?? newAddedRule());
+    this.editIssue = '';
+    this.discardRequested = false;
+    this.editShown = true;
+  }
+
+  private requestCloseEditor(dismiss: () => void): void {
+    if (this.saving) {
+      return;
+    }
+    if (this.draft?.dirty() === true) {
+      this.discardRequested = true;
+    } else {
+      dismiss();
+    }
+  }
+
+  private saveDraft(): void {
+    const draft = this.draft;
+    if (draft === undefined) {
+      return;
+    }
+    const rule = draft.rule();
+    if (!validAddedRule(rule)) {
+      this.editIssue = $r('app.string.added_rules_invalid');
+      return;
+    }
+    if (this.editingExisting && !draft.dirty()) {
+      this.editShown = false;
+      return;
+    }
+    const next = this.settings.rules.slice();
+    const index = next.findIndex((item: AddedRule): boolean => item.id === rule.id);
+    if (index === -1) {
+      if (this.editingExisting) {
+        this.editIssue = $r('app.string.added_rules_conflict');
+        return;
+      }
+      next.push(rule);
+    } else {
+      next[index] = rule;
+    }
+    this.commit(next);
+  }
+
+  private async commit(rules: AddedRule[], reordering: boolean = false): Promise<void> {
+    if (this.saving) {
+      return;
+    }
+    const previous = this.settings;
+    this.saving = true;
+    if (reordering) {
+      this.settings = { revision: previous.revision, rules: rules };
+      this.refreshRows();
+    }
+    try {
+      this.settings = await saveAddedRules(this.context(), previous.revision, rules);
+      this.refreshRows(!reordering);
+      this.editShown = false;
+      this.presetsShown = false;
+      if (this.deleteShown) {
+        const remaining = new Set<string>(this.settings.rules.map((rule: AddedRule): string => rule.id));
+        this.selectedIds = this.selectedIds.filter((id: string): boolean => remaining.has(id));
+        this.selecting = this.selectedIds.length > 0;
+        this.deleteShown = false;
+      }
+      this.toast($r('app.string.added_rules_saved'));
+    } catch (error) {
+      this.settings = previous;
+      this.refreshRows();
+      const reason = (error as Error).message;
+      const message = this.failureText(reason);
+      if (reason === 'profile_settings_conflict') {
+        await this.load();
+        this.clearSelection();
+        this.deleteShown = false;
+      }
+      if (this.editShown) {
+        this.editIssue = message;
+      } else {
+        this.toast(message);
+      }
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  private failureText(reason: string): Resource {
+    switch (reason) {
+      case 'profile_settings_invalid': return $r('app.string.added_rules_invalid');
+      case 'profile_settings_conflict': return $r('app.string.added_rules_conflict');
+      case 'profile_settings_unavailable': return $r('app.string.added_rules_unavailable');
+      default: return $r('app.string.added_rules_save_failed');
+    }
+  }
+
+  private addPresets(rules: AddedRule[]): void {
+    const existing = new Set<string>(this.settings.rules.map((item: AddedRule): string => addedRuleText(item)));
+    const added = rules.filter((rule: AddedRule): boolean => !existing.has(addedRuleText(rule)));
+    if (added.length === 0) {
+      this.presetsShown = false;
+      return;
+    }
+    this.commit(this.settings.rules.concat(added));
+  }
+
+  private clearSelection(): void {
+    this.selecting = false;
+    this.selectedIds = [];
+  }
+
+  private toggleRow(rule: AddedRule): void {
+    if (!this.selecting) {
+      this.openEdit(rule);
+      return;
+    }
+    this.selectedIds = this.selectedIds.includes(rule.id) ?
+      this.selectedIds.filter((id: string): boolean => id !== rule.id) : this.selectedIds.concat([rule.id]);
+  }
+
+  private selectVisible(): void {
+    const selected = new Set<string>(this.selectedIds);
+    const all = this.visibleIds.every((id: string): boolean => selected.has(id));
+    for (const id of this.visibleIds) {
+      if (all) { selected.delete(id); } else { selected.add(id); }
+    }
+    this.selectedIds = Array.from(selected);
+  }
+
+  private selectedVisible(): string[] {
+    const selected = new Set<string>(this.selectedIds);
+    return this.visibleIds.filter((id: string): boolean => selected.has(id));
+  }
+
+  private deleteSelected(): void {
+    const selected = new Set<string>(this.selectedVisible());
+    this.commit(this.settings.rules.filter((rule: AddedRule): boolean => !selected.has(rule.id)));
+  }
+
+  private reorder(from: number, to: number): void {
+    if (this.selecting || this.query.trim() !== '' || this.saving) {
+      return;
+    }
+    const rules = this.settings.rules.slice();
+    if (from === to || from < 0 || to < 0 || from >= rules.length || to >= rules.length) {
+      return;
+    }
+    const moved = rules.splice(from, 1)[0];
+    rules.splice(to, 0, moved);
+    this.commit(rules, true);
+  }
+
+  private handleBack(): boolean {
+    if (this.selecting) {
+      this.clearSelection();
+      return true;
+    }
+    if (this.searchShown) {
+      this.toggleSearch();
+      return true;
+    }
+    return false;
+  }
+
+  @Builder
+  HeaderTitle() {
+    DestinationTitle({ titleText: $r('app.string.added_rules_title') })
+  }
+
+  @Builder
+  HeaderAction(icon: Resource, label: Resource, available: boolean, action: () => void) {
+    Button({ type: ButtonType.Circle }) {
+      SymbolGlyph(icon).fontSize(HEADER_ICON_SIZE).fontColor([$r('sys.color.font_primary')])
+    }
+    .attributeModifier(HEADER_ACTION)
+    .systemMaterial(this.appStyle.headerMaterial())
+    .accessibilityText(label)
+    .enabled(available)
+    .onClick((): void => action())
+  }
+
+  @Builder
+  HeaderMenus() {
+    Row({ space: HEADER_GAP }) {
+      if (this.selecting) {
+        this.HeaderAction($r('sys.symbol.xmark'), $r('app.string.action_cancel'), !this.saving,
+          (): void => this.clearSelection())
+        this.HeaderAction($r('sys.symbol.checkmark'), $r('app.string.added_rules_select_all'),
+          !this.saving && this.visibleCount > 0, (): void => this.selectVisible())
+        this.HeaderAction($r('sys.symbol.trash'), $r('app.string.action_delete'),
+          !this.saving && this.selectedVisible().length > 0, (): void => { this.deleteShown = true; })
+      } else {
+        this.HeaderAction($r('sys.symbol.magnifyingglass'), $r('app.string.diagnostics_search'),
+          !this.loading && !this.loadFailed, (): void => this.toggleSearch())
+        if (this.settings.rules.length > 0) {
+          this.HeaderAction($r('sys.symbol.checkmark'), $r('app.string.added_rules_select'),
+            !this.saving, (): void => { this.selecting = true; })
+        }
+        this.HeaderAction($r('sys.symbol.bolt'), $r('app.string.added_rules_presets'),
+          !this.loading && !this.loadFailed && !this.saving, (): void => { this.presetsShown = true; })
+        this.HeaderAction($r('sys.symbol.plus'), $r('app.string.action_add'),
+          !this.loading && !this.loadFailed && !this.saving, (): void => this.openEdit())
+      }
+    }
+    .height('100%')
+    .alignItems(VerticalAlign.Center)
+    .padding({ right: PAGE_GUTTER })
+  }
+
+  @Builder
+  RuleList() {
+    List() {
+      LazyForEach(this.rows, (item: AddedRuleListItem) => {
+        ListItem() {
+          AddedRuleRow({
+            rule: item.rule, first: item.key === this.firstId, last: item.key === this.lastId,
+            selecting: this.selecting, selected: this.selectedIds.includes(item.key),
+            onTap: (): void => this.toggleRow(item.rule)
+          })
+        }
+      }, (item: AddedRuleListItem): string => item.key)
+        .onMove(!this.selecting && !this.saving && this.query.trim() === '' ?
+          (from: number, to: number): void => this.reorder(from, to) : undefined)
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .enabled(!this.saving)
+    .scrollBar(BarState.Off)
+    .cachedCount(2)
+    .contentStartOffset(12)
+    .contentEndOffset(24)
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+  }
+
+  @Builder
+  DeleteSheet() {
+    Column({ space: 16 }) {
+      Text($r('app.string.added_rules_delete_count', this.selectedVisible().length))
+        .fontFamily(this.appStyle.fontFamily)
+        .fontSize(16)
+        .width('100%')
+      Row({ space: 12 }) {
+        Button($r('app.string.action_cancel')).buttonStyle(ButtonStyleMode.NORMAL).layoutWeight(1)
+          .onClick((): void => { this.deleteShown = false; })
+        Button($r('app.string.action_delete')).role(ButtonRole.ERROR).layoutWeight(1)
+          .onClick((): void => this.deleteSelected())
+      }
+      .width('100%')
+    }
+    .width('100%').enabled(!this.saving)
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
+  }
+
+  @Builder
+  EditorSheet() {
+    if (this.draft !== undefined) {
+      AddedRuleEditor({
+        draft: this.draft, saving: this.saving, issue: this.editIssue, discardRequested: this.discardRequested,
+        onSave: (): void => this.saveDraft(), onChange: (): void => { this.editIssue = ''; },
+        onCancel: (): void => this.requestCloseEditor((): void => { this.editShown = false; }),
+        onResume: (): void => { this.discardRequested = false; },
+        onDiscard: (): void => { this.editShown = false; }
+      })
+    }
+  }
+
+  @Builder
+  PresetsSheet() {
+    AddedRulePresets({ saving: this.saving, onAdd: (rules: AddedRule[]): void => this.addPresets(rules) })
+  }
+
+  @Builder
+  Content() {
+    Column() {
+      if (this.searchShown) {
+        TextInput({ text: this.query, placeholder: $r('app.string.added_rules_search_hint') })
+          .height(40)
+          .margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
+          .onChange((value: string): void => this.updateSearch(value))
+      }
+      if (this.loading) {
+        Column() {
+          LoadingProgress().width(32).height(32).color(this.appStyle.palette.brand)
+        }
+        .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
+      } else if (this.loadFailed || this.visibleCount === 0) {
+        EmptyState({
+          icon: $r('sys.symbol.list_bullet'),
+          title: this.loadFailed ? $r('app.string.added_rules_load_failed') :
+            this.query.trim() === '' ? $r('app.string.added_rules_empty') : $r('app.string.diagnostics_no_matches'),
+          actionLabel: this.loadFailed ? $r('app.string.dns_override_retry') : '',
+          onAction: (): void => { this.load(); }
+        })
+        .layoutWeight(1)
+      } else {
+        this.RuleList()
+      }
+    }
+    .width('100%').height('100%')
+  }
+
+  build() {
+    NavDestination() {
+      Stack() {
+        this.Content()
+        Column()
+          .bindSheet($$this.editShown, this.EditorSheet, {
+            title: { title: this.editingExisting ? $r('app.string.added_rules_edit') : $r('app.string.added_rules_add') },
+            height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+            onWillDismiss: (action: DismissSheetAction): void =>
+              this.requestCloseEditor((): void => action.dismiss())
+          })
+        Column()
+          .bindSheet($$this.presetsShown, this.PresetsSheet, {
+            title: { title: $r('app.string.added_rules_presets') }, height: SheetSize.LARGE,
+            systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+            onWillDismiss: (action: DismissSheetAction): void => { if (!this.saving) { action.dismiss(); } }
+          })
+        Column()
+          .bindSheet($$this.deleteShown, this.DeleteSheet, {
+            title: { title: $r('app.string.action_delete') }, height: SheetSize.FIT_CONTENT,
+            systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+            onWillDismiss: (action: DismissSheetAction): void => { if (!this.saving) { action.dismiss(); } }
+          })
+      }
+      .width('100%').height('100%')
+    }
+    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
+    .menus(this.HeaderMenus)
+    .backgroundColor(this.appStyle.palette.pageBackground)
+    .onShown((): void => { this.shown = true; if (!this.saving) { this.load(); } })
+    .onHidden((): void => { this.shown = false; })
+    .onBackPressed((): boolean => this.handleBack())
+  }
+}
+
+@ComponentV2
+@ReusableV2
+struct AddedRuleRow {
+  @Local private appStyle: AppearanceState = appAppearance;
+  @Param @Require rule: AddedRule;
+  @Param first: boolean = false;
+  @Param last: boolean = false;
+  @Param selecting: boolean = false;
+  @Param selected: boolean = false;
+  @Event onTap: () => void = () => {};
+
+  private targetColor(): ResourceColor {
+    if (this.rule.target === 'DIRECT' || this.rule.target === 'COMPATIBLE') {
+      return $r('app.color.status_connected');
+    }
+    return this.rule.target.startsWith('REJECT') ? $r('app.color.status_error') : $r('sys.color.font_secondary');
+  }
+
+  build() {
+    Column() {
+      Row({ space: 12 }) {
+        if (this.selecting) {
+          SymbolGlyph(this.selected ? $r('sys.symbol.checkmark') : $r('sys.symbol.circle'))
+            .fontSize(18)
+            .fontColor([this.selected ? this.appStyle.palette.brand : $r('sys.color.font_tertiary')])
+            .width(24)
+        }
+        Column({ space: 2 }) {
+          Text(this.rule.kind).fontFamily('monospace').fontSize(15).fontColor($r('sys.color.font_primary'))
+            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.rule.payload).fontFamily('monospace').fontSize(12).fontColor($r('sys.color.font_secondary'))
+            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+        Text(this.rule.target === 'MATCH' ? 'MATCH-TARGET' : this.rule.target)
+          .fontFamily('monospace').fontSize(14).fontColor(this.targetColor())
+          .constraintSize({ maxWidth: '50%' }).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .width('100%').constraintSize({ minHeight: 52 })
+      .padding({ left: 16, right: 16, top: 7, bottom: 7 })
+      if (!this.last) {
+        Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 16 })
+      }
+    }
+    .width('100%')
+    .borderRadius({ topLeft: this.first ? 24 : 0, topRight: this.first ? 24 : 0,
+      bottomLeft: this.last ? 24 : 0, bottomRight: this.last ? 24 : 0 })
+    .backgroundColor(this.selected ? this.appStyle.palette.tileBackground : this.appStyle.palette.cardBackground)
+    .accessibilitySelected(this.selected)
+    .onClick((): void => this.onTap())
+  }
+}

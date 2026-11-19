@@ -33,7 +33,9 @@ type startOptions struct {
 	Mode     string `json:"mode"`     // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
 	AllowLan *bool  `json:"allowLan"` // nil = 用配置里的值
 	// Geo 设置只由原生启动流程从磁盘读取，不扩展 C ABI 或 ArkTS 参数。
-	Geo geoSettings `json:"-"`
+	Geo        geoSettings         `json:"-"`
+	DNS        dnsOverrideSettings `json:"-"`
+	AddedRules addedRulesSettings  `json:"-"`
 }
 
 var (
@@ -77,6 +79,14 @@ func start(opts startOptions) error {
 		return err
 	}
 	opts.Geo = settings
+	opts.DNS, err = readDNSOverrides(opts.HomeDir)
+	if err != nil {
+		return err
+	}
+	opts.AddedRules, err = readAddedRules(opts.HomeDir)
+	if err != nil {
+		return err
+	}
 
 	constant.SetHomeDir(opts.HomeDir)
 	constant.SetConfig(opts.ConfigPath)
@@ -208,6 +218,11 @@ func reload(path, profile string, expectedProfile *string) error {
 	if err != nil {
 		return err
 	}
+	waitDiagnostics, err = applyReloadLocked(next, cfg, nextInbound)
+	return err
+}
+
+func applyReloadLocked(next startOptions, cfg *config.Config, nextInbound inboundSettings) (func(), error) {
 	cancelDelayTests()
 	attached := tunListener != nil
 	// 始终先屏蔽，避免 executor 接管平台 TUN，也避免失败时暴露部分入口。
@@ -215,20 +230,20 @@ func reload(path, profile string, expectedProfile *string) error {
 		cleanupFailure = errors.Join(cleanupFailure, err, stopTun())
 		resolver.ResetConnection()
 		publishRuntime()
-		return cleanupFailure
+		return nil, cleanupFailure
 	}
-	waitDiagnostics = reloadDiagnosticsLocked()
-	constant.SetConfig(path)
+	waitDiagnostics := reloadDiagnosticsLocked()
+	constant.SetConfig(next.ConfigPath)
 	executor.ApplyConfig(withoutBusinessInbounds(cfg), true)
 	desiredInbound = nextInbound
-	current.ConfigPath = path
-	current.Profile = profile
+	current = next
+	profile := next.Profile
 	runningID.Store(&profile)
 	runtimeConfigRevision++
 	ensureDiagnosticCaptureCollectorsLocked()
 	resetProxyIdentities()
 	watchRuntimeRoutes(cfg)
-	log.Infoln("[ArkClash] reloaded profile %s", profile)
+	log.Infoln("[ArkClash] reloaded profile %s", next.Profile)
 	var inboundErr error
 	if attached {
 		inboundErr = restoreBusinessInbounds()
@@ -237,8 +252,8 @@ func reload(path, profile string, expectedProfile *string) error {
 		}
 	}
 	publishRuntime()
-	emit(reloadedEvent{Type: "reloaded", Profile: profile})
-	return errors.Join(inboundErr, cleanupFailure)
+	emit(reloadedEvent{Type: "reloaded", Profile: next.Profile})
+	return waitDiagnostics, errors.Join(inboundErr, cleanupFailure)
 }
 
 // 推给界面的「热切换完成」事件，格式和 entry/src/main/ets/client/ 里的解析一致。
@@ -326,6 +341,10 @@ func applyOverrides(rawCfg *config.RawConfig, opts startOptions) {
 	if !rawCfg.DNS.Enable {
 		rawCfg.DNS.Enable = true
 		rawCfg.DNS.EnhancedMode = constant.DNSFakeIP
+	}
+	if opts.Profile != "" {
+		opts.DNS.Entries.apply(&rawCfg.DNS)
+		opts.AddedRules.apply(rawCfg)
 	}
 
 	// 用户在界面上选过的出站模式和局域网代理优先于配置，热切换后不会被新配置改回去（ADR-0010）。

@@ -25,3 +25,5 @@
 | [0018](0018-ui-appearance.md) | 应用外观只由 UI 进程管理 | 已采纳 |
 | [0019](0019-app-diagnostics-capture.md) | 诊断采集跟随应用，实时列表跟随页面 | 已采纳，设备性能独立验收 |
 | [0020](0020-vpn-network-settings.md) | VPN 网络设置在建立隧道时应用 | 已采纳，待真机验收 |
+| [0021](0021-global-dns-overrides.md) | 全局 DNS 逐项覆写 | 已采纳，待真机验收 |
+| [0022](0022-added-rules.md) | 全局附加规则优先于配置规则 | 已采纳，待真机验收 |

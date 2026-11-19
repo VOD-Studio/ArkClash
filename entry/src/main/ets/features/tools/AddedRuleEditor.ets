@@ -1,0 +1,170 @@
+import { AddedRule, ADDED_RULE_KINDS, ADDED_RULE_TARGETS, addedRuleHasParams } from '../../client/AddedRules';
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
+import { PAGE_GUTTER } from '../../components/Theme';
+import { SettingsSection } from './SettingsSection';
+
+@ObservedV2
+export class AddedRuleDraft {
+  readonly original: AddedRule;
+  @Trace kind: string;
+  @Trace payloadText: string;
+  @Trace target: string;
+  @Trace noResolve: boolean;
+  @Trace source: boolean;
+
+  constructor(rule: AddedRule) {
+    this.original = rule;
+    this.kind = rule.kind;
+    this.payloadText = rule.payload;
+    this.target = rule.target;
+    this.noResolve = rule.noResolve;
+    this.source = rule.source;
+  }
+
+  dirty(): boolean {
+    return this.kind !== this.original.kind || this.payloadText !== this.original.payload ||
+      this.target !== this.original.target || this.noResolve !== this.original.noResolve ||
+      this.source !== this.original.source;
+  }
+
+  rule(): AddedRule {
+    const params = addedRuleHasParams(this.kind);
+    return { id: this.original.id, kind: this.kind, payload: this.payloadText.trim(), target: this.target,
+      noResolve: params && this.noResolve, source: params && this.source };
+  }
+}
+
+const RULE_KIND_OPTIONS: SelectOption[] = ADDED_RULE_KINDS.map((kind: string): SelectOption => ({ value: kind }));
+const RULE_TARGET_OPTIONS: SelectOption[] = ADDED_RULE_TARGETS.map((target: string): SelectOption =>
+  ({ value: target === 'MATCH' ? 'MATCH-TARGET' : target }));
+
+@ComponentV2
+export struct AddedRuleEditor {
+  @Local private appStyle: AppearanceState = appAppearance;
+  @Param @Require draft: AddedRuleDraft;
+  @Param saving: boolean = false;
+  @Param discardRequested: boolean = false;
+  @Param issue: ResourceStr = '';
+  @Event onSave: () => void = () => {};
+  @Event onCancel: () => void = () => {};
+  @Event onDiscard: () => void = () => {};
+  @Event onResume: () => void = () => {};
+  @Event onChange: () => void = () => {};
+
+  @Builder
+  Label(label: ResourceStr) {
+    Text(label).fontFamily(this.appStyle.fontFamily).fontSize(16).fontColor($r('sys.color.font_primary'))
+  }
+
+  @Builder
+  RuleDivider() {
+    Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 16 })
+  }
+
+  @Builder
+  BasicRows() {
+    Row({ space: 12 }) {
+      this.Label($r('app.string.added_rules_type'))
+      Blank()
+      Select(RULE_KIND_OPTIONS)
+        .selected(Math.max(0, ADDED_RULE_KINDS.indexOf(this.draft.kind)))
+        .value(this.draft.kind)
+        .onSelect((index: number): void => {
+          this.draft.kind = ADDED_RULE_KINDS[index] ?? this.draft.kind;
+          this.onChange();
+        })
+    }
+    .width('100%').constraintSize({ minHeight: 56 }).padding({ left: 16, right: 12 })
+    this.RuleDivider()
+    Row({ space: 12 }) {
+      this.Label($r('app.string.added_rules_content'))
+      TextInput({ text: this.draft.payloadText, placeholder: $r('app.string.added_rules_content_hint') })
+        .layoutWeight(1)
+        .textAlign(TextAlign.End)
+        .height(44)
+        .maxLength(2048)
+        .backgroundColor(Color.Transparent)
+        .onChange((input: string): void => { this.draft.payloadText = input; this.onChange(); })
+    }
+    .width('100%').constraintSize({ minHeight: 56 }).padding({ left: 16, right: 12 })
+    this.RuleDivider()
+    Row({ space: 12 }) {
+      this.Label($r('app.string.added_rules_target'))
+      Blank()
+      Select(RULE_TARGET_OPTIONS)
+        .selected(Math.max(0, ADDED_RULE_TARGETS.indexOf(this.draft.target)))
+        .value(this.draft.target === 'MATCH' ? 'MATCH-TARGET' : this.draft.target)
+        .onSelect((index: number): void => {
+          this.draft.target = ADDED_RULE_TARGETS[index] ?? this.draft.target;
+          this.onChange();
+        })
+    }
+    .width('100%').constraintSize({ minHeight: 56 }).padding({ left: 16, right: 12 })
+  }
+
+  @Builder
+  ParamsRows() {
+    Row() {
+      this.Label($r('app.string.added_rules_no_resolve'))
+      Blank()
+      Toggle({ type: ToggleType.Switch, isOn: this.draft.noResolve })
+        .selectedColor(this.appStyle.palette.brand)
+        .accessibilityText($r('app.string.added_rules_no_resolve'))
+        .onChange((on: boolean): void => { this.draft.noResolve = on; this.onChange(); })
+    }
+    .width('100%').constraintSize({ minHeight: 56 }).padding({ left: 16, right: 16 })
+    this.RuleDivider()
+    Row() {
+      this.Label($r('app.string.added_rules_source_ip'))
+      Blank()
+      Toggle({ type: ToggleType.Switch, isOn: this.draft.source })
+        .selectedColor(this.appStyle.palette.brand)
+        .accessibilityText($r('app.string.added_rules_source_ip'))
+        .onChange((on: boolean): void => { this.draft.source = on; this.onChange(); })
+    }
+    .width('100%').constraintSize({ minHeight: 56 }).padding({ left: 16, right: 16 })
+  }
+
+  build() {
+    Scroll() {
+      Column({ space: 16 }) {
+        SettingsSection({
+          heading: $r('app.string.added_rules_basic'),
+          rows: (): void => this.BasicRows()
+        })
+        if (addedRuleHasParams(this.draft.kind)) {
+          SettingsSection({
+            heading: $r('app.string.added_rules_params'),
+            rows: (): void => this.ParamsRows()
+          })
+        }
+        if (this.issue !== '') {
+          Text(this.issue).fontFamily(this.appStyle.fontFamily).fontSize(14).fontColor($r('app.color.status_error'))
+        }
+        if (this.discardRequested) {
+          Text($r('app.string.added_rules_unsaved')).fontSize(14).fontColor($r('sys.color.font_secondary'))
+          Row({ space: 12 }) {
+            Button($r('app.string.added_rules_resume')).buttonStyle(ButtonStyleMode.NORMAL).layoutWeight(1)
+              .onClick((): void => this.onResume())
+            Button($r('app.string.added_rules_discard')).role(ButtonRole.ERROR).layoutWeight(1)
+              .onClick((): void => this.onDiscard())
+          }
+          .width('100%')
+        } else {
+          Row({ space: 12 }) {
+            Button($r('app.string.action_cancel')).buttonStyle(ButtonStyleMode.NORMAL).layoutWeight(1)
+              .onClick((): void => this.onCancel())
+            Button($r('app.string.action_save')).layoutWeight(1).onClick((): void => this.onSave())
+          }
+          .width('100%')
+        }
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .enabled(!this.saving)
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
+    }
+    .width('100%')
+    .align(Alignment.Top)
+  }
+}

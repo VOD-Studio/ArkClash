@@ -22,7 +22,8 @@ after(() => rm(sandbox, { recursive: true, force: true }));
 // 冷缓存的工具链、依赖下载和编译不占用用例执行时限。
 before(async () => {
   for (const file of ['go.mod', 'go.sum', 'lifecycle.go', 'inbound.go', 'runtime.go', 'selection.go', 'delay.go', 'probe.go', 'probe_body.go', 'proxies.go',
-    'geo_settings.go', 'geo.go', 'geo_download.go', 'geo_events.go', 'diagnostics.go',
+    'geo_settings.go', 'geo.go', 'geo_download.go', 'geo_events.go', 'diagnostics.go', 'dns_overrides.go',
+    'added_rules.go', 'profile_settings.go',
     'diagnostics_connections.go', 'diagnostics_dns.go', 'diagnostics_stream.go']) {
     await copyFile(join(root, 'core', file), join(sandbox, file));
   }
@@ -30,7 +31,8 @@ before(async () => {
     'geo-reader-host_test.go', 'geo-host_test.go', 'geo-scheduler-host_test.go', 'diagnostics-host_test.go',
     'diagnostics-stream-host_test.go', 'diagnostics-lifecycle-host_test.go', 'diagnostics-control-host_test.go',
     'lifecycle-host_test.go', 'runtime-lifecycle-host_test.go', 'disconnected-delay-host_test.go', 'inbound-host_test.go',
-    'controller-lifecycle-host_test.go', 'forwarding-lifecycle-host_test.go']) {
+    'controller-lifecycle-host_test.go', 'forwarding-lifecycle-host_test.go', 'dns-overrides-host_test.go',
+    'added-rules-host_test.go']) {
     await copyFile(new URL(`./${file}`, import.meta.url), join(sandbox, file));
   }
   await cp(join(root, 'scripts/testdata/geo'), join(sandbox, 'testdata/geo'), { recursive: true });

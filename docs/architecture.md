@@ -83,6 +83,8 @@ sequenceDiagram
 | `profiles/<id>.selected.json`（每配置节点选择） | 应用沙箱 | 离线 UI；在线 Go 选择事务 | UI、内核启动及热切换 |
 | Geo 数据（四类固定文件）和 `geo-<id>.json` 更新元数据 | 应用沙箱 | 在线 Go 管理器；VPN 安装器只恢复缺失或升级未接管的两份内置数据 | 内核、UI（只读文件信息） |
 | `geo-settings.json`（四类 URL、自动更新与小时间隔） | 应用沙箱 | UI 串行原子保存、revision 冲突保护 | Go 启动/热应用、UI |
+| `dns-overrides.json`（用户选中的全局 DNS 覆写项） | 应用沙箱 | 在线由 Go 原子提交，核心确认停止时由 UI 短锁提交 | Go 启动/热应用、UI |
+| `added-rules.json`（全局有序附加规则） | 应用沙箱 | 在线由 Go 原子提交，核心确认停止时由 UI 短锁提交 | Go 启动/热应用、UI |
 | `geo.version`（内置资源版本） | 应用沙箱 | VPN 安装器全部复制成功后 | VPN 安装器 |
 | 用户设置（出站模式、局域网代理等） | UI 的 preferences | UI | UI |
 | 应用主题（深浅色、色板、导航及字体） | UI 的 `appearance` preferences | UI | UI；不进入 VPN 进程 |
@@ -90,6 +92,10 @@ sequenceDiagram
 | 连接 recent/live 与 DNS 诊断历史 | 内核与 UI 内存，不落盘 | 内核观察 hook 写入有界历史，应用级接收端维持采集 | 对应工具页，经独立诊断 WebSocket |
 
 Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/update` 和独立 `/arkclash/geo/events` 最新值快照流。离线只读文件信息和编辑设置，页面可见且本次 boot 转发就绪后才订阅、下载；隐藏不取消内核任务。下载串行、可取消，文件与 reader/cache 原子切换，不重建 TUN。归属与 bundle 保护见 [ADR-0015](adr/0015-geo-resource-management.md)。
+
+全局 DNS 由 `applyOverrides` 在解析订阅或本地配置时逐项合并。在线保存使用 `/arkclash/dns/settings`，在原有控制器和 TUN 上应用配置。设置页只读本地设置文件，DNS 记录页仍使用自己的诊断接口。见 [ADR-0021](adr/0021-global-dns-overrides.md)。
+
+附加规则在线保存使用 `/arkclash/rules/settings`，沿用 DNS 设置的配置热应用事务。全局规则按列表顺序置于每份配置的原规则之前，`MATCH-TARGET` 由当前配置解析。见 [ADR-0022](adr/0022-added-rules.md)。
 
 `/arkclash/diagnostics/capture` 是随 UI 接收端存活的应用级采集通道，不传记录。连接与 DNS 工具只在页面可见、应用在前台且核心就绪时分别订阅 `/arkclash/diagnostics/connections`、`/arkclash/diagnostics/dns`；重新打开读取同代次完整有界历史，包括此前离页和后台期间的记录。连接首帧 live 基线不算 recent；FindProcessOff 不变，DNS initiator 不是应用身份。连接 ring 2000、DNS ring 3000，页面会话队列 256；溢出以 reset 补齐，dropped（会话内中间事件合并）与 evicted（历史淘汰）分开计数。详见 [ADR-0019](adr/0019-app-diagnostics-capture.md)。
 

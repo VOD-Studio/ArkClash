@@ -61,6 +61,8 @@ func init() {
 			r.Get("/events", getEvents)
 			r.Get("/geo", getGeo)
 			r.Post("/geo/settings", postGeoSettings)
+			r.Post("/dns/settings", postDNSOverrides)
+			r.Post("/rules/settings", postAddedRules)
 			r.Post("/geo/update", postGeoUpdate)
 			r.Get("/geo/events", getGeoEvents)
 			r.Get("/diagnostics/capture", getDiagnosticCapture)

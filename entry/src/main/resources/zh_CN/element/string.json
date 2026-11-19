@@ -2427,6 +2427,218 @@
     {
       "name": "network_route_expansion",
       "value": "排除后生成的路由过多，请合并网段。"
+    },
+    {
+      "name": "dns_override_listen",
+      "value": "监听"
+    },
+    {
+      "name": "dns_override_mode",
+      "value": "DNS 模式"
+    },
+    {
+      "name": "dns_override_fake_ip_filter",
+      "value": "Fake-IP 过滤"
+    },
+    {
+      "name": "dns_override_fake_ip_mode",
+      "value": "Fake-IP 过滤模式"
+    },
+    {
+      "name": "dns_override_empty",
+      "value": "暂无覆写项"
+    },
+    {
+      "name": "dns_override_description",
+      "value": "添加的项会覆写所有订阅和本地配置的 DNS，未添加的项沿用配置自身的设置。"
+    },
+    {
+      "name": "dns_override_add",
+      "value": "添加覆写项"
+    },
+    {
+      "name": "dns_override_remove",
+      "value": "移除覆写项"
+    },
+    {
+      "name": "dns_override_count",
+      "value": "%d 项"
+    },
+    {
+      "name": "dns_override_empty_value",
+      "value": "空"
+    },
+    {
+      "name": "dns_override_list_hint",
+      "value": "每行输入一项。"
+    },
+    {
+      "name": "dns_override_saved",
+      "value": "已保存 DNS 覆写"
+    },
+    {
+      "name": "dns_override_invalid",
+      "value": "请检查填写格式以及与当前配置的兼容性。"
+    },
+    {
+      "name": "dns_override_conflict",
+      "value": "DNS 设置已变更，请确认后重试。"
+    },
+    {
+      "name": "dns_override_listen_failed",
+      "value": "DNS 监听地址不可用或端口已被占用。"
+    },
+    {
+      "name": "dns_override_unavailable",
+      "value": "内核状态正在变化，请稍后重试。"
+    },
+    {
+      "name": "dns_override_save_failed",
+      "value": "保存 DNS 覆写失败。"
+    },
+    {
+      "name": "dns_override_load_failed",
+      "value": "无法读取 DNS 覆写。"
+    },
+    {
+      "name": "dns_override_retry",
+      "value": "重试"
+    },
+    {
+      "name": "added_rules_title",
+      "value": "附加规则"
+    },
+    {
+      "name": "added_rules_basic",
+      "value": "基本信息"
+    },
+    {
+      "name": "added_rules_params",
+      "value": "附加参数"
+    },
+    {
+      "name": "added_rules_type",
+      "value": "规则类型"
+    },
+    {
+      "name": "added_rules_content",
+      "value": "内容"
+    },
+    {
+      "name": "added_rules_content_hint",
+      "value": "输入规则内容"
+    },
+    {
+      "name": "added_rules_target",
+      "value": "分流策略"
+    },
+    {
+      "name": "added_rules_no_resolve",
+      "value": "不解析域名"
+    },
+    {
+      "name": "added_rules_source_ip",
+      "value": "匹配源 IP"
+    },
+    {
+      "name": "added_rules_add",
+      "value": "添加规则"
+    },
+    {
+      "name": "added_rules_edit",
+      "value": "编辑规则"
+    },
+    {
+      "name": "added_rules_presets",
+      "value": "快捷操作"
+    },
+    {
+      "name": "added_rules_confirm",
+      "value": "确认"
+    },
+    {
+      "name": "added_rules_quic",
+      "value": "屏蔽 QUIC"
+    },
+    {
+      "name": "added_rules_stun",
+      "value": "屏蔽 STUN"
+    },
+    {
+      "name": "added_rules_dot",
+      "value": "屏蔽 DNS over TLS"
+    },
+    {
+      "name": "added_rules_loopback",
+      "value": "防止代理回环"
+    },
+    {
+      "name": "added_rules_lan",
+      "value": "局域网直连"
+    },
+    {
+      "name": "added_rules_system",
+      "value": "Apple 与 Microsoft 直连"
+    },
+    {
+      "name": "added_rules_tracker",
+      "value": "BT Tracker 直连"
+    },
+    {
+      "name": "added_rules_select",
+      "value": "选择规则"
+    },
+    {
+      "name": "added_rules_select_all",
+      "value": "全选可见规则"
+    },
+    {
+      "name": "added_rules_delete_count",
+      "value": "删除选中的 %d 条规则？"
+    },
+    {
+      "name": "added_rules_search_hint",
+      "value": "搜索类型、内容或策略"
+    },
+    {
+      "name": "added_rules_empty",
+      "value": "暂无规则"
+    },
+    {
+      "name": "added_rules_load_failed",
+      "value": "无法读取附加规则。"
+    },
+    {
+      "name": "added_rules_invalid",
+      "value": "请检查规则内容，以及它与当前配置的兼容性。"
+    },
+    {
+      "name": "added_rules_conflict",
+      "value": "规则列表已变更，请确认后重试。"
+    },
+    {
+      "name": "added_rules_unavailable",
+      "value": "内核状态正在变化，请稍后重试。"
+    },
+    {
+      "name": "added_rules_save_failed",
+      "value": "保存附加规则失败。"
+    },
+    {
+      "name": "added_rules_saved",
+      "value": "已保存附加规则"
+    },
+    {
+      "name": "added_rules_unsaved",
+      "value": "有未保存的修改。"
+    },
+    {
+      "name": "added_rules_resume",
+      "value": "继续编辑"
+    },
+    {
+      "name": "added_rules_discard",
+      "value": "放弃修改"
     }
   ]
 }

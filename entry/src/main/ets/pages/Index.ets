@@ -19,6 +19,8 @@ import { ToolsPage } from '../features/tools/ToolsPage';
 import { ResourcesPage } from '../features/resources/ResourcesPage';
 import { ConnectionsPage } from '../features/tools/ConnectionsPage';
 import { DnsPage } from '../features/tools/DnsPage';
+import { DnsOverridesPage } from '../features/tools/DnsOverridesPage';
+import { AddedRulesPage } from '../features/tools/AddedRulesPage';
 import { WindowInsets } from './WindowInsets';
 import { DashboardTab } from './DashboardTab';
 
@@ -200,6 +202,10 @@ struct Index {
       AdvancedConfigPage({ onOpen: (route: ToolRoute): void => { this.stack.pushPath({ name: route }); } })
     } else if (name === ToolRoute.Network) {
       NetworkPage({ foreground: this.foreground })
+    } else if (name === ToolRoute.DnsOverrides) {
+      DnsOverridesPage({ foreground: this.foreground, reduceMotion: this.reduceMotion })
+    } else if (name === ToolRoute.AddedRules) {
+      AddedRulesPage({ foreground: this.foreground, reduceMotion: this.reduceMotion })
     } else if (name === ToolRoute.Resources) {
       ResourcesPage({ foreground: this.foreground })
     } else if (name === ToolRoute.Connections) {

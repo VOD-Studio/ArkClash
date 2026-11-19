@@ -2447,6 +2447,218 @@
     {
       "name": "network_route_expansion",
       "value": "These exclusions produce too many routes. Try broader prefixes."
+    },
+    {
+      "name": "dns_override_listen",
+      "value": "Listen"
+    },
+    {
+      "name": "dns_override_mode",
+      "value": "DNS mode"
+    },
+    {
+      "name": "dns_override_fake_ip_filter",
+      "value": "Fake-IP filter"
+    },
+    {
+      "name": "dns_override_fake_ip_mode",
+      "value": "Fake-IP filter mode"
+    },
+    {
+      "name": "dns_override_empty",
+      "value": "No overrides"
+    },
+    {
+      "name": "dns_override_description",
+      "value": "Added entries override the DNS configuration in every profile. Other entries use the profile’s own values."
+    },
+    {
+      "name": "dns_override_add",
+      "value": "Add override"
+    },
+    {
+      "name": "dns_override_remove",
+      "value": "Remove override"
+    },
+    {
+      "name": "dns_override_count",
+      "value": "%d items"
+    },
+    {
+      "name": "dns_override_empty_value",
+      "value": "Empty"
+    },
+    {
+      "name": "dns_override_list_hint",
+      "value": "Enter one item per line."
+    },
+    {
+      "name": "dns_override_saved",
+      "value": "DNS overrides saved"
+    },
+    {
+      "name": "dns_override_invalid",
+      "value": "Check the entry format and its compatibility with the current profile."
+    },
+    {
+      "name": "dns_override_conflict",
+      "value": "DNS settings changed. Review them and retry."
+    },
+    {
+      "name": "dns_override_listen_failed",
+      "value": "The DNS listen address could not be bound."
+    },
+    {
+      "name": "dns_override_unavailable",
+      "value": "The core is changing state. Try again shortly."
+    },
+    {
+      "name": "dns_override_save_failed",
+      "value": "Could not save DNS overrides."
+    },
+    {
+      "name": "dns_override_load_failed",
+      "value": "Could not read DNS overrides."
+    },
+    {
+      "name": "dns_override_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "added_rules_title",
+      "value": "Added rules"
+    },
+    {
+      "name": "added_rules_basic",
+      "value": "Basic information"
+    },
+    {
+      "name": "added_rules_params",
+      "value": "Additional parameters"
+    },
+    {
+      "name": "added_rules_type",
+      "value": "Rule type"
+    },
+    {
+      "name": "added_rules_content",
+      "value": "Content"
+    },
+    {
+      "name": "added_rules_content_hint",
+      "value": "Enter rule content"
+    },
+    {
+      "name": "added_rules_target",
+      "value": "Routing policy"
+    },
+    {
+      "name": "added_rules_no_resolve",
+      "value": "Skip hostname resolution"
+    },
+    {
+      "name": "added_rules_source_ip",
+      "value": "Match source IP"
+    },
+    {
+      "name": "added_rules_add",
+      "value": "Add rule"
+    },
+    {
+      "name": "added_rules_edit",
+      "value": "Edit rule"
+    },
+    {
+      "name": "added_rules_presets",
+      "value": "Quick actions"
+    },
+    {
+      "name": "added_rules_confirm",
+      "value": "Confirm"
+    },
+    {
+      "name": "added_rules_quic",
+      "value": "Block QUIC"
+    },
+    {
+      "name": "added_rules_stun",
+      "value": "Block STUN"
+    },
+    {
+      "name": "added_rules_dot",
+      "value": "Block DNS over TLS"
+    },
+    {
+      "name": "added_rules_loopback",
+      "value": "Prevent proxy loops"
+    },
+    {
+      "name": "added_rules_lan",
+      "value": "LAN direct"
+    },
+    {
+      "name": "added_rules_system",
+      "value": "Apple and Microsoft direct"
+    },
+    {
+      "name": "added_rules_tracker",
+      "value": "BT trackers direct"
+    },
+    {
+      "name": "added_rules_select",
+      "value": "Select rules"
+    },
+    {
+      "name": "added_rules_select_all",
+      "value": "Select all visible rules"
+    },
+    {
+      "name": "added_rules_delete_count",
+      "value": "Delete %d rules?"
+    },
+    {
+      "name": "added_rules_search_hint",
+      "value": "Search type, content, or policy"
+    },
+    {
+      "name": "added_rules_empty",
+      "value": "No rules"
+    },
+    {
+      "name": "added_rules_load_failed",
+      "value": "Could not read added rules."
+    },
+    {
+      "name": "added_rules_invalid",
+      "value": "Check the rule content and its compatibility with the current profile."
+    },
+    {
+      "name": "added_rules_conflict",
+      "value": "Rules changed. Review the list and retry."
+    },
+    {
+      "name": "added_rules_unavailable",
+      "value": "The core is changing state. Try again shortly."
+    },
+    {
+      "name": "added_rules_save_failed",
+      "value": "Could not save the added rules."
+    },
+    {
+      "name": "added_rules_saved",
+      "value": "Added rules saved"
+    },
+    {
+      "name": "added_rules_unsaved",
+      "value": "There are unsaved changes."
+    },
+    {
+      "name": "added_rules_resume",
+      "value": "Continue editing"
+    },
+    {
+      "name": "added_rules_discard",
+      "value": "Discard changes"
     }
   ]
 }
