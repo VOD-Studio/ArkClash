@@ -1,11 +1,12 @@
 import { AppearanceState, appAppearance } from './AppearanceState';
-/** 分组列表里的一行：左图标、标题、右侧值或箭头。点按只改背景色。 */
+/** 分组列表里的一行，点按时显示按压背景。 */
 @ComponentV2
 export struct ListRow {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param icon: Resource | undefined = undefined;
   @Param title: ResourceStr = '';
   @Param value: ResourceStr = '';
+  @Param trailingIcon: Resource | undefined = undefined;
   @Param chevron: boolean = true;
   @Event onTap: () => void = () => {};
 
@@ -29,6 +30,11 @@ export struct ListRow {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .constraintSize({ maxWidth: '55%' })
+      }
+      if (this.trailingIcon !== undefined) {
+        SymbolGlyph(this.trailingIcon)
+          .fontSize(22)
+          .fontColor([$r('sys.color.font_primary')])
       }
       if (this.chevron) {
         SymbolGlyph($r('sys.symbol.chevron_right'))

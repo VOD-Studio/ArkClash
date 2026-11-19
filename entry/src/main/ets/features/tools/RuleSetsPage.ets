@@ -63,6 +63,16 @@ export struct RuleSetsPage {
   private rows: KeyedListSource<RuleSetRowItem> = new KeyedListSource<RuleSetRowItem>();
   private fileUri: string = '';
 
+  @Computed
+  get behaviorIndex(): number {
+    return Math.max(0, RULE_SET_BEHAVIORS.indexOf(this.behavior));
+  }
+
+  @Computed
+  get formatIndex(): number {
+    return Math.max(0, RULE_SET_FORMATS.indexOf(this.format));
+  }
+
   private context(): common.UIAbilityContext {
     return this.getUIContext().getHostContext() as common.UIAbilityContext;
   }
@@ -393,7 +403,8 @@ export struct RuleSetsPage {
       }
       Row({ space: 12 }) {
         Text($r('app.string.rule_set_behavior')).layoutWeight(1)
-        Select(RULE_SET_BEHAVIOR_OPTIONS).selected(Math.max(0, RULE_SET_BEHAVIORS.indexOf(this.behavior)))
+        Select(RULE_SET_BEHAVIOR_OPTIONS).selected(this.behaviorIndex)
+          .value(RULE_SET_BEHAVIOR_OPTIONS[this.behaviorIndex].value)
           .onSelect((index: number): void => {
             this.behavior = RULE_SET_BEHAVIORS[index] ?? 'auto';
             this.markChanged();
@@ -401,7 +412,8 @@ export struct RuleSetsPage {
       }.width('100%')
       Row({ space: 12 }) {
         Text($r('app.string.rule_set_format')).layoutWeight(1)
-        Select(RULE_SET_FORMAT_OPTIONS).selected(Math.max(0, RULE_SET_FORMATS.indexOf(this.format)))
+        Select(RULE_SET_FORMAT_OPTIONS).selected(this.formatIndex)
+          .value(RULE_SET_FORMAT_OPTIONS[this.formatIndex].value)
           .onSelect((index: number): void => {
             this.format = RULE_SET_FORMATS[index] ?? 'auto';
             this.markChanged();

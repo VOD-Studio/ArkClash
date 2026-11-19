@@ -280,7 +280,7 @@ export struct NetworkPage {
             (option: string) => {
               ListRow({
                 title: option, chevron: false,
-                icon: option === (this.editKind === NetworkEditor.Stack ?
+                trailingIcon: option === (this.editKind === NetworkEditor.Stack ?
                   this.settings.stack : this.settings.congestionController) ? $r('sys.symbol.checkmark') : undefined,
                 onTap: (): void => this.chooseOption(option)
               })
