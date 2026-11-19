@@ -20,7 +20,14 @@ import { ResourcesPage } from '../features/resources/ResourcesPage';
 import { ConnectionsPage } from '../features/tools/ConnectionsPage';
 import { DnsPage } from '../features/tools/DnsPage';
 import { DnsOverridesPage } from '../features/tools/DnsOverridesPage';
+import { ProfileExtensionPage } from '../features/profiles/ProfileExtensionPage';
+import { ScriptEditorPage } from '../features/profiles/ScriptEditorPage';
+import { LocalProxiesPage } from '../features/profiles/LocalProxiesPage';
+import { ScriptsPage } from '../features/profiles/ScriptsPage';
 import { AddedRulesPage } from '../features/tools/AddedRulesPage';
+import { RuleSetsPage } from '../features/tools/RuleSetsPage';
+import { ProxyFiltersPage } from '../features/tools/ProxyFiltersPage';
+import { IconSetPreviewPage, IconSetsPage } from '../features/tools/IconSetsPage';
 import { WindowInsets } from './WindowInsets';
 import { DashboardTab } from './DashboardTab';
 
@@ -38,6 +45,12 @@ function tabBar(icon: Resource, selectedIcon: Resource, label: Resource, accent:
     selected: new SymbolGlyphModifier(selectedIcon).fontColor([accent])
   }, label).labelStyle({ selectedColor: accent, font: { family: family } });
 }
+
+interface IconSetRouteArgument {
+  id: string;
+}
+
+interface ScriptRouteArgument { id: string; }
 
 @Entry
 @ComponentV2
@@ -194,8 +207,23 @@ struct Index {
     this.miniBarExpanded = false;
   }
 
+  private openProfileExtension(profile: string): void {
+    const argumentsForPage: ScriptRouteArgument = { id: profile };
+    this.stack.pushPath({ name: ToolRoute.ProfileExtension, param: argumentsForPage });
+  }
+
+  private openScriptEditor(id: string): void {
+    const argumentsForPage: ScriptRouteArgument = { id: id };
+    this.stack.pushPath({ name: ToolRoute.ScriptEditor, param: argumentsForPage });
+  }
+
+  private openIconSet(id: string): void {
+    const argument: IconSetRouteArgument = { id: id };
+    this.stack.pushPath({ name: ToolRoute.IconSetPreview, param: argument });
+  }
+
   @Builder
-  Routes(name: string) {
+  Routes(name: string, param: Object) {
     if (name === ToolRoute.Theme) {
       ThemePage({ reduceMotion: this.reduceMotion })
     } else if (name === ToolRoute.AdvancedConfig) {
@@ -206,8 +234,31 @@ struct Index {
       DnsOverridesPage({ foreground: this.foreground, reduceMotion: this.reduceMotion })
     } else if (name === ToolRoute.AddedRules) {
       AddedRulesPage({ foreground: this.foreground, reduceMotion: this.reduceMotion })
+    } else if (name === ToolRoute.LocalProxies) {
+      LocalProxiesPage({ foreground: this.foreground })
+    } else if (name === ToolRoute.RuleSets) {
+      RuleSetsPage({ foreground: this.foreground })
+    } else if (name === ToolRoute.ProxyFilters) {
+      ProxyFiltersPage({ foreground: this.foreground })
+    } else if (name === ToolRoute.IconSets) {
+      IconSetsPage({ foreground: this.foreground, onPreview: (id: string): void => this.openIconSet(id) })
+    } else if (name === ToolRoute.IconSetPreview) {
+      IconSetPreviewPage({ setId: (param as IconSetRouteArgument).id })
+    } else if (name === ToolRoute.Scripts) {
+      ScriptsPage({ foreground: this.foreground, onEdit: (id: string): void => this.openScriptEditor(id) })
+    } else if (name === ToolRoute.ScriptEditor) {
+      ScriptEditorPage({ scriptId: (param as ScriptRouteArgument).id, foreground: this.foreground,
+        onClose: (): void => { this.stack.pop(); } })
+    } else if (name === ToolRoute.ProfileExtension) {
+      ProfileExtensionPage({ profileId: (param as ScriptRouteArgument).id, currentProfile: this.profiles.current,
+        foreground: this.foreground, onScripts: (): void => { this.stack.pushPath({ name: ToolRoute.Scripts }); },
+        onStandardRules: (): void => { this.stack.pushPath({ name: ToolRoute.ProfileRules, param: param }); } })
+    } else if (name === ToolRoute.ProfileRules) {
+      AddedRulesPage({ profileId: (param as ScriptRouteArgument).id,
+        foreground: this.foreground, reduceMotion: this.reduceMotion,
+        onGlobalRules: (): void => { this.stack.pushPath({ name: ToolRoute.AddedRules }); } })
     } else if (name === ToolRoute.Resources) {
-      ResourcesPage({ foreground: this.foreground })
+      ResourcesPage({ foreground: this.foreground, onScript: (id: string): void => this.openScriptEditor(id) })
     } else if (name === ToolRoute.Connections) {
       ConnectionsPage({ foreground: this.foreground })
     } else if (name === ToolRoute.Dns) {
@@ -264,6 +315,7 @@ struct Index {
               store: this.profiles,
               topInset: this.topInset(),
               visible: this.foreground && this.tab === Tab.Profiles,
+              onExtension: (profile: string): void => this.openProfileExtension(profile),
             })
           }
           .tabBar(tabBar($r('sys.symbol.doc_text'), $r('sys.symbol.doc_text_fill'), $r('app.string.tab_profiles'),
