@@ -3067,6 +3067,414 @@
     {
       "name": "rule_set_choose",
       "value": "请选择规则集"
+    },
+    {
+      "name": "local_proxy_field_name",
+      "value": "名称"
+    },
+    {
+      "name": "local_proxy_field_server",
+      "value": "服务器"
+    },
+    {
+      "name": "local_proxy_field_port",
+      "value": "端口"
+    },
+    {
+      "name": "local_proxy_field_udp",
+      "value": "UDP"
+    },
+    {
+      "name": "local_proxy_field_openVpnCa",
+      "value": "CA 证书"
+    },
+    {
+      "name": "local_proxy_field_zeroTierNetwork",
+      "value": "网络 ID"
+    },
+    {
+      "name": "local_proxy_field_networkName",
+      "value": "网络名称"
+    },
+    {
+      "name": "local_proxy_field_networkSecret",
+      "value": "网络密钥"
+    },
+    {
+      "name": "local_proxy_field_peers",
+      "value": "对等节点"
+    },
+    {
+      "name": "local_proxy_field_virtualIpv4",
+      "value": "虚拟 IPv4"
+    },
+    {
+      "name": "local_proxy_field_hostname",
+      "value": "主机名"
+    },
+    {
+      "name": "local_proxy_field_exitNodes",
+      "value": "出口节点"
+    },
+    {
+      "name": "local_proxy_field_username",
+      "value": "用户名"
+    },
+    {
+      "name": "local_proxy_field_password",
+      "value": "密码"
+    },
+    {
+      "name": "local_proxy_field_psk",
+      "value": "预共享密钥"
+    },
+    {
+      "name": "local_proxy_field_key",
+      "value": "密钥"
+    },
+    {
+      "name": "local_proxy_field_privateKey",
+      "value": "私钥"
+    },
+    {
+      "name": "local_proxy_field_publicKey",
+      "value": "公钥"
+    },
+    {
+      "name": "local_proxy_field_privateKeyPassphrase",
+      "value": "私钥密码"
+    },
+    {
+      "name": "local_proxy_field_preSharedKey",
+      "value": "预共享密钥"
+    },
+    {
+      "name": "local_proxy_field_authStr",
+      "value": "密码"
+    },
+    {
+      "name": "local_proxy_field_cipher",
+      "value": "加密方式"
+    },
+    {
+      "name": "local_proxy_field_protocol",
+      "value": "协议"
+    },
+    {
+      "name": "local_proxy_field_obfs",
+      "value": "混淆"
+    },
+    {
+      "name": "local_proxy_field_transport",
+      "value": "传输协议"
+    },
+    {
+      "name": "local_proxy_field_up",
+      "value": "上行带宽"
+    },
+    {
+      "name": "local_proxy_field_down",
+      "value": "下行带宽"
+    },
+    {
+      "name": "local_proxy_field_network",
+      "value": "网络"
+    },
+    {
+      "name": "local_proxy_field_wsHeaders",
+      "value": "WebSocket 请求头"
+    },
+    {
+      "name": "local_proxy_field_httpHeaders",
+      "value": "HTTP 请求头"
+    },
+    {
+      "name": "local_proxy_field_headers",
+      "value": "请求头"
+    },
+    {
+      "name": "local_proxy_field_skipCertVerify",
+      "value": "跳过证书验证"
+    },
+    {
+      "name": "local_proxy_field_clientFingerprint",
+      "value": "客户端指纹"
+    },
+    {
+      "name": "local_proxy_field_plugin",
+      "value": "插件"
+    },
+    {
+      "name": "local_proxy_field_pluginMode",
+      "value": "插件模式"
+    },
+    {
+      "name": "local_proxy_field_pluginHost",
+      "value": "插件主机"
+    },
+    {
+      "name": "local_proxy_field_pluginPath",
+      "value": "插件路径"
+    },
+    {
+      "name": "local_proxy_field_pluginUsername",
+      "value": "插件用户名"
+    },
+    {
+      "name": "local_proxy_field_pluginPassword",
+      "value": "插件密码"
+    },
+    {
+      "name": "local_proxy_field_pluginVersion",
+      "value": "协议版本"
+    },
+    {
+      "name": "local_proxy_field_pluginKey",
+      "value": "密钥"
+    },
+    {
+      "name": "local_proxy_field_pluginCrypt",
+      "value": "插件加密方式"
+    },
+    {
+      "name": "local_proxy_field_pluginSkipCertVerify",
+      "value": "跳过证书验证"
+    },
+    {
+      "name": "local_proxy_field_protocolParam",
+      "value": "协议参数"
+    },
+    {
+      "name": "local_proxy_field_obfsParam",
+      "value": "混淆参数"
+    },
+    {
+      "name": "local_proxy_field_obfsPassword",
+      "value": "混淆密码"
+    },
+    {
+      "name": "local_proxy_field_obfsSecret",
+      "value": "混淆密码"
+    },
+    {
+      "name": "local_proxy_field_obfsMode",
+      "value": "混淆模式"
+    },
+    {
+      "name": "local_proxy_field_obfsHost",
+      "value": "混淆主机"
+    },
+    {
+      "name": "local_proxy_field_version",
+      "value": "协议版本"
+    },
+    {
+      "name": "local_proxy_field_ports",
+      "value": "端口跳跃"
+    },
+    {
+      "name": "local_proxy_field_hopInterval",
+      "value": "跳跃间隔"
+    },
+    {
+      "name": "local_proxy_field_congestionController",
+      "value": "拥塞控制"
+    },
+    {
+      "name": "local_proxy_field_udpRelayMode",
+      "value": "UDP 中继模式"
+    },
+    {
+      "name": "local_proxy_field_allowedIps",
+      "value": "允许的 IP"
+    },
+    {
+      "name": "local_proxy_field_remoteDnsResolve",
+      "value": "远程 DNS 解析"
+    },
+    {
+      "name": "local_proxy_field_interfaceName",
+      "value": "网卡名称"
+    },
+    {
+      "name": "local_proxy_field_routingMark",
+      "value": "路由标记"
+    },
+    {
+      "name": "local_proxy_field_ipVersion",
+      "value": "IP 版本"
+    },
+    {
+      "name": "local_proxy_resources",
+      "value": "自定义资源"
+    },
+    {
+      "name": "local_proxy_title",
+      "value": "代理"
+    },
+    {
+      "name": "local_proxy_add",
+      "value": "添加代理"
+    },
+    {
+      "name": "local_proxy_edit",
+      "value": "编辑代理"
+    },
+    {
+      "name": "local_proxy_empty",
+      "value": "暂无代理"
+    },
+    {
+      "name": "local_proxy_search",
+      "value": "搜索名称、类型或服务器"
+    },
+    {
+      "name": "local_proxy_quick_edit",
+      "value": "快速编辑"
+    },
+    {
+      "name": "local_proxy_basic",
+      "value": "基本信息"
+    },
+    {
+      "name": "local_proxy_auth",
+      "value": "身份验证"
+    },
+    {
+      "name": "local_proxy_network",
+      "value": "网络"
+    },
+    {
+      "name": "local_proxy_transport",
+      "value": "传输"
+    },
+    {
+      "name": "local_proxy_connection",
+      "value": "连接"
+    },
+    {
+      "name": "local_proxy_other",
+      "value": "其他"
+    },
+    {
+      "name": "local_proxy_options",
+      "value": "选项"
+    },
+    {
+      "name": "local_proxy_add_option",
+      "value": "添加配置项"
+    },
+    {
+      "name": "local_proxy_remove_option",
+      "value": "移除配置项"
+    },
+    {
+      "name": "local_proxy_optional_field",
+      "value": "选填"
+    },
+    {
+      "name": "local_proxy_required_field",
+      "value": "必填"
+    },
+    {
+      "name": "local_proxy_item_count",
+      "value": "%d 项"
+    },
+    {
+      "name": "local_proxy_list_hint",
+      "value": "每行一项"
+    },
+    {
+      "name": "local_proxy_map_hint",
+      "value": "每行一组键和值，用冒号分隔"
+    },
+    {
+      "name": "local_proxy_saved",
+      "value": "代理库已保存"
+    },
+    {
+      "name": "local_proxy_saved_pending",
+      "value": "已保存，待内核校验"
+    },
+    {
+      "name": "local_proxy_deleted",
+      "value": "代理已删除"
+    },
+    {
+      "name": "local_proxy_links_remove",
+      "value": "将移除代理：%s"
+    },
+    {
+      "name": "local_proxy_links_add",
+      "value": "将添加代理：%s"
+    },
+    {
+      "name": "local_proxy_line",
+      "value": "第 %d 行：%s"
+    },
+    {
+      "name": "local_proxy_name_format",
+      "value": "名称最多 255 个字符，不能包含逗号或换行。"
+    },
+    {
+      "name": "local_proxy_name_reserved",
+      "value": "该名称为内核保留名称。"
+    },
+    {
+      "name": "local_proxy_name_taken",
+      "value": "已有代理使用此名称。"
+    },
+    {
+      "name": "local_proxy_port",
+      "value": "请输入 1 到 65535 之间的端口。"
+    },
+    {
+      "name": "local_proxy_type",
+      "value": "代理类型"
+    },
+    {
+      "name": "local_proxy_unsupported",
+      "value": "不支持该代理类型。"
+    },
+    {
+      "name": "local_proxy_server_length",
+      "value": "服务器地址最多 512 个字符。"
+    },
+    {
+      "name": "local_proxy_required",
+      "value": "请填写必填字段。"
+    },
+    {
+      "name": "local_proxy_rejected",
+      "value": "Mihomo 拒绝了该代理定义，请检查协议参数。"
+    },
+    {
+      "name": "local_proxy_input",
+      "value": "代理库或分享链接文本超出大小限制。"
+    },
+    {
+      "name": "local_proxy_conflict",
+      "value": "代理库已变化，请重新打开编辑器后重试。"
+    },
+    {
+      "name": "local_proxy_core_unavailable",
+      "value": "内核不可用，待校验。"
+    },
+    {
+      "name": "local_proxy_store",
+      "value": "无法读取或保存代理库。"
+    },
+    {
+      "name": "local_proxy_link",
+      "value": "分享链接无效。"
+    },
+    {
+      "name": "local_proxy_single_link",
+      "value": "请输入仅包含一个代理的分享链接。"
+    },
+    {
+      "name": "local_proxy_map",
+      "value": "请逐行输入键和值，用冒号分隔，键不能重复。"
     }
   ]
 }

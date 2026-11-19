@@ -3087,6 +3087,414 @@
     {
       "name": "rule_set_choose",
       "value": "Choose a rule set"
+    },
+    {
+      "name": "local_proxy_field_name",
+      "value": "Name"
+    },
+    {
+      "name": "local_proxy_field_server",
+      "value": "Server"
+    },
+    {
+      "name": "local_proxy_field_port",
+      "value": "Port"
+    },
+    {
+      "name": "local_proxy_field_udp",
+      "value": "UDP"
+    },
+    {
+      "name": "local_proxy_field_openVpnCa",
+      "value": "CA certificate"
+    },
+    {
+      "name": "local_proxy_field_zeroTierNetwork",
+      "value": "Network ID"
+    },
+    {
+      "name": "local_proxy_field_networkName",
+      "value": "Network name"
+    },
+    {
+      "name": "local_proxy_field_networkSecret",
+      "value": "Network secret"
+    },
+    {
+      "name": "local_proxy_field_peers",
+      "value": "Peers"
+    },
+    {
+      "name": "local_proxy_field_virtualIpv4",
+      "value": "Virtual IPv4"
+    },
+    {
+      "name": "local_proxy_field_hostname",
+      "value": "Hostname"
+    },
+    {
+      "name": "local_proxy_field_exitNodes",
+      "value": "Exit nodes"
+    },
+    {
+      "name": "local_proxy_field_username",
+      "value": "Username"
+    },
+    {
+      "name": "local_proxy_field_password",
+      "value": "Password"
+    },
+    {
+      "name": "local_proxy_field_psk",
+      "value": "Pre-shared key"
+    },
+    {
+      "name": "local_proxy_field_key",
+      "value": "Key"
+    },
+    {
+      "name": "local_proxy_field_privateKey",
+      "value": "Private key"
+    },
+    {
+      "name": "local_proxy_field_publicKey",
+      "value": "Public key"
+    },
+    {
+      "name": "local_proxy_field_privateKeyPassphrase",
+      "value": "Private key passphrase"
+    },
+    {
+      "name": "local_proxy_field_preSharedKey",
+      "value": "Pre-shared key"
+    },
+    {
+      "name": "local_proxy_field_authStr",
+      "value": "Password"
+    },
+    {
+      "name": "local_proxy_field_cipher",
+      "value": "Cipher"
+    },
+    {
+      "name": "local_proxy_field_protocol",
+      "value": "Protocol"
+    },
+    {
+      "name": "local_proxy_field_obfs",
+      "value": "Obfuscation"
+    },
+    {
+      "name": "local_proxy_field_transport",
+      "value": "Transport"
+    },
+    {
+      "name": "local_proxy_field_up",
+      "value": "Upload bandwidth"
+    },
+    {
+      "name": "local_proxy_field_down",
+      "value": "Download bandwidth"
+    },
+    {
+      "name": "local_proxy_field_network",
+      "value": "Network"
+    },
+    {
+      "name": "local_proxy_field_wsHeaders",
+      "value": "WebSocket headers"
+    },
+    {
+      "name": "local_proxy_field_httpHeaders",
+      "value": "HTTP headers"
+    },
+    {
+      "name": "local_proxy_field_headers",
+      "value": "Request headers"
+    },
+    {
+      "name": "local_proxy_field_skipCertVerify",
+      "value": "Skip certificate verification"
+    },
+    {
+      "name": "local_proxy_field_clientFingerprint",
+      "value": "Client fingerprint"
+    },
+    {
+      "name": "local_proxy_field_plugin",
+      "value": "Plugin"
+    },
+    {
+      "name": "local_proxy_field_pluginMode",
+      "value": "Plugin mode"
+    },
+    {
+      "name": "local_proxy_field_pluginHost",
+      "value": "Plugin host"
+    },
+    {
+      "name": "local_proxy_field_pluginPath",
+      "value": "Plugin path"
+    },
+    {
+      "name": "local_proxy_field_pluginUsername",
+      "value": "Plugin username"
+    },
+    {
+      "name": "local_proxy_field_pluginPassword",
+      "value": "Plugin password"
+    },
+    {
+      "name": "local_proxy_field_pluginVersion",
+      "value": "Protocol version"
+    },
+    {
+      "name": "local_proxy_field_pluginKey",
+      "value": "Key"
+    },
+    {
+      "name": "local_proxy_field_pluginCrypt",
+      "value": "Plugin cipher"
+    },
+    {
+      "name": "local_proxy_field_pluginSkipCertVerify",
+      "value": "Skip certificate verification"
+    },
+    {
+      "name": "local_proxy_field_protocolParam",
+      "value": "Protocol parameter"
+    },
+    {
+      "name": "local_proxy_field_obfsParam",
+      "value": "Obfuscation parameter"
+    },
+    {
+      "name": "local_proxy_field_obfsPassword",
+      "value": "Obfuscation password"
+    },
+    {
+      "name": "local_proxy_field_obfsSecret",
+      "value": "Obfuscation password"
+    },
+    {
+      "name": "local_proxy_field_obfsMode",
+      "value": "Obfuscation mode"
+    },
+    {
+      "name": "local_proxy_field_obfsHost",
+      "value": "Obfuscation host"
+    },
+    {
+      "name": "local_proxy_field_version",
+      "value": "Protocol version"
+    },
+    {
+      "name": "local_proxy_field_ports",
+      "value": "Port hopping"
+    },
+    {
+      "name": "local_proxy_field_hopInterval",
+      "value": "Hop interval"
+    },
+    {
+      "name": "local_proxy_field_congestionController",
+      "value": "Congestion control"
+    },
+    {
+      "name": "local_proxy_field_udpRelayMode",
+      "value": "UDP relay mode"
+    },
+    {
+      "name": "local_proxy_field_allowedIps",
+      "value": "Allowed IPs"
+    },
+    {
+      "name": "local_proxy_field_remoteDnsResolve",
+      "value": "Remote DNS resolution"
+    },
+    {
+      "name": "local_proxy_field_interfaceName",
+      "value": "Interface name"
+    },
+    {
+      "name": "local_proxy_field_routingMark",
+      "value": "Routing mark"
+    },
+    {
+      "name": "local_proxy_field_ipVersion",
+      "value": "IP version"
+    },
+    {
+      "name": "local_proxy_resources",
+      "value": "Custom resources"
+    },
+    {
+      "name": "local_proxy_title",
+      "value": "Proxies"
+    },
+    {
+      "name": "local_proxy_add",
+      "value": "Add proxy"
+    },
+    {
+      "name": "local_proxy_edit",
+      "value": "Edit proxy"
+    },
+    {
+      "name": "local_proxy_empty",
+      "value": "No proxies"
+    },
+    {
+      "name": "local_proxy_search",
+      "value": "Search by name, type, or server"
+    },
+    {
+      "name": "local_proxy_quick_edit",
+      "value": "Quick edit"
+    },
+    {
+      "name": "local_proxy_basic",
+      "value": "Basic information"
+    },
+    {
+      "name": "local_proxy_auth",
+      "value": "Authentication"
+    },
+    {
+      "name": "local_proxy_network",
+      "value": "Network"
+    },
+    {
+      "name": "local_proxy_transport",
+      "value": "Transport"
+    },
+    {
+      "name": "local_proxy_connection",
+      "value": "Connection"
+    },
+    {
+      "name": "local_proxy_other",
+      "value": "Other"
+    },
+    {
+      "name": "local_proxy_options",
+      "value": "Options"
+    },
+    {
+      "name": "local_proxy_add_option",
+      "value": "Add option"
+    },
+    {
+      "name": "local_proxy_remove_option",
+      "value": "Remove option"
+    },
+    {
+      "name": "local_proxy_optional_field",
+      "value": "Optional"
+    },
+    {
+      "name": "local_proxy_required_field",
+      "value": "Required"
+    },
+    {
+      "name": "local_proxy_item_count",
+      "value": "%d items"
+    },
+    {
+      "name": "local_proxy_list_hint",
+      "value": "One item per line"
+    },
+    {
+      "name": "local_proxy_map_hint",
+      "value": "One key: value pair per line"
+    },
+    {
+      "name": "local_proxy_saved",
+      "value": "Proxy library saved"
+    },
+    {
+      "name": "local_proxy_saved_pending",
+      "value": "Saved, pending core validation"
+    },
+    {
+      "name": "local_proxy_deleted",
+      "value": "Proxies deleted"
+    },
+    {
+      "name": "local_proxy_links_remove",
+      "value": "Proxies to remove: %s"
+    },
+    {
+      "name": "local_proxy_links_add",
+      "value": "Proxies to add: %s"
+    },
+    {
+      "name": "local_proxy_line",
+      "value": "Line %d: %s"
+    },
+    {
+      "name": "local_proxy_name_format",
+      "value": "Names can contain up to 255 characters, with no commas or line breaks."
+    },
+    {
+      "name": "local_proxy_name_reserved",
+      "value": "This name is reserved by the core."
+    },
+    {
+      "name": "local_proxy_name_taken",
+      "value": "A proxy already uses this name."
+    },
+    {
+      "name": "local_proxy_port",
+      "value": "Enter a port between 1 and 65535."
+    },
+    {
+      "name": "local_proxy_type",
+      "value": "Proxy type"
+    },
+    {
+      "name": "local_proxy_unsupported",
+      "value": "Unsupported proxy type."
+    },
+    {
+      "name": "local_proxy_server_length",
+      "value": "The server field can contain up to 512 characters."
+    },
+    {
+      "name": "local_proxy_required",
+      "value": "Fill in the required fields."
+    },
+    {
+      "name": "local_proxy_rejected",
+      "value": "Mihomo rejected this proxy definition. Check the protocol settings."
+    },
+    {
+      "name": "local_proxy_input",
+      "value": "The proxy library or share-link text exceeds the size limit."
+    },
+    {
+      "name": "local_proxy_conflict",
+      "value": "The proxy library changed. Reopen the editor to use the latest version."
+    },
+    {
+      "name": "local_proxy_core_unavailable",
+      "value": "Core unavailable. Validation pending."
+    },
+    {
+      "name": "local_proxy_store",
+      "value": "Could not read or save the proxy library."
+    },
+    {
+      "name": "local_proxy_link",
+      "value": "Invalid share link."
+    },
+    {
+      "name": "local_proxy_single_link",
+      "value": "Enter a share link for exactly one proxy."
+    },
+    {
+      "name": "local_proxy_map",
+      "value": "Use a unique key: value pair on each line."
     }
   ]
 }

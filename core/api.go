@@ -65,6 +65,7 @@ func init() {
 			r.Post("/rules/settings", postAddedRules)
 			r.Post("/rule-sets", postRuleSet)
 			r.Post("/scripts/apply", postProfileScript)
+			r.Post("/local-proxies/{operation}", postLocalProxies)
 			r.Post("/geo/update", postGeoUpdate)
 			r.Get("/geo/events", getGeoEvents)
 			r.Get("/diagnostics/capture", getDiagnosticCapture)
