@@ -1,10 +1,11 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { UIContext } from '@kit.ArkUI';
 import { formatDateTime } from '../../components/Format';
-import { PAGE_GUTTER } from '../../components/Theme';
+import { HEADER_ACTION, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { errorString } from '../../shared/profiles/Errors';
 import { describeError } from './ProfileErrors';
 import { ProfileDraft } from './ProfileDraft';
+import { ProfileFilterPicker } from './ProfileFilterPicker';
 import { ProfileEdit, ProfileStore } from './Profiles';
 import { ProfileSheetHeader } from './ProfileSheetHeader';
 
@@ -41,6 +42,7 @@ export struct ProfileEditor {
   @Event onSaved: () => void = (): void => {};
   @Event onClose: () => void = (): void => {};
   @Local sourceShown: boolean = false;
+  @Local private sourcePanel: 'text' | 'filter' = 'text';
   @Local sourceText: string = '';
   @Local sourceOriginal: string = '';
   @Local loadingSource: boolean = false;
@@ -89,6 +91,7 @@ export struct ProfileEditor {
       if (!this.appeared) { return; }
       this.sourceText = text;
       this.sourceOriginal = this.sourceText;
+      this.sourcePanel = 'text';
       this.sourceShown = true;
     } catch (e) { this.reportFailure(errorString(e as Object)); }
     finally { this.loadingSource = false; }
@@ -104,6 +107,7 @@ export struct ProfileEditor {
         if (!this.appeared) { return; }
         this.sourceOriginal = original;
         this.sourceText = text;
+        this.sourcePanel = 'text';
         this.sourceShown = true;
       }
     } catch (e) { this.reportFailure(errorString(e as Object)); }
@@ -130,6 +134,10 @@ export struct ProfileEditor {
   }
 
   private closeSource(dismiss: () => void): void {
+    if (this.sourcePanel !== 'text') {
+      this.sourcePanel = 'text';
+      return;
+    }
     if (this.validating) { return; }
     if (this.sourceText === this.sourceOriginal) { dismiss(); return; }
     let choice: 'save' | 'discard' | undefined = undefined;
@@ -208,21 +216,42 @@ export struct ProfileEditor {
   }
 
   @Builder
+  SourceActions() {
+    Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL }) {
+      SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+        .fontSize(HEADER_ICON_SIZE).fontColor([$r('sys.color.font_primary')])
+    }
+    .attributeModifier(HEADER_ACTION).systemMaterial(this.appStyle.headerMaterial())
+    .accessibilityText($r('app.string.proxy_filter_insert')).enabled(!this.validating)
+    .onClick((): void => { this.sourcePanel = 'filter'; })
+  }
+
+  @Builder
   SourceEditor() {
     Column({ space: 12 }) {
-      ProfileSheetHeader({ titleText: this.draft.name, saving: this.validating,
-        onSave: (): void => { this.saveSource(); },
-        onClose: (): void => this.closeSource((): void => { this.sourceShown = false; }) })
-      TextArea({ text: this.sourceText })
-        .fontFamily('monospace')
-        .fontSize(14)
-        .fontColor($r('sys.color.font_primary'))
-        .backgroundColor(Color.Transparent)
-        .borderRadius(0)
-        .layoutWeight(1)
-        .width('100%')
-        .enabled(!this.validating)
-        .onChange((text: string): void => { this.sourceText = text; })
+      if (this.sourcePanel === 'filter') {
+        ProfileFilterPicker({ sourceText: this.sourceText,
+          onApply: (updated: string): void => {
+            this.sourceText = updated;
+            this.sourcePanel = 'text';
+          },
+          onClose: (): void => { this.sourcePanel = 'text'; } })
+      } else {
+        ProfileSheetHeader({ titleText: this.draft.name, saving: this.validating,
+          actions: (): void => this.SourceActions(),
+          onSave: (): void => { this.saveSource(); },
+          onClose: (): void => this.closeSource((): void => { this.sourceShown = false; }) })
+        TextArea({ text: this.sourceText })
+          .fontFamily('monospace')
+          .fontSize(14)
+          .fontColor($r('sys.color.font_primary'))
+          .backgroundColor(Color.Transparent)
+          .borderRadius(0)
+          .layoutWeight(1)
+          .width('100%')
+          .enabled(!this.validating)
+          .onChange((text: string): void => { this.sourceText = text; })
+      }
     }
     .padding({ bottom: 24 })
     .height('100%')

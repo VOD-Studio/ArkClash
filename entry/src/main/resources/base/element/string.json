@@ -3495,6 +3495,106 @@
     {
       "name": "local_proxy_map",
       "value": "Use a unique key: value pair on each line."
+    },
+    {
+      "name": "proxy_filters_title",
+      "value": "Filters"
+    },
+    {
+      "name": "proxy_filter_label",
+      "value": "Label"
+    },
+    {
+      "name": "proxy_filter_regex",
+      "value": "Regular expression"
+    },
+    {
+      "name": "proxy_filter_label_invalid",
+      "value": "Enter a filter label."
+    },
+    {
+      "name": "proxy_filter_duplicate",
+      "value": "A filter with this label already exists."
+    },
+    {
+      "name": "proxy_filter_expression_invalid",
+      "value": "Enter a regular expression."
+    },
+    {
+      "name": "proxy_filter_regex_error",
+      "value": "Invalid regular expression in part %d."
+    },
+    {
+      "name": "proxy_filter_error",
+      "value": "Could not read or save filters."
+    },
+    {
+      "name": "proxy_filter_saved",
+      "value": "Filters saved"
+    },
+    {
+      "name": "proxy_filter_empty",
+      "value": "No saved filters"
+    },
+    {
+      "name": "proxy_filter_search",
+      "value": "Search labels and expressions"
+    },
+    {
+      "name": "proxy_filter_delete",
+      "value": "Delete %d filters?"
+    },
+    {
+      "name": "proxy_filter_insert",
+      "value": "Insert filter"
+    },
+    {
+      "name": "proxy_filter_include",
+      "value": "Include matches (filter)"
+    },
+    {
+      "name": "proxy_filter_exclude",
+      "value": "Exclude matches (exclude-filter)"
+    },
+    {
+      "name": "proxy_filter_target",
+      "value": "Apply to"
+    },
+    {
+      "name": "proxy_filter_group_choice",
+      "value": "Group · %s"
+    },
+    {
+      "name": "proxy_filter_provider_choice",
+      "value": "Provider · %s"
+    },
+    {
+      "name": "proxy_filter_field",
+      "value": "Match type"
+    },
+    {
+      "name": "proxy_filter_choose_target",
+      "value": "Choose a group or provider"
+    },
+    {
+      "name": "proxy_filter_choose_preset",
+      "value": "Choose a filter"
+    },
+    {
+      "name": "proxy_filter_no_targets",
+      "value": "This configuration has no editable groups or providers."
+    },
+    {
+      "name": "proxy_filter_bad_yaml",
+      "value": "Fix the YAML before adding a filter."
+    },
+    {
+      "name": "proxy_filter_bad_target",
+      "value": "Could not insert into the chosen field. Check the field in the YAML editor."
+    },
+    {
+      "name": "proxy_filter_already_present",
+      "value": "The selected filter is already present."
     }
   ]
 }

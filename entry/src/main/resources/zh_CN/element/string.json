@@ -3475,6 +3475,106 @@
     {
       "name": "local_proxy_map",
       "value": "请逐行输入键和值，用冒号分隔，键不能重复。"
+    },
+    {
+      "name": "proxy_filters_title",
+      "value": "筛选"
+    },
+    {
+      "name": "proxy_filter_label",
+      "value": "标签"
+    },
+    {
+      "name": "proxy_filter_regex",
+      "value": "正则表达式"
+    },
+    {
+      "name": "proxy_filter_label_invalid",
+      "value": "请输入筛选标签。"
+    },
+    {
+      "name": "proxy_filter_duplicate",
+      "value": "已存在相同标签的筛选。"
+    },
+    {
+      "name": "proxy_filter_expression_invalid",
+      "value": "请输入正则表达式。"
+    },
+    {
+      "name": "proxy_filter_regex_error",
+      "value": "第 %d 段正则表达式无效。"
+    },
+    {
+      "name": "proxy_filter_error",
+      "value": "无法读取或保存筛选。"
+    },
+    {
+      "name": "proxy_filter_saved",
+      "value": "筛选已保存"
+    },
+    {
+      "name": "proxy_filter_empty",
+      "value": "暂无筛选"
+    },
+    {
+      "name": "proxy_filter_search",
+      "value": "搜索标签和正则表达式"
+    },
+    {
+      "name": "proxy_filter_delete",
+      "value": "删除 %d 条筛选？"
+    },
+    {
+      "name": "proxy_filter_insert",
+      "value": "插入筛选"
+    },
+    {
+      "name": "proxy_filter_include",
+      "value": "包含匹配项（filter）"
+    },
+    {
+      "name": "proxy_filter_exclude",
+      "value": "排除匹配项（exclude-filter）"
+    },
+    {
+      "name": "proxy_filter_target",
+      "value": "应用到"
+    },
+    {
+      "name": "proxy_filter_group_choice",
+      "value": "代理组 · %s"
+    },
+    {
+      "name": "proxy_filter_provider_choice",
+      "value": "代理集合 · %s"
+    },
+    {
+      "name": "proxy_filter_field",
+      "value": "匹配方式"
+    },
+    {
+      "name": "proxy_filter_choose_target",
+      "value": "选择代理组或代理集合"
+    },
+    {
+      "name": "proxy_filter_choose_preset",
+      "value": "选择筛选"
+    },
+    {
+      "name": "proxy_filter_no_targets",
+      "value": "这份配置中没有可编辑的代理组或代理集合。"
+    },
+    {
+      "name": "proxy_filter_bad_yaml",
+      "value": "请先修正 YAML 内容，再插入筛选。"
+    },
+    {
+      "name": "proxy_filter_bad_target",
+      "value": "无法插入所选字段，请在 YAML 编辑器里检查该字段。"
+    },
+    {
+      "name": "proxy_filter_already_present",
+      "value": "该字段已包含所选筛选。"
     }
   ]
 }
