@@ -28,6 +28,7 @@ flowchart LR
 - 两个进程之间只有两条通道（[ADR-0003](adr/0003-ui-core-via-external-controller.md)）：
   - **内核控制面**：mihomo external-controller 承载运行查询、节点选择、测速、规则探测、流量与事件。ArkClash 路由在 `/arkclash/` 下：Go 处理运行快照、选择事务和热切换，订阅命令经 NAPI 转给 VPN 进程的 ArkTS（[ADR-0009](adr/0009-arkclash-commands-on-controller.md)）。独立进程专用的 `PUT`/`PATCH /configs`、`/restart`、`/upgrade` 保持关闭。
   - **文件通道**：`shared/Runtime.ets` 交接启动设置、错误和停止回执；`shared/profiles/Store.ets` 保存配置列表、内容、摘要及每配置节点选择。跨进程短提交持有存储锁，下载使用独立资源任务锁，不占住提交锁等待网络。
+- 配置覆写脚本与绑定保存在 `profiles/scripts.json`，由 UI 和 VPN 扩展在配置存储锁下提交。运行中的脚本和标准规则修订随状态推送，已保存修订通过认证的 `/arkclash/scripts/apply` 应用。脚本模式优先执行 QuickJS 变换，然后应用平台和 DNS 覆写。参见 [ADR-0023](adr/0023-profile-scripts-in-vpn.md)。
 - UI 进程通过 `protectProcessNet()` 和应用排除名单保持直连；Go 出站由 `core/socket.go` 逐 socket 绑定物理网络（[ADR-0008](adr/0008-bind-core-sockets-to-physical-network.md)）。在线出口与服务检查走 `POST /arkclash/probe`，由内核按当前规则拨号，不要求订阅开放 HTTP 代理端口；停止时用 SDK 流式直连。两条路径共用 `client/ServiceRules.ets` 的 FlClash `be847366` 服务协议，不能统一用首页 HEAD 或仅凭 HTTP 状态判断服务可用性。
 - 探测请求携带目标 URL、方法、正文模式、可选目标请求头/正文与重定向策略；controller 凭据不进入目标请求，跨源跳转移除目标 Authorization，并禁止 307/308 跨源重放非空正文。UI 与内核各约束四个实际执行名额，旧请求结束才释放；单步最多 10 秒、整批服务最多 60 秒，多步检查也必须保持同一 boot/revision。
 - 探测响应包含目标状态、正文片段、最终 URL、Location、响应头延迟及 boot/revision。目标 403 等状态仍放在成功的 controller 信封内，不混同 controller 的 409/429/503/504。正文按用途限制：`none` 不收集正文，`small`/`html` 保留 16/512 KiB 前缀，`json` 必须是完整的至多 64 KiB，`scan` 最多扫描 8 MiB、返回首次命中起的当前窗口（32 KiB 加 256 字节重叠），保留同窗口内优先于地区的拒绝证据，不积存整页 HTML。
@@ -76,7 +77,7 @@ sequenceDiagram
 |---|---|---|---|
 | 配置列表 `profiles/list.json`（订阅和配置的记录、当前配置） | 应用沙箱 | UI | UI、VPN 进程 |
 | 配置内容、摘要、订阅状态（`profiles/` 下其余文件） | 应用沙箱 | 核心确实停止时 UI；核心运行时订阅由 VPN 进程更新，本地编辑由 UI 经 controller 应用后提交 | UI、VPN 进程、内核 |
-| `runtime.json`（secret、本次连接的网络设置、模式、LAN、VPN 意图/token） | 应用沙箱 | UI 短锁提交；扩展新实例将转发意图复位为 stopped | VPN 进程、UI |
+| `runtime.json`（secret、本次连接的网络设置和应用排除名单、模式、LAN、VPN 意图/token） | 应用沙箱 | UI 短锁提交；扩展新实例将转发意图复位为 stopped | VPN 进程、UI |
 | `core_error.txt` | 应用沙箱 | VPN 进程 | UI，读后删除 |
 | `runtime-instance.json`（当前扩展实例标识） | 应用沙箱 | VPN 进程，创建资源前 | UI、VPN 进程 |
 | `runtime-stopped.json`（当前扩展实例清理完成回执） | 应用沙箱 | VPN 进程，内核与 VPN 连接均释放后 | UI，核对 secret 与实例 |
@@ -84,7 +85,11 @@ sequenceDiagram
 | Geo 数据（四类固定文件）和 `geo-<id>.json` 更新元数据 | 应用沙箱 | 在线 Go 管理器；VPN 安装器只恢复缺失或升级未接管的两份内置数据 | 内核、UI（只读文件信息） |
 | `geo-settings.json`（四类 URL、自动更新与小时间隔） | 应用沙箱 | UI 串行原子保存、revision 冲突保护 | Go 启动/热应用、UI |
 | `dns-overrides.json`（用户选中的全局 DNS 覆写项） | 应用沙箱 | 在线由 Go 原子提交，核心确认停止时由 UI 短锁提交 | Go 启动/热应用、UI |
-| `added-rules.json`（全局有序附加规则） | 应用沙箱 | 在线由 Go 原子提交，核心确认停止时由 UI 短锁提交 | Go 启动/热应用、UI |
+| `added-rules.json`（全局和配置级附加规则） | 应用沙箱 | 在线由 Go 原子提交，核心确认停止时由 UI 短锁提交 | Go 启动/热应用、UI |
+| `rule-sets.json`、`rule-sets/`（规则集目录、源文件和编译内容） | 应用沙箱 | VPN 进程校验和提交，UI 暂存本地导入内容 | Go 启动/热应用、UI |
+| `profiles/local-proxies.json`（自定义代理库） | 应用沙箱 | UI 配置文件锁、原子提交及修订检查 | UI |
+| `profiles/proxy-filters.json`（筛选预设） | 应用沙箱 | UI 配置文件锁、原子提交及修订检查 | UI |
+| `profiles/icon-sets.json`（图标集目录及图标地址） | 应用沙箱 | 本地由 UI 提交，连接时的 URL 同步由 VPN 进程下载并提交 | UI、VPN |
 | `geo.version`（内置资源版本） | 应用沙箱 | VPN 安装器全部复制成功后 | VPN 安装器 |
 | 用户设置（出站模式、局域网代理等） | UI 的 preferences | UI | UI |
 | 应用主题（深浅色、色板、导航及字体） | UI 的 `appearance` preferences | UI | UI；不进入 VPN 进程 |
@@ -95,7 +100,15 @@ Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/
 
 全局 DNS 由 `applyOverrides` 在解析订阅或本地配置时逐项合并。在线保存使用 `/arkclash/dns/settings`，在原有控制器和 TUN 上应用配置。设置页只读本地设置文件，DNS 记录页仍使用自己的诊断接口。见 [ADR-0021](adr/0021-global-dns-overrides.md)。
 
-附加规则在线保存使用 `/arkclash/rules/settings`，沿用 DNS 设置的配置热应用事务。全局规则按列表顺序置于每份配置的原规则之前，`MATCH-TARGET` 由当前配置解析。见 [ADR-0022](adr/0022-added-rules.md)。
+附加规则在线保存使用 `/arkclash/rules/settings`。标准模式按配置级规则、启用的全局规则、原配置规则的顺序合并。配置级规则保存后在覆写页应用，或随下次配置加载生效。全局规则变更只有影响当前标准配置时才热应用。见 [ADR-0028](adr/0028-standard-profile-overrides.md)。
+
+自定义规则集通过 `/arkclash/rule-sets` 保存和同步。内核只加载附加规则明确引用的规则集，使用稳定 ID 将规则集加入相应的运行配置。见 [ADR-0025](adr/0025-managed-rule-sets.md)。
+
+自定义代理库通过认证的 `/arkclash/local-proxies/{operation}` 在 VPN 进程编解码分享链接和校验节点定义。表单和库快照由 UI 管理。见 [ADR-0024](adr/0024-local-proxy-library.md)。
+
+筛选预设由 UI 保存，表达式通过 `/arkclash/proxy-filters/validate` 交给 mihomo 使用的正则引擎校验。选用预设后，表达式追加到当前配置草稿的 `filter` 或 `exclude-filter` 字段。见 [ADR-0026](adr/0026-proxy-filter-presets.md)。
+
+图标集经文件或 URL 导入。VPN 转发就绪时通过 `/arkclash/profiles/icon-set-download` 按当前规则下载清单。代理组的图标地址写入配置草稿的 `icon` 字段，由现有的代理页和仪表盘显示。见 [ADR-0027](adr/0027-icon-set-library.md)。
 
 `/arkclash/diagnostics/capture` 是随 UI 接收端存活的应用级采集通道，不传记录。连接与 DNS 工具只在页面可见、应用在前台且核心就绪时分别订阅 `/arkclash/diagnostics/connections`、`/arkclash/diagnostics/dns`；重新打开读取同代次完整有界历史，包括此前离页和后台期间的记录。连接首帧 live 基线不算 recent；FindProcessOff 不变，DNS initiator 不是应用身份。连接 ring 2000、DNS ring 3000，页面会话队列 256；溢出以 reset 补齐，dropped（会话内中间事件合并）与 evicted（历史淘汰）分开计数。详见 [ADR-0019](adr/0019-app-diagnostics-capture.md)。
 

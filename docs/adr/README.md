@@ -26,4 +26,10 @@
 | [0019](0019-app-diagnostics-capture.md) | 诊断采集跟随应用，实时列表跟随页面 | 已采纳，设备性能独立验收 |
 | [0020](0020-vpn-network-settings.md) | VPN 网络设置在建立隧道时应用 | 已采纳，待真机验收 |
 | [0021](0021-global-dns-overrides.md) | 全局 DNS 逐项覆写 | 已采纳，待真机验收 |
-| [0022](0022-added-rules.md) | 全局附加规则优先于配置规则 | 已采纳，待真机验收 |
+| [0022](0022-added-rules.md) | 全局附加规则优先于配置规则 | 由 0028 扩展 |
+| [0023](0023-profile-scripts-in-vpn.md) | 配置覆写脚本在 VPN 进程执行 | 已采纳，待真机验收 |
+| [0024](0024-local-proxy-library.md) | 自定义代理库与内核校验 | 已采纳，待真机验收 |
+| [0025](0025-managed-rule-sets.md) | 规则集库与附加规则引用 | 已采纳，待真机验收 |
+| [0026](0026-proxy-filter-presets.md) | 筛选预设与配置 YAML | 已采纳，待真机验收 |
+| [0027](0027-icon-set-library.md) | 图标集库与代理组图标 | 已采纳，待真机验收 |
+| [0028](0028-standard-profile-overrides.md) | 标准覆写的规则顺序与应用时机 | 已采纳，待真机验收 |
