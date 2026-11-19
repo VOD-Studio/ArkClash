@@ -13,8 +13,9 @@ import { analyze, ProfileSummary, readSummary } from '../../shared/profiles/Summ
 import { commitCandidate, downloadNewSubscription, ProfileCandidateChange, UpdateEnv, UpdateOutcome,
   UpdateScheduler } from '../../shared/profiles/Updater';
 import { parseProfileLinks, readSourceText, removeSavedProfile, saveProfileEdit, saveProfileOrder } from './ProfileActions';
+import { pickDocumentFile, documentFileName } from '../../client/DocumentPicker';
 import { ProfileBatchJob, runProfileBatch } from './ProfileBatch';
-import { exportProfileSource, migrateProfileLegacy, pickProfileFile, profileFileName, readProfileFile,
+import { exportProfileSource, migrateProfileLegacy, readProfileFile,
   stageProfileUri } from './ProfileFiles';
 import { mergeProfileItem, ProfileBatchFailure, ProfileBatchResult, ProfileEdit, ProfileItem, ProfileLinkEntry } from './ProfileModels';
 import { ProfileLibrarySnapshot, readProfileSnapshot } from './ProfileSnapshot';
@@ -153,14 +154,14 @@ export class ProfileStore {
     try {
       await this.ensureLoaded();
       if (this.context === undefined) { return 'io'; }
-      const uri = await pickProfileFile(this.context);
+      const uri = await pickDocumentFile(this.context);
       if (uri === undefined) { return undefined; }
       await this.recheckRoute();
       const generation = this.routeGeneration;
       const env = this.importEnv(generation);
       const profile = newId('p');
       const candidate = await stageProfileUri(this.filesDir, profile, uri);
-      const record: ProfileRecord = { id: profile, name: profileFileName(uri) || profile, nameEdited: false,
+      const record: ProfileRecord = { id: profile, name: documentFileName(uri) || profile, nameEdited: false,
         subscription: '', type: 'file' };
       const change: ProfileCandidateChange = { create: record };
       try {

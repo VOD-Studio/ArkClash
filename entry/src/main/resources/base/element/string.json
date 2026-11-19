@@ -2731,6 +2731,362 @@
     {
       "name": "network_excluded_apps_hint",
       "value": "Enter one application bundle name per line. Changes apply when VPN reconnects."
+    },
+    {
+      "name": "action_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "profile_extension",
+      "value": "Override"
+    },
+    {
+      "name": "script_title",
+      "value": "Scripts"
+    },
+    {
+      "name": "script_new",
+      "value": "Start from scratch"
+    },
+    {
+      "name": "script_import_url",
+      "value": "Import from URL"
+    },
+    {
+      "name": "script_url",
+      "value": "URL"
+    },
+    {
+      "name": "script_sync",
+      "value": "Sync"
+    },
+    {
+      "name": "script_synced",
+      "value": "Script synced"
+    },
+    {
+      "name": "script_local",
+      "value": "Local"
+    },
+    {
+      "name": "script_remote",
+      "value": "Remote"
+    },
+    {
+      "name": "script_no_items",
+      "value": "No scripts yet"
+    },
+    {
+      "name": "script_unnamed",
+      "value": "Unnamed"
+    },
+    {
+      "name": "script_name_hint",
+      "value": "Enter a script name"
+    },
+    {
+      "name": "script_delete_title",
+      "value": "Delete script?"
+    },
+    {
+      "name": "script_delete_bound",
+      "value": "Profiles using this script: %s. Choose another script or clear the selection before applying."
+    },
+    {
+      "name": "script_deleted",
+      "value": "Script deleted"
+    },
+    {
+      "name": "script_saved",
+      "value": "Script saved"
+    },
+    {
+      "name": "script_applied",
+      "value": "Applied"
+    },
+    {
+      "name": "script_saved_apply_error",
+      "value": "Saved. Apply failed: %s"
+    },
+    {
+      "name": "script_pending_core",
+      "value": "Saved. Applies when the profile is loaded."
+    },
+    {
+      "name": "script_remote_edit_hint",
+      "value": "Syncing replaces local edits with the remote version."
+    },
+    {
+      "name": "script_extend_mode",
+      "value": "Override mode"
+    },
+    {
+      "name": "script_standard",
+      "value": "Standard"
+    },
+    {
+      "name": "script_standard_desc",
+      "value": "Add rules to the original configuration"
+    },
+    {
+      "name": "standard_rules_title",
+      "value": "Profile rules"
+    },
+    {
+      "name": "standard_match_target",
+      "value": "MATCH target"
+    },
+    {
+      "name": "standard_follow_profile",
+      "value": "Follow profile"
+    },
+    {
+      "name": "standard_global_rules",
+      "value": "Global rules for this profile"
+    },
+    {
+      "name": "standard_target_load_failed",
+      "value": "Couldn't load profile targets. Tap to retry."
+    },
+    {
+      "name": "standard_basic_target",
+      "value": "Built-in policy"
+    },
+    {
+      "name": "standard_group_target",
+      "value": "Proxy group · %s"
+    },
+    {
+      "name": "standard_node_target",
+      "value": "Proxy · %s"
+    },
+    {
+      "name": "standard_match_target_missing",
+      "value": "Choose a MATCH target. The profile has no usable MATCH rule or the selected target is unavailable."
+    },
+    {
+      "name": "script_mode_desc",
+      "value": "Rewrite the configuration with an extension script"
+    },
+    {
+      "name": "script_extend_script",
+      "value": "Extension script"
+    },
+    {
+      "name": "script_go_to_manage",
+      "value": "Manage scripts"
+    },
+    {
+      "name": "script_go_to_rules",
+      "value": "Configure added rules"
+    },
+    {
+      "name": "script_apply_now",
+      "value": "Apply now"
+    },
+    {
+      "name": "script_clear_missing",
+      "value": "Tap to clear the selection"
+    },
+    {
+      "name": "script_undo",
+      "value": "Undo"
+    },
+    {
+      "name": "script_redo",
+      "value": "Redo"
+    },
+    {
+      "name": "script_complete",
+      "value": "Show completions"
+    },
+    {
+      "name": "script_copy_selection",
+      "value": "Copy selection"
+    },
+    {
+      "name": "script_editor_wrap",
+      "value": "Word wrap"
+    },
+    {
+      "name": "script_editor_font",
+      "value": "Editor font size"
+    },
+    {
+      "name": "script_font_standard",
+      "value": "Standard size"
+    },
+    {
+      "name": "script_font_large",
+      "value": "Large"
+    },
+    {
+      "name": "script_font_extra_large",
+      "value": "Extra large"
+    },
+    {
+      "name": "script_editor_failed",
+      "value": "Could not load the JavaScript editor"
+    },
+    {
+      "name": "script_err_store",
+      "value": "Could not read script data"
+    },
+    {
+      "name": "script_err_missing",
+      "value": "Selected script is missing"
+    },
+    {
+      "name": "script_err_empty",
+      "value": "The remote script is empty"
+    },
+    {
+      "name": "script_err_encoding",
+      "value": "Script must use UTF-8 encoding"
+    },
+    {
+      "name": "script_err_size",
+      "value": "Script or configuration exceeds the size limit"
+    },
+    {
+      "name": "script_err_config",
+      "value": "Invalid configuration after applying the script"
+    },
+    {
+      "name": "script_err_syntax",
+      "value": "JavaScript syntax error"
+    },
+    {
+      "name": "script_err_execution",
+      "value": "JavaScript execution failed"
+    },
+    {
+      "name": "script_err_entry",
+      "value": "The script must define a main(config) function"
+    },
+    {
+      "name": "script_err_pending",
+      "value": "The Promise returned by main() did not settle"
+    },
+    {
+      "name": "script_err_return",
+      "value": "main() must return a serializable configuration object"
+    },
+    {
+      "name": "script_err_timeout",
+      "value": "The script exceeded the 10-second time limit"
+    },
+    {
+      "name": "script_err_memory",
+      "value": "The script exceeded its memory limit"
+    },
+    {
+      "name": "script_err_stack",
+      "value": "The script exceeded its stack limit"
+    },
+    {
+      "name": "script_err_position",
+      "value": "%1$s (line %2$s, column %3$s)"
+    },
+    {
+      "name": "script_sync_error",
+      "value": "Could not sync %s"
+    },
+    {
+      "name": "script_import_file",
+      "value": "Import from file"
+    },
+    {
+      "name": "rule_set_title",
+      "value": "Rule Sets"
+    },
+    {
+      "name": "rule_set_new",
+      "value": "Start from scratch"
+    },
+    {
+      "name": "rule_set_auto",
+      "value": "Auto detect"
+    },
+    {
+      "name": "rule_set_invalid",
+      "value": "Check the rule set name, URL, and options."
+    },
+    {
+      "name": "rule_set_bad_content",
+      "value": "The file is empty, too large, or contains rules that do not match this format or behavior."
+    },
+    {
+      "name": "rule_set_download_error",
+      "value": "Could not download the rule set."
+    },
+    {
+      "name": "rule_set_in_use",
+      "value": "Remove this rule set from Added Rules before deleting it."
+    },
+    {
+      "name": "rule_set_failed",
+      "value": "Could not complete the rule set operation."
+    },
+    {
+      "name": "rule_set_empty",
+      "value": "No rule sets"
+    },
+    {
+      "name": "rule_set_batch_failed",
+      "value": "Could not import items %s. Their URLs are still in the form."
+    },
+    {
+      "name": "rule_set_saved",
+      "value": "Rule sets saved"
+    },
+    {
+      "name": "rule_set_synced",
+      "value": "Rule set synced"
+    },
+    {
+      "name": "rule_set_sync",
+      "value": "Sync"
+    },
+    {
+      "name": "rule_set_local",
+      "value": "Local"
+    },
+    {
+      "name": "rule_set_remote",
+      "value": "Remote"
+    },
+    {
+      "name": "rule_set_name",
+      "value": "Name"
+    },
+    {
+      "name": "rule_set_urls",
+      "value": "One URL per line"
+    },
+    {
+      "name": "rule_set_behavior",
+      "value": "Behavior"
+    },
+    {
+      "name": "rule_set_format",
+      "value": "Format"
+    },
+    {
+      "name": "rule_set_content_hint",
+      "value": "One rule per line, or a YAML payload"
+    },
+    {
+      "name": "rule_set_preview_partial",
+      "value": "Preview limited to the first 256 KiB."
+    },
+    {
+      "name": "rule_set_delete",
+      "value": "Delete “%s”?"
+    },
+    {
+      "name": "rule_set_choose",
+      "value": "Choose a rule set"
     }
   ]
 }

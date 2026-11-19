@@ -25,6 +25,7 @@ export function describeError(error: string): ResourceStr {
     case 'dns': return $r('app.string.profile_err_dns');
     case 'tls': return $r('app.string.profile_err_tls');
     case 'apply_failed': return $r('app.string.profile_err_apply');
+    case 'added_rules_match_target': return $r('app.string.standard_match_target_missing');
     case 'metadata_saved': return $r('app.string.profile_metadata_saved');
     case 'unsupported_input': return $r('app.string.profile_err_unsupported_input');
     default: return $r('app.string.err_network', '');

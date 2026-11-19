@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
+import { pickDocumentFile } from '../../client/DocumentPicker';
 import { hostOf } from '../../shared/profiles/Download';
 import { ProfileError } from '../../shared/profiles/Errors';
 import { analyze } from '../../shared/profiles/Summary';
@@ -9,22 +10,6 @@ import {
   ProfileList, ProfileRecord, readOptionalText, removeProfileFile, statePath, summaryPath, withProfileStorage,
   writeList, writeProfileText, yamlPath
 } from '../../shared/profiles/Store';
-
-export function profileFileName(uri: string): string {
-  const tail = uri.split('/').pop() ?? '';
-  try {
-    return decodeURIComponent(tail);
-  } catch (e) {
-    return tail;
-  }
-}
-
-export async function pickProfileFile(context: common.UIAbilityContext): Promise<string | undefined> {
-  const options = new picker.DocumentSelectOptions();
-  options.maxSelectNumber = 1;
-  const uris = await new picker.DocumentViewPicker(context).select(options);
-  return uris.length > 0 ? uris[0] : undefined;
-}
 
 export async function stageProfileUri(filesDir: string, profile: string, uri: string): Promise<string> {
   await ensureProfilesDir(filesDir);
@@ -44,7 +29,7 @@ export async function stageProfileUri(filesDir: string, profile: string, uri: st
 }
 
 export async function readProfileFile(context: common.UIAbilityContext): Promise<string | undefined> {
-  const uri = await pickProfileFile(context);
+  const uri = await pickDocumentFile(context);
   if (uri === undefined) {
     return undefined;
   }

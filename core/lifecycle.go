@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -33,9 +34,13 @@ type startOptions struct {
 	Mode     string `json:"mode"`     // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
 	AllowLan *bool  `json:"allowLan"` // nil = 用配置里的值
 	// Geo 设置只由原生启动流程从磁盘读取，不扩展 C ABI 或 ArkTS 参数。
-	Geo        geoSettings         `json:"-"`
-	DNS        dnsOverrideSettings `json:"-"`
-	AddedRules addedRulesSettings  `json:"-"`
+	Geo          geoSettings         `json:"-"`
+	DNS          dnsOverrideSettings `json:"-"`
+	AddedRules   addedRulesSettings  `json:"-"`
+	RuleSets     ruleSetCatalog      `json:"-"`
+	Script       profileScript       `json:"-"`
+	ProfileRules profileAddedRules   `json:"-"`
+	CustomRules  bool                `json:"-"`
 }
 
 var (
@@ -85,6 +90,14 @@ func start(opts startOptions) error {
 	}
 	opts.AddedRules, err = readAddedRules(opts.HomeDir)
 	if err != nil {
+		return err
+	}
+	opts.RuleSets, err = readRuleSets(opts.HomeDir)
+	if err != nil {
+		return err
+	}
+
+	if err := loadProfileExtension(&opts); err != nil {
 		return err
 	}
 
@@ -139,26 +152,51 @@ func parseConfig(path string, opts startOptions) (*config.Config, error) {
 }
 
 func parseConfigWithInbound(path string, opts startOptions, settings *inboundSettings) (*config.Config, error) {
-	var rawCfg *config.RawConfig
+	rawCfg, err := buildRawConfig(context.Background(), path, opts)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := prepareRawConfig(rawCfg, opts, settings)
+	if err != nil && opts.Script.enabled() && !errors.Is(err, errDNSProxyServersRequired) {
+		return nil, errScriptConfig
+	}
+	return cfg, err
+}
+
+func buildRawConfig(ctx context.Context, path string, opts startOptions) (*config.RawConfig, error) {
 	if path == "" {
 		if opts.Profile != "" {
 			return nil, errors.New("selected profile requires a configuration path")
 		}
-		rawCfg = config.DefaultRawConfig()
-	} else {
-		buf, err := os.ReadFile(path)
-		if err != nil {
+		return config.DefaultRawConfig(), nil
+	}
+	buf, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(buf) == 0 {
+		return nil, errors.New("selected configuration is empty")
+	}
+	if opts.Script.enabled() {
+		return scriptRawConfig(ctx, buf, opts.Script)
+	}
+	return config.UnmarshalRawConfig(buf)
+}
+
+func prepareRawConfig(rawCfg *config.RawConfig, opts startOptions, settings *inboundSettings) (*config.Config, error) {
+	if opts.Profile != "" && !opts.Script.enabled() && !opts.CustomRules {
+		rules := opts.AddedRules.effective(opts.ProfileRules)
+		if err := prependAddedRules(rawCfg, rules, opts.ProfileRules.MatchTarget); err != nil {
 			return nil, err
 		}
-		if len(buf) == 0 {
-			return nil, errors.New("selected configuration is empty")
-		}
-		rawCfg, err = config.UnmarshalRawConfig(buf)
-		if err != nil {
+		if err := opts.RuleSets.attach(rawCfg, opts.HomeDir, rules); err != nil {
 			return nil, err
 		}
 	}
 	applyOverrides(rawCfg, opts)
+	if opts.Profile != "" && opts.DNS.Entries.missingProxyServers(&rawCfg.DNS) {
+		return nil, errDNSProxyServersRequired
+	}
 	// 自定义 TUN 不经过平台 fd 所有权，不能让订阅绕过唯一的系统 VPN。
 	for _, mapping := range rawCfg.Listeners {
 		if kind, _ := mapping["type"].(string); kind == "tun" {
@@ -213,6 +251,9 @@ func reload(path, profile string, expectedProfile *string) error {
 	next := current
 	next.Profile = profile
 	next.ConfigPath = path
+	if err := loadProfileExtension(&next); err != nil {
+		return err
+	}
 	var nextInbound inboundSettings
 	cfg, err := parseConfigWithInbound(path, next, &nextInbound)
 	if err != nil {
@@ -344,7 +385,6 @@ func applyOverrides(rawCfg *config.RawConfig, opts startOptions) {
 	}
 	if opts.Profile != "" {
 		opts.DNS.Entries.apply(&rawCfg.DNS)
-		opts.AddedRules.apply(rawCfg)
 	}
 
 	// 用户在界面上选过的出站模式和局域网代理优先于配置，热切换后不会被新配置改回去（ADR-0010）。

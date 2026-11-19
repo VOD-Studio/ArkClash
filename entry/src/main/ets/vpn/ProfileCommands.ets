@@ -1,4 +1,5 @@
 import core from 'libarkclash.so';
+import { handleScriptDownload } from './ScriptUpdates';
 import { ProfileError } from '../shared/profiles/Errors';
 import { checkProfileCommit, findProfile, readListAsync, readStateAsync, validProfileId } from '../shared/profiles/Store';
 import { downloadNewSubscription, UpdateEnv, UpdateOutcome, UpdateScheduler } from '../shared/profiles/Updater';
@@ -51,6 +52,8 @@ export async function handleProfileCommand(scheduler: UpdateScheduler, env: Upda
       return await downloadNewSubscription(env, command.profile, command.subscription, command.url,
         command.label ?? '', eligible);
     }
+    case 'script-download':
+      return handleScriptDownload(env.filesDir, env.downloader, body, eligible);
     case 'changed': {
       scheduler.reschedule();
       const reply: VpnProfileOkReply = { ok: true };

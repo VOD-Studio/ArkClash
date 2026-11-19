@@ -1,4 +1,5 @@
 // VPN 扩展持有内核与 TUN；系统销毁扩展后不承诺继续运行。
+import { refreshDueScripts } from './ScriptUpdates';
 import { Want } from '@kit.AbilityKit';
 import { connection as networkConnection, vpnExtension, VpnExtensionAbility } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -147,7 +148,8 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     const result = await this.cleanupForwarding(undefined, true);
     if (this.coreTouched) {
       try {
-        await core.stop();
+        const stopping: Promise<void> = core.stop();
+        await stopping;
         this.coreTouched = false;
       } catch (_error) {
         result.errors.push('core_stop_failed');
@@ -225,6 +227,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       reload: (path: string, id: string, expectedProfile?: string): Promise<void> => {
         return core.reload(path, id, expectedProfile);
       },
+      updateResources: (eligible: () => boolean): Promise<void> => refreshDueScripts(filesDir, eligible),
       prefetch: (path: string) => {
         this.prefetch(path).catch(() => {});
       }
@@ -237,7 +240,8 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     this.checkGeneration(generation);
     this.coreTouched = true;
     this.nativeInitialized = true;
-    await core.start(JSON.stringify(options));
+    const starting: Promise<void> = core.start(JSON.stringify(options));
+    await starting;
     this.checkGeneration(generation);
     const status = await this.nativeStatus();
     this.checkGeneration(generation);
@@ -343,7 +347,8 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     }
     let phase = 'vpn_state_failed';
     try {
-      await core.updateVpnState('started', 'preparing', false);
+      const preparing: Promise<void> = core.updateVpnState('started', 'preparing', false);
+      await preparing;
       await this.checkOperation(operation);
       const defaults = new VpnNetworkSettings();
       defaults.stack = runtime.stack || defaults.stack;
@@ -355,14 +360,17 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       this.vpnCreated = true;
       await this.checkOperation(operation);
       phase = 'vpn_state_failed';
-      await core.updateVpnState('started', 'preparing', true);
+      const registered: Promise<void> = core.updateVpnState('started', 'preparing', true);
+      await registered;
       await this.checkOperation(operation);
       phase = 'vpn_attach_failed';
-      await core.attachTun(tunFd, JSON.stringify(network), request.bootId, request.profile ?? '',
+      const attaching: Promise<void> = core.attachTun(tunFd, JSON.stringify(network), request.bootId, request.profile ?? '',
         request.configRevision ?? 0);
+      await attaching;
       await this.checkOperation(operation);
       phase = 'vpn_state_failed';
-      await core.updateVpnState('started', 'running', true);
+      const forwarding: Promise<void> = core.updateVpnState('started', 'running', true);
+      await forwarding;
       await this.checkOperation(operation);
       const ready = await this.nativeStatus();
       await this.checkOperation(operation);
@@ -449,7 +457,8 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     const result: VpnCleanupResult = { errors: [] };
     if (this.coreTouched) {
       try {
-        await core.detachTun();
+        const detaching: Promise<void> = core.detachTun();
+        await detaching;
       } catch (_error) {
         result.errors.push('vpn_detach_failed');
       }
@@ -480,7 +489,9 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
         await this.observeCleanup(operation, result);
       }
       try {
-        await core.updateVpnState(intent, result.errors.length === 0 ? 'stopped' : 'failed', this.vpnCreated);
+        const published: Promise<void> = core.updateVpnState(intent, result.errors.length === 0 ? 'stopped' : 'failed',
+          this.vpnCreated);
+        await published;
       } catch (_error) {
         result.errors.push('vpn_state_failed');
       }

@@ -909,10 +909,16 @@ test('已有同名自动首选可明确清除组pin，actual仍标记第二实�
   tests.cancel();
 });
 
+async function controllerConsumer(fixtureUrl) {
+  const request = await sourceModule('../entry/src/main/ets/shared/ControllerRequest.ets',
+    `import { http, CONTROLLER_ADDRESS, readRuntime } from ${JSON.stringify(fixtureUrl)};\n`);
+  return import(await sourceModule('../entry/src/main/ets/client/Controller.ets',
+    `import { http } from ${JSON.stringify(fixtureUrl)};\nimport { call } from ${JSON.stringify(request)};\n`));
+}
+
 test('实际Controller首页摘要保留自动组第二同名实例历史及可见组图标', async () => {
   const harness = await consumerHarness();
-  const controller = await import(await sourceModule('../entry/src/main/ets/client/Controller.ets',
-    `import { http, CONTROLLER_ADDRESS, readRuntime } from ${JSON.stringify(harness.fixtureUrl)};\n`));
+  const controller = await controllerConsumer(harness.fixtureUrl);
   const pending = controller.getMainGroup('/fixture');
   await drainConsumers();
   const mode = harness.native.requests.shift();
@@ -1013,8 +1019,7 @@ test('URLTest缓存中的退休actual保持摘要和嵌套解析，当前成员�
 
 test('实际Controller摘要沿URLTest退休actual取旧实例，明确retired且不误取新同名历史', async () => {
   const harness = await consumerHarness();
-  const controller = await import(await sourceModule('../entry/src/main/ets/client/Controller.ets',
-    `import { http, CONTROLLER_ADDRESS, readRuntime } from ${JSON.stringify(harness.fixtureUrl)};\n`));
+  const controller = await controllerConsumer(harness.fixtureUrl);
   const pending = controller.getMainGroup('/fixture');
   await drainConsumers();
   const mode = harness.native.requests.shift();

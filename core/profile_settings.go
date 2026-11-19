@@ -73,6 +73,9 @@ func applyProfileSettingsLocked(next startOptions, path string, value any) (func
 	if next.Profile != "" {
 		var err error
 		cfg, err = parseProfileSettingsConfig(&next, &nextInbound)
+		if errors.Is(err, errDNSProxyServersRequired) || errors.Is(err, errAddedRulesMatchTarget) {
+			return nil, err
+		}
 		if err != nil {
 			return nil, errProfileSettingsInvalid
 		}

@@ -17,6 +17,7 @@ export async function readProfileSnapshot(filesDir: string): Promise<ProfileLibr
       item.name = record.name;
       item.nameEdited = record.nameEdited;
       item.subscription = record.subscription;
+      item.type = record.type ?? '';
       item.url = sub?.url ?? '';
       item.autoUpdate = sub?.autoUpdate ?? false;
       item.intervalMinutes = sub !== undefined ? intervalMinutes(sub) : 1440;

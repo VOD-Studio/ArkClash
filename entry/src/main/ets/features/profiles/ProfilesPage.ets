@@ -20,6 +20,7 @@ export struct ProfilesPage {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require store: ProfileStore;
   @Param @Require scroller: Scroller;
+  @Event onExtension: (profile: string) => void = (_profile: string): void => {};
   @Event onScrollDirection: (down: boolean) => void = (): void => {};
   @Param topInset: number = 0;
   @Param pickerMode: boolean = false;
@@ -301,6 +302,8 @@ export struct ProfilesPage {
               onEdit: (): void => this.openEdit(item), onRemove: (): void => this.confirmRemove(item),
               onCopy: (): void => { this.copyLink(item); }, onExport: (): void => { this.export(item); },
               onUpdate: (): void => { this.update(item); },
+              extensionAvailable: !this.pickerMode && item.type !== 'custom',
+              onExtension: (): void => this.onExtension(item.id),
               onDetails: (): void => { this.detailItem = item; this.detailShown = true; } })
           }
         }, (item: ProfileItem): string => item.id)

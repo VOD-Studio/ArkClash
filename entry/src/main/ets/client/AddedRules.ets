@@ -1,6 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { url } from '@kit.ArkTS';
-import { newId } from '../shared/profiles/Store';
+import { findProfile, newId, readListAsync, validProfileId } from '../shared/profiles/Store';
 import { ProfileSettingsFile, readProfileSettings, saveProfileSettings } from './ProfileSettingsFile';
 
 export interface AddedRule {
@@ -15,13 +15,22 @@ export interface AddedRule {
 export interface AddedRulesSettings {
   revision: string;
   rules: AddedRule[];
+  profiles?: ProfileAddedRules[];
+}
+
+export interface ProfileAddedRules {
+  profile: string;
+  revision: string;
+  rules: AddedRule[];
+  disabled: string[];
+  matchTarget: string;
 }
 
 export const ADDED_RULE_KINDS: string[] = [
   'DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD', 'DOMAIN-REGEX', 'DOMAIN-WILDCARD', 'GEOSITE',
   'IP-CIDR', 'IP-CIDR6', 'IP-SUFFIX', 'IP-ASN', 'GEOIP', 'SRC-GEOIP', 'SRC-IP-ASN', 'SRC-IP-CIDR',
   'SRC-IP-SUFFIX', 'DST-PORT', 'SRC-PORT', 'IN-PORT', 'IN-TYPE', 'IN-USER', 'IN-NAME', 'REMATCH-NAME',
-  'NETWORK', 'DSCP', 'AND', 'OR', 'NOT'
+  'NETWORK', 'DSCP', 'AND', 'OR', 'NOT', 'RULE-SET'
 ];
 
 export const ADDED_RULE_TARGETS: string[] = [
@@ -29,7 +38,7 @@ export const ADDED_RULE_TARGETS: string[] = [
 ];
 
 export function addedRuleHasParams(kind: string): boolean {
-  return ['IP-CIDR', 'IP-CIDR6', 'IP-SUFFIX', 'IP-ASN', 'GEOIP'].includes(kind);
+  return ['IP-CIDR', 'IP-CIDR6', 'IP-SUFFIX', 'IP-ASN', 'GEOIP', 'RULE-SET'].includes(kind);
 }
 
 export function newAddedRule(kind: string = 'DOMAIN', payload: string = '', target: string = 'DIRECT',
@@ -37,9 +46,9 @@ export function newAddedRule(kind: string = 'DOMAIN', payload: string = '', targ
   return { id: newId('rule.'), kind: kind, payload: payload, target: target, noResolve: noResolve, source: false };
 }
 
-export function addedRuleText(rule: AddedRule): string {
+export function addedRuleText(rule: AddedRule, label: string = rule.payload): string {
   const target = rule.target === 'MATCH' ? 'MATCH-TARGET' : rule.target;
-  return [rule.kind, rule.payload, target].join(',') + (rule.noResolve ? ',no-resolve' : '') + (rule.source ? ',src' : '');
+  return [rule.kind, label, target].join(',') + (rule.noResolve ? ',no-resolve' : '') + (rule.source ? ',src' : '');
 }
 
 function validPrefix(payload: string): boolean {
@@ -69,6 +78,9 @@ export function validAddedRule(rule: AddedRule): boolean {
     return false;
   }
   const payload = rule.payload;
+  if (rule.kind === 'RULE-SET') {
+    return /^[a-z0-9][a-z0-9-]{0,79}$/.test(payload);
+  }
   if (['AND', 'OR', 'NOT'].includes(rule.kind)) {
     return payload.startsWith('(') && payload.endsWith(')') &&
       !/\(\s*(RULE-SET|SUB-RULE|UID|PROCESS-[A-Z-]+)\s*,/i.test(payload);
@@ -89,18 +101,40 @@ export function emptyAddedRules(): AddedRulesSettings {
   return { revision: 'default', rules: [] };
 }
 
+export function profileAddedRules(settings: AddedRulesSettings, id: string): ProfileAddedRules {
+  return settings.profiles?.find((item: ProfileAddedRules): boolean => item.profile === id) ??
+    { profile: id, revision: '', rules: [], disabled: [], matchTarget: '' };
+}
+
+function validRevision(revision: string): boolean {
+  return typeof revision === 'string' && revision !== '' && revision.length <= 80;
+}
+
+function validRuleList(rules: AddedRule[]): boolean {
+  if (!Array.isArray(rules) || rules.length > 1000) { return false; }
+  const ids = new Set<string>();
+  for (const rule of rules) {
+    if (!validAddedRule(rule) || ids.has(rule.id)) { return false; }
+    ids.add(rule.id);
+  }
+  return true;
+}
+
 function checked(settings: AddedRulesSettings): AddedRulesSettings {
-  if (settings === null || typeof settings !== 'object' || typeof settings.revision !== 'string' ||
-    settings.revision === '' || settings.revision.length > 80 || !Array.isArray(settings.rules) ||
-    settings.rules.length > 1000) {
+  if (settings === null || typeof settings !== 'object' || !validRevision(settings.revision) ||
+    !validRuleList(settings.rules) || (settings.profiles !== undefined && !Array.isArray(settings.profiles))) {
     throw new Error('profile_settings_invalid');
   }
   const ids = new Set<string>();
-  for (const rule of settings.rules) {
-    if (!validAddedRule(rule) || ids.has(rule.id)) {
+  for (const item of settings.profiles ?? []) {
+    if (item === null || !validProfileId(item.profile) || ids.has(item.profile) || !validRevision(item.revision) ||
+      !validRuleList(item.rules) || !Array.isArray(item.disabled) || item.disabled.length > 1000 ||
+      item.disabled.some((id: string): boolean => typeof id !== 'string' || id === '' || id.length > 80) ||
+      typeof item.matchTarget !== 'string' || item.matchTarget.length > 1024 ||
+      item.matchTarget.trim() !== item.matchTarget || /[,\x00\r\n]/.test(item.matchTarget)) {
       throw new Error('profile_settings_invalid');
     }
-    ids.add(rule.id);
+    ids.add(item.profile);
   }
   return settings;
 }
@@ -114,8 +148,26 @@ export function readAddedRules(filesDir: string): Promise<AddedRulesSettings> {
   return readProfileSettings<AddedRulesSettings>(filesDir, storage);
 }
 
-export function saveAddedRules(context: common.UIAbilityContext, expectedRevision: string,
-  rules: AddedRule[]): Promise<AddedRulesSettings> {
-  return saveProfileSettings<AddedRulesSettings>(context, storage, expectedRevision,
-    { revision: newId('rules.'), rules: rules });
+export async function saveAddedRules(context: common.UIAbilityContext, expected: AddedRulesSettings,
+  rules: AddedRule[], edit?: ProfileAddedRules): Promise<AddedRulesSettings> {
+  const revision = newId('rules.');
+  const list = await readListAsync(context.filesDir);
+  if (edit !== undefined) {
+    const profile = findProfile(list, edit.profile);
+    if (profile === undefined || profile.type === 'custom' || edit.revision !== profileAddedRules(expected, edit.profile).revision) {
+      throw new Error('profile_settings_conflict');
+    }
+  }
+  const globals = new Set<string>(rules.map((rule: AddedRule): string => rule.id));
+  const profiles = (expected.profiles ?? []).filter((item: ProfileAddedRules): boolean =>
+    item.profile !== edit?.profile && findProfile(list, item.profile) !== undefined)
+    .map((item: ProfileAddedRules): ProfileAddedRules => ({ profile: item.profile, revision: item.revision,
+      rules: item.rules, matchTarget: item.matchTarget,
+      disabled: item.disabled.filter((id: string): boolean => globals.has(id)) }));
+  if (edit !== undefined) {
+    profiles.push({ profile: edit.profile, revision: revision, rules: edit.rules, matchTarget: edit.matchTarget,
+      disabled: edit.disabled.filter((id: string): boolean => globals.has(id)) });
+  }
+  return saveProfileSettings<AddedRulesSettings>(context, storage, expected.revision,
+    { revision: revision, rules: rules, profiles: profiles });
 }

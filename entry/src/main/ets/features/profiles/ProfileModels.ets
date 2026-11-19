@@ -6,6 +6,7 @@ export class ProfileItem {
   @Trace name: string = '';
   @Trace nameEdited: boolean = false;
   @Trace subscription: string = '';
+  @Trace type: string = '';
   @Trace url: string = '';
   @Trace autoUpdate: boolean = true;
   @Trace intervalMinutes: number = DEFAULT_INTERVAL_MINUTES;
@@ -62,6 +63,7 @@ export function mergeProfileItem(previous: ProfileItem | undefined, fresh: Profi
   previous.name = fresh.name;
   previous.nameEdited = fresh.nameEdited;
   previous.subscription = fresh.subscription;
+  previous.type = fresh.type;
   previous.url = fresh.url;
   previous.autoUpdate = fresh.autoUpdate;
   previous.intervalMinutes = fresh.intervalMinutes;

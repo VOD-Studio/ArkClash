@@ -238,6 +238,8 @@ export class UpdateScheduler {
           // 坏单项保留原文件，不能阻断其余订阅；页面读取时会显示损坏错误。
         }
       }
+      const eligible = (): boolean => !this.stopped && generation === this.generation && this.env.eligible?.() !== false;
+      if (eligible()) { await this.env.updateResources?.(eligible); }
     } finally {
       this.checking = false;
       if (generation !== this.generation && !this.stopped && this.env.eligible?.() !== false) {

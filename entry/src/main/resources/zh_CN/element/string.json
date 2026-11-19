@@ -2711,6 +2711,362 @@
     {
       "name": "network_excluded_apps_hint",
       "value": "每行填写一个应用包名，重新连接 VPN 后生效。"
+    },
+    {
+      "name": "action_retry",
+      "value": "重试"
+    },
+    {
+      "name": "profile_extension",
+      "value": "覆写"
+    },
+    {
+      "name": "script_title",
+      "value": "脚本"
+    },
+    {
+      "name": "script_new",
+      "value": "从零开始"
+    },
+    {
+      "name": "script_import_url",
+      "value": "从 URL 导入"
+    },
+    {
+      "name": "script_url",
+      "value": "链接"
+    },
+    {
+      "name": "script_sync",
+      "value": "同步"
+    },
+    {
+      "name": "script_synced",
+      "value": "脚本已同步"
+    },
+    {
+      "name": "script_local",
+      "value": "本地"
+    },
+    {
+      "name": "script_remote",
+      "value": "远程"
+    },
+    {
+      "name": "script_no_items",
+      "value": "暂无脚本"
+    },
+    {
+      "name": "script_unnamed",
+      "value": "未命名"
+    },
+    {
+      "name": "script_name_hint",
+      "value": "请输入脚本名称"
+    },
+    {
+      "name": "script_delete_title",
+      "value": "删除脚本？"
+    },
+    {
+      "name": "script_delete_bound",
+      "value": "以下配置引用此脚本：%s。删除后请在覆写中重新选择脚本或解除绑定。"
+    },
+    {
+      "name": "script_deleted",
+      "value": "脚本已删除"
+    },
+    {
+      "name": "script_saved",
+      "value": "脚本已保存"
+    },
+    {
+      "name": "script_applied",
+      "value": "已应用"
+    },
+    {
+      "name": "script_saved_apply_error",
+      "value": "已保存，应用失败：%s"
+    },
+    {
+      "name": "script_pending_core",
+      "value": "已保存，将在加载配置时应用"
+    },
+    {
+      "name": "script_remote_edit_hint",
+      "value": "同步时，远程内容会覆盖本地编辑。"
+    },
+    {
+      "name": "script_extend_mode",
+      "value": "覆写模式"
+    },
+    {
+      "name": "script_standard",
+      "value": "标准"
+    },
+    {
+      "name": "script_standard_desc",
+      "value": "在原配置基础上添加规则"
+    },
+    {
+      "name": "standard_rules_title",
+      "value": "配置附加规则"
+    },
+    {
+      "name": "standard_match_target",
+      "value": "MATCH 目标"
+    },
+    {
+      "name": "standard_follow_profile",
+      "value": "跟随配置"
+    },
+    {
+      "name": "standard_global_rules",
+      "value": "此配置使用的全局规则"
+    },
+    {
+      "name": "standard_target_load_failed",
+      "value": "读取配置目标失败，点击重试"
+    },
+    {
+      "name": "standard_basic_target",
+      "value": "基础策略"
+    },
+    {
+      "name": "standard_group_target",
+      "value": "代理组 · %s"
+    },
+    {
+      "name": "standard_node_target",
+      "value": "节点 · %s"
+    },
+    {
+      "name": "standard_match_target_missing",
+      "value": "请选择 MATCH 目标。当前配置缺少可用的 MATCH 规则，或所选策略已不可用。"
+    },
+    {
+      "name": "script_mode_desc",
+      "value": "使用扩展脚本改写整个配置"
+    },
+    {
+      "name": "script_extend_script",
+      "value": "扩展脚本"
+    },
+    {
+      "name": "script_go_to_manage",
+      "value": "前往配置脚本"
+    },
+    {
+      "name": "script_go_to_rules",
+      "value": "前往配置附加规则"
+    },
+    {
+      "name": "script_apply_now",
+      "value": "立即应用"
+    },
+    {
+      "name": "script_clear_missing",
+      "value": "点击解除绑定"
+    },
+    {
+      "name": "script_undo",
+      "value": "撤销"
+    },
+    {
+      "name": "script_redo",
+      "value": "重做"
+    },
+    {
+      "name": "script_complete",
+      "value": "显示补全"
+    },
+    {
+      "name": "script_copy_selection",
+      "value": "复制选中内容"
+    },
+    {
+      "name": "script_editor_wrap",
+      "value": "自动换行"
+    },
+    {
+      "name": "script_editor_font",
+      "value": "编辑器字号"
+    },
+    {
+      "name": "script_font_standard",
+      "value": "标准字号"
+    },
+    {
+      "name": "script_font_large",
+      "value": "大号"
+    },
+    {
+      "name": "script_font_extra_large",
+      "value": "特大号"
+    },
+    {
+      "name": "script_editor_failed",
+      "value": "JavaScript 编辑器加载失败"
+    },
+    {
+      "name": "script_err_store",
+      "value": "脚本数据读取失败"
+    },
+    {
+      "name": "script_err_missing",
+      "value": "所选脚本已不存在"
+    },
+    {
+      "name": "script_err_empty",
+      "value": "远程脚本内容为空"
+    },
+    {
+      "name": "script_err_encoding",
+      "value": "脚本必须使用 UTF-8 编码"
+    },
+    {
+      "name": "script_err_size",
+      "value": "脚本或配置超出大小限制"
+    },
+    {
+      "name": "script_err_config",
+      "value": "脚本处理后的配置无效"
+    },
+    {
+      "name": "script_err_syntax",
+      "value": "JavaScript 语法错误"
+    },
+    {
+      "name": "script_err_execution",
+      "value": "JavaScript 执行失败"
+    },
+    {
+      "name": "script_err_entry",
+      "value": "脚本必须定义 main(config) 函数"
+    },
+    {
+      "name": "script_err_pending",
+      "value": "main() 返回的 Promise 未完成"
+    },
+    {
+      "name": "script_err_return",
+      "value": "main() 必须返回可序列化的配置对象"
+    },
+    {
+      "name": "script_err_timeout",
+      "value": "脚本执行超过 10 秒"
+    },
+    {
+      "name": "script_err_memory",
+      "value": "脚本超出内存限制"
+    },
+    {
+      "name": "script_err_stack",
+      "value": "脚本超出调用栈限制"
+    },
+    {
+      "name": "script_err_position",
+      "value": "%1$s（第 %2$s 行，第 %3$s 列）"
+    },
+    {
+      "name": "script_sync_error",
+      "value": "同步 %s 失败"
+    },
+    {
+      "name": "script_import_file",
+      "value": "从文件导入"
+    },
+    {
+      "name": "rule_set_title",
+      "value": "规则集"
+    },
+    {
+      "name": "rule_set_new",
+      "value": "从空白新建"
+    },
+    {
+      "name": "rule_set_auto",
+      "value": "自动识别"
+    },
+    {
+      "name": "rule_set_invalid",
+      "value": "请检查规则集名称、URL 和选项。"
+    },
+    {
+      "name": "rule_set_bad_content",
+      "value": "文件为空、过大，或含有不符合所选格式或规则类型的内容。"
+    },
+    {
+      "name": "rule_set_download_error",
+      "value": "无法下载规则集。"
+    },
+    {
+      "name": "rule_set_in_use",
+      "value": "请先在附加规则中取消引用此规则集。"
+    },
+    {
+      "name": "rule_set_failed",
+      "value": "无法完成规则集操作。"
+    },
+    {
+      "name": "rule_set_empty",
+      "value": "暂无规则集"
+    },
+    {
+      "name": "rule_set_batch_failed",
+      "value": "第 %s 项导入失败，失败链接仍保留在表单中。"
+    },
+    {
+      "name": "rule_set_saved",
+      "value": "规则集已保存"
+    },
+    {
+      "name": "rule_set_synced",
+      "value": "规则集已同步"
+    },
+    {
+      "name": "rule_set_sync",
+      "value": "同步"
+    },
+    {
+      "name": "rule_set_local",
+      "value": "本地"
+    },
+    {
+      "name": "rule_set_remote",
+      "value": "远程"
+    },
+    {
+      "name": "rule_set_name",
+      "value": "名称"
+    },
+    {
+      "name": "rule_set_urls",
+      "value": "每行一个 URL"
+    },
+    {
+      "name": "rule_set_behavior",
+      "value": "规则类型"
+    },
+    {
+      "name": "rule_set_format",
+      "value": "格式"
+    },
+    {
+      "name": "rule_set_content_hint",
+      "value": "每行一条规则，或输入 YAML payload"
+    },
+    {
+      "name": "rule_set_preview_partial",
+      "value": "预览显示文件开头的 256 KiB。"
+    },
+    {
+      "name": "rule_set_delete",
+      "value": "删除「%s」？"
+    },
+    {
+      "name": "rule_set_choose",
+      "value": "请选择规则集"
     }
   ]
 }

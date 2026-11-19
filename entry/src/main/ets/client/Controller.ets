@@ -1,8 +1,9 @@
 // 内核 controller 的一次性查询和设置；推送类数据（流量等）在 Traffic.ets。
 import { http } from '@kit.NetworkKit';
-import { CONTROLLER_ADDRESS, readRuntime } from '../shared/Runtime';
+import { call } from '../shared/ControllerRequest';
 
-const TIMEOUT_MS = 3000;
+export { call };
+
 // 能选出实际节点的代理组类型，见 mihomo adapter/outboundgroup。
 const GROUP_TYPES: string[] = ['Selector', 'URLTest', 'Fallback', 'LoadBalance'];
 
@@ -12,9 +13,6 @@ interface ModeBody {
   mode: string;
 }
 
-interface ErrorBody {
-  message?: string;
-}
 
 export interface RuntimeStatus {
   profile: string;
@@ -29,6 +27,8 @@ export interface RuntimeStatus {
   bootId: string;
   revision: number;
   configRevision: number;
+  profileExtension?: string;
+  standardRulesRevision?: string;
   version: string;
   mode: OutboundMode;
 }
@@ -74,42 +74,6 @@ export interface GroupSummary {
   retired: boolean;
   groups: string[]; // 按配置顺序
   groupIcons?: Record<string, string>;
-}
-
-/** 非 2xx 时抛出 Error，message 优先用响应里的 message（ArkClash 自有接口的错误格式）。 */
-export async function call(filesDir: string, method: http.RequestMethod, path: string, body?: string,
-  timeoutMs: number = TIMEOUT_MS): Promise<string> {
-  const runtime = await readRuntime(filesDir);
-  if (runtime === undefined) {
-    throw new Error('core is not running');
-  }
-  const request = http.createHttp();
-  try {
-    const header: Record<string, string> = {
-      'Authorization': `Bearer ${runtime.secret}`,
-      'Content-Type': 'application/json'
-    };
-    const response = await request.request(`http://${CONTROLLER_ADDRESS}${path}`, {
-      method: method,
-      header: header,
-      extraData: body,
-      connectTimeout: TIMEOUT_MS,
-      readTimeout: timeoutMs,
-      expectDataType: http.HttpDataType.STRING
-    });
-    if (response.responseCode < 200 || response.responseCode >= 300) {
-      let message: string | undefined;
-      try {
-        message = (JSON.parse(response.result as string) as ErrorBody).message;
-      } catch (e) {
-        message = undefined;
-      }
-      throw new Error(message ?? `controller ${path}: HTTP ${response.responseCode}`);
-    }
-    return response.result as string;
-  } finally {
-    request.destroy();
-  }
 }
 
 // /configs 的字段名带连字符（mixed-port），按 Record 读。

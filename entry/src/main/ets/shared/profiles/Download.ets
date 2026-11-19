@@ -16,6 +16,7 @@ export interface DownloadInfo {
 
 export interface DownloadRequestIdentity {
   canceled: () => boolean;
+  maxBytes?: number;
 }
 
 export interface Downloader {
@@ -185,7 +186,8 @@ export class DirectDownloader implements Downloader {
           header: address.headers,
           connectTimeout: DOWNLOAD_TIMEOUT_MS,
           readTimeout: DOWNLOAD_TIMEOUT_MS,
-          expectDataType: http.HttpDataType.ARRAY_BUFFER
+          expectDataType: http.HttpDataType.ARRAY_BUFFER,
+          maxLimit: identity?.maxBytes
         });
         response = await Promise.race<http.HttpResponse>([pending, deadline]);
         clearTimeout(timer);

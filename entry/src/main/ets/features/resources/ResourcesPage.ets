@@ -1,6 +1,10 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
+import { fetchConfigScript } from '../../client/ScriptDownloads';
+import { applyConfigScript } from '../../shared/profiles/ScriptApply';
+import { ConfigScript, readConfigScripts } from '../../shared/profiles/Scripts';
+import { formatUpdatedAgo } from '../../components/Format';
 import { connection, Connection } from '../../client/Connection';
 import { DestinationTitle } from '../../components/DestinationTitle';
 import {
@@ -14,6 +18,9 @@ import { GeoResourceItem, ResourcesStore } from './Resources';
 
 @ComponentV2
 export struct ResourcesPage {
+  @Event onScript: (id: string) => void = (_id: string): void => {};
+  @Local private remoteScripts: ConfigScript[] = [];
+  @Local private syncingScript: string = '';
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Local store: ResourcesStore = new ResourcesStore();
@@ -56,11 +63,55 @@ export struct ResourcesPage {
   }
 
   private async restore(generation: number): Promise<void> {
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.loadScripts(context, generation);
     try {
-      await this.store.load(this.getUIContext().getHostContext() as common.UIAbilityContext);
+      await this.store.load(context);
     } catch (error) {
       if (this.isCurrent(generation)) { this.toast(geoErrorText((error as Error).message)); }
     }
+  }
+
+  private async loadScripts(context: common.UIAbilityContext, generation: number): Promise<void> {
+    try {
+      const snapshot = await readConfigScripts(context.filesDir);
+      if (this.isCurrent(generation)) {
+        this.remoteScripts = snapshot.scripts.filter((item: ConfigScript): boolean => item.url !== '');
+      }
+    } catch (error) {
+      if (this.isCurrent(generation)) { this.toast($r('app.string.script_err_store')); }
+    }
+  }
+
+  private async syncScripts(items: ConfigScript[]): Promise<void> {
+    if (this.syncingScript !== '' || items.length === 0) { return; }
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const generation = this.generation;
+    for (const item of items) {
+      if (!this.isCurrent(generation)) { break; }
+      this.syncingScript = item.id;
+      let saved = false;
+      try {
+        const snapshot = await fetchConfigScript(context, item.url, item);
+        saved = true;
+        if (this.isCurrent(generation)) {
+          this.remoteScripts = snapshot.scripts.filter((script: ConfigScript): boolean => script.url !== '');
+        }
+        await applyConfigScript(context.filesDir, snapshot, '', item.id);
+        if (items.length === 1 && this.isCurrent(generation)) { this.toast($r('app.string.script_synced')); }
+      } catch (error) {
+        if (this.isCurrent(generation)) {
+          this.toast(saved ? $r('app.string.script_saved_apply_error', item.name) :
+            $r('app.string.script_sync_error', item.name));
+        }
+      }
+    }
+    this.syncingScript = '';
+  }
+
+  private syncAll(): void {
+    if (this.store.canSync) { this.syncResources(GEO_RESOURCE_IDS); }
+    this.syncScripts(this.remoteScripts);
   }
 
   private isCurrent(generation: number): boolean {
@@ -284,7 +335,7 @@ export struct ResourcesPage {
   HeaderMenus() {
     Row({ space: HEADER_GAP }) {
       Button({ type: ButtonType.Circle }) {
-        if (this.updating()) {
+        if (this.updating() || this.syncingScript !== '') {
           LoadingProgress().width(HEADER_ICON_SIZE).height(HEADER_ICON_SIZE).color($r('sys.color.font_primary'))
             .accessibilityText($r('app.string.geo_updating'))
         } else {
@@ -294,11 +345,11 @@ export struct ResourcesPage {
       }
       .attributeModifier(HEADER_ACTION)
       .systemMaterial(this.appStyle.headerMaterial())
-      .enabled(this.store.canSync && !this.updating())
+      .enabled((this.store.canSync || this.remoteScripts.length > 0) && !this.updating() && this.syncingScript === '')
       .accessibilityText($r('app.string.action_update_all'))
       .accessibilityDescription(this.updating() ? $r('app.string.geo_updating') :
         (this.store.canSync ? $r('app.string.action_update_all') : $r('app.string.geo_connect_to_update')))
-      .onClick((): void => { this.syncResources(GEO_RESOURCE_IDS); })
+      .onClick((): void => this.syncAll())
     }
     .height('100%')
     .alignItems(VerticalAlign.Center)
@@ -340,6 +391,39 @@ export struct ResourcesPage {
     }
     .height('100%')
     .width('100%')
+  }
+
+  @Builder
+  ScriptResources() {
+    if (this.remoteScripts.length > 0) {
+      Text($r('app.string.script_title')).fontFamily(this.appStyle.fontFamily).fontSize(14).fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_secondary')).width('100%').padding({ left: 16, right: 16 })
+      Column() {
+        ForEach(this.remoteScripts, (item: ConfigScript, index: number) => {
+          if (index > 0) { Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 16 }) }
+          Row({ space: 8 }) {
+            Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.NORMAL }) {
+              Column({ space: 4 }) {
+                Text(item.name).fontFamily(this.appStyle.fontFamily).fontSize(16).fontColor($r('sys.color.font_primary'))
+                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(item.url).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
+                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              }.width('100%').alignItems(HorizontalAlign.Start)
+            }.layoutWeight(1).height(56).padding(0).backgroundColor(Color.Transparent)
+              .enabled(this.syncingScript === '').onClick((): void => this.onScript(item.id))
+            Text(formatUpdatedAgo(item.updatedAt, this.store.now)).fontSize(13).fontColor($r('sys.color.font_secondary'))
+            Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
+              if (this.syncingScript === item.id) {
+                LoadingProgress().width(22).height(22).color(this.appStyle.palette.brand)
+              } else {
+                SymbolGlyph($r('sys.symbol.arrow_clockwise')).fontSize(20).fontColor([$r('sys.color.font_secondary')])
+              }
+            }.width(40).height(40).backgroundColor(Color.Transparent).enabled(this.syncingScript === '')
+              .accessibilityText($r('app.string.script_sync')).onClick((): void => { this.syncScripts([item]); })
+          }.width('100%').height(64).padding({ left: 16, right: 8 })
+        }, (item: ConfigScript): string => item.id)
+      }.width('100%').borderRadius(22).clip(true).backgroundColor(this.appStyle.palette.cardBackground)
+    }
   }
 
   build() {
@@ -403,6 +487,7 @@ export struct ResourcesPage {
               .clip(true)
               .backgroundColor(this.appStyle.palette.cardBackground)
             }
+            this.ScriptResources()
             if (this.store.settingsError !== '') {
               Column({ space: 12 }) {
                 Text(geoErrorText(this.store.settingsError)).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('app.color.status_error'))

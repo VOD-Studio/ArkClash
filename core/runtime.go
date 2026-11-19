@@ -18,20 +18,22 @@ import (
 
 // 快照只在持有 mu 的提交点替换，controller 查询不等待配置解析或资源关闭。
 type statusResponse struct {
-	Profile        string `json:"profile"`
-	Running        bool   `json:"running"`
-	Intent         string `json:"intent"`
-	Forward        string `json:"forward"`
-	SessionMode    string `json:"sessionMode"`
-	ListenersOpen  bool   `json:"listenersOpen"`
-	TunAttached    bool   `json:"tunAttached"`
-	VpnCreated     bool   `json:"vpnCreated"`
-	StartedAt      int64  `json:"startedAt"`
-	BootID         string `json:"bootId"`
-	Revision       uint64 `json:"revision"`
-	ConfigRevision uint64 `json:"configRevision"`
-	Version        string `json:"version"`
-	Mode           string `json:"mode"`
+	Profile               string `json:"profile"`
+	ProfileExtension      string `json:"profileExtension,omitempty"`
+	StandardRulesRevision string `json:"standardRulesRevision,omitempty"`
+	Running               bool   `json:"running"`
+	Intent                string `json:"intent"`
+	Forward               string `json:"forward"`
+	SessionMode           string `json:"sessionMode"`
+	ListenersOpen         bool   `json:"listenersOpen"`
+	TunAttached           bool   `json:"tunAttached"`
+	VpnCreated            bool   `json:"vpnCreated"`
+	StartedAt             int64  `json:"startedAt"`
+	BootID                string `json:"bootId"`
+	Revision              uint64 `json:"revision"`
+	ConfigRevision        uint64 `json:"configRevision"`
+	Version               string `json:"version"`
+	Mode                  string `json:"mode"`
 }
 
 var runtimeSnapshot atomic.Pointer[statusResponse]
@@ -86,7 +88,10 @@ func publishRuntime() {
 		ListenersOpen: businessListenersOpen(),
 		TunAttached:   tunListener != nil, VpnCreated: runtimeVpnCreated,
 		BootID: runtimeBootID, Revision: runtimeRevision, Version: constant.Version, Mode: tunnel.Mode().String(),
-		ConfigRevision: runtimeConfigRevision,
+		ConfigRevision: runtimeConfigRevision, ProfileExtension: current.Script.identity,
+	}
+	if !current.Script.enabled() {
+		next.StandardRulesRevision = current.ProfileRules.Revision
 	}
 	if next.Forward == "running" && (!running || next.Intent != "started" || !next.TunAttached || !next.VpnCreated) ||
 		next.Forward == "stopped" && (next.TunAttached || next.VpnCreated || next.ListenersOpen) ||

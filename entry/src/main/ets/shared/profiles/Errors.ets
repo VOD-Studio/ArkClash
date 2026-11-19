@@ -10,7 +10,9 @@ export class ProfileError extends Error {
 const CODES: string[] = ['http', 'not_clash', 'invalid_yaml', 'rejected', 'network', 'io', 'not_found', 'busy',
   'conflict', 'canceled', 'timeout', 'dns', 'tls', 'corrupt', 'url_invalid', 'name_empty', 'name_taken',
   'name_long', 'link_exists', 'interval_invalid', 'in_use', 'unsupported_input', 'age_required', 'apply_failed',
-  'metadata_saved', 'host_unknown'];
+  'metadata_saved', 'host_unknown', 'script_empty', 'script_encoding', 'script_size', 'script_store', 'script_conflict',
+  'icon_set_input', 'icon_set_invalid', 'icon_set_size', 'icon_set_download', 'icon_set_conflict',
+  'added_rules_match_target'];
 
 export function errorString(error: Object): string {
   const message = (error as Error).message ?? '';

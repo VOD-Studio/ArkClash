@@ -1,4 +1,5 @@
 import { AddedRule, ADDED_RULE_KINDS, ADDED_RULE_TARGETS, addedRuleHasParams } from '../../client/AddedRules';
+import { RuleSetItem } from '../../client/RuleSets';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { PAGE_GUTTER } from '../../components/Theme';
 import { SettingsSection } from './SettingsSection';
@@ -45,6 +46,8 @@ export struct AddedRuleEditor {
   @Param saving: boolean = false;
   @Param discardRequested: boolean = false;
   @Param issue: ResourceStr = '';
+  @Param ruleSets: RuleSetItem[] = [];
+  @Param ruleSetOptions: SelectOption[] = [];
   @Event onSave: () => void = () => {};
   @Event onCancel: () => void = () => {};
   @Event onDiscard: () => void = () => {};
@@ -61,6 +64,10 @@ export struct AddedRuleEditor {
     Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 16 })
   }
 
+  private ruleSetIndex(): number {
+    return this.ruleSets.findIndex((item: RuleSetItem): boolean => item.id === this.draft.payloadText);
+  }
+
   @Builder
   BasicRows() {
     Row({ space: 12 }) {
@@ -70,21 +77,40 @@ export struct AddedRuleEditor {
         .selected(Math.max(0, ADDED_RULE_KINDS.indexOf(this.draft.kind)))
         .value(this.draft.kind)
         .onSelect((index: number): void => {
-          this.draft.kind = ADDED_RULE_KINDS[index] ?? this.draft.kind;
+          const next = ADDED_RULE_KINDS[index] ?? this.draft.kind;
+          if (next !== this.draft.kind && (next === 'RULE-SET' || this.draft.kind === 'RULE-SET')) {
+            this.draft.payloadText = '';
+          }
+          this.draft.kind = next;
           this.onChange();
         })
     }
     .width('100%').constraintSize({ minHeight: 56 }).padding({ left: 16, right: 12 })
     this.RuleDivider()
     Row({ space: 12 }) {
-      this.Label($r('app.string.added_rules_content'))
-      TextInput({ text: this.draft.payloadText, placeholder: $r('app.string.added_rules_content_hint') })
-        .layoutWeight(1)
-        .textAlign(TextAlign.End)
-        .height(44)
-        .maxLength(2048)
-        .backgroundColor(Color.Transparent)
-        .onChange((input: string): void => { this.draft.payloadText = input; this.onChange(); })
+      if (this.draft.kind === 'RULE-SET') {
+        this.Label($r('app.string.rule_set_title'))
+        Blank()
+        if (this.ruleSets.length === 0) {
+          Text($r('app.string.rule_set_empty')).fontSize(14).fontColor($r('sys.color.font_secondary'))
+        } else {
+          Select(this.ruleSetOptions).selected(this.ruleSetIndex())
+            .value(this.ruleSets[this.ruleSetIndex()]?.name ?? $r('app.string.rule_set_choose'))
+            .onSelect((index: number): void => {
+              this.draft.payloadText = this.ruleSets[index]?.id ?? '';
+              this.onChange();
+            })
+        }
+      } else {
+        this.Label($r('app.string.added_rules_content'))
+        TextInput({ text: this.draft.payloadText, placeholder: $r('app.string.added_rules_content_hint') })
+          .layoutWeight(1)
+          .textAlign(TextAlign.End)
+          .height(44)
+          .maxLength(2048)
+          .backgroundColor(Color.Transparent)
+          .onChange((input: string): void => { this.draft.payloadText = input; this.onChange(); })
+      }
     }
     .width('100%').constraintSize({ minHeight: 56 }).padding({ left: 16, right: 12 })
     this.RuleDivider()

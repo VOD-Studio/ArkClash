@@ -1,10 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/metacubex/chi/render"
@@ -24,11 +27,22 @@ type addedRule struct {
 }
 
 type addedRulesSettings struct {
-	Revision string      `json:"revision"`
-	Rules    []addedRule `json:"rules"`
+	Revision string              `json:"revision"`
+	Rules    []addedRule         `json:"rules"`
+	Profiles []profileAddedRules `json:"profiles,omitempty"`
+}
+
+type profileAddedRules struct {
+	Profile     string      `json:"profile"`
+	Revision    string      `json:"revision"`
+	Rules       []addedRule `json:"rules"`
+	Disabled    []string    `json:"disabled"`
+	MatchTarget string      `json:"matchTarget"`
 }
 
 var nonPortableChild = regexp.MustCompile(`(?i)\(\s*(RULE-SET|SUB-RULE|UID|PROCESS-[A-Z-]+)\s*,`)
+var addedRulesProfileID = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+var errAddedRulesMatchTarget = errors.New("added_rules_match_target")
 
 func (r addedRule) valid() bool {
 	if r.ID == "" || len(r.ID) > 80 || r.Payload == "" || len(r.Payload) > 2048 ||
@@ -41,6 +55,8 @@ func (r addedRule) valid() bool {
 		return false
 	}
 	switch r.Kind {
+	case "RULE-SET":
+		return ruleSetID.MatchString(r.Payload)
 	case "IP-CIDR", "IP-CIDR6", "IP-SUFFIX", "IP-ASN", "GEOIP":
 		return !strings.Contains(r.Payload, ",")
 	case "DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-WILDCARD", "GEOSITE", "SRC-GEOIP",
@@ -57,36 +73,104 @@ func (r addedRule) valid() bool {
 }
 
 func (s addedRulesSettings) validate() error {
-	if s.Revision == "" || len(s.Revision) > 80 || s.Rules == nil || len(s.Rules) > 1000 {
+	if s.Revision == "" || len(s.Revision) > 80 || !validAddedRuleList(s.Rules) {
 		return errProfileSettingsInvalid
 	}
-	ids := make(map[string]bool, len(s.Rules))
-	for _, rule := range s.Rules {
-		if !rule.valid() || ids[rule.ID] {
+	profiles := make(map[string]bool)
+	for _, profile := range s.Profiles {
+		id := profile.Profile
+		if !addedRulesProfileID.MatchString(id) || id == "." || id == ".." || profiles[id] ||
+			profile.Revision == "" || len(profile.Revision) > 80 || !validAddedRuleList(profile.Rules) ||
+			profile.Disabled == nil || len(profile.Disabled) > 1000 || len(profile.MatchTarget) > 1024 ||
+			strings.TrimSpace(profile.MatchTarget) != profile.MatchTarget || strings.ContainsAny(profile.MatchTarget, ",\x00\r\n") {
 			return errProfileSettingsInvalid
 		}
-		ids[rule.ID] = true
+		disabled := make(map[string]bool, len(profile.Disabled))
+		for _, ruleID := range profile.Disabled {
+			if ruleID == "" || len(ruleID) > 80 || disabled[ruleID] {
+				return errProfileSettingsInvalid
+			}
+			disabled[ruleID] = true
+		}
+		profiles[id] = true
 	}
 	return nil
 }
 
-func (s addedRulesSettings) apply(raw *config.RawConfig) {
-	if len(s.Rules) == 0 {
-		return
+func validAddedRuleList(rules []addedRule) bool {
+	if rules == nil || len(rules) > 1000 {
+		return false
 	}
-	match := "DIRECT"
-	for i := len(raw.Rule) - 1; i >= 0; i-- {
-		kind, _, target, _ := common.ParseRulePayload(raw.Rule[i], true)
-		if kind == "MATCH" && target != "" {
-			match = target
-			break
+	ids := make(map[string]bool, len(rules))
+	for _, rule := range rules {
+		if !rule.valid() || ids[rule.ID] {
+			return false
+		}
+		ids[rule.ID] = true
+	}
+	return true
+}
+
+func (s addedRulesSettings) forProfile(profile string) profileAddedRules {
+	for _, entry := range s.Profiles {
+		if entry.Profile == profile {
+			return entry
 		}
 	}
-	rules := make([]string, 0, len(s.Rules)+len(raw.Rule))
+	return profileAddedRules{}
+}
+
+func (s addedRulesSettings) effective(profile profileAddedRules) []addedRule {
+	if len(profile.Disabled) == 0 && len(profile.Rules) == 0 {
+		return s.Rules
+	}
+	disabled := make(map[string]bool, len(profile.Disabled))
+	for _, id := range profile.Disabled {
+		disabled[id] = true
+	}
+	effective := slices.Clone(profile.Rules)
 	for _, rule := range s.Rules {
+		if !disabled[rule.ID] {
+			effective = append(effective, rule)
+		}
+	}
+	return effective
+}
+
+func prependAddedRules(raw *config.RawConfig, added []addedRule, match string) error {
+	if len(added) == 0 {
+		return nil
+	}
+	needsMatch := slices.ContainsFunc(added, func(rule addedRule) bool { return rule.Target == "MATCH" })
+	if needsMatch && match == "" {
+		for i := len(raw.Rule) - 1; i >= 0; i-- {
+			kind, _, target, _ := common.ParseRulePayload(raw.Rule[i], true)
+			if kind == "MATCH" && target != "" {
+				match = target
+				break
+			}
+		}
+	}
+	if needsMatch && !validMatchTarget(raw, match) {
+		return errAddedRulesMatchTarget
+	}
+	rules := make([]string, 0, len(added)+len(raw.Rule))
+	for _, rule := range added {
 		rules = append(rules, rule.raw(match))
 	}
 	raw.Rule = append(rules, raw.Rule...)
+	return nil
+}
+
+func validMatchTarget(raw *config.RawConfig, name string) bool {
+	switch name {
+	case "DIRECT", "REJECT", "REJECT-DROP", "PASS", "PASS-RULE", "COMPATIBLE", "GLOBAL":
+		return true
+	case "":
+		return false
+	}
+	return slices.ContainsFunc(raw.ProxyGroup, func(item map[string]any) bool { return item["name"] == name }) ||
+		slices.ContainsFunc(raw.Proxy, func(item map[string]any) bool { return item["name"] == name })
 }
 
 func (r addedRule) raw(match string) string {
@@ -94,7 +178,11 @@ func (r addedRule) raw(match string) string {
 	if target == "MATCH" {
 		target = match
 	}
-	text := r.Kind + "," + r.Payload + "," + target
+	payload := r.Payload
+	if r.Kind == "RULE-SET" {
+		payload = managedRuleSetName(payload)
+	}
+	text := r.Kind + "," + payload + "," + target
 	if r.NoResolve {
 		text += ",no-resolve"
 	}
@@ -122,6 +210,33 @@ func readAddedRules(home string) (addedRulesSettings, error) {
 		return settings, err
 	}
 	return settings, settings.validate()
+}
+
+func readProfileTypes(home string) (map[string]string, error) {
+	file, err := os.Open(filepath.Join(home, "profiles", "list.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errProfileSettingsIO
+	}
+	defer file.Close()
+	var list struct {
+		Profiles []struct {
+			ID   string `json:"id"`
+			Type string `json:"type"`
+		} `json:"profiles"`
+	}
+	const limit = 8 << 20
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil || len(data) > limit || json.Unmarshal(data, &list) != nil {
+		return nil, errProfileSettingsInvalid
+	}
+	types := make(map[string]string, len(list.Profiles))
+	for _, item := range list.Profiles {
+		types[item.ID] = item.Type
+	}
+	return types, nil
 }
 
 func postAddedRules(w http.ResponseWriter, r *http.Request) {
@@ -158,15 +273,88 @@ func updateAddedRules(request profileSettingsRequest[addedRulesSettings]) error 
 	}
 	next := current
 	next.AddedRules = request.Settings
-	if next.Profile == "" {
-		for _, rule := range next.AddedRules.Rules {
-			kind, payload, target, params := common.ParseRulePayload(rule.raw("DIRECT"), true)
-			if _, err := mihomoRules.ParseRule(kind, payload, target, params, nil); err != nil {
-				return errProfileSettingsInvalid
-			}
+	if next.AddedRules.Profiles == nil {
+		next.AddedRules.Profiles = slices.Clone(current.AddedRules.Profiles)
+	}
+	if len(next.AddedRules.Profiles) > 0 {
+		types, err := readProfileTypes(next.HomeDir)
+		if err != nil {
+			return err
 		}
+		if types != nil {
+			for _, entry := range next.AddedRules.Profiles {
+				kind, exists := types[entry.Profile]
+				if (!exists || kind == "custom") &&
+					entry.Revision != current.AddedRules.forProfile(entry.Profile).Revision {
+					return errProfileSettingsConflict
+				}
+			}
+			next.AddedRules.Profiles = slices.DeleteFunc(next.AddedRules.Profiles, func(entry profileAddedRules) bool {
+				kind, exists := types[entry.Profile]
+				return !exists || kind == "custom"
+			})
+		}
+	}
+	globalIDs := make(map[string]bool, len(next.AddedRules.Rules))
+	for _, rule := range next.AddedRules.Rules {
+		globalIDs[rule.ID] = true
+	}
+	for i := range next.AddedRules.Profiles {
+		entry := &next.AddedRules.Profiles[i]
+		entry.Disabled = slices.DeleteFunc(slices.Clone(entry.Disabled), func(id string) bool { return !globalIDs[id] })
+		prior := current.AddedRules.forProfile(entry.Profile)
+		if entry.Revision == prior.Revision &&
+			(!slices.Equal(entry.Rules, prior.Rules) || entry.MatchTarget != prior.MatchTarget ||
+				!slices.Equal(entry.Disabled, slices.DeleteFunc(slices.Clone(prior.Disabled), func(id string) bool {
+					return !globalIDs[id]
+				}))) {
+			return errProfileSettingsConflict
+		}
+		if err := validateAddedRuleContent(entry.Rules, prior.Rules, next.RuleSets); err != nil {
+			return err
+		}
+	}
+	if err := validateAddedRuleContent(next.AddedRules.Rules, current.AddedRules.Rules, next.RuleSets); err != nil {
+		return err
+	}
+	next.ProfileRules.Disabled = slices.DeleteFunc(slices.Clone(current.ProfileRules.Disabled), func(id string) bool {
+		return !globalIDs[id]
+	})
+	if next.Profile == "" || next.CustomRules || next.Script.enabled() ||
+		slices.Equal(current.AddedRules.effective(current.ProfileRules), next.AddedRules.effective(next.ProfileRules)) {
+		path := addedRulesPath(next.HomeDir)
+		staged, err := stageProfileSettings(path, next.AddedRules)
+		if err != nil {
+			return err
+		}
+		defer os.Remove(staged)
+		if err := os.Rename(staged, path); err != nil {
+			return errProfileSettingsIO
+		}
+		current = next
+		return nil
 	}
 	var err error
 	wait, err = applyProfileSettingsLocked(next, addedRulesPath(next.HomeDir), next.AddedRules)
 	return err
+}
+
+func validateAddedRuleContent(rules, previous []addedRule, catalog ruleSetCatalog) error {
+	old := make(map[string]addedRule, len(previous))
+	for _, rule := range previous {
+		old[rule.ID] = rule
+	}
+	for _, rule := range rules {
+		if old[rule.ID] == rule {
+			continue
+		}
+		if rule.Kind == "RULE-SET" && catalog.find(rule.Payload) < 0 {
+			return errRuleSetInUse
+		}
+		kind, payload, target, params := common.ParseRulePayload(rule.raw("DIRECT"), true)
+		if _, err := mihomoRules.ParseRule(kind, payload, target, params, nil); err != nil {
+			return errProfileSettingsInvalid
+		}
+	}
+	return nil
 }
