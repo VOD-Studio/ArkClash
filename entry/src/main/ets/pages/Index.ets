@@ -11,6 +11,8 @@ import { ProfileItem, ProfileStore } from '../features/profiles/Profiles';
 import { ProfilesPage } from '../features/profiles/ProfilesPage';
 import { ProxiesPage } from '../features/proxies/ProxiesPage';
 import { AboutPage } from '../features/tools/AboutPage';
+import { AdvancedConfigPage } from '../features/tools/AdvancedConfigPage';
+import { NetworkPage } from '../features/tools/NetworkPage';
 import { ThemePage } from '../features/tools/ThemePage';
 import { ToolRoute } from '../features/tools/ToolRoutes';
 import { ToolsPage } from '../features/tools/ToolsPage';
@@ -194,6 +196,10 @@ struct Index {
   Routes(name: string) {
     if (name === ToolRoute.Theme) {
       ThemePage({ reduceMotion: this.reduceMotion })
+    } else if (name === ToolRoute.AdvancedConfig) {
+      AdvancedConfigPage({ onOpen: (route: ToolRoute): void => { this.stack.pushPath({ name: route }); } })
+    } else if (name === ToolRoute.Network) {
+      NetworkPage({ foreground: this.foreground })
     } else if (name === ToolRoute.Resources) {
       ResourcesPage({ foreground: this.foreground })
     } else if (name === ToolRoute.Connections) {

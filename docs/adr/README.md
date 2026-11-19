@@ -24,3 +24,4 @@
 | [0017](0017-core-ready-without-vpn.md) | 一个核心预热，系统 VPN 转发独立启停 | 已采纳，宿主与 Linux fd 回归通过，手机驻留和性能待验收 |
 | [0018](0018-ui-appearance.md) | 应用外观只由 UI 进程管理 | 已采纳 |
 | [0019](0019-app-diagnostics-capture.md) | 诊断采集跟随应用，实时列表跟随页面 | 已采纳，设备性能独立验收 |
+| [0020](0020-vpn-network-settings.md) | VPN 网络设置在建立隧道时应用 | 已采纳，待真机验收 |

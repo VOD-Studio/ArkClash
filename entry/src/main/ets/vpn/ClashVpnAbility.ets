@@ -1,6 +1,6 @@
 // VPN 扩展持有内核与 TUN；系统销毁扩展后不承诺继续运行。
 import { Want } from '@kit.AbilityKit';
-import { vpnExtension, VpnExtensionAbility } from '@kit.NetworkKit';
+import { connection as networkConnection, vpnExtension, VpnExtensionAbility } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import core from 'libarkclash.so';
 import { hasFile } from '../shared/Files';
@@ -9,6 +9,9 @@ import { newId, ProfileRecord, readList, readListAsync, validProfileId, withProf
 import { UpdateEnv, UpdateScheduler } from '../shared/profiles/Updater';
 import { beginRuntimeInstance, CONTROLLER_ADDRESS, readRuntime, RuntimeConfig, writeCoreError,
   writeRuntime, writeRuntimeStopped } from '../shared/Runtime';
+import {
+  TUN_IPV4, TUN_IPV4_DNS, TUN_IPV6, TUN_IPV6_DNS, VpnNetworkSettings, VpnRoutePrefix, vpnRoutePrefixes
+} from '../shared/VpnNetwork';
 import { serveCommands, VpnCommandError } from './Commands';
 import { installGeoData } from './GeoData';
 import { KernelDownloader } from './KernelDownloader';
@@ -17,13 +20,8 @@ import { emitUpdated } from './ProfileCommands';
 const DOMAIN = 0x0A11;
 const TAG = 'ClashVpnAbility';
 
-// Must match tunAddress in core/tun.go.
-const TUN_ADDRESS = '172.19.0.1';
-const TUN_PREFIX = 30;
-// Any address routed into the TUN works; mihomo hijacks all port-53 traffic.
-const TUN_DNS = '172.19.0.2';
-const TUN_MTU = 1500;
 const FAMILY_IPV4 = 1;
+const FAMILY_IPV6 = 2;
 // 内核就绪后再补齐其他配置的 rule-provider，不和启动抢资源。
 const PREFETCH_DELAY_MS = 10000;
 
@@ -347,23 +345,10 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     try {
       await core.updateVpnState('started', 'preparing', false);
       await this.checkOperation(operation);
-      const config: vpnExtension.VpnConfig = {
-        addresses: [{
-          address: { address: TUN_ADDRESS, family: FAMILY_IPV4 },
-          prefixLength: TUN_PREFIX
-        }],
-        routes: [{
-          interface: 'vpn-tun',
-          destination: { address: { address: '0.0.0.0', family: FAMILY_IPV4 }, prefixLength: 0 },
-          gateway: { address: TUN_ADDRESS, family: FAMILY_IPV4 },
-          hasGateway: false,
-          isDefaultRoute: true
-        }],
-        dnsAddresses: [TUN_DNS],
-        mtu: TUN_MTU,
-        // 界面进程保持直连；出口与服务探测经 controller 交给内核按当前规则拨号。
-        blockedApplications: [this.context.applicationInfo.name]
-      };
+      const defaults = new VpnNetworkSettings();
+      defaults.stack = runtime.stack || defaults.stack;
+      const network = runtime.network ?? defaults;
+      const config = this.vpnConfig(network);
       phase = 'vpn_create_failed';
       this.platformNeedsCleanup = true;
       const tunFd = await connection.create(config);
@@ -373,7 +358,8 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       await core.updateVpnState('started', 'preparing', true);
       await this.checkOperation(operation);
       phase = 'vpn_attach_failed';
-      await core.attachTun(tunFd, runtime.stack, request.bootId, request.profile ?? '', request.configRevision ?? 0);
+      await core.attachTun(tunFd, JSON.stringify(network), request.bootId, request.profile ?? '',
+        request.configRevision ?? 0);
       await this.checkOperation(operation);
       phase = 'vpn_state_failed';
       await core.updateVpnState('started', 'running', true);
@@ -396,6 +382,33 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       }
       throw cleanup.canceled ?? failure;
     }
+  }
+
+  private vpnConfig(network: VpnNetworkSettings): vpnExtension.VpnConfig {
+    const config: vpnExtension.VpnConfig = {
+      // 地址、前缀长度和 DNS 地址须与 core/tun.go 一致。
+      addresses: [{ address: { address: TUN_IPV4, family: FAMILY_IPV4 }, prefixLength: 30 }],
+      routes: vpnRoutePrefixes(network).map((route: VpnRoutePrefix): networkConnection.RouteInfo => {
+        const family = route.ipv6 ? FAMILY_IPV6 : FAMILY_IPV4;
+        return {
+          interface: 'vpn-tun',
+          destination: { address: { address: route.address, family: family }, prefixLength: route.length },
+          gateway: { address: route.ipv6 ? TUN_IPV6 : TUN_IPV4, family: family },
+          hasGateway: false,
+          isDefaultRoute: route.length === 0
+        };
+      }),
+      dnsAddresses: [TUN_IPV4_DNS],
+      isIPv6Accepted: network.ipv6,
+      mtu: network.mtu,
+      // 界面进程保持直连；出口与服务探测经 controller 交给内核按当前规则拨号。
+      blockedApplications: [this.context.applicationInfo.name]
+    };
+    if (network.ipv6) {
+      config.addresses.push({ address: { address: TUN_IPV6, family: FAMILY_IPV6 }, prefixLength: 126 });
+      config.dnsAddresses?.push(TUN_IPV6_DNS);
+    }
+    return config;
   }
 
   private async disconnect(operation: VpnQueuedOperation): Promise<Object> {

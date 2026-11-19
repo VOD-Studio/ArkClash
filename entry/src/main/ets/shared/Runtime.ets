@@ -5,6 +5,7 @@ import { appManager } from '@kit.AbilityKit';
 import { process } from '@kit.ArkTS';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { readText, writeText, writeTextAsync } from './Files';
+import { VpnNetworkSettings } from './VpnNetwork';
 
 export const CONTROLLER_ADDRESS = '127.0.0.1:19090';
 
@@ -12,6 +13,7 @@ export const CONTROLLER_ADDRESS = '127.0.0.1:19090';
 export interface RuntimeConfig {
   secret: string;
   stack: string;
+  network?: VpnNetworkSettings;
   mode: string; // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
   allowLan?: boolean; // 没有 = 用配置里的值
   vpnIntent: 'started' | 'stopped';

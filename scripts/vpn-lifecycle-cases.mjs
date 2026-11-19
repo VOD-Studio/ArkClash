@@ -73,8 +73,8 @@ function fixture(t, { empty = false, historicalIntent = 'stopped' } = {}) {
       activeTun = false;
       listenersOpen = false;
     },
-    async attachTun(fd, stack, bootId, profile, configRevision) {
-      await invoke('attachTun', [fd, stack, bootId, profile, configRevision]);
+    async attachTun(fd, optionsJson, bootId, profile, configRevision) {
+      await invoke('attachTun', [fd, JSON.parse(optionsJson), bootId, profile, configRevision]);
       if (bootId !== status.bootId || profile !== status.profile || configRevision !== status.configRevision) {
         throw new Error('stale_attach_identity');
       }
@@ -318,6 +318,44 @@ test('空配置可以预热，但不能创建系统VPN', async t => {
   assert.notEqual(reply.status, 200);
   assert.equal(f.count('create'), 0);
   assert.equal(f.count('attachTun'), 0);
+});
+
+test('VPN 将同一份网络设置用于系统接口和内核，旧配置保留原有默认值', async t => {
+  const f = fixture(t);
+  await f.warm();
+  await connect(f);
+  const initial = f.calls.find(call => call.name === 'create').args[0];
+  assert.equal(initial.mtu, 1500);
+  assert.equal(initial.isIPv6Accepted, false);
+  assert.equal(initial.routes.length, 1);
+  assert.equal(initial.routes[0].destination.address.address, '0.0.0.0');
+  assert.equal(f.calls.find(call => call.name === 'attachTun').args[1].dnsHijacking, true);
+  assert.equal((await f.request('disconnect', 'disconnect-advanced').result).status, 200);
+
+  f.replaceRuntime({ network: {
+    stack: 'mips', mtu: 1400, ipv6: true, dnsHijacking: false, congestionController: 'bbr',
+    bypassPrivateRoute: true, routeAddress: ['192.0.2.0/24', '2001:db8::/32'],
+    routeExcludeAddress: ['192.0.2.0/25', '2001:db8::/33']
+  } });
+  assert.equal((await f.request('connect', 'connect-advanced').result).status, 200);
+  const config = f.calls.filter(call => call.name === 'create').at(-1).args[0];
+  const core = f.calls.filter(call => call.name === 'attachTun').at(-1).args[1];
+  assert.equal(config.isIPv6Accepted, true);
+  assert.equal(config.addresses[1].address.family, 2);
+  assert.ok(config.dnsAddresses.includes('fdfe:dcba:9876::2'));
+  assert.equal(config.blockedApplications[0], 'fixture.application');
+  assert.equal(config.mtu, 1400);
+  assert.equal(core.mtu, config.mtu);
+  assert.equal(core.ipv6, config.isIPv6Accepted);
+  assert.equal(core.stack, 'mips');
+  assert.equal(core.congestionController, 'bbr');
+  assert.equal(core.dnsHijacking, false);
+  assert.deepEqual(Array.from(config.routes, route => [
+    route.destination.address.address, route.destination.prefixLength
+  ]), [
+    ['192.0.2.128', 25], ['172.19.0.2', 32], ['2001:db8:8000:0:0:0:0:0', 33],
+    ['fdfe:dcba:9876:0:0:0:0:2', 128]
+  ]);
 });
 
 test('重复连接和断开幂等，保留同一个核心、配置与更新调度器', async t => {

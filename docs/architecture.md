@@ -76,7 +76,7 @@ sequenceDiagram
 |---|---|---|---|
 | 配置列表 `profiles/list.json`（订阅和配置的记录、当前配置） | 应用沙箱 | UI | UI、VPN 进程 |
 | 配置内容、摘要、订阅状态（`profiles/` 下其余文件） | 应用沙箱 | 核心确实停止时 UI；核心运行时订阅由 VPN 进程更新，本地编辑由 UI 经 controller 应用后提交 | UI、VPN 进程、内核 |
-| `runtime.json`（secret、协议栈、模式、LAN、VPN 意图/token） | 应用沙箱 | UI 短锁提交；扩展新实例将转发意图复位为 stopped | VPN 进程、UI |
+| `runtime.json`（secret、本次连接的网络设置、模式、LAN、VPN 意图/token） | 应用沙箱 | UI 短锁提交；扩展新实例将转发意图复位为 stopped | VPN 进程、UI |
 | `core_error.txt` | 应用沙箱 | VPN 进程 | UI，读后删除 |
 | `runtime-instance.json`（当前扩展实例标识） | 应用沙箱 | VPN 进程，创建资源前 | UI、VPN 进程 |
 | `runtime-stopped.json`（当前扩展实例清理完成回执） | 应用沙箱 | VPN 进程，内核与 VPN 连接均释放后 | UI，核对 secret 与实例 |
@@ -157,6 +157,7 @@ entry/ ── hvigor（CMake 编 NAPI 桥 + ArkTS）──► HAP
 - **provider 预下载**：热切换要等新配置的 provider 全部加载完。`core/prefetch.go` 在后台预先下载 rule-provider，触发方是 VPN 进程（订阅更新后、连接 10 秒后）和界面（连接中导入本地配置后，经 `POST /arkclash/prefetch`）。proxy-provider 不预下载（原因见 ADR-0010）。
 - **新的 ArkClash 命令**：挂在 `core/api.go` 的 `/arkclash/` 下。内核自己能完成的由 Go 处理；要用到 ArkTS 侧逻辑的，走 `/arkclash/profiles/{name}` 这类转发路由（ADR-0009）。
 - **VpnConfig 级设置**（协议栈、IPv6、分应用代理、VpnConfig 里的 DNS 地址和 MTU）不能热切换，改了只能断开重连（ADR-0010）。
+- **网络设置**保存在 UI preferences，连接时随操作 token 写入 `runtime.json`。系统 VPN 和内核 TUN 使用同一份快照（[ADR-0020](adr/0020-vpn-network-settings.md)）。
 - **分应用代理**：`VpnConfig` 的 `trustedApplications` 和 `blockedApplications` 互斥。"只代理这些应用"用 trusted 列表，本应用不在列表里，自然被排除；"绕过这些应用"用 blocked 列表，列表里必须始终带上本应用（[ADR-0004](adr/0004-exclude-self-by-uid.md)）。
 - **流量与连接**：用 controller 的 WebSocket（`/traffic`、`/connections`、`/logs`）推送，规则见 `docs/agents/ui.md`「性能」。
 - **IPv6**：要同时给 `VpnConfig` 加 IPv6 地址和路由，给 `tun.go` 加 `Inet6Address`，两边一起改。

@@ -2339,6 +2339,114 @@
     {
       "name": "diagnostics_more",
       "value": "More actions"
+    },
+    {
+      "name": "tools_settings",
+      "value": "Settings"
+    },
+    {
+      "name": "tools_other",
+      "value": "Other"
+    },
+    {
+      "name": "tools_advanced_config",
+      "value": "Advanced configuration"
+    },
+    {
+      "name": "network_title",
+      "value": "Network"
+    },
+    {
+      "name": "network_vpn",
+      "value": "VPN"
+    },
+    {
+      "name": "network_ipv6",
+      "value": "IPv6"
+    },
+    {
+      "name": "network_options",
+      "value": "Options"
+    },
+    {
+      "name": "network_system_proxy",
+      "value": "System proxy"
+    },
+    {
+      "name": "network_bypass_domains",
+      "value": "Excluded domains"
+    },
+    {
+      "name": "network_allow_bypass",
+      "value": "Allow apps to bypass VPN"
+    },
+    {
+      "name": "network_dns_hijacking",
+      "value": "DNS hijacking"
+    },
+    {
+      "name": "network_stack",
+      "value": "Stack mode"
+    },
+    {
+      "name": "network_congestion",
+      "value": "TCP congestion control"
+    },
+    {
+      "name": "network_bypass_private",
+      "value": "Bypass private routes"
+    },
+    {
+      "name": "network_routes",
+      "value": "Route addresses"
+    },
+    {
+      "name": "network_exclusions",
+      "value": "Excluded route addresses"
+    },
+    {
+      "name": "network_platform_limit",
+      "value": "HarmonyOS VPN does not provide system proxy or app bypass controls."
+    },
+    {
+      "name": "network_applies_on_connect",
+      "value": "Changes take effect the next time you connect."
+    },
+    {
+      "name": "network_saved",
+      "value": "Network settings saved"
+    },
+    {
+      "name": "network_reconnect",
+      "value": "Network settings saved. Reconnect to apply."
+    },
+    {
+      "name": "network_load_retry",
+      "value": "Retry loading network settings"
+    },
+    {
+      "name": "network_save_failed",
+      "value": "Could not save network settings"
+    },
+    {
+      "name": "network_mtu_range",
+      "value": "Enter an MTU between %d and %d"
+    },
+    {
+      "name": "network_route_hint",
+      "value": "Enter one CIDR per line."
+    },
+    {
+      "name": "network_invalid_cidr",
+      "value": "Enter valid IPv4 or IPv6 CIDR prefixes."
+    },
+    {
+      "name": "network_route_limit",
+      "value": "Enter up to %d CIDR prefixes."
+    },
+    {
+      "name": "network_route_expansion",
+      "value": "These exclusions produce too many routes. Try broader prefixes."
     }
   ]
 }

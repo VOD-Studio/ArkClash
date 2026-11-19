@@ -82,6 +82,7 @@ const kits = {
   '../shared/profiles/Store': {
     async withProfileStorage(_filesDir, operation) { await state.storageGate; return operation(); }
   },
+  './VpnNetworkSettings': { async readVpnNetworkSettings() { return state.networkSettings; } },
   './Controller': {}
 };
 const module = { exports: {} };
@@ -169,7 +170,7 @@ beforeEach(() => {
     active: false, flushError: false, saved: {}, writingRuntime: false,
     instance: { secret: 'fixture-session', instance: 'fixture.instance' },
     random: 0, commands: [], commandGate: Promise.resolve(), commandTimeout: false, commandError: undefined,
-    denyAuthorization: false,
+    denyAuthorization: false, networkSettings: undefined,
     requestingStatus: false, statusGate: Promise.resolve(), startGate: Promise.resolve(),
     runtimeWriteGate: Promise.resolve(), storageGate: Promise.resolve(),
     geoText: undefined, geoTemporary: undefined, geoWriting: false, geoSaveError: false, geoSaveGate: Promise.resolve() });
@@ -732,19 +733,21 @@ test('旧运行文件不恢复历史连接意图', async () => {
   assert.equal(config.vpnOperation, '');
 });
 
-test('偏好短提交保留后来写入的断开操作 token', async () => {
+test('偏好短提交保留后来写入的断开操作 token 和网络快照', async () => {
   let release;
   state.storageGate = new Promise(resolve => { release = resolve; });
   state.runtime = { secret: 'session', stack: 'gvisor', mode: 'rule',
     vpnIntent: 'started', vpnOperation: 'connect-operation' };
   const saving = core.updateRuntimeOptions(context.filesDir, 'global', true);
-  state.runtime = { ...state.runtime, vpnIntent: 'stopped', vpnOperation: 'disconnect-operation' };
+  state.runtime = { ...state.runtime, vpnIntent: 'stopped', vpnOperation: 'disconnect-operation',
+    network: { stack: 'mixed', mtu: 1400 } };
   release();
   await saving;
   assert.equal(state.runtime.vpnIntent, 'stopped');
   assert.equal(state.runtime.vpnOperation, 'disconnect-operation');
   assert.equal(state.runtime.mode, 'global');
   assert.equal(state.runtime.allowLan, true);
+  assert.deepEqual(state.runtime.network, { stack: 'mixed', mtu: 1400 });
 });
 
 const warm = { ...ready, intent: 'stopped', forward: 'stopped', tunAttached: false,

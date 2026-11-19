@@ -7,6 +7,7 @@ import {
   CONTROLLER_ADDRESS, readRuntime, readRuntimeInstance, runtimeMayBeActive, RuntimeConfig, takeCoreError, writeRuntime
 } from '../shared/Runtime';
 import { RuntimeStatus } from './Controller';
+import { readVpnNetworkSettings } from './VpnNetworkSettings';
 import { withProfileStorage } from '../shared/profiles/Store';
 
 // Generous until Geo data is bundled: the first start may download it.
@@ -260,6 +261,7 @@ async function changeVpn(context: common.UIAbilityContext, status: RuntimeStatus
   if (runtime === undefined || instance === undefined || instance.secret !== runtime.secret || !isCurrent()) {
     throw new Error('代理实例已变化，请重试');
   }
+  const network = connect ? await readVpnNetworkSettings(context) : undefined;
   const operation = randomSecret();
   const current = async (): Promise<boolean> => {
     const latest = await readRuntime(filesDir);
@@ -277,6 +279,9 @@ async function changeVpn(context: common.UIAbilityContext, status: RuntimeStatus
     }
     latest.vpnIntent = connect ? 'started' : 'stopped';
     latest.vpnOperation = operation;
+    if (network !== undefined) {
+      latest.network = network;
+    }
     await writeRuntime(filesDir, latest);
   });
   if (!await current()) {
@@ -340,9 +345,9 @@ export async function updateRuntimeOptions(filesDir: string, mode: string, allow
     if (runtime === undefined) {
       return;
     }
-    const next: RuntimeConfig = { secret: runtime.secret, stack: runtime.stack, mode: mode, allowLan: allowLan,
-      vpnIntent: runtime.vpnIntent, vpnOperation: runtime.vpnOperation };
-    await writeRuntime(filesDir, next);
+    runtime.mode = mode;
+    runtime.allowLan = allowLan;
+    await writeRuntime(filesDir, runtime);
   });
 }
 

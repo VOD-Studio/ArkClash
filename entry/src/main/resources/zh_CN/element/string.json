@@ -2319,6 +2319,114 @@
     {
       "name": "diagnostics_more",
       "value": "更多操作"
+    },
+    {
+      "name": "tools_settings",
+      "value": "设置"
+    },
+    {
+      "name": "tools_other",
+      "value": "其他"
+    },
+    {
+      "name": "tools_advanced_config",
+      "value": "进阶配置"
+    },
+    {
+      "name": "network_title",
+      "value": "网络"
+    },
+    {
+      "name": "network_vpn",
+      "value": "VPN"
+    },
+    {
+      "name": "network_ipv6",
+      "value": "IPv6"
+    },
+    {
+      "name": "network_options",
+      "value": "选项"
+    },
+    {
+      "name": "network_system_proxy",
+      "value": "系统代理"
+    },
+    {
+      "name": "network_bypass_domains",
+      "value": "排除域名"
+    },
+    {
+      "name": "network_allow_bypass",
+      "value": "允许应用绕过 VPN"
+    },
+    {
+      "name": "network_dns_hijacking",
+      "value": "DNS 劫持"
+    },
+    {
+      "name": "network_stack",
+      "value": "栈模式"
+    },
+    {
+      "name": "network_congestion",
+      "value": "TCP 拥塞控制"
+    },
+    {
+      "name": "network_bypass_private",
+      "value": "绕过私有路由地址"
+    },
+    {
+      "name": "network_routes",
+      "value": "路由地址"
+    },
+    {
+      "name": "network_exclusions",
+      "value": "排除路由地址"
+    },
+    {
+      "name": "network_platform_limit",
+      "value": "HarmonyOS 的 VPN 接口不提供系统代理、排除域名和应用自行绕过功能。"
+    },
+    {
+      "name": "network_applies_on_connect",
+      "value": "设置将在下次连接时生效。"
+    },
+    {
+      "name": "network_saved",
+      "value": "已保存网络设置"
+    },
+    {
+      "name": "network_reconnect",
+      "value": "已保存网络设置，重新连接后生效。"
+    },
+    {
+      "name": "network_load_retry",
+      "value": "重试读取网络设置"
+    },
+    {
+      "name": "network_save_failed",
+      "value": "无法保存网络设置"
+    },
+    {
+      "name": "network_mtu_range",
+      "value": "MTU 应在 %d 至 %d 之间"
+    },
+    {
+      "name": "network_route_hint",
+      "value": "每行输入一个 CIDR 网段。"
+    },
+    {
+      "name": "network_invalid_cidr",
+      "value": "请输入有效的 IPv4 或 IPv6 CIDR 网段。"
+    },
+    {
+      "name": "network_route_limit",
+      "value": "最多输入 %d 个 CIDR 网段。"
+    },
+    {
+      "name": "network_route_expansion",
+      "value": "排除后生成的路由过多，请合并网段。"
     }
   ]
 }
