@@ -91,9 +91,7 @@ func publishRuntime() {
 		BootID: runtimeBootID, Revision: runtimeRevision, Version: constant.Version, Mode: tunnel.Mode().String(),
 		ConfigRevision: runtimeConfigRevision, ProfileExtension: current.Script.identity,
 	}
-	if !current.Script.enabled() {
-		next.StandardRulesRevision = current.ProfileRules.Revision
-	}
+	next.StandardRulesRevision = current.ProfileRules.Revision
 	if next.Forward == "running" && (!running || next.Intent != "started" || !next.TunAttached || !next.VpnCreated) ||
 		next.Forward == "stopped" && (next.TunAttached || next.VpnCreated || next.ListenersOpen) ||
 		next.Forward == "preparing" && (!running || next.Intent != "started") || cleanupFailure != nil {

@@ -1,5 +1,7 @@
 # 0023 配置覆写脚本在 VPN 进程执行
 
+覆写顺序及应用修订由 [ADR-0030](0030-composed-overrides-and-live-status.md) 更新。
+
 - 状态：已采纳，待真机验收
 
 ## 背景

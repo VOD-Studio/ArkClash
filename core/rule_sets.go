@@ -385,7 +385,7 @@ func commitRuleSets(ctx context.Context, request ruleSetRequest, catalog ruleSet
 		return errProfileSettingsConflict
 	}
 	references := func(rule addedRule) bool { return rule.Kind == "RULE-SET" && rule.Payload == request.Item.ID }
-	active := current.Profile != "" && !current.Script.enabled() && !current.CustomRules &&
+	active := current.Profile != "" && !current.CustomRules &&
 		slices.ContainsFunc(current.AddedRules.effective(current.ProfileRules), references)
 	if request.Action == "delete" {
 		if active || slices.ContainsFunc(current.AddedRules.Rules, references) {

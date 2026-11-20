@@ -167,7 +167,8 @@ func parseConfigWithInbound(path string, opts startOptions, settings *inboundSet
 		return nil, err
 	}
 	cfg, err := prepareRawConfig(rawCfg, opts, settings)
-	if err != nil && opts.Script.enabled() && !errors.Is(err, errDNSProxyServersRequired) {
+	if err != nil && opts.Script.enabled() && !errors.Is(err, errDNSProxyServersRequired) &&
+		!errors.Is(err, errAddedRulesMatchTarget) {
 		return nil, errScriptConfig
 	}
 	return cfg, err
@@ -194,9 +195,9 @@ func buildRawConfig(ctx context.Context, path string, opts startOptions) (*confi
 }
 
 func prepareRawConfig(rawCfg *config.RawConfig, opts startOptions, settings *inboundSettings) (*config.Config, error) {
-	if opts.Profile != "" && !opts.Script.enabled() && !opts.CustomRules {
+	if opts.Profile != "" && !opts.CustomRules {
 		rules := opts.AddedRules.effective(opts.ProfileRules)
-		if err := prependAddedRules(rawCfg, rules, opts.ProfileRules.MatchTarget); err != nil {
+		if err := prependAddedRules(rawCfg, rules, opts.ProfileRules.MatchTarget, opts.ProfileRules.ExitTargets); err != nil {
 			return nil, err
 		}
 		if err := opts.RuleSets.attach(rawCfg, opts.HomeDir, rules); err != nil {

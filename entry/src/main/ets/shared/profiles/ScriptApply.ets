@@ -25,7 +25,7 @@ interface ScriptReloadRequest {
 }
 
 export async function applyConfigScript(filesDir: string, store: ConfigScriptsSnapshot, profile: string,
-  changedScript: string = '', standardRevision: string = ''): Promise<boolean> {
+  changedScript: string = '', standardRevision?: string): Promise<boolean> {
   const selected = (await readListAsync(filesDir)).current;
   const active = profile || selected;
   if (active === '' || active !== selected) { return false; }
@@ -45,9 +45,9 @@ export async function applyConfigScript(filesDir: string, store: ConfigScriptsSn
         expectedProfile: status.profile };
       await call(filesDir, http.RequestMethod.POST, '/arkclash/reload', JSON.stringify(request), 60000);
     } else if (identity !== (status.profileExtension ?? '') ||
-      (identity === '' && standardRevision !== (status.standardRulesRevision ?? ''))) {
+      (standardRevision !== undefined && standardRevision !== (status.standardRulesRevision ?? ''))) {
       const request: ScriptApplyRequest = { bootId: status.bootId, profile: active, identity: identity,
-        standardRevision: identity === '' ? standardRevision : undefined };
+        standardRevision: standardRevision };
       await call(filesDir, http.RequestMethod.POST, '/arkclash/scripts/apply', JSON.stringify(request), 60000);
     }
     return true;

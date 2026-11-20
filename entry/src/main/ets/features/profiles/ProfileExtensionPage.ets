@@ -5,13 +5,15 @@ import { getRuntimeStatus } from '../../client/Controller';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
 import { ListSource } from '../../components/ListSource';
+import { ListRow } from '../../components/ListRow';
 import { CARD_RADIUS, PAGE_GUTTER } from '../../components/Theme';
 import { ConfigScript, ConfigScriptBinding, ConfigScriptsSnapshot, emptyConfigScripts, ExtensionMode,
   readConfigScripts, saveScriptBinding, scriptBinding, scriptIdentity } from '../../shared/profiles/Scripts';
 import { configScriptError } from './ScriptMessages';
 
+@ReusableV2
 @ComponentV2
-struct ExtensionModeOption {
+struct ExtensionScriptOption {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require label: ResourceStr;
   @Param subtitle: ResourceStr = '';
@@ -75,7 +77,7 @@ export struct ProfileExtensionPage {
   private pending(): boolean {
     return !this.loading && !this.loadFailed && this.currentProfile === this.profileId &&
       (this.runtimeKnown || this.changed) && (this.appliedIdentity !== scriptIdentity(this.snapshot, this.profileId) ||
-        (this.binding.mode === 'standard' && this.standardRevision !== this.appliedStandard));
+        this.standardRevision !== this.appliedStandard);
   }
 
   private missing(): boolean { return scriptIdentity(this.snapshot, this.profileId) === undefined; }
@@ -138,8 +140,9 @@ export struct ProfileExtensionPage {
       const revision = leaving ? profileAddedRules(await readAddedRules(filesDir), id).revision : this.standardRevision;
       if (await applyConfigScript(filesDir, store, id, '', revision)) {
         this.appliedIdentity = scriptIdentity(store, id) ?? '';
-        this.appliedStandard = this.appliedIdentity === '' ? revision : '';
+        this.appliedStandard = revision;
         this.changed = false;
+        this.openedStandardRules = false;
         if (!leaving) { message = $r('app.string.script_applied'); }
       } else if (!leaving) { message = $r('app.string.script_pending_core'); }
     } catch (error) { message = $r('app.string.script_saved_apply_error', configScriptError(error as Object)); }
@@ -169,29 +172,16 @@ export struct ProfileExtensionPage {
   }
 
   @Builder
-  Modes() {
-    this.Heading($r('app.string.script_extend_mode'))
-    Column() {
-      ExtensionModeOption({ label: $r('app.string.script_standard'), subtitle: $r('app.string.script_standard_desc'),
-        picked: this.binding.mode === 'standard', active: !this.saving && !this.applying,
-        onPick: (): void => { this.select('standard', this.binding.scriptId); } })
-      Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 16 })
-      ExtensionModeOption({ label: $r('app.string.script_title'), subtitle: $r('app.string.script_mode_desc'),
-        picked: this.binding.mode === 'script', active: !this.saving && !this.applying,
-        onPick: (): void => { this.select('script', this.binding.scriptId); } })
-    }.width('100%').borderRadius(CARD_RADIUS).clip(true)
-  }
-
-  @Builder
   Footer() {
-    Row() {
-      Button(this.binding.mode === 'script' ? $r('app.string.script_go_to_manage') : $r('app.string.standard_rules_title'))
-        .height(44).buttonStyle(ButtonStyleMode.NORMAL).enabled(!this.saving && !this.applying)
-        .onClick((): void => {
-          if (this.binding.mode === 'script') { this.onScripts(); }
-          else { this.openedStandardRules = true; this.onStandardRules(); }
-        })
-    }.width('100%').justifyContent(FlexAlign.Center).padding({ top: 16, bottom: 16 })
+    Column() {
+      ListRow({ title: $r('app.string.script_go_to_manage'), onTap: (): void => this.onScripts() })
+      Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 16 })
+      ListRow({ title: $r('app.string.standard_rules_title'), onTap: (): void => {
+        this.openedStandardRules = true;
+        this.onStandardRules();
+      } })
+    }.width('100%').backgroundColor(this.appStyle.palette.cardBackground).borderRadius(CARD_RADIUS)
+      .clip(true).enabled(!this.saving && !this.applying).margin({ top: 16 })
   }
 
   build() {
@@ -204,26 +194,28 @@ export struct ProfileExtensionPage {
           Button($r('app.string.action_retry')).onClick((): void => { this.refresh(); })
         } else {
           List() {
+            ListItem() { this.Heading($r('app.string.script_extend_script')) }
             ListItem() {
-              Column() { this.Modes() }
+              ExtensionScriptOption({ label: $r('app.string.script_none'),
+                picked: this.binding.mode === 'standard' || this.binding.scriptId === '',
+                active: !this.saving && !this.applying,
+                onPick: (): void => { this.select('standard', ''); } })
+            }.borderRadius(8).clip(true)
+            if (this.missing()) {
+              ListItem() {
+                ExtensionScriptOption({ label: $r('app.string.script_err_missing'),
+                  subtitle: $r('app.string.script_clear_missing'), active: !this.saving && !this.applying,
+                  onPick: (): void => { this.select('standard', ''); } })
+              }.borderRadius(8).clip(true)
             }
-            if (this.binding.mode === 'script') {
-              ListItem() { this.Heading($r('app.string.script_extend_script')) }
-              if (this.missing()) {
-                ListItem() {
-                  ExtensionModeOption({ label: $r('app.string.script_err_missing'),
-                    subtitle: $r('app.string.script_clear_missing'), active: !this.saving && !this.applying,
-                    onPick: (): void => { this.select('script', ''); } })
-                }.borderRadius(CARD_RADIUS).clip(true)
-              }
-              LazyForEach(this.scripts, (item: ConfigScript) => {
-                ListItem() {
-                  ExtensionModeOption({ label: item.name, picked: this.binding.scriptId === item.id,
-                    active: !this.saving && !this.applying,
-                    onPick: (): void => { this.select('script', this.binding.scriptId === item.id ? '' : item.id); } })
-                }.borderRadius(8).clip(true)
-              }, (item: ConfigScript): string => item.id)
-            }
+            LazyForEach(this.scripts, (item: ConfigScript) => {
+              ListItem() {
+                ExtensionScriptOption({ label: item.name,
+                  picked: this.binding.mode === 'script' && this.binding.scriptId === item.id,
+                  active: !this.saving && !this.applying,
+                  onPick: (): void => { this.select('script', item.id); } })
+              }.borderRadius(8).clip(true)
+            }, (item: ConfigScript): string => item.id)
             ListItem() { this.Footer() }
           }.width('100%').layoutWeight(1).padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
             .contentEndOffset(24).cachedCount(2).scrollBar(BarState.Off)

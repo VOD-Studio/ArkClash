@@ -19,6 +19,7 @@ export struct DashboardTab {
   @Event onSwitchProfile: () => void = () => {};
   @Event onOpenProfiles: () => void = () => {};
   @Event onOpenProxies: () => void = () => {};
+  @Event onOpenResources: () => void = () => {};
   @Local conn: Connection = connection;
   @Local detailShown: boolean = false;
   @Local detailItem: ProfileItem | undefined = undefined;
@@ -89,7 +90,8 @@ export struct DashboardTab {
             const active = this.activeProfile;
             if (active !== undefined) { this.store.update(active.id); }
           },
-          onOpenProxies: (): void => this.onOpenProxies()
+          onOpenProxies: (): void => this.onOpenProxies(),
+          onOpenResources: (): void => this.onOpenResources()
         })
       }
       .width('100%')

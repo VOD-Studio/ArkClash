@@ -2817,18 +2817,6 @@
       "value": "Syncing replaces local edits with the remote version."
     },
     {
-      "name": "script_extend_mode",
-      "value": "Override mode"
-    },
-    {
-      "name": "script_standard",
-      "value": "Standard"
-    },
-    {
-      "name": "script_standard_desc",
-      "value": "Add rules to the original configuration"
-    },
-    {
       "name": "standard_rules_title",
       "value": "Profile rules"
     },
@@ -2863,10 +2851,6 @@
     {
       "name": "standard_match_target_missing",
       "value": "Choose a MATCH target. The profile has no usable MATCH rule or the selected target is unavailable."
-    },
-    {
-      "name": "script_mode_desc",
-      "value": "Rewrite the configuration with an extension script"
     },
     {
       "name": "script_extend_script",
@@ -3887,6 +3871,186 @@
     {
       "name": "general_storage_failed",
       "value": "Could not save settings to storage."
+    },
+    {
+      "name": "script_none",
+      "value": "No script"
+    },
+    {
+      "name": "added_rules_exit_new",
+      "value": "New named exit"
+    },
+    {
+      "name": "added_rules_exit_option",
+      "value": "Exit: %s"
+    },
+    {
+      "name": "added_rules_exit_name",
+      "value": "Exit name"
+    },
+    {
+      "name": "added_rules_exit_hint",
+      "value": "For example, Media"
+    },
+    {
+      "name": "added_rules_exit_invalid",
+      "value": "Enter a name without commas or reserved policy names."
+    },
+    {
+      "name": "added_rules_exits",
+      "value": "Named exits"
+    },
+    {
+      "name": "added_rules_exit_auto",
+      "value": "Automatic"
+    },
+    {
+      "name": "added_rules_exit_auto_hint",
+      "value": "Uses a same-named outbound, then MATCH, then DIRECT."
+    },
+    {
+      "name": "added_rules_exit_missing",
+      "value": "Saved outbound %s is unavailable."
+    },
+    {
+      "name": "live_status_title",
+      "value": "Live status"
+    },
+    {
+      "name": "live_status_count",
+      "value": "Live status, %d items"
+    },
+    {
+      "name": "live_status_core_ready",
+      "value": "Ready"
+    },
+    {
+      "name": "live_status_core_starting",
+      "value": "Starting…"
+    },
+    {
+      "name": "live_status_core_stopped",
+      "value": "Stopped"
+    },
+    {
+      "name": "live_status_core_unknown",
+      "value": "Status unavailable"
+    },
+    {
+      "name": "live_status_start_core",
+      "value": "Start core"
+    },
+    {
+      "name": "live_status_app_update",
+      "value": "App update"
+    },
+    {
+      "name": "live_status_check",
+      "value": "Check for updates"
+    },
+    {
+      "name": "live_status_checking",
+      "value": "Checking…"
+    },
+    {
+      "name": "live_status_update_current",
+      "value": "%s is up to date"
+    },
+    {
+      "name": "live_status_update_available",
+      "value": "%s is available"
+    },
+    {
+      "name": "live_status_update_failed",
+      "value": "Check failed. Tap to retry."
+    },
+    {
+      "name": "general_auto_check_update",
+      "value": "Automatically check for app updates"
+    },
+    {
+      "name": "live_status_verifying",
+      "value": "Verifying SHA-256…"
+    },
+    {
+      "name": "live_status_download_ready",
+      "value": "Verified and ready to save"
+    },
+    {
+      "name": "live_status_saving_package",
+      "value": "Saving package…"
+    },
+    {
+      "name": "live_status_gallery_available",
+      "value": "Update available in AppGallery"
+    },
+    {
+      "name": "live_status_install_update",
+      "value": "Update in AppGallery"
+    },
+    {
+      "name": "live_status_install_failed",
+      "value": "Could not open the AppGallery update"
+    },
+    {
+      "name": "live_status_download_unsigned",
+      "value": "Download unsigned HAP"
+    },
+    {
+      "name": "live_status_download_debug",
+      "value": "Download maintainer-signed HAP"
+    },
+    {
+      "name": "live_status_save_package",
+      "value": "Save HAP"
+    },
+    {
+      "name": "live_status_package_saved",
+      "value": "Package saved"
+    },
+    {
+      "name": "live_status_download_failed",
+      "value": "Could not download the update"
+    },
+    {
+      "name": "live_status_checksum_failed",
+      "value": "Update package verification failed"
+    },
+    {
+      "name": "live_status_save_failed",
+      "value": "Could not save the update package"
+    },
+    {
+      "name": "live_status_view_release",
+      "value": "View release"
+    },
+    {
+      "name": "live_status_release_failed",
+      "value": "Could not open the release page."
+    },
+    {
+      "name": "live_status_resources_active",
+      "value": "%d updating"
+    },
+    {
+      "name": "live_status_resources_failed",
+      "value": "%d failed"
+    },
+    {
+      "name": "live_status_resources_unavailable",
+      "value": "Status unavailable"
+    },
+    {
+      "name": "live_status_bytes_total",
+      "value": "%s / %s"
+    },
+    {
+      "name": "live_status_bytes_received",
+      "value": "%s downloaded"
+    },
+    {
+      "name": "live_status_resource_failed",
+      "value": "Update failed"
     }
   ]
 }

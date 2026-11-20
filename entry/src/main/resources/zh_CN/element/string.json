@@ -2797,18 +2797,6 @@
       "value": "同步时，远程内容会覆盖本地编辑。"
     },
     {
-      "name": "script_extend_mode",
-      "value": "覆写模式"
-    },
-    {
-      "name": "script_standard",
-      "value": "标准"
-    },
-    {
-      "name": "script_standard_desc",
-      "value": "在原配置基础上添加规则"
-    },
-    {
       "name": "standard_rules_title",
       "value": "配置附加规则"
     },
@@ -2843,10 +2831,6 @@
     {
       "name": "standard_match_target_missing",
       "value": "请选择 MATCH 目标。当前配置缺少可用的 MATCH 规则，或所选策略已不可用。"
-    },
-    {
-      "name": "script_mode_desc",
-      "value": "使用扩展脚本改写整个配置"
     },
     {
       "name": "script_extend_script",
@@ -3867,6 +3851,186 @@
     {
       "name": "general_storage_failed",
       "value": "无法写入常规设置。"
+    },
+    {
+      "name": "script_none",
+      "value": "不使用脚本"
+    },
+    {
+      "name": "added_rules_exit_new",
+      "value": "新建命名出口"
+    },
+    {
+      "name": "added_rules_exit_option",
+      "value": "出口：%s"
+    },
+    {
+      "name": "added_rules_exit_name",
+      "value": "出口名称"
+    },
+    {
+      "name": "added_rules_exit_hint",
+      "value": "例如「媒体」"
+    },
+    {
+      "name": "added_rules_exit_invalid",
+      "value": "请输入不含逗号且未被内置策略占用的名称。"
+    },
+    {
+      "name": "added_rules_exits",
+      "value": "命名出口"
+    },
+    {
+      "name": "added_rules_exit_auto",
+      "value": "自动"
+    },
+    {
+      "name": "added_rules_exit_auto_hint",
+      "value": "依次尝试同名出站、MATCH 出站和直连。"
+    },
+    {
+      "name": "added_rules_exit_missing",
+      "value": "已保存的出站「%s」不可用。"
+    },
+    {
+      "name": "live_status_title",
+      "value": "运行状态"
+    },
+    {
+      "name": "live_status_count",
+      "value": "运行状态，%d 项"
+    },
+    {
+      "name": "live_status_core_ready",
+      "value": "已就绪"
+    },
+    {
+      "name": "live_status_core_starting",
+      "value": "正在启动…"
+    },
+    {
+      "name": "live_status_core_stopped",
+      "value": "已停止"
+    },
+    {
+      "name": "live_status_core_unknown",
+      "value": "状态不可用"
+    },
+    {
+      "name": "live_status_start_core",
+      "value": "启动内核"
+    },
+    {
+      "name": "live_status_app_update",
+      "value": "应用更新"
+    },
+    {
+      "name": "live_status_check",
+      "value": "检查更新"
+    },
+    {
+      "name": "live_status_checking",
+      "value": "正在检查…"
+    },
+    {
+      "name": "live_status_update_current",
+      "value": "%s 已是最新版本"
+    },
+    {
+      "name": "live_status_update_available",
+      "value": "可更新至 %s"
+    },
+    {
+      "name": "live_status_update_failed",
+      "value": "检查失败，点击重试"
+    },
+    {
+      "name": "general_auto_check_update",
+      "value": "自动检查应用更新"
+    },
+    {
+      "name": "live_status_verifying",
+      "value": "正在校验 SHA-256…"
+    },
+    {
+      "name": "live_status_download_ready",
+      "value": "校验通过，可保存"
+    },
+    {
+      "name": "live_status_saving_package",
+      "value": "正在保存安装包…"
+    },
+    {
+      "name": "live_status_gallery_available",
+      "value": "应用市场有新版本"
+    },
+    {
+      "name": "live_status_install_update",
+      "value": "通过应用市场更新"
+    },
+    {
+      "name": "live_status_install_failed",
+      "value": "无法打开应用市场更新"
+    },
+    {
+      "name": "live_status_download_unsigned",
+      "value": "下载未签名 HAP"
+    },
+    {
+      "name": "live_status_download_debug",
+      "value": "下载维护者调试签名 HAP"
+    },
+    {
+      "name": "live_status_save_package",
+      "value": "保存 HAP"
+    },
+    {
+      "name": "live_status_package_saved",
+      "value": "安装包已保存"
+    },
+    {
+      "name": "live_status_download_failed",
+      "value": "下载更新失败"
+    },
+    {
+      "name": "live_status_checksum_failed",
+      "value": "安装包校验失败"
+    },
+    {
+      "name": "live_status_save_failed",
+      "value": "保存安装包失败"
+    },
+    {
+      "name": "live_status_view_release",
+      "value": "查看发布版本"
+    },
+    {
+      "name": "live_status_release_failed",
+      "value": "无法打开发布页面。"
+    },
+    {
+      "name": "live_status_resources_active",
+      "value": "%d 项正在更新"
+    },
+    {
+      "name": "live_status_resources_failed",
+      "value": "%d 项更新失败"
+    },
+    {
+      "name": "live_status_resources_unavailable",
+      "value": "状态不可用"
+    },
+    {
+      "name": "live_status_bytes_total",
+      "value": "%s / %s"
+    },
+    {
+      "name": "live_status_bytes_received",
+      "value": "已下载 %s"
+    },
+    {
+      "name": "live_status_resource_failed",
+      "value": "更新失败"
     }
   ]
 }

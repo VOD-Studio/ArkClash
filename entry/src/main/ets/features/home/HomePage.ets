@@ -20,6 +20,7 @@ import { DashboardStatus } from './DashboardStatus';
 import { DashboardVpn } from './DashboardVpn';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DashboardEditMotion } from './DashboardEditMotion';
+import { DashboardLiveStatus } from './DashboardLiveStatus';
 
 @ComponentV2
 export struct HomePage {
@@ -51,6 +52,7 @@ export struct HomePage {
   @Event onSwitchProfile: () => void = () => {};
   @Event onUpdateProfile: () => void = () => {};
   @Event onOpenProxies: () => void = () => {};
+  @Event onOpenResources: () => void = () => {};
   @Event onEditingChanged: (editing: boolean) => void = () => {};
   @Local settings: DashboardSettings = dashboardSettings;
   @Local editing: boolean = false;
@@ -392,9 +394,17 @@ export struct HomePage {
       }
     }
 
+  @Builder
+  LiveStatusAction() {
+    if (!this.editing) {
+      DashboardLiveStatus({ visible: this.visible, onOpenResources: (): void => this.onOpenResources() })
+    }
+  }
+
   build() {
     TabPage({ title: this.editing ? $r('app.string.dash_edit_cards') : $r('app.string.tab_home'),
       topInset: this.topInset, scroller: this.scroller, content: (): void => this.DashboardContent(),
-      menus: this.menus(), onScrollDirection: (down: boolean): void => { this.onScrollDirection(down); } })
+      menus: this.menus(), headerAction: (): void => this.LiveStatusAction(),
+      onScrollDirection: (down: boolean): void => { this.onScrollDirection(down); } })
   }
 }

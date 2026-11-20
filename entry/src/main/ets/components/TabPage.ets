@@ -44,6 +44,7 @@ export struct TabPage {
   @Param contentOwnsScroll: boolean = false;
   @Param customTitle: boolean = false;
   @BuilderParam titleContent: () => void = emptyContent;
+  @BuilderParam headerAction: () => void = emptyContent;
   @BuilderParam content: () => void = emptyContent;
   // 滚动方向变化时回调：true = 往下看内容（页签栏该收起），false = 往回滚或回到顶部。
   @Event onScrollDirection: (down: boolean) => void = () => {};
@@ -96,6 +97,7 @@ export struct TabPage {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
+        this.headerAction()
         Repeat($$.menus).each((menu: RepeatItem<HdsNavigationMenuItemOptions>): void => {
           Button({ type: ButtonType.Circle }) {
             if (menu.item.content?.icon !== undefined) {

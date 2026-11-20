@@ -1,6 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { AddedRule, AddedRulesSettings, ProfileAddedRules, profileAddedRules, addedRuleText, emptyAddedRules, newAddedRule, readAddedRules,
-  saveAddedRules, validAddedRule } from '../../client/AddedRules';
+  namedExits, saveAddedRules, validAddedRule, validExitName } from '../../client/AddedRules';
 import { readRuleSets, RuleSetItem } from '../../client/RuleSets';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
@@ -148,6 +148,10 @@ export struct AddedRulesPage {
       this.editIssue = $r('app.string.rule_set_choose');
       return;
     }
+    if (rule.customExit === true && !validExitName(rule.target)) {
+      this.editIssue = $r('app.string.added_rules_exit_invalid');
+      return;
+    }
     if (!validAddedRule(rule)) {
       this.editIssue = $r('app.string.added_rules_invalid');
       return;
@@ -179,7 +183,7 @@ export struct AddedRulesPage {
     this.saving = true;
     const update: ProfileAddedRules | undefined = this.profileId === '' ? undefined : {
       profile: standard.profile, revision: standard.revision, rules: rules,
-      disabled: standard.disabled, matchTarget: standard.matchTarget
+      disabled: standard.disabled, matchTarget: standard.matchTarget, exitTargets: standard.exitTargets
     };
     if (reordering) {
       this.settings = { revision: previous.revision, rules: update === undefined ? rules : previous.rules,
@@ -395,6 +399,7 @@ export struct AddedRulesPage {
       AddedRuleEditor({
         draft: this.draft, saving: this.saving, issue: this.editIssue, discardRequested: this.discardRequested,
         ruleSets: this.ruleSets, ruleSetOptions: this.ruleSetOptions,
+        knownExits: namedExits(this.settings.rules.concat(this.standard().rules)),
         onSave: (): void => this.saveDraft(), onChange: (): void => { this.editIssue = ''; },
         onCancel: (): void => this.requestCloseEditor((): void => { this.editShown = false; }),
         onResume: (): void => { this.discardRequested = false; },

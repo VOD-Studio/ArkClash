@@ -24,6 +24,7 @@ export function configScriptError(error: Object): ResourceStr {
     case 'script_apply': return $r('app.string.profile_err_apply');
     case 'profile_settings_invalid': return $r('app.string.added_rules_invalid');
     case 'profile_settings_conflict': return $r('app.string.added_rules_conflict');
+    case 'added_rules_match_target': return $r('app.string.standard_match_target_missing');
     default: return describeError(errorString(error));
   }
   const match = new RegExp('^script_[a-z]+:([0-9]+):([0-9]+)$').exec(code);

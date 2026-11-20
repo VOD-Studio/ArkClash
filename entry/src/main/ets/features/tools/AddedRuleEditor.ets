@@ -10,6 +10,7 @@ export class AddedRuleDraft {
   @Trace kind: string;
   @Trace payloadText: string;
   @Trace target: string;
+  @Trace customExit: boolean;
   @Trace noResolve: boolean;
   @Trace source: boolean;
 
@@ -18,19 +19,22 @@ export class AddedRuleDraft {
     this.kind = rule.kind;
     this.payloadText = rule.payload;
     this.target = rule.target;
+    this.customExit = rule.customExit === true;
     this.noResolve = rule.noResolve;
     this.source = rule.source;
   }
 
   dirty(): boolean {
     return this.kind !== this.original.kind || this.payloadText !== this.original.payload ||
-      this.target !== this.original.target || this.noResolve !== this.original.noResolve ||
+      this.target !== this.original.target || this.customExit !== (this.original.customExit === true) ||
+      this.noResolve !== this.original.noResolve ||
       this.source !== this.original.source;
   }
 
   rule(): AddedRule {
     const params = addedRuleHasParams(this.kind);
-    return { id: this.original.id, kind: this.kind, payload: this.payloadText.trim(), target: this.target,
+    return { id: this.original.id, kind: this.kind, payload: this.payloadText.trim(), target: this.target.trim(),
+      customExit: this.customExit ? true : undefined,
       noResolve: params && this.noResolve, source: params && this.source };
   }
 }
@@ -48,6 +52,7 @@ export struct AddedRuleEditor {
   @Param issue: ResourceStr = '';
   @Param ruleSets: RuleSetItem[] = [];
   @Param ruleSetOptions: SelectOption[] = [];
+  @Param knownExits: string[] = [];
   @Event onSave: () => void = () => {};
   @Event onCancel: () => void = () => {};
   @Event onDiscard: () => void = () => {};
@@ -66,6 +71,26 @@ export struct AddedRuleEditor {
 
   private ruleSetIndex(): number {
     return this.ruleSets.findIndex((item: RuleSetItem): boolean => item.id === this.draft.payloadText);
+  }
+
+  @Computed
+  get targetOptions(): SelectOption[] {
+    return RULE_TARGET_OPTIONS.concat(this.knownExits.map((name: string): SelectOption => ({
+      value: $r('app.string.added_rules_exit_option', name)
+    })), [{ value: $r('app.string.added_rules_exit_new') }]);
+  }
+
+  private pickRuleTarget(index: number): void {
+    this.draft.customExit = index >= ADDED_RULE_TARGETS.length;
+    this.draft.target = this.draft.customExit ? this.knownExits[index - ADDED_RULE_TARGETS.length] ?? '' :
+      ADDED_RULE_TARGETS[index] ?? 'DIRECT';
+    this.onChange();
+  }
+
+  private targetIndex(): number {
+    if (!this.draft.customExit) { return ADDED_RULE_TARGETS.indexOf(this.draft.target); }
+    const index = this.knownExits.indexOf(this.draft.target);
+    return ADDED_RULE_TARGETS.length + (index < 0 ? this.knownExits.length : index);
   }
 
   @Builder
@@ -117,15 +142,23 @@ export struct AddedRuleEditor {
     Row({ space: 12 }) {
       this.Label($r('app.string.added_rules_target'))
       Blank()
-      Select(RULE_TARGET_OPTIONS)
-        .selected(Math.max(0, ADDED_RULE_TARGETS.indexOf(this.draft.target)))
-        .value(this.draft.target === 'MATCH' ? 'MATCH-TARGET' : this.draft.target)
-        .onSelect((index: number): void => {
-          this.draft.target = ADDED_RULE_TARGETS[index] ?? this.draft.target;
-          this.onChange();
-        })
+      Select(this.targetOptions)
+        .selected(this.targetIndex())
+        .value(this.draft.customExit ? this.draft.target || $r('app.string.added_rules_exit_new') :
+          this.draft.target === 'MATCH' ? 'MATCH-TARGET' : this.draft.target)
+        .onSelect((index: number): void => this.pickRuleTarget(index))
     }
     .width('100%').constraintSize({ minHeight: 56 }).padding({ left: 16, right: 12 })
+    if (this.draft.customExit) {
+      this.RuleDivider()
+      Row({ space: 12 }) {
+        this.Label($r('app.string.added_rules_exit_name'))
+        TextInput({ text: this.draft.target, placeholder: $r('app.string.added_rules_exit_hint') })
+          .layoutWeight(1).textAlign(TextAlign.End).height(44).maxLength(1024)
+          .backgroundColor(Color.Transparent)
+          .onChange((text: string): void => { this.draft.target = text; this.onChange(); })
+      }.width('100%').constraintSize({ minHeight: 56 }).padding({ left: 16, right: 12 })
+    }
   }
 
   @Builder

@@ -20,7 +20,7 @@ func TestAddedRulesPreserveOrderAndMatchTarget(t *testing.T) {
 	raw := config.DefaultRawConfig()
 	raw.ProxyGroup = []map[string]any{{"name": "Proxy"}}
 	raw.Rule = []string{"MATCH,REJECT", "DOMAIN,example.test,DIRECT", "MATCH,Proxy"}
-	if err := prependAddedRules(raw, list.Rules, ""); err != nil {
+	if err := prependAddedRules(raw, list.Rules, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"DOMAIN,example.test,Proxy", "IP-CIDR,192.0.2.0/24,REJECT,no-resolve,src",
@@ -29,9 +29,34 @@ func TestAddedRulesPreserveOrderAndMatchTarget(t *testing.T) {
 		t.Fatalf("unexpected effective order: %v", raw.Rule)
 	}
 	raw.Rule = []string{"DOMAIN,example.test,REJECT"}
-	if err := prependAddedRules(raw, list.Rules, ""); !errors.Is(err, errAddedRulesMatchTarget) ||
+	if err := prependAddedRules(raw, list.Rules, "", nil); !errors.Is(err, errAddedRulesMatchTarget) ||
 		!reflect.DeepEqual(raw.Rule, []string{"DOMAIN,example.test,REJECT"}) {
 		t.Fatalf("missing MATCH was accepted: %v, %v", raw.Rule, err)
+	}
+}
+
+func TestNamedRuleExitsResolveFromFinalOutbounds(t *testing.T) {
+	raw := config.DefaultRawConfig()
+	raw.ProxyGroup = []map[string]any{{"name": "Media"}, {"name": "Mapped"}}
+	raw.Proxy = []map[string]any{{"name": "Node"}}
+	raw.Rule = []string{"MATCH,REJECT"}
+	rules := []addedRule{
+		{Kind: "DOMAIN", Payload: "explicit.test", Target: "Media", CustomExit: true},
+		{Kind: "DOMAIN", Payload: "same.test", Target: "Node", CustomExit: true},
+		{Kind: "DOMAIN", Payload: "fallback.test", Target: "Unavailable", CustomExit: true},
+	}
+	exits := []addedRuleExit{{Name: "Media", Target: "Mapped"}, {Name: "Unavailable", Target: "Gone"}}
+	if err := prependAddedRules(raw, rules, "", exits); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"DOMAIN,explicit.test,Mapped", "DOMAIN,same.test,Node", "DOMAIN,fallback.test,REJECT", "MATCH,REJECT"}
+	if !reflect.DeepEqual(raw.Rule, want) {
+		t.Fatalf("unexpected exit resolution: %v", raw.Rule)
+	}
+	raw.Rule = nil
+	if err := prependAddedRules(raw, rules[2:], "", nil); err != nil ||
+		!reflect.DeepEqual(raw.Rule, []string{"DOMAIN,fallback.test,DIRECT"}) {
+		t.Fatalf("missing MATCH fallback: %v, %v", raw.Rule, err)
 	}
 }
 
@@ -74,7 +99,7 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 	if got := runtimeSnapshot.Load(); got.ConfigRevision != before || got.StandardRulesRevision != "" {
 		t.Fatal("saving a profile rule changed the runtime")
 	}
-	apply := scriptApplyRequest{BootID: boot, Profile: "first", StandardRevision: "local"}
+	apply := scriptApplyRequest{BootID: boot, Profile: "first", StandardRevision: new("local")}
 	if err := applyProfileScript(context.Background(), apply); err != nil {
 		t.Fatal(err)
 	}
@@ -98,17 +123,40 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 		t.Fatalf("deleting a disabled rule should clean its references without reloading: %v", err)
 	}
 	scriptPath := filepath.Join(opts.HomeDir, "profiles", "scripts.json")
-	binding := `{"version":1,"scripts":[],"bindings":[{"profile":"first","mode":"script","scriptId":""}]}`
+	binding := `{"version":1,"scripts":[{"id":"test","revision":"first","source":"function main(c) { c['proxy-groups'] = [{name: 'Script Exit', type: 'select', proxies: ['DIRECT']}]; c.rules = ['MATCH,REJECT']; return c; }"}],"bindings":[{"profile":"first","mode":"script","scriptId":"test"}]}`
 	if err := os.WriteFile(scriptPath, []byte(binding), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := applyProfileScript(context.Background(), scriptApplyRequest{BootID: boot, Profile: "first", Identity: "script"}); err != nil {
+	outbounds, err := readScriptOutbounds(t.Context(), opts.HomeDir, "first")
+	if err != nil || len(outbounds.Groups) != 1 || outbounds.Groups[0].Name != "Script Exit" {
+		t.Fatalf("script outbounds not available: %v, %v", outbounds, err)
+	}
+	const identity = "script:test:first"
+	if err := applyProfileScript(context.Background(), scriptApplyRequest{BootID: boot, Profile: "first", Identity: identity}); err != nil {
 		t.Fatal(err)
 	}
-	if rules := tunnel.Rules(); len(rules) != 1 || rules[0].Adapter() != "GLOBAL" {
-		t.Fatal("script mode inherited standard rules")
+	if rules := tunnel.Rules(); len(rules) != 4 || rules[0].Adapter() != "DIRECT" || rules[3].Adapter() != "REJECT" ||
+		runtimeSnapshot.Load().StandardRulesRevision != "local" || tunListener != tun {
+		t.Fatal("script and added rules did not apply together")
+	}
+	named := saved.forProfile("first")
+	named.Revision = "named-target"
+	named.Rules[0].Target, named.Rules[0].CustomExit = "Media", true
+	named.ExitTargets = []addedRuleExit{{Name: "Media", Target: "Script Exit"}}
+	request.ExpectedRevision = saved.Revision
+	request.Settings = addedRulesSettings{Revision: named.Revision, Rules: saved.Rules, Profiles: []profileAddedRules{named}}
+	if err := updateAddedRules(request); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyProfileScript(t.Context(), scriptApplyRequest{BootID: boot, Profile: "first", Identity: identity,
+		StandardRevision: &named.Revision}); err != nil || tunnel.Rules()[0].Adapter() != "Script Exit" || tunListener != tun {
+		t.Fatalf("named target was not applied to the scripted outbound: %v", err)
 	}
 	if err := os.Remove(scriptPath); err != nil {
+		t.Fatal(err)
+	}
+	saved, err = readAddedRules(opts.HomeDir)
+	if err != nil {
 		t.Fatal(err)
 	}
 	invalid := saved.forProfile("first")
@@ -122,9 +170,9 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 		t.Fatalf("a stale standard revision was accepted: %v", err)
 	}
 	before = runtimeSnapshot.Load().ConfigRevision
-	apply.StandardRevision = invalid.Revision
+	apply.StandardRevision = &invalid.Revision
 	if err := applyProfileScript(context.Background(), apply); !errors.Is(err, errAddedRulesMatchTarget) ||
-		runtimeSnapshot.Load().ConfigRevision != before || runtimeSnapshot.Load().ProfileExtension != "script" || tunListener != tun {
+		runtimeSnapshot.Load().ConfigRevision != before || runtimeSnapshot.Load().ProfileExtension != identity || tunListener != tun {
 		t.Fatalf("a missing target changed the runtime: %v", err)
 	}
 	fixed := saved.forProfile("first")
@@ -134,7 +182,7 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)
 	}
-	apply.StandardRevision = fixed.Revision
+	apply.StandardRevision = &fixed.Revision
 	if err := applyProfileScript(context.Background(), apply); err != nil || len(tunnel.Rules()) != 4 ||
 		runtimeSnapshot.Load().StandardRulesRevision != fixed.Revision || tunListener != tun {
 		t.Fatalf("switching back did not restore saved standard rules: %v", err)

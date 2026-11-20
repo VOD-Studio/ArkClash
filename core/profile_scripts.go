@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/VOD-Studio/ArkClash/core/internal/script"
 	"github.com/metacubex/chi/render"
@@ -192,11 +193,88 @@ func preserveShortIDScalar(node *yaml.Node) {
 	}
 }
 
+type scriptOutbound struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type scriptOutbounds struct {
+	Groups []scriptOutbound `json:"groups"`
+	Nodes  []scriptOutbound `json:"nodes"`
+}
+
+func readScriptOutbounds(ctx context.Context, home, profile string) (scriptOutbounds, error) {
+	types, err := readProfileTypes(home)
+	if err != nil {
+		return scriptOutbounds{}, err
+	}
+	if kind, exists := types[profile]; !exists || kind == "custom" {
+		return scriptOutbounds{}, errScriptConflict
+	}
+	selection, err := readProfileScript(home, profile)
+	if err != nil {
+		return scriptOutbounds{}, err
+	}
+	opts := startOptions{HomeDir: home, Profile: profile, Script: selection}
+	raw, err := buildRawConfig(ctx, filepath.Join(home, "profiles", profile+".yaml"), opts)
+	if err != nil {
+		return scriptOutbounds{}, errScriptConfig
+	}
+	return scriptOutbounds{Groups: collectScriptOutbounds(raw.ProxyGroup), Nodes: collectScriptOutbounds(raw.Proxy)}, nil
+}
+
+func collectScriptOutbounds(items []map[string]any) []scriptOutbound {
+	outbounds := make([]scriptOutbound, 0, len(items))
+	for _, item := range items {
+		name, _ := item["name"].(string)
+		kind, _ := item["type"].(string)
+		if validRuleTargetName(name) && len(kind) <= 80 {
+			outbounds = append(outbounds, scriptOutbound{Name: name, Type: kind})
+		}
+	}
+	return outbounds
+}
+
+func getScriptOutbounds(w http.ResponseWriter, r *http.Request) {
+	profile := r.URL.Query().Get("profile")
+	if !addedRulesProfileID.MatchString(profile) || profile == "." || profile == ".." {
+		writeError(w, r, http.StatusBadRequest, errScriptConflict)
+		return
+	}
+	mu.Lock()
+	home := current.HomeDir
+	ready := running
+	mu.Unlock()
+	if !ready {
+		writeError(w, r, http.StatusServiceUnavailable, errScriptConflict)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	outbounds, err := readScriptOutbounds(ctx, home, profile)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	render.JSON(w, r, outbounds)
+}
+
 type scriptApplyRequest struct {
-	BootID           string `json:"bootId"`
-	Profile          string `json:"profile"`
-	Identity         string `json:"identity"`
-	StandardRevision string `json:"standardRevision,omitempty"`
+	BootID           string  `json:"bootId"`
+	Profile          string  `json:"profile"`
+	Identity         string  `json:"identity"`
+	StandardRevision *string `json:"standardRevision,omitempty"`
+}
+
+func (request scriptApplyRequest) selectedRules(options startOptions) (profileAddedRules, error) {
+	if request.StandardRevision == nil {
+		return options.ProfileRules, nil
+	}
+	rules := options.AddedRules.forProfile(request.Profile)
+	if rules.Revision != *request.StandardRevision {
+		return profileAddedRules{}, errProfileSettingsConflict
+	}
+	return rules, nil
 }
 
 func postProfileScript(w http.ResponseWriter, r *http.Request) {
@@ -207,7 +285,7 @@ func postProfileScript(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := applyProfileScript(r.Context(), request); err != nil {
 		status := http.StatusBadRequest
-		if errors.Is(err, errScriptConflict) {
+		if errors.Is(err, errScriptConflict) || errors.Is(err, errProfileSettingsConflict) {
 			status = http.StatusConflict
 		}
 		writeError(w, r, status, err)
@@ -232,11 +310,11 @@ func applyProfileScript(ctx context.Context, request scriptApplyRequest) error {
 	if selection.identity != request.Identity {
 		return errScriptConflict
 	}
-	standard := next.AddedRules.forProfile(request.Profile)
-	if !selection.enabled() && standard.Revision != request.StandardRevision {
-		return errProfileSettingsConflict
+	standard, err := request.selectedRules(next)
+	if err != nil {
+		return err
 	}
-	if next.Script.identity == selection.identity && (selection.enabled() || next.ProfileRules.Revision == standard.Revision) {
+	if next.Script.identity == selection.identity && next.ProfileRules.Revision == standard.Revision {
 		return nil
 	}
 	next.Script = selection
@@ -269,9 +347,9 @@ func applyProfileScript(ctx context.Context, request scriptApplyRequest) error {
 	if err != nil || latest.identity != selection.identity {
 		return errScriptConflict
 	}
-	standard = current.AddedRules.forProfile(request.Profile)
-	if !selection.enabled() && standard.Revision != request.StandardRevision {
-		return errProfileSettingsConflict
+	standard, err = request.selectedRules(current)
+	if err != nil {
+		return err
 	}
 	// 模式和局域网开关可以在脚本执行时变化，但不会增加配置版本。
 	next = current
@@ -280,10 +358,10 @@ func applyProfileScript(ctx context.Context, request scriptApplyRequest) error {
 	var inbounds inboundSettings
 	cfg, err := prepareRawConfig(raw, next, &inbounds)
 	if err != nil {
+		if errors.Is(err, errAddedRulesMatchTarget) || errors.Is(err, errDNSProxyServersRequired) {
+			return err
+		}
 		if !selection.enabled() {
-			if errors.Is(err, errAddedRulesMatchTarget) || errors.Is(err, errDNSProxyServersRequired) {
-				return err
-			}
 			return errProfileSettingsInvalid
 		}
 		return errScriptConfig

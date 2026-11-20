@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
+import { AppUpdateState, appUpdateState } from '../../client/AppUpdate';
 import { GeneralSettingsState, generalSettingsState } from '../../client/GeneralSettings';
 import { Connection, connection } from '../../client/Connection';
 import { appAppearance, AppearanceState } from '../../components/AppearanceState';
@@ -43,6 +44,7 @@ function parseHostRows(raw: string): Record<string, string[]> {
 export struct GeneralPage {
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private settings: GeneralSettingsState = generalSettingsState;
+  @Local private updates: AppUpdateState = appUpdateState;
   @Local private conn: Connection = connection;
   @Local private isSaving: boolean = false;
   @Local private loadFailed: boolean = false;
@@ -259,6 +261,14 @@ export struct GeneralPage {
     this.Rule()
     ListRow({ title: $r('app.string.general_hosts'),
       value: this.hostCount(), onTap: (): void => this.openEditor('hosts') })
+    this.Rule()
+    GeneralSwitchRow({ label: $r('app.string.general_auto_check_update'),
+      checked: this.updates.automatic, interactive: this.updates.preferenceReady && !this.updates.preferenceSaving,
+      onToggle: (isOn: boolean): void => {
+        this.updates.setAutomatic(this.context(), isOn).catch((): void => {
+          this.getUIContext().getPromptAction().showToast({ message: $r('app.string.general_save_failed') });
+        });
+      } })
   }
 
   @Builder

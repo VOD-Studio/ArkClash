@@ -4,6 +4,7 @@ import { common } from '@kit.AbilityKit';
 import { accessibility } from '@kit.AccessibilityKit';
 import { AppStorageV2, SymbolGlyphModifier } from '@kit.ArkUI';
 import { HdsBarStyle, HdsTabs, HdsTabsBarChangeMode, HdsTabsController, HdsTabsFloatingStyle } from '@kit.UIDesignKit';
+import { appUpdateState } from '../client/AppUpdate';
 import { connection, Connection } from '../client/Connection';
 import { traffic } from '../client/Traffic';
 import { AppearanceState, appAppearance } from '../components/AppearanceState';
@@ -62,6 +63,7 @@ struct Index {
   @Local stack: NavPathStack = new NavPathStack();
   @Local tab: number = Tab.Home;
   @Local foreground: boolean = true;
+  @Local private mainVisible: boolean = true;
   @Local profiles: ProfileStore = new ProfileStore();
   @Local proxyPicker: boolean = false;
   @Local profilePicker: boolean = false;
@@ -103,6 +105,7 @@ struct Index {
     traffic.stop('shell');
     this.conn.observe(this.context, false);
     this.profiles.setForeground(false);
+    appUpdateState.setForeground(this.context, false);
   }
 
   // 配置的更新由谁负责、要不要订阅 VPN 进程的推送，取决于连接状态和应用是否在前台（ADR-0009）。
@@ -140,11 +143,13 @@ struct Index {
 
   onPageShow(): void {
     this.foreground = true;
+    appUpdateState.setForeground(this.context, true);
   }
 
   onPageHide(): void {
     this.warmRequested = false;
     this.foreground = false;
+    appUpdateState.setForeground(this.context, false);
   }
 
   onBackPress(): boolean {
@@ -284,12 +289,13 @@ struct Index {
           TabContent() {
             DashboardTab({
               store: this.profiles, scroller: this.scrollers[Tab.Home], topInset: this.topInset(),
-              visible: this.tab === Tab.Home && this.foreground, closeEditSignal: this.closeEditSignal,
+              visible: this.tab === Tab.Home && this.foreground && this.mainVisible, closeEditSignal: this.closeEditSignal,
               onScrollDirection: (down: boolean) => this.onScrollDirection(down),
               onEditingChanged: (editing: boolean) => { this.homeEditing = editing; },
               onSwitchProfile: (): void => { this.profilePicker = true; },
               onOpenProfiles: () => this.tabs.changeIndex(Tab.Profiles),
-              onOpenProxies: () => { this.proxyPicker = true; }
+              onOpenProxies: () => { this.proxyPicker = true; },
+              onOpenResources: (): void => { this.stack.pushPath({ name: ToolRoute.Resources }); }
             })
           }
           .tabBar(tabBar($r('sys.symbol.house'), $r('sys.symbol.house_fill'), $r('app.string.tab_home'),
@@ -370,6 +376,7 @@ struct Index {
       .mode(NavigationMode.Stack)
       .hideTitleBar(true)
       .hideToolBar(true)
+      .onNavBarStateChange((visible: boolean): void => { this.mainVisible = visible; })
       .navDestination(this.Routes)
     }
     .width('100%')

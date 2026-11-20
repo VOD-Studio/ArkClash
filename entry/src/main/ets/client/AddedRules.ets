@@ -1,5 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { url } from '@kit.ArkTS';
+import { http } from '@kit.NetworkKit';
+import { call } from './Controller';
 import { findProfile, newId, readListAsync, validProfileId } from '../shared/profiles/Store';
 import { ProfileSettingsFile, readProfileSettings, saveProfileSettings } from './ProfileSettingsFile';
 
@@ -8,6 +10,7 @@ export interface AddedRule {
   kind: string;
   payload: string;
   target: string;
+  customExit?: boolean;
   noResolve: boolean;
   source: boolean;
 }
@@ -24,6 +27,31 @@ export interface ProfileAddedRules {
   rules: AddedRule[];
   disabled: string[];
   matchTarget: string;
+  exitTargets?: AddedRuleExit[];
+}
+
+export interface AddedRuleExit {
+  name: string;
+  target: string;
+}
+
+export interface RuleOutbound {
+  name: string;
+  type: string;
+}
+
+export interface RuleOutbounds {
+  groups: RuleOutbound[];
+  nodes: RuleOutbound[];
+}
+
+export async function readScriptOutbounds(filesDir: string, profile: string): Promise<RuleOutbounds> {
+  const path = `/arkclash/scripts/outbounds?profile=${encodeURIComponent(profile)}`;
+  const result = JSON.parse(await call(filesDir, http.RequestMethod.GET, path, undefined, 18000)) as RuleOutbounds;
+  if (result === null || !Array.isArray(result.groups) || !Array.isArray(result.nodes)) {
+    throw new Error('script_config');
+  }
+  return result;
 }
 
 export const ADDED_RULE_KINDS: string[] = [
@@ -47,8 +75,22 @@ export function newAddedRule(kind: string = 'DOMAIN', payload: string = '', targ
 }
 
 export function addedRuleText(rule: AddedRule, label: string = rule.payload): string {
-  const target = rule.target === 'MATCH' ? 'MATCH-TARGET' : rule.target;
+  const target = rule.customExit === true ? `[${rule.target}]` : rule.target === 'MATCH' ? 'MATCH-TARGET' : rule.target;
   return [rule.kind, label, target].join(',') + (rule.noResolve ? ',no-resolve' : '') + (rule.source ? ',src' : '');
+}
+
+export function validRuleTargetName(name: string): boolean {
+  return typeof name === 'string' && name !== '' && name.length <= 1024 &&
+    name.trim() === name && !/[,\x00\r\n]/.test(name);
+}
+
+export function validExitName(name: string): boolean {
+  return validRuleTargetName(name) && !ADDED_RULE_TARGETS.includes(name.toUpperCase());
+}
+
+export function namedExits(rules: AddedRule[]): string[] {
+  return Array.from(new Set<string>(rules.filter((rule: AddedRule): boolean => rule.customExit === true)
+    .map((rule: AddedRule): string => rule.target)));
 }
 
 function validPrefix(payload: string): boolean {
@@ -70,7 +112,9 @@ function validPrefix(payload: string): boolean {
 
 export function validAddedRule(rule: AddedRule): boolean {
   if (rule === null || typeof rule !== 'object' || typeof rule.id !== 'string' || rule.id === '' ||
-    rule.id.length > 80 || !ADDED_RULE_KINDS.includes(rule.kind) || !ADDED_RULE_TARGETS.includes(rule.target) ||
+    rule.id.length > 80 || !ADDED_RULE_KINDS.includes(rule.kind) ||
+    (rule.customExit !== undefined && typeof rule.customExit !== 'boolean') ||
+    (rule.customExit === true ? !validExitName(rule.target) : !ADDED_RULE_TARGETS.includes(rule.target)) ||
     typeof rule.payload !== 'string' || rule.payload === '' || rule.payload.length > 2048 ||
     rule.payload.trim() !== rule.payload || /[\x00\r\n]/.test(rule.payload) ||
     typeof rule.noResolve !== 'boolean' || typeof rule.source !== 'boolean' ||
@@ -131,12 +175,26 @@ function checked(settings: AddedRulesSettings): AddedRulesSettings {
       !validRuleList(item.rules) || !Array.isArray(item.disabled) || item.disabled.length > 1000 ||
       item.disabled.some((id: string): boolean => typeof id !== 'string' || id === '' || id.length > 80) ||
       typeof item.matchTarget !== 'string' || item.matchTarget.length > 1024 ||
-      item.matchTarget.trim() !== item.matchTarget || /[,\x00\r\n]/.test(item.matchTarget)) {
+      (item.matchTarget !== '' && !validRuleTargetName(item.matchTarget)) ||
+      !validExitTargets(item.exitTargets)) {
       throw new Error('profile_settings_invalid');
     }
     ids.add(item.profile);
   }
   return settings;
+}
+
+function validExitTargets(targets: AddedRuleExit[] | undefined): boolean {
+  if (targets === undefined) { return true; }
+  if (!Array.isArray(targets) || targets.length > 1000) { return false; }
+  const names = new Set<string>();
+  for (const exit of targets) {
+    if (exit === null || !validExitName(exit.name) || !validRuleTargetName(exit.target) || names.has(exit.name)) {
+      return false;
+    }
+    names.add(exit.name);
+  }
+  return true;
 }
 
 const storage: ProfileSettingsFile<AddedRulesSettings> = {
@@ -162,10 +220,11 @@ export async function saveAddedRules(context: common.UIAbilityContext, expected:
   const profiles = (expected.profiles ?? []).filter((item: ProfileAddedRules): boolean =>
     item.profile !== edit?.profile && findProfile(list, item.profile) !== undefined)
     .map((item: ProfileAddedRules): ProfileAddedRules => ({ profile: item.profile, revision: item.revision,
-      rules: item.rules, matchTarget: item.matchTarget,
+      rules: item.rules, matchTarget: item.matchTarget, exitTargets: item.exitTargets,
       disabled: item.disabled.filter((id: string): boolean => globals.has(id)) }));
   if (edit !== undefined) {
     profiles.push({ profile: edit.profile, revision: revision, rules: edit.rules, matchTarget: edit.matchTarget,
+      exitTargets: edit.exitTargets,
       disabled: edit.disabled.filter((id: string): boolean => globals.has(id)) });
   }
   return saveProfileSettings<AddedRulesSettings>(context, storage, expected.revision,

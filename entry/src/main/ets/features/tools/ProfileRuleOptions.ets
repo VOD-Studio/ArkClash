@@ -1,5 +1,6 @@
 import { common } from '@kit.AbilityKit';
-import { ADDED_RULE_TARGETS, AddedRule, addedRuleText, ProfileAddedRules } from '../../client/AddedRules';
+import { ADDED_RULE_TARGETS, AddedRule, AddedRuleExit, addedRuleText, namedExits, ProfileAddedRules,
+  readScriptOutbounds, RuleOutbound, RuleOutbounds, validRuleTargetName } from '../../client/AddedRules';
 import { RuleSetItem } from '../../client/RuleSets';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { EmptyState } from '../../components/EmptyState';
@@ -8,6 +9,7 @@ import { ListSource } from '../../components/ListSource';
 import { PAGE_GUTTER } from '../../components/Theme';
 import { yamlPath } from '../../shared/profiles/Store';
 import { analyze, ProfileSummary, readSummary, SummaryGroup, SummaryProxy } from '../../shared/profiles/Summary';
+import { readConfigScripts, scriptBinding } from '../../shared/profiles/Scripts';
 import { SettingsSection } from './SettingsSection';
 
 interface MatchChoice {
@@ -25,6 +27,8 @@ export struct ProfileRuleOptions {
   @Event onGlobalRules: () => void = (): void => {};
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private targetShown: boolean = false;
+  @Local private exitsShown: boolean = false;
+  @Local private activeExit: string = '';
   @Local private globalsShown: boolean = false;
   @Local private openGlobalRules: boolean = false;
   @Local private targetLoading: boolean = false;
@@ -34,6 +38,7 @@ export struct ProfileRuleOptions {
   @Local private globalsCount: number = 0;
   private choices: MatchChoice[] = [];
   private targetRequest: number = 0;
+  private queuedExit: string = '';
   private targets: ListSource<MatchChoice> = new ListSource<MatchChoice>();
   private visibleGlobals: ListSource<AddedRule> = new ListSource<AddedRule>();
 
@@ -42,39 +47,56 @@ export struct ProfileRuleOptions {
       this.ruleSets.find((item: RuleSetItem): boolean => item.id === rule.payload)?.name ?? rule.payload : rule.payload;
   }
 
-  private async pickTarget(): Promise<void> {
+  @Computed
+  get exits(): string[] {
+    const globals = this.globals.filter((rule: AddedRule): boolean => !this.standard.disabled.includes(rule.id));
+    return namedExits(this.standard.rules.concat(globals));
+  }
+
+  private async readOutbounds(filesDir: string, profile: string): Promise<RuleOutbounds> {
+    const scripts = await readConfigScripts(filesDir);
+    const binding = scriptBinding(scripts, profile);
+    if (binding.mode === 'script' && binding.scriptId !== '') {
+      return readScriptOutbounds(filesDir, profile);
+    }
+    let summary: ProfileSummary | undefined = await readSummary(filesDir, profile);
+    if (summary?.nodes === undefined) {
+      const source = await analyze(yamlPath(filesDir, profile));
+      if (source.error !== '') { throw new Error('profile_settings_invalid'); }
+      summary = JSON.parse(source.summary) as ProfileSummary;
+    }
+    return {
+      groups: summary.groups.map((group: SummaryGroup): RuleOutbound => ({ name: group.name, type: group.type })),
+      nodes: (summary.nodes ?? []).map((node: SummaryProxy): RuleOutbound => ({ name: node.name, type: node.type }))
+    };
+  }
+
+  private async pickTarget(exit: string = ''): Promise<void> {
     const request = ++this.targetRequest;
+    this.activeExit = exit;
     this.query = '';
     this.targetShown = true;
     this.targetLoading = true;
     this.targetFailed = false;
     const profile = this.standard.profile;
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    let summary: ProfileSummary | undefined;
-    let failed = false;
+    let outbounds: RuleOutbounds = { groups: [], nodes: [] };
     try {
-      summary = await readSummary(context.filesDir, profile);
-      if (summary?.nodes === undefined) {
-        const source = await analyze(yamlPath(context.filesDir, profile));
-        if (source.error !== '') { throw new Error('profile_settings_invalid'); }
-        summary = JSON.parse(source.summary) as ProfileSummary;
-      }
-    } catch (_error) { failed = true; }
+      outbounds = await this.readOutbounds(context.filesDir, profile);
+    } catch (_error) { if (request === this.targetRequest) { this.targetFailed = true; } }
     if (request !== this.targetRequest || !this.targetShown) { return; }
-    this.targetFailed = failed;
     const candidates: MatchChoice[] = ADDED_RULE_TARGETS.filter((name: string): boolean => name !== 'MATCH')
       .map((name: string): MatchChoice => ({ name: name, detail: $r('app.string.standard_basic_target') }));
-    (summary?.groups ?? []).forEach((group: SummaryGroup): void => {
+    outbounds.groups.forEach((group: RuleOutbound): void => {
       candidates.push({ name: group.name, detail: $r('app.string.standard_group_target', group.type) });
     });
-    (summary?.nodes ?? []).forEach((node: SummaryProxy): void => {
+    outbounds.nodes.forEach((node: RuleOutbound): void => {
       candidates.push({ name: node.name, detail: $r('app.string.standard_node_target', node.type) });
     });
     const seen = new Set<string>();
     this.choices = candidates.filter((choice: MatchChoice): boolean => {
       const name = choice.name;
-      if (name === '' || name.length > 1024 || name.trim() !== name ||
-        /[,\x00\r\n]/.test(name) || seen.has(name)) { return false; }
+      if (!validRuleTargetName(name) || seen.has(name)) { return false; }
       seen.add(name);
       return true;
     });
@@ -100,19 +122,32 @@ export struct ProfileRuleOptions {
   @Monitor('globals')
   globalsChanged(): void { if (this.globalsShown) { this.searchGlobals(); } }
 
+  private mappedTarget(exit: string): string {
+    return this.standard.exitTargets?.find((item: AddedRuleExit): boolean => item.name === exit)?.target ?? '';
+  }
+
+  private selectedTarget(): string {
+    return this.activeExit === '' ? this.standard.matchTarget : this.mappedTarget(this.activeExit);
+  }
+
   private saveTarget(name: string): void {
     this.targetShown = false;
-    if (name !== this.standard.matchTarget) {
-      this.onChange({ profile: this.standard.profile, revision: this.standard.revision, rules: this.standard.rules,
-        disabled: this.standard.disabled, matchTarget: name });
+    if (name === this.selectedTarget()) { return; }
+    let targets = this.standard.exitTargets;
+    if (this.activeExit !== '') {
+      targets = (targets ?? []).filter((exit: AddedRuleExit): boolean => exit.name !== this.activeExit);
+      if (name !== '') { targets.push({ name: this.activeExit, target: name }); }
     }
+    this.onChange({ profile: this.standard.profile, revision: this.standard.revision, rules: this.standard.rules,
+      disabled: this.standard.disabled, matchTarget: this.activeExit === '' ? name : this.standard.matchTarget,
+      exitTargets: targets });
   }
 
   private toggleGlobal(id: string): void {
     const ids = this.standard.disabled;
     const disabled = ids.includes(id) ? ids.filter((item: string): boolean => item !== id) : ids.concat([id]);
     this.onChange({ profile: this.standard.profile, revision: this.standard.revision, rules: this.standard.rules,
-      disabled: disabled, matchTarget: this.standard.matchTarget });
+      disabled: disabled, matchTarget: this.standard.matchTarget, exitTargets: this.standard.exitTargets });
   }
 
   @Builder
@@ -126,11 +161,11 @@ export struct ProfileRuleOptions {
             Text(detail).fontSize(13).fontColor($r('sys.color.font_secondary'))
           }
         }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-        if (this.standard.matchTarget === name) {
+        if (this.selectedTarget() === name) {
           SymbolGlyph($r('sys.symbol.checkmark')).fontSize(18).fontColor([this.appStyle.palette.brand])
         }
       }.width('100%').padding({ left: 16, right: 16 })
-    }.width('100%').height(56).accessibilitySelected(this.standard.matchTarget === name)
+    }.width('100%').height(56).accessibilitySelected(this.selectedTarget() === name)
       .onClick((): void => this.saveTarget(name))
   }
 
@@ -140,9 +175,17 @@ export struct ProfileRuleOptions {
       if (this.targetLoading) {
         LoadingProgress().width(28).height(28).color(this.appStyle.palette.brand)
       } else {
-        this.TargetRow($r('app.string.standard_follow_profile'), '')
+        this.TargetRow(this.activeExit === '' ? $r('app.string.standard_follow_profile') :
+          $r('app.string.added_rules_exit_auto'), '', this.activeExit === '' ? '' :
+          $r('app.string.added_rules_exit_auto_hint'))
+        if (!this.targetFailed && this.selectedTarget() !== '' &&
+          !this.choices.some((choice: MatchChoice): boolean => choice.name === this.selectedTarget())) {
+          Text($r('app.string.added_rules_exit_missing', this.selectedTarget()))
+            .fontSize(14).fontColor($r('app.color.status_error')).width('100%')
+        }
         if (this.targetFailed) {
-          ListRow({ title: $r('app.string.standard_target_load_failed'), onTap: (): void => { this.pickTarget(); } })
+          ListRow({ title: $r('app.string.standard_target_load_failed'),
+            onTap: (): void => { this.pickTarget(this.activeExit); } })
         }
         TextInput({ text: this.query, placeholder: $r('app.string.diagnostics_search') }).height(40)
           .onChange((text: string): void => { this.query = text; this.searchTargets(); })
@@ -198,6 +241,18 @@ export struct ProfileRuleOptions {
   }
 
   @Builder
+  ExitSheet() {
+    List() {
+      Repeat(this.exits).each((exit: RepeatItem<string>): void => {
+        ListItem() {
+          ListRow({ title: exit.item, value: this.mappedTarget(exit.item) || $r('app.string.added_rules_exit_auto'),
+            onTap: (): void => { this.queuedExit = exit.item; this.exitsShown = false; } })
+        }
+      }).key((name: string): string => name)
+    }.width('100%').height('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 12 })
+  }
+
+  @Builder
   Options() {
     ListRow({ title: $r('app.string.standard_match_target'),
       value: this.standard.matchTarget || $r('app.string.standard_follow_profile'),
@@ -208,13 +263,27 @@ export struct ProfileRuleOptions {
       this.searchGlobals();
       this.globalsShown = true;
     } })
+    if (this.exits.length > 0) {
+      Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 16 })
+      ListRow({ title: $r('app.string.added_rules_exits'), value: this.exits.length.toString(),
+        onTap: (): void => { this.exitsShown = true; } })
+    }
   }
 
   build() {
     Column() {
       SettingsSection({ rows: (): void => this.Options() }).enabled(!this.saving)
+      Column().bindSheet($$this.exitsShown, this.ExitSheet, {
+        title: { title: $r('app.string.added_rules_exits') }, height: SheetSize.LARGE,
+        showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
+        onDisappear: (): void => {
+          const exit = this.queuedExit;
+          this.queuedExit = '';
+          if (exit !== '') { this.pickTarget(exit); }
+        }
+      })
       Column().bindSheet($$this.targetShown, this.TargetSheet, {
-        title: { title: $r('app.string.standard_match_target') }, height: SheetSize.LARGE,
+        title: { title: this.activeExit || $r('app.string.standard_match_target') }, height: SheetSize.LARGE,
         showClose: true, systemMaterial: this.appStyle.sheetMaterial()
       })
       Column().bindSheet($$this.globalsShown, this.GlobalSheet, {
