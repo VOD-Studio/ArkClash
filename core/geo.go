@@ -17,15 +17,17 @@ import (
 )
 
 type geoResourceStatus struct {
-	ID          geoResourceID `json:"id"`
-	FileName    string        `json:"fileName"`
-	Exists      bool          `json:"exists"`
-	Size        int64         `json:"size"`
-	ModifiedAt  int64         `json:"modifiedAt"`
-	Phase       string        `json:"phase"`
-	OperationID string        `json:"operationId"`
-	Outcome     string        `json:"outcome"`
-	Error       string        `json:"error"`
+	ID            geoResourceID `json:"id"`
+	FileName      string        `json:"fileName"`
+	Exists        bool          `json:"exists"`
+	Size          int64         `json:"size"`
+	ModifiedAt    int64         `json:"modifiedAt"`
+	Phase         string        `json:"phase"`
+	OperationID   string        `json:"operationId"`
+	Outcome       string        `json:"outcome"`
+	Error         string        `json:"error"`
+	ReceivedBytes int64         `json:"receivedBytes,omitempty"`
+	TotalBytes    int64         `json:"totalBytes,omitempty"`
 }
 
 type geoSnapshot struct {
@@ -217,6 +219,7 @@ func (m *geoManager) enqueueItemsLocked(ids []geoResourceID, automatic bool) boo
 		m.queue = append(m.queue, job)
 		item := &m.items[geoIndex(id)]
 		item.Phase, item.OperationID, item.Outcome, item.Error = "queued", job.operationID, "none", ""
+		item.ReceivedBytes, item.TotalBytes = 0, 0
 		changed = true
 	}
 	if changed {

@@ -1,6 +1,6 @@
 import { common } from '@kit.AbilityKit';
 import { ControllerSocket } from '../../client/ControllerSocket';
-import { applyGeoSettings, geoResourceError, getGeoSnapshot, parseGeoSnapshot,
+import { applyGeoSettings, geoResourceError, getGeoSnapshot, parseGeoEvent,
   updateGeoResources } from '../../client/GeoResources';
 import { defaultGeoSettings, flushGeoSettings, GEO_RESOURCE_IDS, GeoResourceId, GeoResourceOutcome,
   GeoResourcePhase, GeoResourceStatus, GeoSettings, GeoSnapshot, readGeoFileInfos, readGeoSettings,
@@ -25,11 +25,6 @@ export interface GeoResourceNotice {
   kind: 'saved' | 'pending' | 'single' | 'batch' | 'error';
   items: GeoResourceStatus[];
   error: string;
-}
-
-interface GeoStreamMessage {
-  type: string;
-  snapshot: GeoSnapshot;
 }
 
 interface GeoBatchEntry {
@@ -182,11 +177,8 @@ export class ResourcesStore {
     const socket = new ControllerSocket('/arkclash/geo/events', (text: string): void => {
       if (!this.current(generation) || !this.visible) { return; }
       try {
-        const message = JSON.parse(text) as GeoStreamMessage;
-        if (message.type === 'geo') {
-          this.accept(parseGeoSnapshot(JSON.stringify(message.snapshot)));
-          this.applyOnRestore(generation).catch((): void => {});
-        }
+        this.accept(parseGeoEvent(text));
+        this.applyOnRestore(generation).catch((): void => {});
       } catch (_error) { this.error = 'geo_invalid_data'; }
     });
     this.socket = socket;

@@ -51,7 +51,7 @@ type geoMetadata struct {
 
 func defaultGeoSettings() geoSettings {
 	const base = "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/"
-	return geoSettings{Version: 1, Revision: "default", IntervalHours: 24, URLs: geoURLs{
+	return geoSettings{Version: 1, Revision: "default", AutoUpdate: true, IntervalHours: 24, URLs: geoURLs{
 		MMDB: base + "geoip.metadb", ASN: base + "GeoLite2-ASN.mmdb",
 		GeoIP: base + "geoip.dat", GeoSite: base + "geosite.dat",
 	}}

@@ -122,7 +122,7 @@
     },
     {
       "name": "geo_reset_message",
-      "value": "Reset all four URLs, turn off automatic updates and restore the 24-hour interval? Downloaded databases will not be deleted."
+      "value": "Restore all four default URLs and enable updates every 24 hours? Downloaded databases will be kept."
     },
     {
       "name": "geo_invalid_settings",

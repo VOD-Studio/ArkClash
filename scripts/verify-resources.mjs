@@ -131,10 +131,11 @@ async function managed(dir, id, isManaged = true) {
 test('默认设置无需写盘，保存返回已提交revision并能完整重读', async () => sandbox(async (dir, { geo }) => {
   const initial = await geo.readGeoSettings(dir);
   assert.equal(initial.revision, 'default');
-  assert.equal(initial.autoUpdate, false);
+  assert.equal(initial.autoUpdate, true);
   assert.equal(initial.intervalHours, 24);
   assert.deepEqual(await fsp.readdir(dir), []);
   initial.urls.mmdb = 'https://example.com/custom.mmdb?token=private';
+  initial.autoUpdate = false;
   const committed = await geo.saveGeoSettings(dir, initial);
   await geo.flushGeoSettings();
   assert.notEqual(committed.revision, 'default');
@@ -565,11 +566,11 @@ test('旧Sheet revision拒绝覆盖并重读已提交值，失败只抛表单错
   h.controls.writeGate = gate.promise;
   const save = h.store.saveInterval(36);
   await untilResource(() => h.controls.writing);
-  await assert.rejects(h.store.saveAutoUpdate(true), /geo_invalid_settings/);
+  await assert.rejects(h.store.saveAutoUpdate(false), /geo_invalid_settings/);
   gate.resolve();
   await save;
   assert.equal(h.store.settings.intervalHours, 36);
-  assert.equal(h.store.settings.autoUpdate, false);
+  assert.equal(h.store.settings.autoUpdate, true);
   h.store.clearNotice();
   await assert.rejects(h.store.saveUrl('asn', 'ftp://invalid.example/asn'), /geo_invalid_url/);
   assert.equal(h.store.notice, undefined);
@@ -822,7 +823,7 @@ test('损坏设置显式恢复只重置设置，保留数据库并重新开启�
   assert.equal(h.requests.filter(request => request.route.endsWith('/settings')).length, 0);
   await h.store.resetSettings();
   assert.equal(h.store.settingsError, '');
-  assert.equal(h.store.settings.autoUpdate, false);
+  assert.equal(h.store.settings.autoUpdate, true);
   assert.equal(h.store.canSync, true);
   assert.equal(h.store.notice.kind, 'saved');
   assert.equal(await fsp.readFile(path.join(h.dir, 'ASN.mmdb'), 'utf8'), 'must-keep');
@@ -912,6 +913,7 @@ module.exports = ResourcePageActions;`, {
 }
 
 test('正文自动更新草稿在真实保存失败后回滚，离线重试仍可保存', async () => resourceStoreCase(async h => {
+  await h.geo.saveGeoSettings(h.dir, { ...h.geo.defaultGeoSettings(), autoUpdate: false });
   h.store.setVisible(true);
   await h.store.load(h.context);
   const { page, notices } = resourcePageActions(h.store);

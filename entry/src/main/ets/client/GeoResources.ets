@@ -12,6 +12,17 @@ interface GeoUpdateBody {
   ids: GeoResourceId[];
 }
 
+interface GeoStreamMessage {
+  type: string;
+  snapshot: GeoSnapshot;
+}
+
+export function parseGeoEvent(text: string): GeoSnapshot {
+  const event = JSON.parse(text) as GeoStreamMessage;
+  if (event?.type !== 'geo') { throw new Error('geo_invalid_data'); }
+  return checkedGeoSnapshot(event.snapshot);
+}
+
 // 只允许固定错误码进入界面，controller 和网络原始错误可能含凭据。
 export function geoResourceError(error: Object): string {
   const message = (error as Error).message;
@@ -22,8 +33,11 @@ export function geoResourceError(error: Object): string {
 }
 
 export function parseGeoSnapshot(text: string): GeoSnapshot {
-  const snapshot = JSON.parse(text) as GeoSnapshot;
-  if (snapshot === null || typeof snapshot !== 'object' || typeof snapshot.bootId !== 'string' ||
+  return checkedGeoSnapshot(JSON.parse(text) as GeoSnapshot);
+}
+
+function checkedGeoSnapshot(snapshot: GeoSnapshot): GeoSnapshot {
+  if (snapshot === null || snapshot === undefined || typeof snapshot !== 'object' || typeof snapshot.bootId !== 'string' ||
     snapshot.bootId.length === 0 || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0 ||
     typeof snapshot.settingsRevision !== 'string' || !Array.isArray(snapshot.items) || snapshot.items.length !== 4) {
     throw new Error('geo_invalid_data');
@@ -34,7 +48,9 @@ export function parseGeoSnapshot(text: string): GeoSnapshot {
       typeof item.fileName !== 'string' || typeof item.exists !== 'boolean' ||
       !Number.isFinite(item.size) || item.size < 0 || !Number.isFinite(item.modifiedAt) || item.modifiedAt < 0 ||
       !['idle', 'queued', 'updating'].includes(item.phase) || typeof item.operationId !== 'string' ||
-      !['none', 'updated', 'unchanged', 'failed', 'canceled'].includes(item.outcome) || typeof item.error !== 'string') {
+      !['none', 'updated', 'unchanged', 'failed', 'canceled'].includes(item.outcome) || typeof item.error !== 'string' ||
+      !Number.isSafeInteger(item.receivedBytes ?? 0) || (item.receivedBytes ?? 0) < 0 ||
+      !Number.isSafeInteger(item.totalBytes ?? 0) || (item.totalBytes ?? 0) < 0) {
       throw new Error('geo_invalid_data');
     }
     seen.push(item.id);

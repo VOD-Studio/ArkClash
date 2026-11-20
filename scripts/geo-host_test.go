@@ -42,6 +42,7 @@ func geoDiskSettings(t *testing.T, home string, settings geoSettings) {
 
 func geoTestSettings(source string) geoSettings {
 	settings := defaultGeoSettings()
+	settings.AutoUpdate = false
 	settings.URLs = geoURLs{MMDB: source + "/mmdb", ASN: source + "/asn", GeoIP: source + "/geoip", GeoSite: source + "/geosite"}
 	settings.Revision = "fixture-settings"
 	return settings
@@ -184,8 +185,14 @@ func geoAssertNoTemps(t *testing.T, home string) {
 func TestGeoSettingsAndFixedPathContract(t *testing.T) {
 	home := t.TempDir()
 	defaults, err := readGeoSettings(home)
-	if err != nil || defaults.Revision != "default" || defaults.AutoUpdate || defaults.IntervalHours != 24 {
+	if err != nil || defaults.Revision != "default" || !defaults.AutoUpdate || defaults.IntervalHours != 24 {
 		t.Fatalf("missing settings: %+v %v", defaults, err)
+	}
+	disabled := defaults
+	disabled.AutoUpdate = false
+	geoDiskSettings(t, home, disabled)
+	if saved, err := readGeoSettings(home); err != nil || saved.AutoUpdate {
+		t.Fatalf("saved Geo preference: %+v %v", saved, err)
 	}
 	for _, source := range []string{"", "ftp://example.com/a", "https://user:password@example.com/a", "http:///missing", strings.Repeat("x", 2049)} {
 		settings := defaults
@@ -698,8 +705,20 @@ func geoReadFrame(t *testing.T, reader *bufio.Reader) *geoSnapshot {
 
 func TestGeoWebSocketInitialAndReconnectDeliverFinalState(t *testing.T) {
 	payload := geoSiteData(t, "new.example", false)
-	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(payload) }))
+	finish := make(chan struct{})
+	release := sync.OnceFunc(func() { close(finish) })
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprint(len(payload)))
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		select {
+		case <-finish:
+			_, _ = w.Write(payload)
+		case <-r.Context().Done():
+		}
+	}))
 	defer source.Close()
+	defer release()
 	manager := geoFixture(t, geoTestSettings(source.URL))
 	events := httptest.NewServer(http.HandlerFunc(getGeoEvents))
 	defer events.Close()
@@ -709,13 +728,24 @@ func TestGeoWebSocketInitialAndReconnectDeliverFinalState(t *testing.T) {
 		t.Fatal("initial snapshot omitted current boot")
 	}
 	geoAdmit(t, manager, geoSite)
+	for {
+		item := geoItem(t, geoReadFrame(t, reader), geoSite)
+		if item.Phase == "updating" && item.TotalBytes == int64(len(payload)) {
+			if item.ReceivedBytes != 0 {
+				t.Fatal("download reported bytes before reading the body")
+			}
+			break
+		}
+	}
+	release()
 	terminal := geoWait(t, manager, geoSite)
 	latest := initial
 	for latest.Revision < terminal.Revision {
 		latest = geoReadFrame(t, reader)
 	}
-	if geoItem(t, latest, geoSite).Phase != "idle" || geoItem(t, latest, geoSite).Outcome != "updated" {
-		t.Fatal("final event was dropped")
+	if item := geoItem(t, latest, geoSite); item.Phase != "idle" || item.Outcome != "updated" ||
+		item.ReceivedBytes != int64(len(payload)) || item.TotalBytes != int64(len(payload)) {
+		t.Fatalf("final event omitted download result: %+v", item)
 	}
 	_ = connection.Close()
 	_, reader = geoWebSocket(t, events.URL)

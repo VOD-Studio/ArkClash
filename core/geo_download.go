@@ -28,13 +28,31 @@ var geoDownloadTimeout = 60 * time.Second
 type geoContextReader struct {
 	ctx    context.Context
 	reader io.Reader
+	onRead func(int)
 }
 
 func (reader geoContextReader) Read(buffer []byte) (int, error) {
 	if err := reader.ctx.Err(); err != nil {
 		return 0, err
 	}
-	return reader.reader.Read(buffer)
+	n, err := reader.reader.Read(buffer)
+	if reader.onRead != nil && n > 0 {
+		reader.onRead(n)
+	}
+	return n, err
+}
+
+func (m *geoManager) reportDownload(job *geoJob, received, total int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.jobValidLocked(job) {
+		return
+	}
+	item := &m.items[geoIndex(job.id)]
+	if item.ReceivedBytes != received || item.TotalBytes != total {
+		item.ReceivedBytes, item.TotalBytes = received, total
+		m.publishLocked()
+	}
 }
 
 func geoContextError(ctx context.Context) error {
@@ -149,7 +167,19 @@ func (m *geoManager) update(job *geoJob) (outcome string, resultErr error) {
 	path := file.Name()
 	defer os.Remove(path)
 	hash := sha256.New()
-	n, copyErr := io.Copy(io.MultiWriter(file, hash), io.LimitReader(geoContextReader{ctx: ctx, reader: response.Body}, geoDownloadLimit+1))
+	total := max(0, response.ContentLength)
+	m.reportDownload(job, 0, total)
+	var received int64
+	nextReport := time.Now().Add(time.Second)
+	reader := geoContextReader{ctx: ctx, reader: response.Body, onRead: func(n int) {
+		received += int64(n)
+		if now := time.Now(); !now.Before(nextReport) {
+			m.reportDownload(job, received, total)
+			nextReport = now.Add(time.Second)
+		}
+	}}
+	n, copyErr := io.Copy(io.MultiWriter(file, hash), io.LimitReader(reader, geoDownloadLimit+1))
+	m.reportDownload(job, received, total)
 	if copyErr == nil && (n == 0 || n > geoDownloadLimit) {
 		copyErr = errors.New("geo_invalid_data")
 	}

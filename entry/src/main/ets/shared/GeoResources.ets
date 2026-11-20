@@ -32,6 +32,8 @@ export interface GeoResourceStatus {
   operationId: string;
   outcome: GeoResourceOutcome;
   error: string;
+  receivedBytes?: number;
+  totalBytes?: number;
 }
 
 export interface GeoSnapshot {
@@ -60,7 +62,7 @@ let settingsQueue: Promise<void> = Promise.resolve();
 let latestSave: Promise<void> = Promise.resolve();
 
 export function defaultGeoSettings(): GeoSettings {
-  return { version: 1, revision: 'default', autoUpdate: false, intervalHours: 24,
+  return { version: 1, revision: 'default', autoUpdate: true, intervalHours: 24,
     urls: { mmdb: GEO_DEFAULT_URLS.mmdb, asn: GEO_DEFAULT_URLS.asn,
       geoip: GEO_DEFAULT_URLS.geoip, geosite: GEO_DEFAULT_URLS.geosite } };
 }
