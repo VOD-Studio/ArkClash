@@ -143,6 +143,20 @@ test('node share links stay on one line and produce a usable configuration with 
   assert.deepEqual(config.rules, ['MATCH,PROXY']);
 });
 
+test('install-config accepts subscription URLs with a single level of encoding', () => {
+  const { installConfigSource } = load(path.join(etsDir, 'shared/profiles/InstallConfig.ets'));
+  const source = 'https://example.invalid/sub?a=one+two&b=%252F#tail';
+  const encoded = encodeURIComponent(source);
+  for (const scheme of ['clash', 'clashmeta', 'flclash']) {
+    assert.equal(installConfigSource(`${scheme}://install-config?name=ignored&url=${encoded}`), source);
+  }
+  for (const input of [`arkclash://install-config?url=${encoded}`, `clash://install-config/p?url=${encoded}`,
+    `clash://install-config.evil?url=${encoded}`, `clash://install-config?url=${encoded}&url=${encoded}`,
+    'clash://install-config?url=file%3A%2F%2F%2Fetc%2Fhosts', 'clash://install-config?url=%ZZ']) {
+    assert.equal(installConfigSource(input), undefined);
+  }
+});
+
 test('missing selections return an empty map; corrupt selections are preserved and rejected', async () => {
   await sandbox(async (dir) => {
     assert.deepEqual(JSON.parse(JSON.stringify(await store.readSelected(dir, 'p1'))), {});

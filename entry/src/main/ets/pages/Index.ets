@@ -15,6 +15,8 @@ import { hdsGlass } from '../components/Theme';
 import { ConnectionBar } from '../features/home/ConnectionBar';
 import { ProfileItem, ProfileStore } from '../features/profiles/Profiles';
 import { ProfilesPage } from '../features/profiles/ProfilesPage';
+import { ProfileImportSheet } from '../features/profiles/ProfileImportSheet';
+import { ProfileInstallInbox } from './ProfileInstallInbox';
 import { ProxiesPage } from '../features/proxies/ProxiesPage';
 import { AboutPage } from '../features/tools/AboutPage';
 import { AdvancedConfigPage } from '../features/tools/AdvancedConfigPage';
@@ -68,6 +70,11 @@ struct Index {
   @Local foreground: boolean = true;
   @Local private mainVisible: boolean = true;
   @Local profiles: ProfileStore = new ProfileStore();
+  @Local private installInbox: ProfileInstallInbox = AppStorageV2.connect(ProfileInstallInbox,
+    () => new ProfileInstallInbox())!;
+  @Local private installSource: string = '';
+  @Local private installShown: boolean = false;
+  @Local private installingProfile: boolean = false;
   @Local proxyPicker: boolean = false;
   @Local profilePicker: boolean = false;
   @Local homeEditing: boolean = false;
@@ -111,7 +118,22 @@ struct Index {
     traffic.stop('shell');
     this.conn.observe(this.context, false);
     this.profiles.setForeground(false);
+    this.installInbox.finish();
     appUpdateState.setForeground(this.context, false);
+  }
+
+  @Monitor('installInbox.pending', 'foreground', 'profiles.loaded', 'profiles.loadError')
+  showPendingInstall(): void {
+    if (!this.foreground || !this.profiles.loaded || this.profiles.loadError !== '' || this.installSource !== '' ||
+      this.installInbox.pending === '') { return; }
+    this.installSource = this.installInbox.take();
+    this.installShown = true;
+  }
+
+  private finishInstall(): void {
+    this.installSource = '';
+    this.installInbox.finish();
+    this.showPendingInstall();
   }
 
   // 配置的更新由谁负责、要不要订阅 VPN 进程的推送，取决于连接状态和应用是否在前台（ADR-0009）。
@@ -294,6 +316,17 @@ struct Index {
     }
   }
 
+  @Builder
+  InstallSheet() {
+    ProfileImportSheet({ store: this.profiles, initialSource: this.installSource,
+      onBusy: (busy: boolean): void => { this.installingProfile = busy; },
+      onClose: (): void => { if (!this.installingProfile) { this.installShown = false; } },
+      onDone: (): void => {
+        this.installShown = false;
+        if (this.mainVisible) { this.tabs.changeIndex(Tab.Profiles); }
+      } })
+  }
+
   build() {
     // 窗口是沉浸式布局（EntryAbility）：背景和 Tabs 铺满整个窗口，悬浮栏的 barBottomMargin（默认 28vp）
     // 从屏幕底边算起；各页签用 TabPage 让开状态栏，内容从标题栏下面滚过去。
@@ -393,6 +426,11 @@ struct Index {
       .hideToolBar(true)
       .onNavBarStateChange((visible: boolean): void => { this.mainVisible = visible; })
       .navDestination(this.Routes)
+      .bindSheet($$this.installShown, this.InstallSheet(), {
+        height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
+        onWillDismiss: (action: DismissSheetAction): void => { if (!this.installingProfile) { action.dismiss(); } },
+        onDisappear: (): void => this.finishInstall()
+      })
     }
     .width('100%')
     .height('100%')

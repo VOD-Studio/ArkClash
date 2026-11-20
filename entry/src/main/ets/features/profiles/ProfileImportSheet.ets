@@ -12,6 +12,7 @@ export struct ProfileImportSheet {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require store: ProfileStore;
   @Param batch: boolean = false;
+  @Param initialSource: string = '';
   @Event onDone: () => void = (): void => {};
   @Event onBusy: (busy: boolean) => void = (): void => {};
   @Event onClose: () => void = (): void => {};
@@ -24,7 +25,11 @@ export struct ProfileImportSheet {
   @Local resultShown: boolean = false;
   private visible: boolean = false;
 
-  aboutToAppear(): void { this.visible = true; this.importingMany = this.batch; }
+  aboutToAppear(): void {
+    this.visible = true;
+    this.importingMany = this.batch;
+    this.source = this.initialSource;
+  }
   aboutToDisappear(): void { this.visible = false; }
 
   private toastFailure(failure: string): void {

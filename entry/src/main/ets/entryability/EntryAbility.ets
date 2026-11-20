@@ -2,6 +2,7 @@ import { AbilityConstant, Configuration, UIAbility, Want } from '@kit.AbilityKit
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppStorageV2, window } from '@kit.ArkUI';
 import { AppearanceLifecycle } from '../pages/AppearanceLifecycle';
+import { ProfileInstallInbox } from '../pages/ProfileInstallInbox';
 import { WindowInsets } from '../pages/WindowInsets';
 
 const DOMAIN = 0x0A11;
@@ -19,6 +20,14 @@ export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, TAG, 'onCreate');
     this.appearance.load(this.context);
+    this.acceptInstallLink(want);
+  }
+
+  onNewWant(want: Want): void { this.acceptInstallLink(want); }
+
+  private acceptInstallLink(want: Want): void {
+    if (want.action !== 'ohos.want.action.viewData' || want.uri === undefined) { return; }
+    AppStorageV2.connect(ProfileInstallInbox, () => new ProfileInstallInbox())?.offer(want.uri);
   }
 
   onConfigurationUpdate(config: Configuration): void {
