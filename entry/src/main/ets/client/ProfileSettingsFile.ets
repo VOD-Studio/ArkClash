@@ -8,16 +8,9 @@ import { runtimeMayBeActive } from '../shared/Runtime';
 import { profileDataPath, withProfileStorage } from '../shared/profiles/Store';
 import { call } from './Controller';
 import { readCoreHostStatus } from './CoreClient';
+import { profileSettingsRequestJson, VersionedProfileSettings } from './ProfileSettingsProtocol';
 
-export interface VersionedProfileSettings {
-  revision: string;
-}
-
-interface ProfileSettingsRequest<T extends VersionedProfileSettings> {
-  bootId: string;
-  expectedRevision: string;
-  settings: T;
-}
+export type { VersionedProfileSettings } from './ProfileSettingsProtocol';
 
 export interface ProfileSettingsFile<T extends VersionedProfileSettings> {
   fileName: string;
@@ -57,11 +50,9 @@ export async function saveProfileSettings<T extends VersionedProfileSettings>(co
   }
   const host = await readCoreHostStatus(context);
   if (host.state === 'running' && host.status !== undefined) {
-    const request: ProfileSettingsRequest<T> = {
-      bootId: host.status.bootId, expectedRevision: expectedRevision, settings: settings
-    };
     try {
-      await call(filesDir, http.RequestMethod.POST, storage.endpoint, JSON.stringify(request), 90000);
+      const request = profileSettingsRequestJson<T>(host.status.bootId, expectedRevision, settings);
+      await call(filesDir, http.RequestMethod.POST, storage.endpoint, request, 90000);
     } catch (error) {
       const committed = await readProfileSettings<T>(filesDir, storage).catch((): undefined => undefined);
       if (committed?.revision !== settings.revision) {

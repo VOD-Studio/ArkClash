@@ -10,6 +10,8 @@
     "libarkstore.so": "file:./src/main/cpp/types/libarkstore",
     "yaml": "2.8.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.25"
+  },
   "dynamicDependencies": {}
 }

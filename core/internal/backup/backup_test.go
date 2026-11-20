@@ -3,6 +3,7 @@ package backup
 import (
 	"archive/zip"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -54,6 +55,47 @@ func snapshot(t *testing.T, root, work, name string) string {
 		t.Fatal(err)
 	}
 	return target
+}
+
+func TestArchiveManifestContract(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "testdata", "contracts.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		BackupManifest json.RawMessage
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	input := t.TempDir()
+	const yaml = "proxies: []\n"
+	place(t, input, "fixture.yaml", yaml)
+	work := t.TempDir()
+	target := filepath.Join(work, "fixture.zip")
+	if err := Pack(input, target, "9007199254740993"); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := zip.OpenReader(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer archive.Close()
+	file, err := archive.Open("manifest.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	actual, err := io.ReadAll(file)
+	if err = errors.Join(err, file.Close()); err != nil {
+		t.Fatal(err)
+	}
+	want, err := json.Marshal(fixture.BackupManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(actual) != string(want) {
+		t.Fatalf("归档清单不一致\n实际：%s\n预期：%s", actual, want)
+	}
 }
 
 func TestArchiveRestoreMatrix(t *testing.T) {

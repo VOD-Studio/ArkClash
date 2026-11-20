@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
 	"github.com/metacubex/mihomo/adapter"
@@ -56,13 +55,6 @@ func emit(event any) {
 	default:
 	}
 }
-func writeError(w http.ResponseWriter, r *http.Request, status int, err error) {
-	render.Status(r, status)
-	render.JSON(w, r, struct {
-		Message string `json:"message"`
-	}{Message: err.Error()})
-}
-
 func fixture(t *testing.T) *config.Config {
 	t.Helper()
 	inbound.EnableArkClashListenerOwnership()

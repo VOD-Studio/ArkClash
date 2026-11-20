@@ -28,7 +28,7 @@ before(async () => {
     'diagnostics_logs.go', 'general_settings.go', 'panel_controller.go', 'backup.go']) {
     await copyFile(join(root, 'core', file), join(sandbox, file));
   }
-  for (const file of ['backup-live-host_test.go', 'core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go',
+  for (const file of ['contracts-host_test.go', 'backup-live-host_test.go', 'core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go',
     'geo-reader-host_test.go', 'geo-host_test.go', 'geo-scheduler-host_test.go', 'diagnostics-host_test.go',
     'diagnostics-stream-host_test.go', 'diagnostics-lifecycle-host_test.go', 'diagnostics-control-host_test.go',
     'lifecycle-host_test.go', 'runtime-lifecycle-host_test.go', 'disconnected-delay-host_test.go', 'inbound-host_test.go',
@@ -71,14 +71,15 @@ before(async () => {
   await writeFile(join(sandbox, 'fetch.go'), 'package main\nimport (\n' +
     '"context"\n"errors"\n"io"\n"net/url"\n"os"\n"strings"\n"time"\n' +
     '"github.com/metacubex/http"\n)\n' + [fetchLimit, ...fetchDeclarations, ...fetchFunctions].join('\n\n') + '\n');
-  const frameFunctions = ['upgradeWebSocket', 'writeTextFrame', 'getStatus'].map(name => {
+  const frameFunctions = ['upgradeWebSocket', 'writeTextFrame', 'getStatus', 'writeError'].map(name => {
     const declaration = apiSource.match(new RegExp(`^func ${name}\\([^\\n]+\\) [^\\n]*\\{[\\s\\S]*?^\\}`, 'm'))?.[0];
     assert.ok(declaration, `未找到产品 WebSocket/状态函数 ${name}`);
     return declaration;
   });
   await writeFile(join(sandbox, 'frames.go'), 'package main\nimport (\n' +
     '"bufio"\n"crypto/sha1"\n"encoding/base64"\n"encoding/binary"\n"errors"\n"io"\n"net"\n' +
-    '"github.com/metacubex/http"\n"github.com/metacubex/chi/render"\n)\n' + frameFunctions.join('\n\n') + '\n');
+    '"github.com/metacubex/http"\n"github.com/metacubex/chi/render"\n)\n' +
+    apiSource.match(/^type apiError struct \{[\s\S]*?^\}/m)[0] + '\n\n' + frameFunctions.join('\n\n') + '\n');
   const build = spawnSync('go', ['test', '-mod=readonly', ...(race ? ['-race'] : []), '-c', '-o', executable, '.'], {
     cwd: sandbox, encoding: 'utf8', timeout: 600000, env: goEnv
   });
