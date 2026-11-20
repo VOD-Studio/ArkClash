@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -55,5 +56,45 @@ func TestLocalProxyController(t *testing.T) {
 	if status := request("decode", `{"lines":["`+strings.Repeat("a", localProxyLimit)+`"]}`, &failure); status != 400 ||
 		failure.Message != "local_proxy_input" {
 		t.Fatalf("超大请求限制失效，HTTP %d", status)
+	}
+}
+
+func TestHTTPUpgradeShareLinkRoundTrip(t *testing.T) {
+	for _, tt := range []struct {
+		protocol string
+		alterID  int
+		fastOpen bool
+	}{
+		{"vless", 0, false},
+		{"vless", 0, true},
+		{"vmess", 0, true},
+		{"vmess", 4, true},
+		{"trojan", 0, false},
+	} {
+		t.Run(tt.protocol+":"+fmt.Sprint(tt.alterID, "/", tt.fastOpen), func(t *testing.T) {
+			const path = "/upgrade?token=fixture"
+			ws := map[string]any{"path": path, "v2ray-http-upgrade": true}
+			if tt.fastOpen {
+				ws["v2ray-http-upgrade-fast-open"] = true
+			}
+			if tt.protocol != "trojan" {
+				ws["headers"] = map[string]any{"Host": "cdn.example.com"}
+			}
+			definition := map[string]any{
+				"name": "fixture", "type": tt.protocol, "server": "192.0.2.50", "port": 443, "tls": true,
+				"uuid": "33333333-3333-4333-8333-333333333333", "alterId": tt.alterID, "password": "fixture",
+				"network": "ws", "ws-opts": ws,
+			}
+			link := encodeLocalProxyLinks([]map[string]any{definition})[0]
+			decoded := decodeLocalProxyLink(link)
+			if len(decoded) != 1 || decoded[0]["network"] != "ws" {
+				t.Fatal("分享链接未还原 WebSocket 传输")
+			}
+			opts := proxyFields(decoded[0]).sub("ws-opts")
+			if !opts.flag("v2ray-http-upgrade") || opts.flag("v2ray-http-upgrade-fast-open") != tt.fastOpen ||
+				opts.str("path") != path || opts.sub("headers").str("Host") != proxyFields(ws).sub("headers").str("Host") {
+				t.Fatal("分享链接改变了 HTTPUpgrade 选项")
+			}
+		})
 	}
 }
