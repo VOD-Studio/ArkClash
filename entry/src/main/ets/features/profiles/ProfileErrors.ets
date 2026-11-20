@@ -20,6 +20,10 @@ export function describeError(error: string): ResourceStr {
     case 'conflict': return $r('app.string.profile_err_conflict');
     case 'corrupt': return $r('app.string.profile_err_corrupt');
     case 'url_invalid': return $r('app.string.profile_err_url');
+    case 'import_link_invalid': return $r('app.string.profile_err_import_link');
+    case 'proxy_link_invalid':
+    case 'local_proxy_input': return $r('app.string.local_proxy_link');
+    case 'local_proxy_core_unavailable': return $r('app.string.local_proxy_core_unavailable');
     case 'canceled': return $r('app.string.profile_err_canceled');
     case 'timeout': return $r('app.string.profile_err_timeout');
     case 'dns': return $r('app.string.profile_err_dns');

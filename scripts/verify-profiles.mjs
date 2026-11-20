@@ -118,7 +118,8 @@ function componentControl(name, overrides = {}) {
 const store = load(path.join(etsDir, 'shared/profiles/Store.ets'));
 const download = load(path.join(etsDir, 'shared/profiles/Download.ets'));
 const parseLinks = exportedFunction(path.join(featureDir, 'ProfileActions.ets'), 'parseProfileLinks',
-  "import { validSubscriptionUrl } from '../../shared/profiles/Download';");
+  "import { validSubscriptionUrl } from '../../shared/profiles/Download';\n" +
+  "import { isProxyShareLink } from '../../shared/profiles/ShareProfile';");
 const nextDue = exportedFunction(path.join(etsDir, 'shared/profiles/Updater.ets'), 'nextDue',
   "import { intervalMinutes } from './Store';\nconst MINUTE_MS = 60000;");
 const { runProfileBatch } = load(path.join(featureDir, 'ProfileBatch.ets'));
@@ -128,6 +129,19 @@ async function sandbox(run) {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'arkclash-profile-case-'));
   try { await run(dir); } finally { await fsp.rm(dir, { recursive: true, force: true }); }
 }
+
+test('node share links stay on one line and produce a usable configuration with distinct names', () => {
+  const source = 'socks5://example.invalid:1080#Test node';
+  const parsed = parseLinks(`- '${source}',\n${source}\nhttps://example.invalid/sub\n`, []);
+  assert.deepEqual(JSON.parse(JSON.stringify(parsed)), { entries: [{ source, line: 1 },
+    { source: 'https://example.invalid/sub', line: 3 }], skipped: 1, errors: [] });
+  const { buildShareProfile } = load(path.join(etsDir, 'shared/profiles/ShareProfile.ets'));
+  const { parse } = require(path.resolve(scriptDir, '../entry/oh_modules/yaml/dist/index.js'));
+  const config = parse(buildShareProfile([{ name: 'PROXY', type: 'socks5', server: 'example.invalid', port: 1080 },
+    { name: 'PROXY', type: 'socks5', server: 'example.invalid', port: 1081 }]).yaml);
+  assert.deepEqual(config['proxy-groups'], [{ name: 'PROXY', type: 'select', proxies: ['PROXY-01', 'PROXY-02'] }]);
+  assert.deepEqual(config.rules, ['MATCH,PROXY']);
+});
 
 test('missing selections return an empty map; corrupt selections are preserved and rejected', async () => {
   await sandbox(async (dir) => {

@@ -52,7 +52,7 @@ export struct ProfileImportSheet {
         const result = await this.store.importLinks(this.batchSource);
         if (this.visible) { this.result = result; this.resultShown = true; }
       } else {
-        const failure = await this.store.addSubscription(this.source, this.label);
+        const failure = await this.store.importLink(this.source, this.label);
         if (failure === undefined) { if (this.visible) { this.onDone(); } }
         else { this.toastFailure(failure); }
       }
@@ -120,10 +120,9 @@ export struct ProfileImportSheet {
               .width('100%')
               Row().height(0.5).width('100%').backgroundColor(this.appStyle.palette.divider).margin({ left: 16, right: 14 })
               Row({ space: 16 }) {
-                Text($r('app.string.subscription_link')).fontFamily(this.appStyle.fontFamily).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+                Text($r('app.string.profile_link_field')).fontFamily(this.appStyle.fontFamily).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
                 TextInput({ text: this.source, placeholder: $r('app.string.profile_field_required') })
                   .fontFamily(this.appStyle.fontFamily)
-                  .maxLength(2048)
                   .layoutWeight(1)
                   .height(56)
                   .fontSize(17)

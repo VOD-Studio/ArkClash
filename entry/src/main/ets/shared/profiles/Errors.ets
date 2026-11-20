@@ -12,7 +12,7 @@ const CODES: string[] = ['http', 'not_clash', 'invalid_yaml', 'rejected', 'netwo
   'name_long', 'link_exists', 'interval_invalid', 'in_use', 'unsupported_input', 'age_required', 'apply_failed',
   'metadata_saved', 'host_unknown', 'script_empty', 'script_encoding', 'script_size', 'script_store', 'script_conflict',
   'icon_set_input', 'icon_set_invalid', 'icon_set_size', 'icon_set_download', 'icon_set_conflict',
-  'added_rules_match_target'];
+  'added_rules_match_target', 'import_link_invalid', 'proxy_link_invalid', 'local_proxy_input', 'local_proxy_core_unavailable'];
 
 export function errorString(error: Object): string {
   const message = (error as Error).message ?? '';

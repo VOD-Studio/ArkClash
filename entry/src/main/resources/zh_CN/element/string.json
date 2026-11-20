@@ -1246,7 +1246,7 @@
     },
     {
       "name": "profile_batch_hint",
-      "value": "每行一个订阅链接，可批量导入"
+      "value": "每行一个链接，多条节点链接合成一份配置"
     },
     {
       "name": "profile_batch_result",
@@ -1667,6 +1667,14 @@
     {
       "name": "profile_import_link",
       "value": "从链接导入"
+    },
+    {
+      "name": "profile_link_field",
+      "value": "链接"
+    },
+    {
+      "name": "profile_err_import_link",
+      "value": "请输入有效的订阅地址或节点分享链接。"
     },
     {
       "name": "profile_import_file",

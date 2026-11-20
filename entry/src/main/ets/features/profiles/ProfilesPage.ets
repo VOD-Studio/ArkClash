@@ -350,7 +350,7 @@ export struct ProfilesPage {
   AddMenu() {
     Column({ space: 8 }) {
       this.AddOption($r('app.string.profile_import_file'), $r('sys.symbol.doc_text'), 'file')
-      this.AddOption($r('app.string.subscription_link'), $r('sys.symbol.link'), 'link')
+      this.AddOption($r('app.string.profile_import_link'), $r('sys.symbol.link'), 'link')
       this.AddOption($r('app.string.custom_create'), $r('sys.symbol.plus'), 'custom')
     }
     .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 24 })

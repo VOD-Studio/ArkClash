@@ -1,9 +1,14 @@
 import { common } from '@kit.AbilityKit';
+import { taskpool } from '@kit.ArkTS';
 import { getRuntimeStatus, prefetchProfile, reloadProfile, RuntimeStatus } from '../../client/Controller';
 import { connection } from '../../client/Connection';
+import { decodeProxyLinks, validateProxyDefinitions } from '../../client/LocalProxyCore';
 import { addViaVpn, notifyListChanged, ProfileEvent, ProfileEvents, updateViaVpn } from '../../client/ProfileCommands';
 import { DirectDownloader, hostOf, validSubscriptionUrl } from '../../shared/profiles/Download';
 import { errorString, ProfileError } from '../../shared/profiles/Errors';
+import { ProxyDefinition } from '../../shared/profiles/LocalProxySchema';
+import { LOCAL_PROXY_COUNT } from '../../shared/profiles/LocalProxies';
+import { buildShareProfile, isProxyShareLink, ShareProfileSource } from '../../shared/profiles/ShareProfile';
 import {
   candidatePath, checkProfileCommit, ensureProfilesDir, findProfile, newId,
   ProfileRecord, readListAsync, removeProfileFile, SubscriptionRecord, withProfileStorage,
@@ -28,6 +33,11 @@ export const ERR_NAME_EMPTY = 'name_empty';
 export const ERR_LINK_EXISTS = 'link_exists';
 export const ERR_INTERVAL = 'interval_invalid';
 export const ERR_IN_USE = 'in_use';
+
+@Concurrent
+function buildShareProfileWork(definitions: ProxyDefinition[]): ShareProfileSource {
+  return buildShareProfile(definitions);
+}
 
 @ObservedV2
 export class ProfileStore {
@@ -151,6 +161,49 @@ export class ProfileStore {
     } catch (e) { return errorString(e as Object); }
   }
 
+  async importLink(text: string, label: string): Promise<string | undefined> {
+    const source = text.trim();
+    if (isProxyShareLink(source)) { return await this.importShareLinks([source], label); }
+    if (!validSubscriptionUrl(source)) { return 'import_link_invalid'; }
+    return await this.addSubscription(source, label);
+  }
+
+  private async importShareLinks(links: string[], label: string = ''): Promise<string | undefined> {
+    try {
+      await this.ensureLoaded();
+      const context = this.context;
+      if (context === undefined) { return 'io'; }
+      if (label.trim().length > 64) { return 'name_long'; }
+      if (links.length > LOCAL_PROXY_COUNT) { return 'proxy_link_invalid'; }
+      const decoded = await decodeProxyLinks(context, links);
+      if (decoded.length !== links.length || decoded.some((row: ProxyDefinition[]): boolean => row.length === 0)) {
+        return 'proxy_link_invalid';
+      }
+      const source = await taskpool.execute(buildShareProfileWork, decoded.flat()) as ShareProfileSource;
+      const checks = await validateProxyDefinitions(context, source.definitions);
+      if (checks.length !== source.definitions.length || checks.some((issue: string): boolean => issue !== '')) {
+        return 'proxy_link_invalid';
+      }
+      await this.recheckRoute();
+      const generation = this.routeGeneration;
+      const profile = newId('p');
+      const candidate = candidatePath(this.filesDir, profile);
+      const record: ProfileRecord = { id: profile, name: label.trim() || source.name,
+        nameEdited: label.trim() !== '', subscription: '', type: 'file' };
+      const eligible = (): boolean => this.businessWritable(generation);
+      await ensureProfilesDir(this.filesDir);
+      try {
+        await writeProfileText(candidate, source.yaml, eligible);
+        await withProfileTask<void>(this.filesDir, profile, async (): Promise<void> => {
+          await commitCandidate(this.importEnv(generation), profile, candidate, eligible, { create: record });
+        });
+      } finally { await removeProfileFile(candidate); }
+      await this.refresh();
+      this.notifyChanged();
+      return await this.activateCurrentIfEmpty();
+    } catch (error) { return errorString(error as Object); }
+  }
+
   async importLocal(): Promise<string | undefined> {
     try {
       await this.ensureLoaded();
@@ -225,10 +278,19 @@ export class ProfileStore {
     if (parsed.errors.length > 0) {
       return { total: parsed.entries.length, succeeded: 0, skipped: parsed.skipped,
         failures: parsed.errors.map((line: number): ProfileBatchFailure =>
-          ({ id: '', name: '', error: 'url_invalid', line: line })) };
+          ({ id: '', name: '', error: 'import_link_invalid', line: line })) };
     }
-    const jobs = parsed.entries.map((entry: ProfileLinkEntry): ProfileBatchJob =>
-      ({ id: '', name: hostOf(entry.source), line: entry.line, run: (): Promise<string | undefined> => this.addSubscription(entry.source) }));
+    const shareLinks = parsed.entries.filter((entry: ProfileLinkEntry): boolean => isProxyShareLink(entry.source));
+    const jobs: ProfileBatchJob[] = [];
+    for (const entry of parsed.entries) {
+      if (!isProxyShareLink(entry.source)) {
+        jobs.push({ id: '', name: hostOf(entry.source), line: entry.line,
+          run: (): Promise<string | undefined> => this.addSubscription(entry.source) });
+      } else if (entry === shareLinks[0]) {
+        jobs.push({ id: '', name: '', line: entry.line, run: (): Promise<string | undefined> =>
+          this.importShareLinks(shareLinks.map((link: ProfileLinkEntry): string => link.source)) });
+      }
+    }
     return await runProfileBatch(jobs, parsed.skipped);
   }
 

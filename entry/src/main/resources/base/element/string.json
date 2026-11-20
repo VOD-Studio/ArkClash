@@ -1266,7 +1266,7 @@
     },
     {
       "name": "profile_batch_hint",
-      "value": "Enter one subscription URL per line to import multiple profiles"
+      "value": "One link per line. Proxy links become one profile."
     },
     {
       "name": "profile_batch_result",
@@ -1687,6 +1687,14 @@
     {
       "name": "profile_import_link",
       "value": "Import from link"
+    },
+    {
+      "name": "profile_link_field",
+      "value": "Link"
+    },
+    {
+      "name": "profile_err_import_link",
+      "value": "Enter a valid subscription URL or proxy share link."
     },
     {
       "name": "profile_import_file",

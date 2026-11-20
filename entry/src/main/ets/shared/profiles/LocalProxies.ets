@@ -193,6 +193,13 @@ export function nameProxyFromLink(definition: ProxyDefinition, snapshot: LocalPr
   return withProxyValue(definition, ['name'], uniqueProxyName(importedName(definition), taken));
 }
 
+export function nameImportedProxies(definitions: ProxyDefinition[], group: string): ProxyDefinition[] {
+  const taken = new Set<string>(RESERVED);
+  taken.add(group);
+  return definitions.map((definition: ProxyDefinition): ProxyDefinition =>
+    withProxyValue(definition, ['name'], uniqueProxyName(importedName(definition), taken)));
+}
+
 export function applyProxyLinkPlan(snapshot: LocalProxySnapshot, links: string[], plan: ProxyLinkPlan,
   decoded: Map<number, ProxyDefinition[]>, originals: Map<string, ProxyDefinition>): LocalProxy[] {
   const used = new Set<string>(RESERVED);
