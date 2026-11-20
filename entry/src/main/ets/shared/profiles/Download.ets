@@ -1,3 +1,4 @@
+import { generalUserAgent } from '../GeneralSettings';
 import { util, url as urlKit } from '@kit.ArkTS';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { http } from '@kit.NetworkKit';
@@ -163,8 +164,11 @@ async function writeBuffer(path: string, data: ArrayBuffer): Promise<void> {
 }
 
 export class DirectDownloader implements Downloader {
+  private filesDir: string;
+
+  constructor(filesDir: string = '') { this.filesDir = filesDir; }
   async download(raw: string, path: string, identity?: DownloadRequestIdentity): Promise<DownloadInfo> {
-    const address = await prepareDownloadAddress(raw);
+    const address = await prepareDownloadAddress(raw, await generalUserAgent(this.filesDir));
     const request = http.createHttp();
     let expired = false;
     let rejectTimeout: ((error: Error) => void) | undefined = undefined;

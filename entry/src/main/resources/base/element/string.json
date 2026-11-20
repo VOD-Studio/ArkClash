@@ -3679,6 +3679,214 @@
     {
       "name": "icon_set_no_groups",
       "value": "No editable proxy groups"
+    },
+    {
+      "name": "tools_general",
+      "value": "General"
+    },
+    {
+      "name": "tools_logs",
+      "value": "Logs"
+    },
+    {
+      "name": "general_inbound_section",
+      "value": "Inbound"
+    },
+    {
+      "name": "general_core_section",
+      "value": "Requests and core"
+    },
+    {
+      "name": "general_ports",
+      "value": "Proxy ports"
+    },
+    {
+      "name": "general_ports_hint",
+      "value": "Use 1024–49151. Mixed is required. Enter 0 to disable the other ports."
+    },
+    {
+      "name": "general_auth",
+      "value": "Inbound authentication"
+    },
+    {
+      "name": "general_controller",
+      "value": "External controller"
+    },
+    {
+      "name": "general_controller_pending",
+      "value": "Port unavailable"
+    },
+    {
+      "name": "general_controller_secret",
+      "value": "Controller secret"
+    },
+    {
+      "name": "general_new_secret",
+      "value": "Generate new secret"
+    },
+    {
+      "name": "general_ua",
+      "value": "Subscription User-Agent"
+    },
+    {
+      "name": "general_ua_hint",
+      "value": "Leave empty to use the default User-Agent."
+    },
+    {
+      "name": "general_hosts",
+      "value": "Global Hosts"
+    },
+    {
+      "name": "general_hosts_hint",
+      "value": "Enter a domain and one or more addresses or an alias per line, separated by spaces."
+    },
+    {
+      "name": "general_delay_timeout",
+      "value": "Delay-test timeout"
+    },
+    {
+      "name": "general_close_connections",
+      "value": "Close connections on node change"
+    },
+    {
+      "name": "general_capture_logs",
+      "value": "Capture logs"
+    },
+    {
+      "name": "general_log_level",
+      "value": "Core log level"
+    },
+    {
+      "name": "general_log_debug",
+      "value": "Debug"
+    },
+    {
+      "name": "general_log_info",
+      "value": "Info"
+    },
+    {
+      "name": "general_log_warning",
+      "value": "Warning"
+    },
+    {
+      "name": "general_log_error",
+      "value": "Error"
+    },
+    {
+      "name": "general_log_silent",
+      "value": "Silent"
+    },
+    {
+      "name": "general_inherit",
+      "value": "Follow profile"
+    },
+    {
+      "name": "general_default",
+      "value": "Default"
+    },
+    {
+      "name": "general_on",
+      "value": "On"
+    },
+    {
+      "name": "general_off",
+      "value": "Off"
+    },
+    {
+      "name": "general_port_busy",
+      "value": "A proxy port could not be opened. Check the port and try again."
+    },
+    {
+      "name": "general_controller_busy",
+      "value": "Port 9090 could not be opened."
+    },
+    {
+      "name": "general_invalid",
+      "value": "Check the settings and port ranges."
+    },
+    {
+      "name": "general_conflict",
+      "value": "Settings changed. Reopen the form and try again."
+    },
+    {
+      "name": "general_save_failed",
+      "value": "Could not apply settings."
+    },
+    {
+      "name": "general_saved",
+      "value": "Settings saved"
+    },
+    {
+      "name": "logs_filter",
+      "value": "Level"
+    },
+    {
+      "name": "logs_all_levels",
+      "value": "All levels"
+    },
+    {
+      "name": "logs_search",
+      "value": "Search logs"
+    },
+    {
+      "name": "logs_export",
+      "value": "Export logs"
+    },
+    {
+      "name": "logs_exported",
+      "value": "Logs exported"
+    },
+    {
+      "name": "logs_export_failed",
+      "value": "Could not export logs."
+    },
+    {
+      "name": "logs_pause",
+      "value": "Pause"
+    },
+    {
+      "name": "logs_resume",
+      "value": "Resume"
+    },
+    {
+      "name": "logs_capture_off",
+      "value": "Log capture is off."
+    },
+    {
+      "name": "logs_silent",
+      "value": "The core log level is Silent."
+    },
+    {
+      "name": "logs_disconnected",
+      "value": "Log stream disconnected."
+    },
+    {
+      "name": "logs_connecting",
+      "value": "Connecting to log stream…"
+    },
+    {
+      "name": "logs_empty",
+      "value": "No captured logs yet."
+    },
+    {
+      "name": "logs_no_matches",
+      "value": "No matching logs."
+    },
+    {
+      "name": "logs_gap",
+      "value": "Some logs were missed during capture."
+    },
+    {
+      "name": "logs_evicted",
+      "value": "%d older logs removed."
+    },
+    {
+      "name": "general_unavailable",
+      "value": "Proxy status is unconfirmed. Retry after the core is ready."
+    },
+    {
+      "name": "general_storage_failed",
+      "value": "Could not save settings to storage."
     }
   ]
 }

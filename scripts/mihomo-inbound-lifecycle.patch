@@ -193,46 +193,45 @@
  var Default auth.AuthStore = NewAuthStore(nil)
 --- a/log/log.go
 +++ b/log/log.go
-@@ -3,6 +3,7 @@
- import (
- 	"fmt"
- 	"os"
+@@ -5,0 +6 @@
 +	"sync/atomic"
- 
- 	"github.com/metacubex/mihomo/common/observable"
- 
-@@ -12,10 +13,11 @@
- var (
- 	logCh  = make(chan Event)
- 	source = observable.NewObservable[Event](logCh)
+@@ -15 +16,2 @@
 -	level  = INFO
 +	level  atomic.Int64
- )
- 
- func init() {
++	arkClashObserver atomic.Pointer[func(Event)]
+@@ -18,0 +21 @@
 +	level.Store(int64(INFO))
- 	log.SetOutput(os.Stdout)
- 	log.SetLevel(log.DebugLevel)
- 	log.SetFormatter(&log.TextFormatter{
-@@ -72,15 +74,15 @@
- }
- 
- func Level() LogLevel {
+@@ -30,0 +34 @@
++	Template string
+@@ -75 +79 @@
 -	return level
 +	return LogLevel(level.Load())
- }
- 
- func SetLevel(newLevel LogLevel) {
+@@ -79 +83 @@
 -	level = newLevel
 +	level.Store(int64(newLevel))
- }
- 
- func print(data Event) {
+@@ -83 +87 @@
 -	if data.LogLevel < level {
 +	if data.LogLevel < Level() {
- 		return
- 	}
- 
+@@ -98,0 +103,9 @@
++// SetArkClashLogObserver 的回调运行在产生日志的协程，只能非阻塞入队。
++func SetArkClashLogObserver(observer func(Event)) {
++	if observer == nil {
++		arkClashObserver.Store(nil)
++		return
++	}
++	arkClashObserver.Store(&observer)
++}
++
+@@ -100 +113 @@
+-	return Event{
++	event := Event{
+@@ -102,0 +116 @@
++		Template: format,
+@@ -103,0 +118,4 @@
++	if observer := arkClashObserver.Load(); observer != nil && logLevel >= Level() {
++		(*observer)(event)
++	}
++	return event
 --- /dev/null
 +++ b/adapter/inbound/arkclash_listener_test.go
 @@ -0,0 +1,180 @@

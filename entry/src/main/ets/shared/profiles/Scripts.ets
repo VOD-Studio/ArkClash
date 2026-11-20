@@ -229,7 +229,7 @@ export async function downloadConfigScript(filesDir: string, downloader: Downloa
     await ensureProfilesDir(filesDir);
     const path = candidatePath(filesDir, key);
     try {
-      const transport = isScriptLoopback(url) ? new DirectDownloader() : downloader;
+      const transport = isScriptLoopback(url) ? new DirectDownloader(filesDir) : downloader;
       await transport.download(url, path, { canceled: (): boolean => !eligible(), maxBytes: SCRIPT_LIMIT });
       const text = await readScriptText(path);
       if (text.trim() === '') { throw new Error('script_empty'); }

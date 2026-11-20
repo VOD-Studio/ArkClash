@@ -27,6 +27,7 @@ export interface RuntimeStatus {
   bootId: string;
   revision: number;
   configRevision: number;
+  panelOpen?: boolean;
   profileExtension?: string;
   standardRulesRevision?: string;
   version: string;

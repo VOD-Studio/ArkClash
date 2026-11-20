@@ -1,3 +1,5 @@
+import { GeneralPage } from '../features/tools/GeneralPage';
+import { LogsPage } from '../features/tools/LogsPage';
 import { common } from '@kit.AbilityKit';
 import { accessibility } from '@kit.AccessibilityKit';
 import { AppStorageV2, SymbolGlyphModifier } from '@kit.ArkUI';
@@ -226,6 +228,10 @@ struct Index {
   Routes(name: string, param: Object) {
     if (name === ToolRoute.Theme) {
       ThemePage({ reduceMotion: this.reduceMotion })
+    } else if (name === ToolRoute.General) {
+      GeneralPage()
+    } else if (name === ToolRoute.Logs) {
+      LogsPage({ foreground: this.foreground })
     } else if (name === ToolRoute.AdvancedConfig) {
       AdvancedConfigPage({ onOpen: (route: ToolRoute): void => { this.stack.pushPath({ name: route }); } })
     } else if (name === ToolRoute.Network) {

@@ -628,7 +628,7 @@ class ProxyDelayScheduler {
       const path = `/arkclash/delay?profile=${encodeURIComponent(job.target.profile)}` +
         `&id=${encodeURIComponent(job.target.id)}&url=${encodeURIComponent(job.target.url)}` +
         `&group=${encodeURIComponent(job.target.group)}&expectedBootId=${encodeURIComponent(job.target.expectedBootId)}` +
-        `&expectedRevision=${job.target.expectedRevision}&timeout=${PROXY_TEST_TIMEOUT}`;
+        `&expectedRevision=${job.target.expectedRevision}`;
       const response = await request.request(`http://${CONTROLLER_ADDRESS}${path}`, {
         method: http.RequestMethod.GET, header: header, connectTimeout: 3000,
         readTimeout: PROXY_TEST_TIMEOUT + 2000, expectDataType: http.HttpDataType.STRING

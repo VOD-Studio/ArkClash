@@ -19,6 +19,7 @@ import (
 // 快照只在持有 mu 的提交点替换，controller 查询不等待配置解析或资源关闭。
 type statusResponse struct {
 	Profile               string `json:"profile"`
+	PanelOpen             bool   `json:"panelOpen"`
 	ProfileExtension      string `json:"profileExtension,omitempty"`
 	StandardRulesRevision string `json:"standardRulesRevision,omitempty"`
 	Running               bool   `json:"running"`
@@ -84,7 +85,7 @@ func updateVpnState(intent, forward string, vpnCreated bool) error {
 func publishRuntime() {
 	runtimeRevision++
 	next := &statusResponse{
-		Profile: current.Profile, Running: running, Intent: runtimeIntent, Forward: runtimeForward, SessionMode: "tun",
+		Profile: current.Profile, PanelOpen: activePanel != nil, Running: running, Intent: runtimeIntent, Forward: runtimeForward, SessionMode: "tun",
 		ListenersOpen: businessListenersOpen(),
 		TunAttached:   tunListener != nil, VpnCreated: runtimeVpnCreated,
 		BootID: runtimeBootID, Revision: runtimeRevision, Version: constant.Version, Mode: tunnel.Mode().String(),

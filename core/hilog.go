@@ -23,7 +23,23 @@ func init() {
 	sub := log.Subscribe()
 	go func() {
 		for event := range sub {
-			msg := C.CString(event.Payload)
+			var message string
+			switch event.Template {
+			case "[ArkClash] core started", "[ArkClash] reloaded profile %s",
+				"[ArkClash] core stopped with pending VPN resources: %s",
+				"[ArkClash] external controller port unavailable":
+				message = diagnosticLogMessage(event)
+			case "[%s] %s --> %s using DIRECT", "[%s] %s --> %s using GLOBAL",
+				"[%s] %s --> %s using %s", "[%s] %s --> %s match %s using %s",
+				"[%s] %s --> %s doesn't match any rule using %s":
+				if log.Level() > log.INFO {
+					continue
+				}
+				message = diagnosticLogMessage(event)
+			default:
+				continue
+			}
+			msg := C.CString(message)
 			C.arkclash_log(hilogLevel(event.LogLevel), msg)
 			C.free(unsafe.Pointer(msg))
 		}

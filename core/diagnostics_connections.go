@@ -291,6 +291,9 @@ func (c *diagnosticCollector) releaseUnreferencedLocked() {
 }
 
 func (c *diagnosticCollector) snapshotLocked(s *diagnosticSession, kind string, now time.Time) any {
+	if c.feed == "logs" {
+		return c.logsFrameLocked(s, kind, now)
+	}
 	if c.feed == "dns" {
 		return c.dnsSnapshotLocked(s, kind, now)
 	}
@@ -315,6 +318,9 @@ func (c *diagnosticCollector) snapshotLocked(s *diagnosticSession, kind string, 
 }
 
 func (c *diagnosticCollector) deltaLocked(s *diagnosticSession, now time.Time) any {
+	if c.feed == "logs" {
+		return c.logsFrameLocked(s, "delta", now)
+	}
 	if c.feed == "dns" {
 		return c.dnsDeltaLocked(s, now)
 	}

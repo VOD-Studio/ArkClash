@@ -401,11 +401,11 @@ export class ProfileStore {
     if (!this.businessWritable()) { throw new ProfileError('host_unknown'); }
   }
   private localEnv(): UpdateEnv {
-    return { filesDir: this.filesDir, downloader: new DirectDownloader(), running: (): string => '',
+    return { filesDir: this.filesDir, downloader: new DirectDownloader(this.filesDir), running: (): string => '',
       eligible: (): boolean => this.localWritable() };
   }
   private importEnv(generation: number): UpdateEnv {
-    return { filesDir: this.filesDir, downloader: new DirectDownloader(), running: (): string => this.coreReady ? this.running : '',
+    return { filesDir: this.filesDir, downloader: new DirectDownloader(this.filesDir), running: (): string => this.coreReady ? this.running : '',
       eligible: (): boolean => this.businessWritable(generation),
       reload: async (path: string, profile: string, expectedProfile?: string): Promise<void> => {
         if (!this.coreReady || !this.businessWritable(generation)) { throw new ProfileError('canceled'); }

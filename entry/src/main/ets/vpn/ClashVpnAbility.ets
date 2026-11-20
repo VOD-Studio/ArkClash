@@ -222,7 +222,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     const env: UpdateEnv = {
       filesDir: filesDir,
       eligible: (): boolean => !this.stopped && generation === this.generation,
-      downloader: new KernelDownloader(),
+      downloader: new KernelDownloader(filesDir),
       running: () => core.runningProfile(),
       reload: (path: string, id: string, expectedProfile?: string): Promise<void> => {
         return core.reload(path, id, expectedProfile);

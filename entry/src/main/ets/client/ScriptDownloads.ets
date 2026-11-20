@@ -9,7 +9,7 @@ import { readCoreHostStatus } from './CoreClient';
 export async function fetchConfigScript(context: common.UIAbilityContext, url: string,
   item?: ConfigScript): Promise<ConfigScriptsSnapshot> {
   if (isScriptLoopback(url)) {
-    return downloadConfigScript(context.filesDir, new DirectDownloader(), url, item);
+    return downloadConfigScript(context.filesDir, new DirectDownloader(context.filesDir), url, item);
   }
   const host = await readCoreHostStatus(context);
   if (host.state === 'unknown') { throw new Error('host_unknown'); }
@@ -18,5 +18,5 @@ export async function fetchConfigScript(context: common.UIAbilityContext, url: s
     await call(context.filesDir, http.RequestMethod.POST, '/arkclash/profiles/script-download', JSON.stringify(command), 30000);
     return readConfigScripts(context.filesDir);
   }
-  return downloadConfigScript(context.filesDir, new DirectDownloader(), url, item);
+  return downloadConfigScript(context.filesDir, new DirectDownloader(context.filesDir), url, item);
 }

@@ -10,7 +10,7 @@ export async function refreshDueScripts(filesDir: string, eligible: () => boolea
   const settings = await readGeoSettings(filesDir);
   if (!settings.autoUpdate || !eligible()) { return; }
   const scripts = await readConfigScripts(filesDir);
-  const downloader = new KernelDownloader();
+  const downloader = new KernelDownloader(filesDir);
   for (const item of scripts.scripts) {
     if (!eligible()) { return; }
     if (item.url === '' || item.updatedAt + settings.intervalHours * HOUR_MS > Date.now()) { continue; }

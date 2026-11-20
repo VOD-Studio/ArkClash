@@ -85,6 +85,7 @@ sequenceDiagram
 | Geo 数据（四类固定文件）和 `geo-<id>.json` 更新元数据 | 应用沙箱 | 在线 Go 管理器；VPN 安装器只恢复缺失或升级未接管的两份内置数据 | 内核、UI（只读文件信息） |
 | `geo-settings.json`（四类 URL、自动更新与小时间隔） | 应用沙箱 | UI 串行原子保存、revision 冲突保护 | Go 启动/热应用、UI |
 | `dns-overrides.json`（用户选中的全局 DNS 覆写项） | 应用沙箱 | 在线由 Go 原子提交，核心确认停止时由 UI 短锁提交 | Go 启动/热应用、UI |
+| `general-settings.json`（端口、认证、Hosts、订阅 UA、连接和日志设置） | 应用沙箱 | 在线由 Go 提交，核心确认停止时由 UI 短锁提交 | Go、UI、VPN |
 | `added-rules.json`（全局和配置级附加规则） | 应用沙箱 | 在线由 Go 原子提交，核心确认停止时由 UI 短锁提交 | Go 启动/热应用、UI |
 | `rule-sets.json`、`rule-sets/`（规则集目录、源文件和编译内容） | 应用沙箱 | VPN 进程校验和提交，UI 暂存本地导入内容 | Go 启动/热应用、UI |
 | `profiles/local-proxies.json`（自定义代理库） | 应用沙箱 | UI 配置文件锁、原子提交及修订检查 | UI |
@@ -99,6 +100,8 @@ sequenceDiagram
 Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/update` 和独立 `/arkclash/geo/events` 最新值快照流。离线只读文件信息和编辑设置，页面可见且本次 boot 转发就绪后才订阅、下载；隐藏不取消内核任务。下载串行、可取消，文件与 reader/cache 原子切换，不重建 TUN。归属与 bundle 保护见 [ADR-0015](adr/0015-geo-resource-management.md)。
 
 全局 DNS 由 `applyOverrides` 在解析订阅或本地配置时逐项合并。在线保存使用 `/arkclash/dns/settings`，在原有控制器和 TUN 上应用配置。设置页只读本地设置文件，DNS 记录页仍使用自己的诊断接口。见 [ADR-0021](adr/0021-global-dns-overrides.md)。
+
+常规设置通过 `/arkclash/general/settings` 提交。用户启用的面板单独使用 `127.0.0.1:9090`，密钥与内部通道独立。日志页可见且打开捕获时订阅 `/arkclash/diagnostics/logs`，关联当前内核代次，最近 5000 项留在内存。见 [ADR-0029](adr/0029-general-settings-and-log-capture.md)。
 
 附加规则在线保存使用 `/arkclash/rules/settings`。标准模式按配置级规则、启用的全局规则、原配置规则的顺序合并。配置级规则保存后在覆写页应用，或随下次配置加载生效。全局规则变更只有影响当前标准配置时才热应用。见 [ADR-0028](adr/0028-standard-profile-overrides.md)。
 

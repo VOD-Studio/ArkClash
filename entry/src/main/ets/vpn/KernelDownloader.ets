@@ -1,3 +1,4 @@
+import { generalUserAgent } from '../shared/GeneralSettings';
 import core from 'libarkclash.so';
 import { DOWNLOAD_TIMEOUT_MS, DownloadInfo, DownloadRequestIdentity, Downloader, infoFromHeaders,
   prepareDownloadAddress } from '../shared/profiles/Download';
@@ -20,12 +21,15 @@ interface FetchResult {
 
 // 在线订阅按当前规则经内核下载；失败保留原配置，不改变用户选择的出口策略。
 export class KernelDownloader implements Downloader {
+  private filesDir: string;
+
+  constructor(filesDir: string) { this.filesDir = filesDir; }
 
   async download(url: string, path: string, identity?: DownloadRequestIdentity): Promise<DownloadInfo> {
     if (identity?.canceled()) {
       throw new ProfileError('canceled');
     }
-    const address = await prepareDownloadAddress(url);
+    const address = await prepareDownloadAddress(url, await generalUserAgent(this.filesDir));
     const request: FetchRequest = {
       url: address.address,
       header: address.headers,

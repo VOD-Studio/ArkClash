@@ -35,6 +35,7 @@ type startOptions struct {
 	AllowLan *bool  `json:"allowLan"` // nil = 用配置里的值
 	// Geo 设置只由原生启动流程从磁盘读取，不扩展 C ABI 或 ArkTS 参数。
 	Geo          geoSettings         `json:"-"`
+	General      generalSettings     `json:"-"`
 	DNS          dnsOverrideSettings `json:"-"`
 	AddedRules   addedRulesSettings  `json:"-"`
 	RuleSets     ruleSetCatalog      `json:"-"`
@@ -84,6 +85,10 @@ func start(opts startOptions) error {
 		return err
 	}
 	opts.Geo = settings
+	opts.General, err = readGeneralSettings(opts.HomeDir)
+	if err != nil {
+		return err
+	}
 	opts.DNS, err = readDNSOverrides(opts.HomeDir)
 	if err != nil {
 		return err
@@ -113,7 +118,7 @@ func start(opts startOptions) error {
 	if err := route.ArkClashReCreateServer(&route.Config{
 		Addr: cfg.Controller.ExternalController, Secret: cfg.Controller.Secret,
 		RoutingMark: cfg.Controller.ExternalControllerRoutingMark,
-		DohServer:   cfg.Controller.ExternalDohServer, IsDebug: cfg.General.LogLevel == log.DEBUG,
+		DohServer:   cfg.Controller.ExternalDohServer,
 		Cors: route.Cors{AllowOrigins: cfg.Controller.Cors.AllowOrigins,
 			AllowPrivateNetwork: cfg.Controller.Cors.AllowPrivateNetwork},
 	}); err != nil {
@@ -140,6 +145,11 @@ func start(opts startOptions) error {
 		return errors.Join(err, cleanupFailure)
 	}
 	activeGeo.Store(manager)
+	if opts.General.ControllerSecret != "" {
+		if err := setPanelControllerLocked(opts.General.ControllerSecret); err != nil {
+			log.Warnln("[ArkClash] external controller port unavailable")
+		}
+	}
 	resetProxyIdentities()
 	watchRuntimeRoutes(cfg)
 	publishRuntime()
@@ -264,6 +274,10 @@ func reload(path, profile string, expectedProfile *string) error {
 }
 
 func applyReloadLocked(next startOptions, cfg *config.Config, nextInbound inboundSettings) (func(), error) {
+	return reloadPreparedLocked(next, cfg, nextInbound, false)
+}
+
+func reloadPreparedLocked(next startOptions, cfg *config.Config, nextInbound inboundSettings, canRestore bool) (func(), error) {
 	cancelDelayTests()
 	attached := tunListener != nil
 	// 始终先屏蔽，避免 executor 接管平台 TUN，也避免失败时暴露部分入口。
@@ -288,6 +302,9 @@ func applyReloadLocked(next startOptions, cfg *config.Config, nextInbound inboun
 	var inboundErr error
 	if attached {
 		inboundErr = restoreBusinessInbounds()
+		if inboundErr != nil && canRestore {
+			return waitDiagnostics, inboundErr
+		}
 		if inboundErr != nil {
 			cleanupFailure = errors.Join(cleanupFailure, closeBusinessInbounds(), stopTun())
 		}
@@ -348,6 +365,7 @@ func setRuntimeOptions(mode *string, allowLan *bool) error {
 
 // applyOverrides forces the settings ArkClash owns, whatever the profile says.
 func applyOverrides(rawCfg *config.RawConfig, opts startOptions) {
+	opts.General.apply(rawCfg)
 	// The TUN is created by VpnExtensionAbility and handed over as an fd, so the
 	// profile must not try to create its own.
 	rawCfg.Tun.Enable = false
@@ -480,6 +498,7 @@ func stop() error {
 	lifecycle.Lock()
 	defer lifecycle.Unlock()
 	mu.Lock()
+	_ = setPanelControllerLocked("")
 	closeCoreListeners()
 	if !running && tunListener == nil && !businessListenersOpen() {
 		_ = updateVpnState("stopped", "stopped", runtimeVpnCreated)

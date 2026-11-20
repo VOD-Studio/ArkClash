@@ -124,6 +124,10 @@ func checkSelectionNode(req selectionRequest, group outboundgroup.ProxyGroup) er
 func commitSelection(req selectionRequest) (selectionResult, error) {
 	mu.Lock()
 	defer mu.Unlock()
+	return commitSelectionLocked(req)
+}
+
+func commitSelectionLocked(req selectionRequest) (selectionResult, error) {
 	if !running || current.Profile == "" || req.Profile != current.Profile {
 		return selectionResult{}, errors.New("selection_profile_changed")
 	}
@@ -219,7 +223,11 @@ func commitSelection(req selectionRequest) (selectionResult, error) {
 		result.Pinned = ""
 	}
 	if changed {
-		if req.CloseConnections {
+		closeConnections := req.CloseConnections
+		if current.General.CloseConnections != nil {
+			closeConnections = *current.General.CloseConnections
+		}
+		if closeConnections {
 			statistic.DefaultManager.Range(func(connection statistic.Tracker) bool {
 				if connection.Close() != nil {
 					result.CleanupFailed = true

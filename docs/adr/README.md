@@ -33,3 +33,4 @@
 | [0026](0026-proxy-filter-presets.md) | 筛选预设与配置 YAML | 已采纳，待真机验收 |
 | [0027](0027-icon-set-library.md) | 图标集库与代理组图标 | 已采纳，待真机验收 |
 | [0028](0028-standard-profile-overrides.md) | 标准覆写的规则顺序与应用时机 | 已采纳，待真机验收 |
+| [0029](0029-general-settings-and-log-capture.md) | 常规设置、外部控制器与日志采集 | 已采纳，待真机验收 |

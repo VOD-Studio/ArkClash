@@ -66,6 +66,8 @@ func newDiagnosticStreamServer(t *testing.T, wrap func(net.Conn, *bufio.ReadWrit
 			getDiagnosticCapture(w, r.WithContext(ctx))
 		case "/dns":
 			getDiagnosticDns(w, r.WithContext(ctx))
+		case "/logs":
+			getDiagnosticLogs(w, r.WithContext(ctx))
 		default:
 			getDiagnosticConnections(w, r.WithContext(ctx))
 		}

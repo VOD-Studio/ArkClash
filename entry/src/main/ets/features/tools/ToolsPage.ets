@@ -17,9 +17,11 @@ export struct ToolsPage {
     SettingsSection({ rows: (): void => this.Rows([
       new Entry(ToolRoute.Connections, $r('sys.symbol.list_bullet'), $r('app.string.tools_connections')),
       new Entry(ToolRoute.Dns, $r('sys.symbol.connection'), $r('app.string.tools_dns')),
-      new Entry(ToolRoute.Resources, $r('sys.symbol.square_stack_3d'), $r('app.string.tools_resources'))
+      new Entry(ToolRoute.Resources, $r('sys.symbol.square_stack_3d'), $r('app.string.tools_resources')),
+      new Entry(ToolRoute.Logs, $r('sys.symbol.doc_text'), $r('app.string.tools_logs'))
     ]) })
     SettingsSection({ heading: $r('app.string.tools_settings'), rows: (): void => this.Rows([
+      new Entry(ToolRoute.General, $r('sys.symbol.slider_horizontal_2'), $r('app.string.tools_general')),
       new Entry(ToolRoute.Theme, $r('sys.symbol.slider_horizontal_2'), $r('app.string.tools_theme')),
       new Entry(ToolRoute.AdvancedConfig, $r('sys.symbol.wrench_and_screwdriver'), $r('app.string.tools_advanced_config'))
     ]) })

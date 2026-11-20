@@ -37,6 +37,7 @@ export class Connection {
   @Trace allowLan: boolean | undefined = undefined;
   @Trace intent: 'started' | 'stopped' = 'stopped';
   @Trace forward: 'stopped' | 'preparing' | 'running' | 'paused' | 'failed' = 'stopped';
+  @Trace panelOpen: boolean = false;
   @Trace sessionMode: 'tun' | 'proxyOnly' = 'tun';
   @Trace listenersOpen: boolean = false;
   @Trace tunAttached: boolean = false;
@@ -400,6 +401,7 @@ export class Connection {
     this.intent = status.intent;
     this.forward = status.forward;
     this.sessionMode = status.sessionMode;
+    this.panelOpen = status.panelOpen === true;
     this.listenersOpen = status.listenersOpen;
     this.tunAttached = status.tunAttached;
     this.connectedAt = status.startedAt;

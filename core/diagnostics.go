@@ -13,6 +13,7 @@ import (
 
 	"github.com/metacubex/http"
 	"github.com/metacubex/mihomo/dns"
+	"github.com/metacubex/mihomo/log"
 	"github.com/metacubex/mihomo/tunnel/statistic"
 )
 
@@ -38,6 +39,7 @@ type diagnosticEvent struct {
 	traffic    diagnosticTraffic
 	id         string
 	dns        DiagnosticDnsRecord
+	log        diagnosticLogRecord
 }
 
 type diagnosticSession struct {
@@ -75,6 +77,10 @@ type diagnosticCollector struct {
 	recentHead   int
 	dnsRecords   []DiagnosticDnsRecord
 	dnsHead      int
+	logs         []diagnosticLogRecord
+	logHead      int
+	logDropped   atomic.Uint64
+	logDone      chan struct{}
 	sampleDue    time.Time
 	timer        *time.Timer
 	initializing bool
@@ -118,15 +124,21 @@ func diagnosticBootError(boot string) (int, error) {
 func subscribeDiagnostics(feed, expectedBootID string, expectedConfigRevision uint64) (*diagnosticSession, int, error) {
 	mu.Lock()
 	defer mu.Unlock()
-	if feed != "connections" && feed != "dns" {
+	if feed != "connections" && feed != "dns" && feed != "logs" {
 		return nil, http.StatusBadRequest, errors.New("diagnostics_invalid_request")
 	}
 	if status, err := diagnosticRuntimeError(expectedBootID, expectedConfigRevision); err != nil {
 		return nil, status, err
 	}
 	owner := &diagnosticConnections
-	if feed == "dns" {
+	switch feed {
+	case "dns":
 		owner = &diagnosticDNS
+	case "logs":
+		if !current.General.CaptureLogs {
+			return nil, http.StatusForbidden, errDiagnosticLogsDisabled
+		}
+		owner = &diagnosticLogs
 	}
 	c := ensureDiagnosticCollectorLocked(owner, feed)
 	c.mu.Lock()
@@ -160,8 +172,10 @@ func ensureDiagnosticCollectorLocked(owner **diagnosticCollector, feed string) *
 		c.initializing = false
 		c.releaseUnreferencedLocked()
 		c.mu.Unlock()
-	} else {
+	} else if feed == "dns" {
 		dns.SetQueryObserver(c.observeDNS)
+	} else {
+		c.collectLogs()
 	}
 	*owner = c
 	go c.run()
@@ -311,7 +325,7 @@ func (s *diagnosticSession) nextFrameAt(now time.Time) any {
 
 func (c *diagnosticCollector) headerLocked(s *diagnosticSession, kind string, now time.Time) diagnosticHeader {
 	return diagnosticHeader{Type: c.feed, Kind: kind, BootID: c.bootID, ConfigRevision: c.revision, SessionID: s.id,
-		Seq: s.seq + 1, SampledAt: now.UnixMilli(), Dropped: s.dropped, Evicted: c.evicted}
+		Seq: s.seq + 1, SampledAt: now.UnixMilli(), Dropped: s.dropped + c.logDropped.Load(), Evicted: c.evicted}
 }
 
 func (c *diagnosticCollector) run() {
@@ -398,7 +412,7 @@ func (s *diagnosticSession) close() {
 	s.cancelLocked()
 	delete(c.sessions, s)
 	last := len(c.sessions) == 0
-	retire := last && diagnosticCapture == nil
+	retire := last && (c.feed == "logs" || diagnosticCapture == nil)
 	if retire {
 		c.retireLocked()
 	} else if last && c.feed == "connections" {
@@ -411,6 +425,9 @@ func (s *diagnosticSession) close() {
 	mu.Unlock()
 	if retire {
 		<-c.workerDone
+		if c.logDone != nil {
+			<-c.logDone
+		}
 	}
 }
 
@@ -439,6 +456,7 @@ func (c *diagnosticCollector) retireLocked() {
 	c.liveCount = 0
 	c.recent = nil
 	c.dnsRecords = nil
+	c.logs = nil
 }
 
 // DNS 撤钩会等待正在执行的回调，必须先释放回调需要的 collector 锁。
@@ -448,37 +466,47 @@ func (c *diagnosticCollector) uninstallLocked() {
 		if diagnosticConnections == c {
 			diagnosticConnections = nil
 		}
-	} else {
+	} else if c.feed == "dns" {
 		dns.SetQueryObserver(nil)
 		if diagnosticDNS == c {
 			diagnosticDNS = nil
 		}
+	} else if diagnosticLogs == c {
+		log.SetArkClashLogObserver(nil)
+		diagnosticLogs = nil
 	}
 }
 
-func retireDiagnosticCollectorsLocked(onlyUnused bool) []<-chan struct{} {
-	collectors := [...]*diagnosticCollector{diagnosticConnections, diagnosticDNS}
-	var workers []<-chan struct{}
-	for _, c := range collectors {
-		if c == nil {
-			continue
-		}
-		c.mu.Lock()
-		if onlyUnused && len(c.sessions) != 0 {
-			c.mu.Unlock()
-			continue
-		}
-		for s := range c.sessions {
-			if !s.closed {
-				s.cancelLocked()
-			}
-			workers = append(workers, s.workerDone)
-		}
-		clear(c.sessions)
-		c.retireLocked()
+func retireDiagnosticCollectorLocked(c *diagnosticCollector, onlyUnused bool) []<-chan struct{} {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	if onlyUnused && len(c.sessions) != 0 {
 		c.mu.Unlock()
-		c.uninstallLocked()
-		workers = append(workers, c.workerDone)
+		return nil
+	}
+	workers := make([]<-chan struct{}, 0, len(c.sessions)+1)
+	for s := range c.sessions {
+		if !s.closed {
+			s.cancelLocked()
+		}
+		workers = append(workers, s.workerDone)
+	}
+	clear(c.sessions)
+	c.retireLocked()
+	c.mu.Unlock()
+	c.uninstallLocked()
+	if c.logDone != nil {
+		workers = append(workers, c.logDone)
+	}
+	return append(workers, c.workerDone)
+}
+
+func retireDiagnosticCollectorsLocked(onlyUnused bool) []<-chan struct{} {
+	var workers []<-chan struct{}
+	for _, c := range [...]*diagnosticCollector{diagnosticConnections, diagnosticDNS, diagnosticLogs} {
+		workers = append(workers, retireDiagnosticCollectorLocked(c, onlyUnused)...)
 	}
 	return workers
 }

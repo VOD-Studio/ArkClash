@@ -3659,6 +3659,214 @@
     {
       "name": "icon_set_no_groups",
       "value": "暂无可编辑的代理组"
+    },
+    {
+      "name": "tools_general",
+      "value": "常规"
+    },
+    {
+      "name": "tools_logs",
+      "value": "日志"
+    },
+    {
+      "name": "general_inbound_section",
+      "value": "入站"
+    },
+    {
+      "name": "general_core_section",
+      "value": "请求与内核"
+    },
+    {
+      "name": "general_ports",
+      "value": "代理端口"
+    },
+    {
+      "name": "general_ports_hint",
+      "value": "端口范围为 1024–49151。Mixed 必填，其他端口填 0 可关闭。"
+    },
+    {
+      "name": "general_auth",
+      "value": "入站认证"
+    },
+    {
+      "name": "general_controller",
+      "value": "外部控制器"
+    },
+    {
+      "name": "general_controller_pending",
+      "value": "端口不可用"
+    },
+    {
+      "name": "general_controller_secret",
+      "value": "控制器密钥"
+    },
+    {
+      "name": "general_new_secret",
+      "value": "生成新密钥"
+    },
+    {
+      "name": "general_ua",
+      "value": "订阅 User-Agent"
+    },
+    {
+      "name": "general_ua_hint",
+      "value": "留空使用默认 User-Agent。"
+    },
+    {
+      "name": "general_hosts",
+      "value": "全局 Hosts"
+    },
+    {
+      "name": "general_hosts_hint",
+      "value": "每行填写域名和一个或多个地址，或一个别名，用空格分隔。"
+    },
+    {
+      "name": "general_delay_timeout",
+      "value": "测速超时"
+    },
+    {
+      "name": "general_close_connections",
+      "value": "切换节点后关闭连接"
+    },
+    {
+      "name": "general_capture_logs",
+      "value": "捕获日志"
+    },
+    {
+      "name": "general_log_level",
+      "value": "内核日志等级"
+    },
+    {
+      "name": "general_log_debug",
+      "value": "调试"
+    },
+    {
+      "name": "general_log_info",
+      "value": "信息"
+    },
+    {
+      "name": "general_log_warning",
+      "value": "警告"
+    },
+    {
+      "name": "general_log_error",
+      "value": "错误"
+    },
+    {
+      "name": "general_log_silent",
+      "value": "静默"
+    },
+    {
+      "name": "general_inherit",
+      "value": "跟随配置"
+    },
+    {
+      "name": "general_default",
+      "value": "默认"
+    },
+    {
+      "name": "general_on",
+      "value": "已开启"
+    },
+    {
+      "name": "general_off",
+      "value": "已关闭"
+    },
+    {
+      "name": "general_port_busy",
+      "value": "代理端口无法打开，请检查后重试。"
+    },
+    {
+      "name": "general_controller_busy",
+      "value": "无法打开外部控制器端口 9090。"
+    },
+    {
+      "name": "general_invalid",
+      "value": "请检查设置内容和端口范围。"
+    },
+    {
+      "name": "general_conflict",
+      "value": "设置已变化，请重新打开表单后重试。"
+    },
+    {
+      "name": "general_save_failed",
+      "value": "无法应用设置。"
+    },
+    {
+      "name": "general_saved",
+      "value": "设置已保存"
+    },
+    {
+      "name": "logs_filter",
+      "value": "等级"
+    },
+    {
+      "name": "logs_all_levels",
+      "value": "全部等级"
+    },
+    {
+      "name": "logs_search",
+      "value": "搜索日志"
+    },
+    {
+      "name": "logs_export",
+      "value": "导出日志"
+    },
+    {
+      "name": "logs_exported",
+      "value": "日志已导出"
+    },
+    {
+      "name": "logs_export_failed",
+      "value": "无法导出日志。"
+    },
+    {
+      "name": "logs_pause",
+      "value": "暂停"
+    },
+    {
+      "name": "logs_resume",
+      "value": "继续"
+    },
+    {
+      "name": "logs_capture_off",
+      "value": "日志捕获已关闭。"
+    },
+    {
+      "name": "logs_silent",
+      "value": "内核日志等级为静默。"
+    },
+    {
+      "name": "logs_disconnected",
+      "value": "日志流已断开。"
+    },
+    {
+      "name": "logs_connecting",
+      "value": "正在连接日志流…"
+    },
+    {
+      "name": "logs_empty",
+      "value": "暂无捕获的日志。"
+    },
+    {
+      "name": "logs_no_matches",
+      "value": "没有匹配的日志。"
+    },
+    {
+      "name": "logs_gap",
+      "value": "日志采集出现断档。"
+    },
+    {
+      "name": "logs_evicted",
+      "value": "已淘汰 %d 条较早日志。"
+    },
+    {
+      "name": "general_unavailable",
+      "value": "尚未确认代理状态，请在内核就绪后重试。"
+    },
+    {
+      "name": "general_storage_failed",
+      "value": "无法写入常规设置。"
     }
   ]
 }

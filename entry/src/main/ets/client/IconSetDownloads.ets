@@ -28,5 +28,5 @@ export async function fetchIconSet(context: common.UIAbilityContext, expected: I
       return readIconSets(filesDir);
     }
   }
-  return downloadIconSet(filesDir, new DirectDownloader(), command);
+  return downloadIconSet(filesDir, new DirectDownloader(filesDir), command);
 }

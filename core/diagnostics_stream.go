@@ -29,6 +29,10 @@ func getDiagnosticDns(w http.ResponseWriter, r *http.Request) {
 	getDiagnosticStream(w, r, "dns")
 }
 
+func getDiagnosticLogs(w http.ResponseWriter, r *http.Request) {
+	getDiagnosticStream(w, r, "logs")
+}
+
 func diagnosticStreamRuntime(r *http.Request, requireRevision bool) (string, uint64, error) {
 	invalid := errors.New("diagnostics_invalid_request")
 	if r.Method != http.MethodGet || !r.ProtoAtLeast(1, 1) ||
