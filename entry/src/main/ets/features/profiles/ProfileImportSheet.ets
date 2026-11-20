@@ -1,6 +1,8 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { HEADER_ACTION, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { errorString } from '../../shared/profiles/Errors';
+import { isProxyShareLink } from '../../shared/profiles/ShareProfile';
+import { ProfileAgeKeyField } from './ProfileAgeKeyField';
 import { describeError } from './ProfileErrors';
 import { ProfileBatchResult } from './ProfileModels';
 import { ProfileStore } from './Profiles';
@@ -18,6 +20,7 @@ export struct ProfileImportSheet {
   @Event onClose: () => void = (): void => {};
   @Local source: string = '';
   @Local label: string = '';
+  @Local private ageSecretKey: string = '';
   @Local importingMany: boolean = false;
   @Local batchSource: string = '';
   @Local adding: boolean = false;
@@ -57,7 +60,7 @@ export struct ProfileImportSheet {
         const result = await this.store.importLinks(this.batchSource);
         if (this.visible) { this.result = result; this.resultShown = true; }
       } else {
-        const failure = await this.store.importLink(this.source, this.label);
+        const failure = await this.store.importLink(this.source, this.label, this.ageSecretKey);
         if (failure === undefined) { if (this.visible) { this.onDone(); } }
         else { this.toastFailure(failure); }
       }
@@ -141,6 +144,12 @@ export struct ProfileImportSheet {
               }
               .padding({ left: 16, right: 16 })
               .width('100%')
+              if (!isProxyShareLink(this.source.trim())) {
+                Row().height(0.5).width('100%').backgroundColor(this.appStyle.palette.divider)
+                  .margin({ left: 16, right: 14 })
+                ProfileAgeKeyField({ secretKey: this.ageSecretKey,
+                  onKeyChange: (text: string): void => { this.ageSecretKey = text; } })
+              }
             }
             .backgroundColor(this.appStyle.palette.cardBackground)
             .borderRadius(24).clip(true)

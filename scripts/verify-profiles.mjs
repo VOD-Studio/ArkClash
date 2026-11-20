@@ -348,8 +348,10 @@ test('startup checks immediately, runs serially, and retries failures after a 20
       clearTimeout() {}
     }).UpdateScheduler;
     await store.writeList(dir, { version: 1, current: 'p1',
-      profiles: ['p1', 'p2', 'p3'].map((id, index) => ({ id, name: id, nameEdited: false, subscription: `s${index + 1}` })),
-      subscriptions: ['s1', 's2', 's3'].map((id) => ({ id, url: `https://${id}.invalid/config`, autoUpdate: id !== 's2', intervalHours: 24 })) });
+      profiles: ['p1', 'p2', 'p3', 'p4'].map((id, index) =>
+        ({ id, name: id, nameEdited: false, subscription: `s${index + 1}` })),
+      subscriptions: ['s1', 's2', 's3', 's4'].map((id) => ({ id, url: `https://${id}.invalid/config`,
+        autoUpdate: id !== 's2', intervalHours: 24, ageSecretKey: id === 's4' ? 'fixture-identity' : undefined })) });
     const calls = [];
     let active = 0;
     let maximum = 0;
@@ -364,7 +366,7 @@ test('startup checks immediately, runs serially, and retries failures after a 20
         return { subscription, ok: false, error: 'network', state };
       }
     }
-    const scheduler = new FailingScheduler({ filesDir: dir }, () => {});
+    const scheduler = new FailingScheduler({ filesDir: dir, downloader: { supportsAge: false } }, () => {});
     const firstRound = new Promise((resolve) => { finishRound = resolve; });
     scheduler.start(); scheduler.start();
     await firstRound;

@@ -1721,6 +1721,22 @@
       "value": "Could not generate a QR code. You can copy the link instead."
     },
     {
+      "name": "profile_age_key",
+      "value": "age private key"
+    },
+    {
+      "name": "profile_age_required",
+      "value": "This subscription is encrypted. Enter its age private key and try again."
+    },
+    {
+      "name": "profile_age_decrypt",
+      "value": "Could not decrypt the subscription. Check the age private key and the source."
+    },
+    {
+      "name": "profile_age_core_unavailable",
+      "value": "Start the core to decrypt this subscription."
+    },
+    {
       "name": "profile_import_file",
       "value": "File"
     },

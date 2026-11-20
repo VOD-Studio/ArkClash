@@ -8,6 +8,7 @@ import { ProfileDraft } from './ProfileDraft';
 import { ProfileFilterPicker } from './ProfileFilterPicker';
 import { ProfileIconPicker } from './ProfileIconPicker';
 import { ProfileEdit, ProfileStore } from './Profiles';
+import { ProfileAgeKeyField } from './ProfileAgeKeyField';
 import { ProfileSheetHeader } from './ProfileSheetHeader';
 
 export function confirmProfileEditorDismiss(context: UIContext, draft: ProfileDraft | undefined,
@@ -170,10 +171,10 @@ export struct ProfileEditor {
         if (disabled === undefined) { return false; }
         this.draft.autoUpdate = !disabled;
       }
-      const edit: ProfileEdit = { name: this.draft.name, url: this.draft.link,
+      const edit: ProfileEdit = { name: this.draft.name, url: this.draft.link, ageSecretKey: this.draft.ageSecretKey,
         autoUpdate: this.draft.autoUpdate, intervalMinutes: Number(this.draft.interval),
         content: this.draft.content, baseContentRevision: this.draft.baseContentRevision,
-        baseName: this.draft.baseName, baseUrl: this.draft.baseLink };
+        baseName: this.draft.baseName, baseUrl: this.draft.baseLink, baseAgeSecretKey: this.draft.baseAgeSecretKey };
       const failure = await this.store.edit(this.draft.id, edit);
       if (failure !== undefined) {
         this.reportFailure(failure);
@@ -310,6 +311,10 @@ export struct ProfileEditor {
                   .onChange((text: string): void => { this.draft.link = text; })
               }
               .padding({ left: 16, right: 16 }).width('100%')
+              Row().height(0.5).width('100%').backgroundColor(this.appStyle.palette.divider)
+                .margin({ left: 16, right: 14 })
+              ProfileAgeKeyField({ secretKey: this.draft.ageSecretKey,
+                onKeyChange: (text: string): void => { this.draft.ageSecretKey = text; } })
             }
           }
           .backgroundColor(this.appStyle.palette.cardBackground)

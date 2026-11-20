@@ -138,10 +138,11 @@ export class ProfileStore {
     this.syncLifecycle();
   }
 
-  async addSubscription(rawUrl: string, label: string = ''): Promise<string | undefined> {
+  async addSubscription(rawUrl: string, label: string = '', ageSecretKey: string = ''): Promise<string | undefined> {
     try {
       await this.ensureLoaded();
       const source = rawUrl.trim();
+      const key = ageSecretKey.trim();
       if (!validSubscriptionUrl(source)) { return 'url_invalid'; }
       if (label.trim().length > 64) { return 'name_long'; }
       const latest = await readListAsync(this.filesDir);
@@ -149,11 +150,11 @@ export class ProfileStore {
       const profile = newId('p');
       const subscription = newId('s');
       const outcome = await this.remoteOrLocal(
-        (): Promise<UpdateOutcome> => addViaVpn(this.filesDir, profile, subscription, source, label.trim()),
+        (): Promise<UpdateOutcome> => addViaVpn(this.filesDir, profile, subscription, source, label.trim(), key),
         async (): Promise<UpdateOutcome> => {
           const generation = this.routeGeneration;
           return await downloadNewSubscription(this.localEnv(), profile, subscription, source, label.trim(),
-            (): boolean => this.localWritable(generation));
+            (): boolean => this.localWritable(generation), key);
         });
       await this.refresh();
       this.notifyChanged();
@@ -161,11 +162,11 @@ export class ProfileStore {
     } catch (e) { return errorString(e as Object); }
   }
 
-  async importLink(text: string, label: string): Promise<string | undefined> {
+  async importLink(text: string, label: string, ageSecretKey: string = ''): Promise<string | undefined> {
     const source = text.trim();
     if (isProxyShareLink(source)) { return await this.importShareLinks([source], label); }
     if (!validSubscriptionUrl(source)) { return 'import_link_invalid'; }
-    return await this.addSubscription(source, label);
+    return await this.addSubscription(source, label, ageSecretKey);
   }
 
   private async importShareLinks(links: string[], label: string = ''): Promise<string | undefined> {
@@ -522,17 +523,26 @@ export class ProfileStore {
   }
   private async remoteOrLocal(remote: () => Promise<UpdateOutcome>, local: () => Promise<UpdateOutcome>): Promise<UpdateOutcome> {
     await this.recheckRoute();
-    if (!this.coreReady) { return await local(); }
-    const generation = this.routeGeneration;
-    try {
-      const outcome = await remote();
-      checkProfileCommit((): boolean => this.businessWritable(generation));
-      return outcome;
-    } catch (e) {
-      await this.recheckRoute();
-      if (this.coreReady) { throw e as Error; }
-      return await local();
+    if (this.coreReady) {
+      try { return await this.runRemoteUpdate(remote); }
+      catch (e) {
+        await this.recheckRoute();
+        if (this.coreReady) { throw e as Error; }
+      }
     }
+    const outcome = await local();
+    if (outcome.error !== 'age_core_unavailable' || this.context === undefined) { return outcome; }
+    try {
+      await connection.ensureReady(this.context);
+      await this.recheckRoute();
+    } catch (error) { return outcome; }
+    return this.coreReady ? await this.runRemoteUpdate(remote) : outcome;
+  }
+  private async runRemoteUpdate(remote: () => Promise<UpdateOutcome>): Promise<UpdateOutcome> {
+    const generation = this.routeGeneration;
+    const outcome = await remote();
+    checkProfileCommit((): boolean => this.businessWritable(generation));
+    return outcome;
   }
   private notifyChanged(): void {
     if (this.coreReady) { notifyListChanged(this.filesDir).catch((): void => {}); }

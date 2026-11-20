@@ -27,6 +27,9 @@ export function describeError(error: string): ResourceStr {
     case 'qr_invalid': return $r('app.string.profile_err_import_link');
     case 'qr_camera': return $r('app.string.profile_qr_camera_error');
     case 'qr_photo': return $r('app.string.profile_qr_photo_error');
+    case 'age_required': return $r('app.string.profile_age_required');
+    case 'age_decrypt': return $r('app.string.profile_age_decrypt');
+    case 'age_core_unavailable': return $r('app.string.profile_age_core_unavailable');
     case 'canceled': return $r('app.string.profile_err_canceled');
     case 'timeout': return $r('app.string.profile_err_timeout');
     case 'dns': return $r('app.string.profile_err_dns');

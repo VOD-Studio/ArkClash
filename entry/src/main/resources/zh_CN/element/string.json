@@ -1701,6 +1701,22 @@
       "value": "无法生成二维码，可以直接复制链接。"
     },
     {
+      "name": "profile_age_key",
+      "value": "age 私钥"
+    },
+    {
+      "name": "profile_age_required",
+      "value": "此订阅已加密，请填写 age 私钥后重试。"
+    },
+    {
+      "name": "profile_age_decrypt",
+      "value": "无法解密订阅，请检查 age 私钥和订阅来源。"
+    },
+    {
+      "name": "profile_age_core_unavailable",
+      "value": "需要启动内核才能解密此订阅。"
+    },
+    {
       "name": "profile_import_file",
       "value": "文件"
     },

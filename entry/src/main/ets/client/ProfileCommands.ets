@@ -16,6 +16,7 @@ interface ClientProfileAddCommand {
   subscription: string;
   url: string;
   label: string;
+  ageSecretKey?: string;
 }
 
 export interface ProfileEvent {
@@ -49,8 +50,9 @@ export async function updateViaVpn(filesDir: string, subscription: string, sourc
 }
 
 export async function addViaVpn(filesDir: string, profile: string, subscription: string,
-  source: string, label: string = ''): Promise<UpdateOutcome> {
-  const body: ClientProfileAddCommand = { profile: profile, subscription: subscription, url: source, label: label };
+  source: string, label: string = '', ageSecretKey: string = ''): Promise<UpdateOutcome> {
+  const body: ClientProfileAddCommand = { profile: profile, subscription: subscription, url: source, label: label,
+    ageSecretKey: ageSecretKey === '' ? undefined : ageSecretKey };
   return parseOutcome(await command(filesDir, 'add', body));
 }
 

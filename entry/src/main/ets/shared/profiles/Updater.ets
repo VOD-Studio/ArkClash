@@ -25,7 +25,9 @@ export async function downloadProfile(env: UpdateEnv, profile: string, source: s
   try {
     checkProfileCommit(eligible);
     const info = await env.downloader.download(source, candidate,
-      { canceled: (): boolean => !eligible() });
+      { canceled: (): boolean => !eligible(),
+        ageSecretKey: change === undefined ? undefined :
+          change.subscription?.ageSecretKey ?? change.expectedSubscription?.ageSecretKey ?? '' });
     if (change !== undefined) {
       change.state = successState(info);
       if (change.create !== undefined && !change.create.nameEdited && info.name !== undefined) {
@@ -51,7 +53,7 @@ function sourceTaskKey(source: string): string {
 }
 
 export async function downloadNewSubscription(env: UpdateEnv, profile: string, subscription: string,
-  source: string, label: string = '', shouldCommit?: () => boolean): Promise<UpdateOutcome> {
+  source: string, label: string = '', shouldCommit?: () => boolean, ageSecretKey: string = ''): Promise<UpdateOutcome> {
   const eligible = (): boolean => env.eligible?.() !== false && shouldCommit?.() !== false;
   try {
     return await withProfileTask<UpdateOutcome>(env.filesDir, sourceTaskKey(source), async (): Promise<UpdateOutcome> =>
@@ -67,7 +69,8 @@ export async function downloadNewSubscription(env: UpdateEnv, profile: string, s
         throw new ProfileError('link_exists');
       }
       const sub: SubscriptionRecord = { id: subscription, url: source, autoUpdate: true,
-        intervalHours: DEFAULT_INTERVAL_HOURS, intervalMinutes: DEFAULT_INTERVAL_MINUTES, revision: newId('s') };
+        intervalHours: DEFAULT_INTERVAL_HOURS, intervalMinutes: DEFAULT_INTERVAL_MINUTES, revision: newId('s'),
+        ageSecretKey: ageSecretKey === '' ? undefined : ageSecretKey };
       const record: ProfileRecord = { id: profile, name: label.trim() || hostOf(source) || profile,
         nameEdited: label.trim() !== '', subscription: subscription, type: 'url' };
       const change: ProfileCandidateChange = { create: record, subscription: sub };
@@ -102,7 +105,7 @@ export async function updateSubscription(env: UpdateEnv, list: ProfileList, subs
     });
   } catch (e) {
     const failure = errorString(e as Object);
-    if (!eligible() || ['busy', 'canceled', 'conflict', 'not_found'].includes(errorCode(failure))) {
+    if (!eligible() || ['busy', 'canceled', 'conflict', 'not_found', 'age_core_unavailable'].includes(errorCode(failure))) {
       return { subscription: subscription, ok: false, error: failure, state: previous };
     }
     return await withProfileStorage<UpdateOutcome>(env.filesDir, async (): Promise<UpdateOutcome> => {
@@ -230,6 +233,7 @@ export class UpdateScheduler {
         if (this.stopped || generation !== this.generation || this.env.eligible?.() === false) {
           break;
         }
+        if (this.env.downloader.supportsAge === false && (sub.ageSecretKey ?? '') !== '') { continue; }
         try {
           const due = nextDue(sub, await readStateAsync(this.env.filesDir, sub.id));
           if (this.stopped || generation !== this.generation || this.env.eligible?.() === false) { break; }

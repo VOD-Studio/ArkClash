@@ -16,6 +16,7 @@ interface VpnProfileAddCommand {
   subscription: string;
   url: string;
   label?: string;
+  ageSecretKey?: string;
 }
 
 interface VpnProfileOkReply { ok: boolean; }
@@ -43,6 +44,9 @@ export async function handleProfileCommand(scheduler: UpdateScheduler, env: Upda
         typeof command.url !== 'string') {
         throw new ProfileError('url_invalid');
       }
+      if (command.ageSecretKey !== undefined && typeof command.ageSecretKey !== 'string') {
+        throw new ProfileError('age_decrypt');
+      }
       const saved = findProfile(await readListAsync(env.filesDir), command.profile);
       if (saved !== undefined) {
         if (saved.subscription !== command.subscription) { throw new ProfileError('conflict'); }
@@ -52,7 +56,7 @@ export async function handleProfileCommand(scheduler: UpdateScheduler, env: Upda
         return reply;
       }
       return await downloadNewSubscription(env, command.profile, command.subscription, command.url,
-        command.label ?? '', eligible);
+        command.label ?? '', eligible, command.ageSecretKey ?? '');
     }
     case 'script-download':
       return handleScriptDownload(env.filesDir, env.downloader, body, eligible);

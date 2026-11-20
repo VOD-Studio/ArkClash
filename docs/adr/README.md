@@ -37,3 +37,4 @@
 | [0030](0030-composed-overrides-and-live-status.md) | 脚本与附加规则组合、仪表盘运行状态 | 已采纳，待真机验收 |
 | [0031](0031-portable-backup.md) | 原子恢复配置库与 WebDAV 备份 | 已采纳 |
 | [0032](0032-structured-custom-profile.md) | 自定义配置的结构化编辑 | 已采纳 |
+| [0033](0033-age-subscriptions.md) | 订阅下载中的 age 解密 | 已采纳 |

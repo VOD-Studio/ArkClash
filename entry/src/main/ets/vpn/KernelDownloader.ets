@@ -11,6 +11,7 @@ interface FetchRequest {
   path: string;
   timeoutMs: number;
   maxBytes?: number;
+  ageSecretKey?: string;
 }
 
 interface FetchResult {
@@ -34,7 +35,7 @@ export class KernelDownloader implements Downloader {
       url: address.address,
       header: address.headers,
       path: path,
-      timeoutMs: DOWNLOAD_TIMEOUT_MS, maxBytes: identity?.maxBytes
+      timeoutMs: DOWNLOAD_TIMEOUT_MS, maxBytes: identity?.maxBytes, ageSecretKey: identity?.ageSecretKey
     };
     try {
       const pending: Promise<string> = core.fetch(JSON.stringify(request));

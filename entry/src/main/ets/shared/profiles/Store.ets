@@ -201,6 +201,7 @@ function parseList(text: string): ProfileList {
     for (const sub of list.subscriptions) {
       if (sub === null || !validProfileId(sub.id) || subscriptions.has(sub.id) ||
         typeof sub.url !== 'string' || typeof sub.autoUpdate !== 'boolean' ||
+        (sub.ageSecretKey !== undefined && typeof sub.ageSecretKey !== 'string') ||
         !Number.isFinite(intervalMinutes(sub)) || intervalMinutes(sub) < 1) {
         throw new ProfileError('corrupt');
       }

@@ -390,11 +390,12 @@ func writeTextFrame(w io.Writer, p []byte) error {
 // ---- 经内核下载 ----
 
 type fetchRequest struct {
-	URL       string            `json:"url"`
-	Header    map[string]string `json:"header"`
-	Path      string            `json:"path"`      // 响应体写到这里，必须在配置目录下
-	TimeoutMs int               `json:"timeoutMs"` // 整个请求的上限
-	MaxBytes  int64             `json:"maxBytes"`
+	URL          string            `json:"url"`
+	Header       map[string]string `json:"header"`
+	Path         string            `json:"path"`      // 响应体写到这里，必须在配置目录下
+	TimeoutMs    int               `json:"timeoutMs"` // 整个请求的上限
+	MaxBytes     int64             `json:"maxBytes"`
+	AgeSecretKey *string           `json:"ageSecretKey"` // 未设置时按原始文件下载。
 }
 
 type fetchResult struct {
@@ -456,7 +457,14 @@ func fetch(req fetchRequest) fetchResult {
 	if req.MaxBytes > 0 && req.MaxBytes < limit {
 		limit = req.MaxBytes
 	}
-	if err := writeBody(req.Path, resp.Body, limit); err != nil {
+	var body io.Reader = resp.Body
+	if req.AgeSecretKey != nil {
+		body, err = subscriptionBody(body, *req.AgeSecretKey, limit)
+		if err != nil {
+			return fetchResult{Error: err.Error()}
+		}
+	}
+	if err := writeBody(req.Path, body, limit); err != nil {
 		return fetchResult{Error: err.Error()}
 	}
 	return result

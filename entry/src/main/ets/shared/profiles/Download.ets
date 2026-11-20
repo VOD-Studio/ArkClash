@@ -9,6 +9,8 @@ export const USER_AGENT = 'ArkClash clash.meta';
 export const DOWNLOAD_TIMEOUT_MS = 20000;
 export const CONNECT_TIMEOUT_MS = DOWNLOAD_TIMEOUT_MS;
 export const READ_TIMEOUT_MS = DOWNLOAD_TIMEOUT_MS;
+const AGE_ARMOR_HEADER = '-----BEGIN AGE ENCRYPTED FILE-----';
+const AGE_BINARY_HEADER = 'age-encryption.org/v1\n';
 
 export interface DownloadInfo {
   name?: string;
@@ -18,9 +20,11 @@ export interface DownloadInfo {
 export interface DownloadRequestIdentity {
   canceled: () => boolean;
   maxBytes?: number;
+  ageSecretKey?: string;
 }
 
 export interface Downloader {
+  readonly supportsAge?: boolean;
   download(url: string, path: string, identity?: DownloadRequestIdentity): Promise<DownloadInfo>;
 }
 
@@ -164,6 +168,7 @@ async function writeBuffer(path: string, data: ArrayBuffer): Promise<void> {
 }
 
 export class DirectDownloader implements Downloader {
+  readonly supportsAge: boolean = false;
   private filesDir: string;
 
   constructor(filesDir: string = '') { this.filesDir = filesDir; }
@@ -207,7 +212,15 @@ export class DirectDownloader implements Downloader {
       if (response.responseCode !== 200) {
         throw new ProfileError('http', `${response.responseCode}`);
       }
-      try { await writeBuffer(path, response.result as ArrayBuffer); }
+      const data = response.result as ArrayBuffer;
+      if (identity?.ageSecretKey !== undefined) {
+        const header = new util.TextDecoder().decodeToString(new Uint8Array(data, 0,
+          Math.min(data.byteLength, AGE_ARMOR_HEADER.length)));
+        if (header.startsWith(AGE_ARMOR_HEADER) || header.startsWith(AGE_BINARY_HEADER)) {
+          throw new ProfileError(identity.ageSecretKey === '' ? 'age_required' : 'age_core_unavailable');
+        }
+      }
+      try { await writeBuffer(path, data); }
       catch (e) { throw new ProfileError('io'); }
       return infoFromHeaders(lowerCaseHeaders(response.header));
     } finally {
