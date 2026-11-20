@@ -58,7 +58,7 @@ class FixtureSocket {
   emit(payload) { this.receive(JSON.stringify(payload)); }
 }
 const io = {
-  OpenMode: { CREATE: 1, WRITE_ONLY: 2, TRUNC: 4, READ_ONLY: 8 },
+  OpenMode: { CREATE: 1, WRITE_ONLY: 2, TRUNC: 4, READ_ONLY: 8, READ_WRITE: 16 },
   access: async (file) => { try { await fs.access(file); return true; } catch (error) {
     if (error.code === 'ENOENT') { return false; } throw error;
   } },
@@ -66,6 +66,7 @@ const io = {
   open: async (file, mode) => {
     const handle = await fs.open(file, mode === io.OpenMode.READ_ONLY ? 'r' : 'w');
     handles.set(handle.fd, handle);
+    handle.lock = async () => {};
     return handle;
   },
   stat: (file) => fs.stat(file),

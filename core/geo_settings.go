@@ -156,7 +156,7 @@ func readGeoJSONFile(path string) ([]byte, error) {
 }
 
 func readGeoSettings(home string) (geoSettings, error) {
-	data, err := readGeoJSONFile(filepath.Join(home, "geo-settings.json"))
+	data, err := readGeoJSONFile(portableDataPath(home, "geo-settings.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return defaultGeoSettings(), nil
 	}

@@ -25,10 +25,10 @@ before(async () => {
     'geo_settings.go', 'geo.go', 'geo_download.go', 'geo_events.go', 'diagnostics.go', 'dns_overrides.go',
     'added_rules.go', 'rule_set_data.go', 'rule_sets.go', 'profile_settings.go', 'profile_scripts.go', 'local_proxies.go', 'local_proxy_links.go',
     'proxy_filters.go', 'diagnostics_connections.go', 'diagnostics_dns.go', 'diagnostics_stream.go',
-    'diagnostics_logs.go', 'general_settings.go', 'panel_controller.go']) {
+    'diagnostics_logs.go', 'general_settings.go', 'panel_controller.go', 'backup.go']) {
     await copyFile(join(root, 'core', file), join(sandbox, file));
   }
-  for (const file of ['core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go',
+  for (const file of ['backup-live-host_test.go', 'core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go',
     'geo-reader-host_test.go', 'geo-host_test.go', 'geo-scheduler-host_test.go', 'diagnostics-host_test.go',
     'diagnostics-stream-host_test.go', 'diagnostics-lifecycle-host_test.go', 'diagnostics-control-host_test.go',
     'lifecycle-host_test.go', 'runtime-lifecycle-host_test.go', 'disconnected-delay-host_test.go', 'inbound-host_test.go',
@@ -99,6 +99,14 @@ before(async () => {
     assert.equal(compiled.status, 0, `${compiled.error ?? ''}\n${compiled.stdout}\n${compiled.stderr}`);
   }
 }, { timeout: 900000 });
+
+test('ZIP 备份、原子恢复和 WebDAV', { timeout: 90000 }, () => {
+  const result = spawnSync('go', ['test', '-mod=readonly', '-count=1', '-v', './internal/backup'], {
+    cwd: sandbox, encoding: 'utf8', timeout: 85000, env: goEnv
+  });
+  assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
+  console.log(result.stdout.trim());
+});
 
 test('QuickJS 配置脚本与执行限额', { timeout: 90000 }, () => {
   const result = spawnSync('go', ['test', '-mod=readonly', '-count=1', '-v', './internal/script'], {

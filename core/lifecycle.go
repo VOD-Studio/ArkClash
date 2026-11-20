@@ -34,14 +34,15 @@ type startOptions struct {
 	Mode     string `json:"mode"`     // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
 	AllowLan *bool  `json:"allowLan"` // nil = 用配置里的值
 	// Geo 设置只由原生启动流程从磁盘读取，不扩展 C ABI 或 ArkTS 参数。
-	Geo          geoSettings         `json:"-"`
-	General      generalSettings     `json:"-"`
-	DNS          dnsOverrideSettings `json:"-"`
-	AddedRules   addedRulesSettings  `json:"-"`
-	RuleSets     ruleSetCatalog      `json:"-"`
-	Script       profileScript       `json:"-"`
-	ProfileRules profileAddedRules   `json:"-"`
-	CustomRules  bool                `json:"-"`
+	Geo             geoSettings         `json:"-"`
+	General         generalSettings     `json:"-"`
+	DNS             dnsOverrideSettings `json:"-"`
+	AddedRules      addedRulesSettings  `json:"-"`
+	RuleSets        ruleSetCatalog      `json:"-"`
+	Script          profileScript       `json:"-"`
+	ProfileRules    profileAddedRules   `json:"-"`
+	StoreGeneration string              `json:"-"`
+	CustomRules     bool                `json:"-"`
 }
 
 var (
@@ -80,6 +81,7 @@ func start(opts startOptions) error {
 		cleanupFailure = errors.Join(cleanupFailure, err)
 		return cleanupFailure
 	}
+	opts.StoreGeneration = portableGeneration(opts.HomeDir)
 	settings, err := readGeoSettings(opts.HomeDir)
 	if err != nil {
 		return err
@@ -323,9 +325,9 @@ type reloadedEvent struct {
 
 // 热切换只接受配置目录下的文件，见 entry/src/main/ets/shared/profiles/Store.ets。
 func checkProfilePath(path string) error {
-	dir := filepath.Join(current.HomeDir, "profiles") + string(filepath.Separator)
-	if !strings.HasPrefix(filepath.Clean(path), dir) {
-		return fmt.Errorf("profile must be under %s", dir)
+	dir := filepath.Dir(filepath.Clean(path))
+	if dir != filepath.Join(current.HomeDir, "profiles") && dir != filepath.Join(current.HomeDir, "profile-work") {
+		return errors.New("invalid_profile_path")
 	}
 	return nil
 }

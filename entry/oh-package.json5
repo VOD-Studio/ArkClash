@@ -7,6 +7,7 @@
   "license": "GPL-3.0",
   "dependencies": {
     "libarkclash.so": "file:./src/main/cpp/types/libarkclash",
+    "libarkstore.so": "file:./src/main/cpp/types/libarkstore",
     "yaml": "2.8.0"
   },
   "devDependencies": {},

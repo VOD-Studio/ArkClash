@@ -10,3 +10,7 @@ endif()
 add_library(arkclash SHARED napi_init.cpp)
 target_include_directories(arkclash PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../../../core)
 target_link_libraries(arkclash PUBLIC libace_napi.z.so ${CORE_LIB})
+
+add_library(arkstore SHARED backup_init.cpp)
+target_compile_features(arkstore PRIVATE cxx_std_14)
+target_link_libraries(arkstore PRIVATE libace_napi.z.so libhilog_ndk.z.so dl)

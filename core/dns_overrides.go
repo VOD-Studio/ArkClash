@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/netip"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -226,7 +225,7 @@ func validFakeIPRange(value *string, ipv6 bool) bool {
 }
 
 func dnsOverridesPath(home string) string {
-	return filepath.Join(home, "dns-overrides.json")
+	return portableDataPath(home, "dns-overrides.json")
 }
 
 func readDNSOverrides(home string) (dnsOverrideSettings, error) {

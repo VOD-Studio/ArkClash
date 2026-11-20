@@ -5,7 +5,7 @@ import { fileIo as fs } from '@kit.CoreFileKit';
 import { http } from '@kit.NetworkKit';
 import { writeTextAsync } from '../shared/Files';
 import { runtimeMayBeActive } from '../shared/Runtime';
-import { withProfileStorage } from '../shared/profiles/Store';
+import { profileDataPath, withProfileStorage } from '../shared/profiles/Store';
 import { call } from './Controller';
 import { readCoreHostStatus } from './CoreClient';
 
@@ -31,7 +31,7 @@ export async function readProfileSettings<T extends VersionedProfileSettings>(fi
   storage: ProfileSettingsFile<T>): Promise<T> {
   let text: string;
   try {
-    text = await fs.readText(`${filesDir}/${storage.fileName}`);
+    text = await fs.readText(await profileDataPath(filesDir, storage.fileName));
   } catch (error) {
     const code = (error as BusinessError).code;
     if (code === 13900002 || code === 2) {
@@ -78,7 +78,7 @@ export async function saveProfileSettings<T extends VersionedProfileSettings>(co
       throw new Error(`${storage.errorPrefix}_conflict`);
     }
     try {
-      await writeTextAsync(`${filesDir}/${storage.fileName}`, serialized);
+      await writeTextAsync(await profileDataPath(filesDir, storage.fileName), serialized);
     } catch (_error) {
       throw new Error(`${storage.errorPrefix}_io`);
     }

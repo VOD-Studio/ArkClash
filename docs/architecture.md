@@ -120,6 +120,10 @@ Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/
 
 同一个应用的 UI 进程和扩展进程共享模块级的 `filesDir`。preferences 只在 UI 进程里用，扩展进程需要的信息都要落到文件通道里。两个进程都会写的文件一律先写临时文件再改名（`shared/Files.ets`），同一时刻只有一方在更新订阅，交接见 ADR-0009。
 
+备份入口在 `features/backup/`，归档及网络编排在 `client/BackupService.ets`，共享数据契约在
+`shared/backup/`。独立的 `libarkstore.so` 在后台执行归档与原子目录交换，和 VPN 内核不链接。
+ZIP 快照与恢复机制、旧版目录兼容及 WebDAV 路由见 [ADR-0031](adr/0031-portable-backup.md)。
+
 ## ArkTS 分层与依赖方向
 
 | 目录 | 职责 | 可以依赖 |

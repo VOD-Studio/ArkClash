@@ -1,3 +1,6 @@
+import { dashboardSettings } from '../features/home/DashboardSettings';
+import { BackupPage } from '../features/backup/BackupPage';
+import { applyBackupPreferences } from '../client/BackupPreferences';
 import { GeneralPage } from '../features/tools/GeneralPage';
 import { LogsPage } from '../features/tools/LogsPage';
 import { common } from '@kit.AbilityKit';
@@ -92,6 +95,9 @@ struct Index {
     accessibility.onAnimationReduceStateChange(this.reductionListener);
     this.profiles.load(this.context);
     this.conn.restore(this.context);
+    applyBackupPreferences(this.context).then((changed: boolean): void => {
+      if (changed) { this.backupChanged(); }
+    }).catch((): void => {});
     this.conn.setDiagnosticsReceiverMounted(true);
     this.syncProfiles();
     this.scrollers.forEach((scroller: Scroller, index: number) => this.tabs.bindScroller(index, scroller));
@@ -123,6 +129,13 @@ struct Index {
       this.warmRequested = true;
       this.conn.ensureReady(this.context, true).catch((): void => {});
     }
+  }
+
+  private backupChanged(): void {
+    this.profiles.retryLoad();
+    dashboardSettings.refresh(this.context).catch((): void => {});
+    this.conn.restore(this.context);
+    this.appStyle.load(this.context).catch((): void => {});
   }
 
   private activeProfile(): ProfileItem | undefined {
@@ -274,6 +287,8 @@ struct Index {
       ConnectionsPage({ foreground: this.foreground })
     } else if (name === ToolRoute.Dns) {
       DnsPage({ foreground: this.foreground })
+    } else if (name === ToolRoute.Backup) {
+      BackupPage({ onChanged: (): void => this.backupChanged() })
     } else if (name === ToolRoute.About) {
       AboutPage()
     }

@@ -3,7 +3,7 @@ import { util } from '@kit.ArkTS';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { http } from '@kit.NetworkKit';
 import {
-  ensureProfilesDir, newId, profilesDir, readOptionalText, removeProfileFile, writeProfileText
+  ensureProfilesDir, newId, profileDataPath, profileWorkDir, readOptionalText, removeProfileFile, writeProfileText
 } from '../shared/profiles/Store';
 import { call, getRuntimeStatus } from './Controller';
 import { connection } from './Connection';
@@ -49,7 +49,7 @@ export function newRuleSet(name: string = '', source: string = ''): RuleSetItem 
 }
 
 export async function readRuleSets(filesDir: string): Promise<RuleSetCatalog> {
-  const text = await readOptionalText(`${filesDir}/rule-sets.json`);
+  const text = await readOptionalText(await profileDataPath(filesDir, 'rule-sets.json'));
   if (text === undefined) { return { revision: 'default', items: [] }; }
   const catalog = JSON.parse(text) as RuleSetCatalog;
   if (!RULE_SET_ID.test(catalog.revision) || !Array.isArray(catalog.items) ||
@@ -93,7 +93,7 @@ export async function changeRuleSets(context: common.UIAbilityContext, catalog: 
     if (text !== undefined || uri !== undefined) {
       await ensureProfilesDir(filesDir);
       candidate = revision;
-      path = `${profilesDir(filesDir)}/${candidate}.ruleset`;
+      path = `${profileWorkDir(filesDir)}/${candidate}.ruleset`;
       if (uri !== undefined) {
         const file = await fs.open(uri, fs.OpenMode.READ_ONLY);
         try {

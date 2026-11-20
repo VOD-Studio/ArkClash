@@ -90,6 +90,13 @@ CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH" \
     -ldflags "-s -w -extldflags=-Wl,-soname,libclash.so -X github.com/metacubex/mihomo/constant.Version=$MIHOMO_VERSION" \
     -o "$OUT/libclash.so" .
 
+# 备份库在界面进程延迟加载，不链接 mihomo。
+CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH" CC="$LLVM/$TRIPLE-clang" \
+  "$GO" build -buildmode=c-shared -trimpath \
+    -ldflags "-s -w -extldflags=-Wl,-soname,libarkstore_impl.so" \
+    -o "$OUT/libarkstore_impl.so" ./backupstore
+rm -f "$OUT/libarkstore_impl.h"
+
 # The C++ bridge uses the hand-written arkclash.h instead.
 rm -f "$OUT/libclash.h"
 
@@ -102,4 +109,9 @@ if grep -Eq "$TLS_RELOC" <<<"$RELOCS"; then
   echo "libclash.so still has initial-exec TLS relocations; is $PATCH applied?" >&2
   exit 1
 fi
-echo "built $OUT/libclash.so (mihomo $MIHOMO_VERSION)"
+RELOCS="$("$LLVM/llvm-readelf" -r "$OUT/libarkstore_impl.so")"
+if grep -Eq "$TLS_RELOC" <<<"$RELOCS"; then
+  echo "libarkstore_impl.so uses initial-exec TLS" >&2
+  exit 1
+fi
+echo "built $OUT/libclash.so (mihomo $MIHOMO_VERSION) and libarkstore_impl.so"

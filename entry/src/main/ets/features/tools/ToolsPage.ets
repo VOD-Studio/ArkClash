@@ -26,6 +26,7 @@ export struct ToolsPage {
       new Entry(ToolRoute.AdvancedConfig, $r('sys.symbol.wrench_and_screwdriver'), $r('app.string.tools_advanced_config'))
     ]) })
     SettingsSection({ heading: $r('app.string.tools_other'), rows: (): void => this.Rows([
+      new Entry(ToolRoute.Backup, $r('sys.symbol.doc_text'), $r('app.string.backup_title')),
       new Entry(ToolRoute.About, $r('sys.symbol.info_circle'), $r('app.string.tools_about'))
     ]) })
   }

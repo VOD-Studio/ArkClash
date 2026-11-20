@@ -130,12 +130,13 @@ const geoSettings = loadConsumer('../entry/src/main/ets/shared/GeoResources.ets'
   '@kit.BasicServicesKit': {},
   '@kit.ArkTS': { url: { URL: { parseURL: source => new URL(source) } } },
   '@kit.CoreFileKit': { fileIo: {
-    OpenMode: { CREATE: 1, WRITE_ONLY: 2, TRUNC: 4 },
+    OpenMode: { CREATE: 1, WRITE_ONLY: 2, TRUNC: 4, READ_WRITE: 8 },
+    async access() { return false; },
     async readText() {
       if (state.geoText === undefined) throw Object.assign(new Error('missing'), { code: 13900002 });
       return state.geoText;
     },
-    async open() { return { fd: 1 }; },
+    async open() { return { fd: 1, async lock() {} }; },
     async write(_fd, text) {
       state.geoWriting = true;
       await state.geoSaveGate;
@@ -192,7 +193,8 @@ test('DNS 覆写离线按版本提交，在线超时只凭落盘版本确认', a
     } } },
     '../shared/Files': { async writeTextAsync(_path, value) { disk = value; } },
     '../shared/Runtime': { async runtimeMayBeActive() { return active; } },
-    '../shared/profiles/Store': { newId: prefix => prefix + ++state.random, withProfileStorage: (_dir, op) => op() },
+    '../shared/profiles/Store': { newId: prefix => prefix + ++state.random, withProfileStorage: (_dir, op) => op(),
+      async profileDataPath(dir, name) { return dir + '/' + name; } },
     './CoreClient': { async readCoreHostStatus() {
       return active ? { state: 'running', status: { bootId: 'dns.boot' } } : { state: 'stopped' };
     } },

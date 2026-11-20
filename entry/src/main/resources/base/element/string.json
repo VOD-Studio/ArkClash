@@ -4051,6 +4051,194 @@
     {
       "name": "live_status_resource_failed",
       "value": "Update failed"
+    },
+    {
+      "name": "backup_title",
+      "value": "Backup & restore"
+    },
+    {
+      "name": "backup_local",
+      "value": "Local"
+    },
+    {
+      "name": "backup_remote",
+      "value": "WebDAV"
+    },
+    {
+      "name": "backup_remote_hint",
+      "value": "Connect WebDAV to upload and restore backups."
+    },
+    {
+      "name": "backup_bind",
+      "value": "Connect WebDAV"
+    },
+    {
+      "name": "backup_address",
+      "value": "Server address"
+    },
+    {
+      "name": "backup_username",
+      "value": "Username"
+    },
+    {
+      "name": "backup_password",
+      "value": "Password"
+    },
+    {
+      "name": "backup_filename",
+      "value": "Remote filename"
+    },
+    {
+      "name": "backup_save",
+      "value": "Save"
+    },
+    {
+      "name": "backup_unbind",
+      "value": "Disconnect WebDAV"
+    },
+    {
+      "name": "backup_confirm_unbind",
+      "value": "Remove the connection from this device. The remote backup file stays in place."
+    },
+    {
+      "name": "backup_checking",
+      "value": "Checking connection…"
+    },
+    {
+      "name": "backup_connected",
+      "value": "Connected"
+    },
+    {
+      "name": "backup_export",
+      "value": "Back up"
+    },
+    {
+      "name": "backup_restore",
+      "value": "Restore"
+    },
+    {
+      "name": "backup_policy",
+      "value": "Restore strategy"
+    },
+    {
+      "name": "backup_merge",
+      "value": "Merge"
+    },
+    {
+      "name": "backup_replace",
+      "value": "Replace"
+    },
+    {
+      "name": "backup_selected",
+      "value": "Selected"
+    },
+    {
+      "name": "backup_profiles",
+      "value": "Profiles and resources"
+    },
+    {
+      "name": "backup_all",
+      "value": "All data"
+    },
+    {
+      "name": "backup_restore_hint",
+      "value": "Restoring profiles and resources includes scripts, rules and proxies and keeps this device’s app settings."
+    },
+    {
+      "name": "backup_sensitive",
+      "value": "The ZIP is unencrypted and contains subscriptions, proxies, and credentials in the selected scope."
+    },
+    {
+      "name": "backup_confirm_overwrite",
+      "value": "Replace will remove %d local profiles or resources missing from the backup."
+    },
+    {
+      "name": "backup_exported",
+      "value": "Backup complete"
+    },
+    {
+      "name": "backup_restored",
+      "value": "Restore complete"
+    },
+    {
+      "name": "backup_restore_pending",
+      "value": "Data restored. Applying the configuration is pending."
+    },
+    {
+      "name": "backup_retry_apply",
+      "value": "Retry applying the restored configuration"
+    },
+    {
+      "name": "backup_empty",
+      "value": "This backup contains no data in the selected scope."
+    },
+    {
+      "name": "backup_phase_snapshot",
+      "value": "Preparing snapshot…"
+    },
+    {
+      "name": "backup_phase_pack",
+      "value": "Creating ZIP…"
+    },
+    {
+      "name": "backup_phase_write",
+      "value": "Writing backup…"
+    },
+    {
+      "name": "backup_phase_read",
+      "value": "Reading backup…"
+    },
+    {
+      "name": "backup_phase_unpack",
+      "value": "Extracting ZIP…"
+    },
+    {
+      "name": "backup_phase_validate",
+      "value": "Validating restore…"
+    },
+    {
+      "name": "backup_phase_commit",
+      "value": "Saving restored data…"
+    },
+    {
+      "name": "backup_phase_apply",
+      "value": "Applying restored configuration…"
+    },
+    {
+      "name": "backup_error_invalid",
+      "value": "The backup is incomplete or failed validation."
+    },
+    {
+      "name": "backup_error_version",
+      "value": "This backup format version is unsupported."
+    },
+    {
+      "name": "backup_error_limit",
+      "value": "The backup exceeds its size limits."
+    },
+    {
+      "name": "backup_error_conflict",
+      "value": "Local data changed. Try again."
+    },
+    {
+      "name": "backup_error_dav_settings",
+      "value": "Check the WebDAV address, username, password, and filename."
+    },
+    {
+      "name": "backup_error_dav_network",
+      "value": "Could not connect to WebDAV. Check the network and server certificate."
+    },
+    {
+      "name": "backup_error_dav_response",
+      "value": "WebDAV returned an incomplete or invalid response."
+    },
+    {
+      "name": "backup_error_http",
+      "value": "The WebDAV request failed (HTTP %d)."
+    },
+    {
+      "name": "backup_error_io",
+      "value": "Could not read or write the backup."
     }
   ]
 }

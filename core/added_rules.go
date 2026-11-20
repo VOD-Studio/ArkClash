@@ -256,7 +256,7 @@ func (r addedRule) raw(target string) string {
 }
 
 func addedRulesPath(home string) string {
-	return filepath.Join(home, "added-rules.json")
+	return portableDataPath(home, "added-rules.json")
 }
 
 func readAddedRules(home string) (addedRulesSettings, error) {

@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/netip"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -168,7 +167,7 @@ func validHostName(value string) bool {
 	return value != "" && validGeneralText(value, 512) && !strings.ContainsAny(value, " /:?#@\t")
 }
 
-func generalSettingsPath(home string) string { return filepath.Join(home, "general-settings.json") }
+func generalSettingsPath(home string) string { return portableDataPath(home, "general-settings.json") }
 
 func readGeneralSettings(home string) (generalSettings, error) {
 	file, err := os.Open(generalSettingsPath(home))

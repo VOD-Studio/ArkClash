@@ -104,7 +104,7 @@ func panelHandler(secret string) http.Handler {
 					"mixed-port": ports.MixedPort, "redir-port": ports.RedirPort, "tproxy-port": ports.TProxyPort})
 				return
 			}
-			selectPanelProxy(w, r, segments[1])
+			portableMutation(func(w http.ResponseWriter, r *http.Request) { selectPanelProxy(w, r, segments[1]) })(w, r)
 			return
 		}
 		http.NotFound(w, r)

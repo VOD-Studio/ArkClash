@@ -76,10 +76,10 @@ func (c ruleSetCatalog) find(id string) int {
 	return slices.IndexFunc(c.Items, func(item ruleSetItem) bool { return item.ID == id })
 }
 
-func ruleSetCatalogPath(home string) string { return filepath.Join(home, "rule-sets.json") }
+func ruleSetCatalogPath(home string) string { return portableDataPath(home, "rule-sets.json") }
 
 func (s ruleSetItem) path(home, suffix string) string {
-	return filepath.Join(home, "rule-sets", s.ID+"."+s.Content+suffix)
+	return filepath.Join(portableDataPath(home, "rule-sets"), s.ID+"."+s.Content+suffix)
 }
 
 func readRuleSets(home string) (ruleSetCatalog, error) {
@@ -112,8 +112,8 @@ func (c ruleSetCatalog) attach(raw *config.RawConfig, home string, rules []added
 		}
 		entry := c.Items[i]
 		path := entry.path(home, ".rules")
-		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
-			return errProfileSettingsIO
+		if err := ensureRuleSetCompiled(home, entry, path); err != nil {
+			return err
 		}
 		name := managedRuleSetName(entry.ID)
 		if raw.RuleProvider == nil {
@@ -167,7 +167,7 @@ func postRuleSet(w http.ResponseWriter, r *http.Request) {
 
 func changeRuleSet(ctx context.Context, request ruleSetRequest) error {
 	mu.Lock()
-	home, catalog := current.HomeDir, current.RuleSets
+	home, catalog, generation := current.HomeDir, current.RuleSets, current.StoreGeneration
 	ok := profileSettingsCurrent(request.BootID, request.ExpectedRevision, catalog.Revision, request.Revision)
 	mu.Unlock()
 	if !ok {
@@ -253,6 +253,14 @@ func changeRuleSet(ctx context.Context, request ruleSetRequest) error {
 	if encoded, err := json.Marshal(next); err != nil || len(encoded) >= profileSettingsLimit-1 {
 		return errRuleSetInput
 	}
+	unlock, err := lockPortableStorage(home)
+	if err != nil {
+		return errProfileSettingsConflict
+	}
+	defer unlock()
+	if generation != portableGeneration(home) {
+		return errProfileSettingsConflict
+	}
 	if err := commitRuleSets(ctx, request, next, contentChanged); err != nil {
 		return err
 	}
@@ -271,7 +279,11 @@ func prepareRuleSet(ctx context.Context, home string, request ruleSetRequest, it
 		if !ruleSetID.MatchString(request.Candidate) {
 			return item, false, errRuleSetInput
 		}
-		data, err = readRuleSetFile(filepath.Join(home, "profiles", request.Candidate+".ruleset"), ruleSetInputLimit)
+		path := filepath.Join(home, "profile-work", request.Candidate+".ruleset")
+		if _, statErr := os.Stat(path); errors.Is(statErr, os.ErrNotExist) {
+			path = filepath.Join(home, "profiles", request.Candidate+".ruleset")
+		}
+		data, err = readRuleSetFile(path, ruleSetInputLimit)
 	case item.URL != "" && (request.Action == "sync" || item.URL != previous.URL):
 		data, err = downloadRuleSet(ctx, item.URL)
 	case previous.Content != "":
@@ -337,7 +349,7 @@ func readRuleSetFile(path string, limit int) ([]byte, error) {
 }
 
 func writeRuleSetFiles(home string, item ruleSetItem, source, compiled []byte) error {
-	if os.MkdirAll(filepath.Join(home, "rule-sets"), 0700) != nil {
+	if os.MkdirAll(portableDataPath(home, "rule-sets"), 0700) != nil {
 		return errProfileSettingsIO
 	}
 	sourcePath := item.path(home, ".source")
@@ -460,4 +472,20 @@ func downloadRuleSet(ctx context.Context, source string) ([]byte, error) {
 		return nil, errRuleSetContent
 	}
 	return data, nil
+}
+
+func ensureRuleSetCompiled(home string, item ruleSetItem, path string) error {
+	info, err := os.Stat(path)
+	if err == nil && info.Mode().IsRegular() {
+		return nil
+	}
+	data, err := readRuleSetFile(item.path(home, ".source"), ruleSetInputLimit)
+	if err != nil {
+		return errProfileSettingsIO
+	}
+	compiled, _, err := compileRuleSet(data, item.Behavior, item.Format)
+	if err != nil {
+		return err
+	}
+	return writeRuleSetFile(path, compiled)
 }

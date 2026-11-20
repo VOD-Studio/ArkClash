@@ -19,6 +19,8 @@ REQUIRED = [
     "ets/modules.abc",
     "libs/arm64-v8a/libclash.so",
     "libs/arm64-v8a/libarkclash.so",
+    "libs/arm64-v8a/libarkstore.so",
+    "libs/arm64-v8a/libarkstore_impl.so",
     "libs/arm64-v8a/libc++_shared.so",
     "resources/rawfile/geo/geoip.metadb",
     "resources/rawfile/geo/geosite.dat",
@@ -29,12 +31,14 @@ REQUIRED = [
     "resources/rawfile/script-editor/editor.js",
     "resources/rawfile/script-editor/third-party.txt",
 ]
-# 字节。2026-11 时 HAP 约 78.1 MB、libclash.so 约 63.9 MB，留 10% 左右余量。
+# 字节。备份版 HAP 约 94.5 MB，独立库约 7.4 MB。转发内核保留原限额。
 BUDGET = {
-    "HAP": 86_000_000,
+    "HAP": 100_000_000,
     "libs/arm64-v8a/libclash.so": 70_000_000,
+    "libs/arm64-v8a/libarkstore_impl.so": 8_000_000,
 }
-TRACKED = ["HAP", "libs/arm64-v8a/libclash.so", "resources/rawfile/geo/geoip.metadb", "resources/rawfile/geo/geosite.dat"]
+TRACKED = ["HAP", "libs/arm64-v8a/libclash.so", "libs/arm64-v8a/libarkstore_impl.so",
+           "resources/rawfile/geo/geoip.metadb", "resources/rawfile/geo/geosite.dat"]
 
 
 def mb(n: int) -> str:

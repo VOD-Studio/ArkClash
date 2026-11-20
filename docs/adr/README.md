@@ -35,3 +35,4 @@
 | [0028](0028-standard-profile-overrides.md) | 标准覆写的规则顺序与应用时机 | 已采纳，覆写顺序由 0030 更新 |
 | [0029](0029-general-settings-and-log-capture.md) | 常规设置、外部控制器与日志采集 | 已采纳，待真机验收 |
 | [0030](0030-composed-overrides-and-live-status.md) | 脚本与附加规则组合、仪表盘运行状态 | 已采纳，待真机验收 |
+| [0031](0031-portable-backup.md) | 原子恢复配置库与 WebDAV 备份 | 已采纳 |

@@ -4031,6 +4031,194 @@
     {
       "name": "live_status_resource_failed",
       "value": "更新失败"
+    },
+    {
+      "name": "backup_title",
+      "value": "备份与恢复"
+    },
+    {
+      "name": "backup_local",
+      "value": "本地"
+    },
+    {
+      "name": "backup_remote",
+      "value": "WebDAV"
+    },
+    {
+      "name": "backup_remote_hint",
+      "value": "绑定 WebDAV 后可手动上传和恢复备份。"
+    },
+    {
+      "name": "backup_bind",
+      "value": "绑定 WebDAV"
+    },
+    {
+      "name": "backup_address",
+      "value": "服务器地址"
+    },
+    {
+      "name": "backup_username",
+      "value": "账号"
+    },
+    {
+      "name": "backup_password",
+      "value": "密码"
+    },
+    {
+      "name": "backup_filename",
+      "value": "远程文件名"
+    },
+    {
+      "name": "backup_save",
+      "value": "保存"
+    },
+    {
+      "name": "backup_unbind",
+      "value": "解除绑定"
+    },
+    {
+      "name": "backup_confirm_unbind",
+      "value": "清除本机 WebDAV 绑定。远程备份文件会保留。"
+    },
+    {
+      "name": "backup_checking",
+      "value": "正在检查连接…"
+    },
+    {
+      "name": "backup_connected",
+      "value": "连接成功"
+    },
+    {
+      "name": "backup_export",
+      "value": "备份"
+    },
+    {
+      "name": "backup_restore",
+      "value": "恢复"
+    },
+    {
+      "name": "backup_policy",
+      "value": "恢复策略"
+    },
+    {
+      "name": "backup_merge",
+      "value": "合并"
+    },
+    {
+      "name": "backup_replace",
+      "value": "覆盖"
+    },
+    {
+      "name": "backup_selected",
+      "value": "已选中"
+    },
+    {
+      "name": "backup_profiles",
+      "value": "仅配置及资源"
+    },
+    {
+      "name": "backup_all",
+      "value": "全部数据"
+    },
+    {
+      "name": "backup_restore_hint",
+      "value": "仅恢复配置及资源时，会一并恢复脚本、规则和节点，并保留本机应用设置。"
+    },
+    {
+      "name": "backup_sensitive",
+      "value": "备份为未加密的 ZIP，包含订阅、节点和所选范围内的凭据。"
+    },
+    {
+      "name": "backup_confirm_overwrite",
+      "value": "此备份中没有的 %d 项本机配置或资源将被删除。"
+    },
+    {
+      "name": "backup_exported",
+      "value": "备份完成"
+    },
+    {
+      "name": "backup_restored",
+      "value": "恢复完成"
+    },
+    {
+      "name": "backup_restore_pending",
+      "value": "数据已恢复，运行配置尚未应用。"
+    },
+    {
+      "name": "backup_retry_apply",
+      "value": "重试应用已恢复配置"
+    },
+    {
+      "name": "backup_empty",
+      "value": "这份备份中没有可恢复的数据。"
+    },
+    {
+      "name": "backup_phase_snapshot",
+      "value": "正在准备快照…"
+    },
+    {
+      "name": "backup_phase_pack",
+      "value": "正在打包…"
+    },
+    {
+      "name": "backup_phase_write",
+      "value": "正在写入备份…"
+    },
+    {
+      "name": "backup_phase_read",
+      "value": "正在读取备份…"
+    },
+    {
+      "name": "backup_phase_unpack",
+      "value": "正在解压…"
+    },
+    {
+      "name": "backup_phase_validate",
+      "value": "正在校验恢复内容…"
+    },
+    {
+      "name": "backup_phase_commit",
+      "value": "正在保存恢复内容…"
+    },
+    {
+      "name": "backup_phase_apply",
+      "value": "正在应用已恢复配置…"
+    },
+    {
+      "name": "backup_error_invalid",
+      "value": "备份不完整或数据校验失败。"
+    },
+    {
+      "name": "backup_error_version",
+      "value": "此备份格式版本不受支持。"
+    },
+    {
+      "name": "backup_error_limit",
+      "value": "备份超过容量限制。"
+    },
+    {
+      "name": "backup_error_conflict",
+      "value": "本机数据已变化，请重试。"
+    },
+    {
+      "name": "backup_error_dav_settings",
+      "value": "请检查 WebDAV 地址、账号、密码及文件名。"
+    },
+    {
+      "name": "backup_error_dav_network",
+      "value": "无法连接 WebDAV，请检查网络和服务器证书。"
+    },
+    {
+      "name": "backup_error_dav_response",
+      "value": "WebDAV 返回了不完整或无效的响应。"
+    },
+    {
+      "name": "backup_error_http",
+      "value": "WebDAV 请求失败（HTTP %d）。"
+    },
+    {
+      "name": "backup_error_io",
+      "value": "无法读取或写入备份。"
     }
   ]
 }

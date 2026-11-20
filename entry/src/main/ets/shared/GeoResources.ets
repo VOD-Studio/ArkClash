@@ -1,3 +1,4 @@
+import { profileDataPath, withProfileDataLock } from './profiles/Store';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { url } from '@kit.ArkTS';
@@ -113,7 +114,7 @@ export async function readGeoOptionalText(path: string): Promise<string | undefi
 }
 
 async function readSettingsFile(filesDir: string): Promise<GeoSettings> {
-  const text = await readGeoOptionalText(`${filesDir}/geo-settings.json`);
+  const text = await readGeoOptionalText(await profileDataPath(filesDir, 'geo-settings.json'));
   if (text === undefined) { return defaultGeoSettings(); }
   let parsed: GeoSettings;
   try {
@@ -131,20 +132,21 @@ export async function readGeoSettings(filesDir: string): Promise<GeoSettings> {
 }
 
 function enqueueSettings(filesDir: string, settings: GeoSettings, reset: boolean): Promise<GeoSettings> {
-  const operation = settingsQueue.then(async (): Promise<GeoSettings> => {
-    const saved = checkedSettings(settings);
-    if (!reset) {
-      const current = await readSettingsFile(filesDir);
-      if (current.revision !== saved.revision) { throw new Error('geo_settings_conflict'); }
-    }
-    saved.revision = `${Date.now().toString(36)}${Math.floor(Math.random() * 0xffffff).toString(36)}`;
-    try {
-      await writeTextAsync(`${filesDir}/geo-settings.json`, JSON.stringify(saved));
-    } catch (_error) {
-      throw new Error('geo_io');
-    }
-    return saved;
-  });
+  const operation = settingsQueue.then((): Promise<GeoSettings> =>
+    withProfileDataLock<GeoSettings>(filesDir, async (): Promise<GeoSettings> => {
+      const saved = checkedSettings(settings);
+      if (!reset) {
+        const current = await readSettingsFile(filesDir);
+        if (current.revision !== saved.revision) { throw new Error('geo_settings_conflict'); }
+      }
+      saved.revision = `${Date.now().toString(36)}${Math.floor(Math.random() * 0xffffff).toString(36)}`;
+      try {
+        await writeTextAsync(await profileDataPath(filesDir, 'geo-settings.json'), JSON.stringify(saved));
+      } catch (_error) {
+        throw new Error('geo_io');
+      }
+      return saved;
+    }));
   latestSave = operation.then((): void => {});
   // 队列只负责串行化，不让某次失败阻断用户下一次主动保存或恢复。
   settingsQueue = latestSave.catch((): void => {});

@@ -27,7 +27,12 @@ function createResourcesHarness(dir, timers = {}) {
     if (controls.fail?.(operation, file)) throw Object.assign(new Error('fixture I/O failure'), { code: 13900012 });
   }
   const fileIo = {
-    OpenMode: { CREATE: fs.constants.O_CREAT, WRITE_ONLY: fs.constants.O_WRONLY, TRUNC: fs.constants.O_TRUNC },
+    OpenMode: { CREATE: fs.constants.O_CREAT, WRITE_ONLY: fs.constants.O_WRONLY, TRUNC: fs.constants.O_TRUNC,
+      READ_WRITE: fs.constants.O_RDWR },
+    async access(file) {
+      try { await fsp.access(file); return true; }
+      catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+    },
     async readText(file) {
       check('read', file);
       try {
@@ -48,7 +53,7 @@ function createResourcesHarness(dir, timers = {}) {
       check('open', file);
       const handle = await fsp.open(file, flags, 0o600);
       descriptors.set(handle.fd, file);
-      return { fd: handle.fd, handle };
+      return { fd: handle.fd, handle, async lock() {} };
     },
     async write(fd, data) {
       check('write', descriptors.get(fd));
