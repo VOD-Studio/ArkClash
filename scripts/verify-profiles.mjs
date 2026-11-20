@@ -503,9 +503,7 @@ async function actualProfileConsumer(filesDir,
       } }; }
       if (name === '@kit.ArkTS') { return { ...kits[name], taskpool: { async execute(action, ...args) { return action(...args); } } }; }
       if (name === '@kit.NetworkKit') { return { http, webSocket }; }
-      if (name === 'yaml') { return { parse(...args) {
-        return require(path.resolve(scriptDir, '../entry/oh_modules/yaml/dist/index.js')).parse(...args);
-      } }; }
+      if (name === 'yaml') { return require(path.resolve(scriptDir, '../entry/oh_modules/yaml/dist/index.js')); }
       const target = path.resolve(path.dirname(absolute), `${name}.ets`);
       if (target === path.join(etsDir, 'client/Connection.ets')) { return { connection: connectionInput }; }
       if (target === path.join(etsDir, 'shared/Runtime.ets')) {
@@ -728,6 +726,32 @@ test('new imports do not force a switch when the detached core already has a run
       } finally { await fixture.close(); }
     });
   });
+
+test('batch node links are validated together and committed as one profile without switching the selection', async () => {
+  await sandbox(async (dir) => {
+    const fixture = await actualProfileConsumer(dir, { profileIds: ['p1'] });
+    try {
+      const first = 'socks5://proxy.invalid:1080#Proxy';
+      const next = 'socks5://proxy.invalid:1081#Proxy';
+      const importing = fixture.view.importLinks(`${first}\n${first}\n${next}`);
+      const decode = await fixture.take('/arkclash/local-proxies/decode');
+      assert.deepEqual(JSON.parse(decode.options.extraData).lines, [first, next]);
+      decode.respond([[{ name: 'Proxy', type: 'socks5', server: 'proxy.invalid', port: 1080 }],
+        [{ name: 'Proxy', type: 'socks5', server: 'proxy.invalid', port: 1081 }]]);
+      const validate = await fixture.take('/arkclash/local-proxies/validate');
+      assert.deepEqual(JSON.parse(validate.options.extraData).definitions.map((node) => node.name), ['Proxy', 'Proxy-01']);
+      validate.respond(['', '']);
+      assert.deepEqual(JSON.parse(JSON.stringify(await importing)), { total: 1, succeeded: 1, skipped: 1, failures: [] });
+      const list = await fixture.store.readListAsync(dir);
+      assert.equal(list.current, 'p1');
+      assert.equal(list.profiles.length, 2);
+      assert.equal(list.profiles[1].type, 'file');
+      assert.equal(list.subscriptions.length, 0);
+      const summary = JSON.parse(await fsp.readFile(fixture.store.summaryPath(dir, list.profiles[1].id), 'utf8'));
+      assert.deepEqual(summary.groups[0].members, ['Proxy', 'Proxy-01']);
+    } finally { await fixture.close(); }
+  });
+});
 
 test('first activation rereads a choice changed during its status query without rewriting that persistent choice',
   { timeout: 10000 }, async () => {
