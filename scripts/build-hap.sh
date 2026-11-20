@@ -20,7 +20,7 @@ cd "$ROOT"
 
 for native_lib in libclash.so libarkstore_impl.so; do
   if [[ ! -f "entry/libs/$ABI/$native_lib" ]]; then
-    echo "缺少 entry/libs/$ABI/$native_lib，先运行 make core ABI=$ABI" >&2
+    echo "缺少 entry/libs/$ABI/${native_lib}，先运行 make core ABI=$ABI" >&2
     exit 1
   fi
 done
