@@ -4219,6 +4219,242 @@
     {
       "name": "backup_error_io",
       "value": "无法读取或写入备份。"
+    },
+    {
+      "name": "custom_create",
+      "value": "新建自定义配置"
+    },
+    {
+      "name": "custom_profile",
+      "value": "自定义配置"
+    },
+    {
+      "name": "custom_unnamed",
+      "value": "填写配置名称"
+    },
+    {
+      "name": "custom_groups",
+      "value": "代理组"
+    },
+    {
+      "name": "custom_group",
+      "value": "编辑代理组"
+    },
+    {
+      "name": "custom_rules",
+      "value": "规则"
+    },
+    {
+      "name": "custom_rule",
+      "value": "编辑规则"
+    },
+    {
+      "name": "custom_nodes",
+      "value": "节点与拨号链"
+    },
+    {
+      "name": "custom_issues",
+      "value": "配置问题"
+    },
+    {
+      "name": "custom_proxy_providers",
+      "value": "代理集合"
+    },
+    {
+      "name": "custom_rule_providers",
+      "value": "规则集"
+    },
+    {
+      "name": "custom_sniffer",
+      "value": "嗅探"
+    },
+    {
+      "name": "custom_import",
+      "value": "导入配置结构"
+    },
+    {
+      "name": "custom_source",
+      "value": "配置 YAML"
+    },
+    {
+      "name": "custom_from_link",
+      "value": "从链接导入"
+    },
+    {
+      "name": "custom_add_group",
+      "value": "添加代理组"
+    },
+    {
+      "name": "custom_add_rule",
+      "value": "添加规则"
+    },
+    {
+      "name": "custom_from_library",
+      "value": "从节点库添加"
+    },
+    {
+      "name": "custom_filter_preset",
+      "value": "筛选预设"
+    },
+    {
+      "name": "custom_choose_target",
+      "value": "选择目标"
+    },
+    {
+      "name": "custom_choose_member",
+      "value": "添加成员"
+    },
+    {
+      "name": "custom_choose_provider",
+      "value": "添加代理集合"
+    },
+    {
+      "name": "custom_dialer",
+      "value": "选择拨号目标"
+    },
+    {
+      "name": "custom_no_dialer",
+      "value": "无拨号目标"
+    },
+    {
+      "name": "custom_dialer_hint",
+      "value": "点按节点可设置拨号目标。"
+    },
+    {
+      "name": "custom_members",
+      "value": "代理成员（每行一个）"
+    },
+    {
+      "name": "custom_group_providers",
+      "value": "代理集合（每行一个）"
+    },
+    {
+      "name": "custom_group_options",
+      "value": "组选项（YAML）"
+    },
+    {
+      "name": "custom_type",
+      "value": "类型"
+    },
+    {
+      "name": "custom_rule_payload",
+      "value": "匹配条件"
+    },
+    {
+      "name": "custom_rule_target",
+      "value": "目标"
+    },
+    {
+      "name": "custom_rule_options",
+      "value": "规则参数"
+    },
+    {
+      "name": "custom_sub_rules",
+      "value": "子规则"
+    },
+    {
+      "name": "custom_search",
+      "value": "搜索"
+    },
+    {
+      "name": "custom_empty",
+      "value": "暂无条目"
+    },
+    {
+      "name": "custom_no_choices",
+      "value": "没有可选条目"
+    },
+    {
+      "name": "custom_retry",
+      "value": "重试"
+    },
+    {
+      "name": "custom_move_up",
+      "value": "上移"
+    },
+    {
+      "name": "custom_move_down",
+      "value": "下移"
+    },
+    {
+      "name": "custom_continue",
+      "value": "继续"
+    },
+    {
+      "name": "custom_import_replace",
+      "value": "用导入的 YAML 替换当前配置内容？"
+    },
+    {
+      "name": "custom_remove_target",
+      "value": "删除此条目？已有引用需要检查。"
+    },
+    {
+      "name": "custom_invalid_shape",
+      "value": "YAML 段的结构不正确。"
+    },
+    {
+      "name": "custom_saved",
+      "value": "已保存自定义配置"
+    },
+    {
+      "name": "custom_saved_warning",
+      "value": "配置已保存，仍有未解决的引用"
+    },
+    {
+      "name": "custom_warning",
+      "value": "警告"
+    },
+    {
+      "name": "custom_error",
+      "value": "错误"
+    },
+    {
+      "name": "custom_issue_name",
+      "value": "节点或代理组名称无效：%s"
+    },
+    {
+      "name": "custom_issue_duplicate",
+      "value": "节点或代理组重名：%s"
+    },
+    {
+      "name": "custom_issue_type",
+      "value": "%1$s 的类型不支持或未填写：%2$s"
+    },
+    {
+      "name": "custom_issue_empty_group",
+      "value": "%s 没有成员来源"
+    },
+    {
+      "name": "custom_issue_target",
+      "value": "%1$s 引用了不存在的目标 %2$s"
+    },
+    {
+      "name": "custom_issue_provider",
+      "value": "%1$s 引用了不存在的代理集合 %2$s"
+    },
+    {
+      "name": "custom_issue_fallback",
+      "value": "%1$s 的兜底代理无效：%2$s"
+    },
+    {
+      "name": "custom_issue_cycle",
+      "value": "代理或拨号链存在循环：%s"
+    },
+    {
+      "name": "custom_issue_rule",
+      "value": "规则格式有误：%s"
+    },
+    {
+      "name": "custom_issue_rule_provider",
+      "value": "规则 %1$s 引用了不存在的规则集 %2$s"
+    },
+    {
+      "name": "custom_issue_sub_rule",
+      "value": "规则 %1$s 引用了不存在的子规则 %2$s"
+    },
+    {
+      "name": "custom_discard_title",
+      "value": "放弃更改？"
     }
   ]
 }

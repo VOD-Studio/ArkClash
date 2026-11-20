@@ -4239,6 +4239,242 @@
     {
       "name": "backup_error_io",
       "value": "Could not read or write the backup."
+    },
+    {
+      "name": "custom_create",
+      "value": "New custom profile"
+    },
+    {
+      "name": "custom_profile",
+      "value": "Custom profile"
+    },
+    {
+      "name": "custom_unnamed",
+      "value": "Enter a profile name"
+    },
+    {
+      "name": "custom_groups",
+      "value": "Proxy groups"
+    },
+    {
+      "name": "custom_group",
+      "value": "Edit proxy group"
+    },
+    {
+      "name": "custom_rules",
+      "value": "Rules"
+    },
+    {
+      "name": "custom_rule",
+      "value": "Edit rule"
+    },
+    {
+      "name": "custom_nodes",
+      "value": "Nodes and dialers"
+    },
+    {
+      "name": "custom_issues",
+      "value": "Configuration issues"
+    },
+    {
+      "name": "custom_proxy_providers",
+      "value": "Proxy providers"
+    },
+    {
+      "name": "custom_rule_providers",
+      "value": "Rule providers"
+    },
+    {
+      "name": "custom_sniffer",
+      "value": "Sniffer"
+    },
+    {
+      "name": "custom_import",
+      "value": "Import structure"
+    },
+    {
+      "name": "custom_source",
+      "value": "Profile YAML"
+    },
+    {
+      "name": "custom_from_link",
+      "value": "Import from URL"
+    },
+    {
+      "name": "custom_add_group",
+      "value": "Add group"
+    },
+    {
+      "name": "custom_add_rule",
+      "value": "Add rule"
+    },
+    {
+      "name": "custom_from_library",
+      "value": "Add from node library"
+    },
+    {
+      "name": "custom_filter_preset",
+      "value": "Filter preset"
+    },
+    {
+      "name": "custom_choose_target",
+      "value": "Choose target"
+    },
+    {
+      "name": "custom_choose_member",
+      "value": "Add member"
+    },
+    {
+      "name": "custom_choose_provider",
+      "value": "Add provider"
+    },
+    {
+      "name": "custom_dialer",
+      "value": "Choose dialer"
+    },
+    {
+      "name": "custom_no_dialer",
+      "value": "No dialer"
+    },
+    {
+      "name": "custom_dialer_hint",
+      "value": "Tap a node to set its dialer."
+    },
+    {
+      "name": "custom_members",
+      "value": "Members · one per line"
+    },
+    {
+      "name": "custom_group_providers",
+      "value": "Providers · one per line"
+    },
+    {
+      "name": "custom_group_options",
+      "value": "Group options (YAML)"
+    },
+    {
+      "name": "custom_type",
+      "value": "Type"
+    },
+    {
+      "name": "custom_rule_payload",
+      "value": "Match condition"
+    },
+    {
+      "name": "custom_rule_target",
+      "value": "Target"
+    },
+    {
+      "name": "custom_rule_options",
+      "value": "Rule parameters"
+    },
+    {
+      "name": "custom_sub_rules",
+      "value": "Sub-rules"
+    },
+    {
+      "name": "custom_search",
+      "value": "Search"
+    },
+    {
+      "name": "custom_empty",
+      "value": "No entries yet"
+    },
+    {
+      "name": "custom_no_choices",
+      "value": "No matching entries"
+    },
+    {
+      "name": "custom_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "custom_move_up",
+      "value": "Move up"
+    },
+    {
+      "name": "custom_move_down",
+      "value": "Move down"
+    },
+    {
+      "name": "custom_continue",
+      "value": "Continue"
+    },
+    {
+      "name": "custom_import_replace",
+      "value": "Replace this configuration with the imported YAML?"
+    },
+    {
+      "name": "custom_remove_target",
+      "value": "Remove this entry? Existing references will need attention."
+    },
+    {
+      "name": "custom_invalid_shape",
+      "value": "The YAML section has an unexpected structure."
+    },
+    {
+      "name": "custom_saved",
+      "value": "Custom profile saved"
+    },
+    {
+      "name": "custom_saved_warning",
+      "value": "Profile saved with unresolved references"
+    },
+    {
+      "name": "custom_warning",
+      "value": "Warning"
+    },
+    {
+      "name": "custom_error",
+      "value": "Error"
+    },
+    {
+      "name": "custom_issue_name",
+      "value": "Invalid node or group name: %s"
+    },
+    {
+      "name": "custom_issue_duplicate",
+      "value": "Duplicate node or group name: %s"
+    },
+    {
+      "name": "custom_issue_type",
+      "value": "Unsupported or missing type in %1$s: %2$s"
+    },
+    {
+      "name": "custom_issue_empty_group",
+      "value": "%s has no member source"
+    },
+    {
+      "name": "custom_issue_target",
+      "value": "%1$s references missing target %2$s"
+    },
+    {
+      "name": "custom_issue_provider",
+      "value": "%1$s references missing provider %2$s"
+    },
+    {
+      "name": "custom_issue_fallback",
+      "value": "%1$s has invalid fallback %2$s"
+    },
+    {
+      "name": "custom_issue_cycle",
+      "value": "Proxy dependency cycle: %s"
+    },
+    {
+      "name": "custom_issue_rule",
+      "value": "Invalid rule at %s"
+    },
+    {
+      "name": "custom_issue_rule_provider",
+      "value": "Rule %1$s references missing rule provider %2$s"
+    },
+    {
+      "name": "custom_issue_sub_rule",
+      "value": "Rule %1$s references missing sub-rule %2$s"
+    },
+    {
+      "name": "custom_discard_title",
+      "value": "Discard changes?"
     }
   ]
 }

@@ -1756,3 +1756,113 @@ test('给代理组设置和清除图标只修改该组的 YAML 字段', () => {
   assert.match(cleared, /rules: \[MATCH,DIRECT\]/);
   assert.throws(() => iconYaml.setProfileGroupIcon(source, first, 'file:///secret'), /icon_set_input/);
 });
+
+const customYaml = load(path.join(etsDir, 'shared/profiles/CustomProfileYaml.ets'));
+
+test('custom profile can be assembled from empty YAML and retains final rule order', () => {
+  let draft = customYaml.editCustomProfile(customYaml.CUSTOM_EMPTY_YAML);
+  draft = customYaml.editCustomProfile(draft.source, {
+    kind: 'node', definition: { name: 'Example node', type: 'socks5', server: 'proxy.example', port: 1080 }
+  });
+  draft = customYaml.editCustomProfile(draft.source, {
+    kind: 'group', group: { name: 'Outbound', type: 'select', members: ['Example node', 'DIRECT'],
+      providers: [], options: 'hidden: false\n' }
+  });
+  draft = customYaml.editCustomProfile(draft.source, { kind: 'rule', text: 'MATCH,DIRECT' });
+  draft = customYaml.editCustomProfile(draft.source, { kind: 'rule', text: 'DOMAIN,proxy.example,Outbound' });
+  draft = customYaml.editCustomProfile(draft.source, { kind: 'order', field: 'rules', index: 1, offset: -1 });
+  assert.deepEqual(Array.from(draft.issues), []);
+  const compiled = testYaml.parse(customYaml.prepareCustomProfile(draft.source));
+  assert.deepEqual(compiled.rules, ['DOMAIN,proxy.example,Outbound', 'MATCH,DIRECT']);
+  assert.deepEqual(compiled['proxy-groups'], [{
+    name: 'Outbound', type: 'select', proxies: ['Example node', 'DIRECT'], hidden: false
+  }]);
+  assert.equal(compiled.proxies[0].server, 'proxy.example');
+});
+
+test('custom YAML round-trips unknown data and rewrites group references by rule grammar', () => {
+  const source = [
+    '# keep top-level comment', 'x-extension: {flag: true}', 'proxies:',
+    '  - {name: Example, type: socks5, server: proxy.example, port: 1080, dialer-proxy: Old}',
+    'proxy-groups:', '  - {name: Old, type: select, proxies: [DIRECT], icon: resource}',
+    '  - {name: Outer, type: select, proxies: [Old], default-selected: Old}',
+    'dns: {nameserver: ["https://dns.example/dns-query#Old"]}',
+    'ntp: {dialer-proxy: Old}',
+    'rules:', '  - DOMAIN-REGEX,^abc{1,3}$.example,Old',
+    '  - AND,((DOMAIN,example.com),(NETWORK,tcp)),Old', '  - MATCH,Outer',
+    'sub-rules:', '  sample:', '    - DOMAIN,other.example,Old', ''
+  ].join('\n');
+  const initial = customYaml.editCustomProfile(source);
+  assert.equal(initial.source, source);
+  const next = customYaml.editCustomProfile(source, {
+    kind: 'group', index: 0, group: { ...initial.groups[0], name: 'Renamed' }
+  });
+  assert.deepEqual(Array.from(next.issues), []);
+  assert.ok(next.source.includes('# keep top-level comment'));
+  const yaml = testYaml.parse(next.source);
+  assert.deepEqual(yaml['x-extension'], { flag: true });
+  assert.equal(yaml['proxy-groups'][0].icon, 'resource');
+  assert.deepEqual(yaml['proxy-groups'][1].proxies, ['Renamed']);
+  assert.equal(yaml['proxy-groups'][1]['default-selected'], 'Renamed');
+  assert.equal(yaml.proxies[0]['dialer-proxy'], 'Renamed');
+  assert.equal(yaml.dns.nameserver[0], 'https://dns.example/dns-query#Renamed');
+  assert.equal(yaml.ntp['dialer-proxy'], 'Renamed');
+  assert.deepEqual(yaml.rules, ['DOMAIN-REGEX,^abc{1,3}$.example,Renamed',
+    'AND,((DOMAIN,example.com),(NETWORK,tcp)),Renamed', 'MATCH,Outer']);
+  assert.deepEqual(yaml['sub-rules'].sample, ['DOMAIN,other.example,Renamed']);
+});
+
+test('custom validation blocks group and dialer cycles while reporting missing providers', () => {
+  const source = [
+    'proxies: [{name: Example, type: direct, dialer-proxy: B}]', 'proxy-groups:',
+    '  - {name: A, type: select, include-all-proxies: true}',
+    '  - {name: B, type: select, proxies: [A], use: [Unavailable]}',
+    'rules: ["MATCH,B"]', ''
+  ].join('\n');
+  const result = customYaml.editCustomProfile(source);
+  assert.ok(result.issues.some(issue => issue.code === 'cycle' && issue.blocking &&
+    /Example.*B.*A.*Example/.test(issue.subject)));
+  assert.ok(result.issues.some(issue => issue.code === 'missing_provider' && !issue.blocking));
+  const fixed = customYaml.editCustomProfile(result.source, { kind: 'dialer', index: 0, text: '' });
+  assert.ok(fixed.issues.every(issue => !issue.blocking));
+  const groupCycle = customYaml.editCustomProfile(source, { kind: 'group', index: 0,
+    group: { name: 'A', type: 'select', members: ['B'], providers: [], options: '' } });
+  assert.ok(groupCycle.issues.some(issue => issue.code === 'cycle' && issue.subject === 'B → A → B'));
+});
+
+test('custom structure imports a rules-only profile and rejects unrelated or malformed YAML', () => {
+  const source = 'rules: ["MATCH,DIRECT"]\n';
+  assert.equal(customYaml.editCustomProfile(source).rules[0], 'MATCH,DIRECT');
+  assert.deepEqual(testYaml.parse(customYaml.prepareCustomProfile(source)), { proxies: [], rules: ['MATCH,DIRECT'] });
+  assert.throws(() => customYaml.editCustomProfile('unrelated: true\n'), /not_clash/);
+  assert.throws(() => customYaml.editCustomProfile('rules: [\n'), /invalid_yaml/);
+  assert.throws(() => customYaml.editCustomProfile(source, { kind: 'section', field: 'rules', text: 'key: value' }),
+    /custom_shape/);
+});
+
+test('custom group filter presets retain existing filters without duplicate keys or patterns', () => {
+  const source = 'filter: "(?i)hk"\nhidden: false\n';
+  const updated = customYaml.appendCustomGroupFilter(source, 'Japan');
+  assert.deepEqual(testYaml.parse(updated), { filter: '(?i)hk' + String.fromCharCode(96) + 'Japan', hidden: false });
+  assert.equal(customYaml.appendCustomGroupFilter(updated, 'Japan'), updated);
+});
+
+test('a custom profile with unresolved references can be saved without selecting it', async () => {
+  await sandbox(async (dir) => {
+    const fixture = await actualProfileConsumer(dir, { profileIds: [] });
+    try {
+      const source = 'proxies: []\nproxy-groups: [{name: Example, type: select, use: [Missing]}]\n';
+      assert.equal(await fixture.view.createCustom('Draft', source, false), undefined);
+      const list = await fixture.store.readListAsync(dir);
+      assert.equal(list.current, '');
+      assert.equal(list.profiles[0].type, 'custom');
+      assert.equal(await fsp.readFile(fixture.store.yamlPath(dir, list.profiles[0].id), 'utf8'), source);
+      fixture.unknown();
+      assert.equal(await fixture.view.createCustom('Standalone', 'proxies: []\n', true), undefined);
+      const withStandalone = await fixture.store.readListAsync(dir);
+      assert.equal(withStandalone.current, '');
+      assert.equal(withStandalone.profiles[1].name, 'Standalone');
+      assert.equal(fixture.requests.some((request) => request.path === '/arkclash/reload'), false);
+    } finally { await fixture.close(); }
+  });
+});

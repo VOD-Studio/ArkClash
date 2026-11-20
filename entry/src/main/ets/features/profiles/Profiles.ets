@@ -14,6 +14,7 @@ import { commitCandidate, downloadNewSubscription, ProfileCandidateChange, Updat
   UpdateScheduler } from '../../shared/profiles/Updater';
 import { parseProfileLinks, readSourceText, removeSavedProfile, saveProfileEdit, saveProfileOrder } from './ProfileActions';
 import { pickDocumentFile, documentFileName } from '../../client/DocumentPicker';
+import { fileIo as fs } from '@kit.CoreFileKit';
 import { ProfileBatchJob, runProfileBatch } from './ProfileBatch';
 import { exportProfileSource, migrateProfileLegacy, readProfileFile,
   stageProfileUri } from './ProfileFiles';
@@ -172,6 +173,49 @@ export class ProfileStore {
       await this.refresh();
       return await this.activateCurrentIfEmpty();
     } catch (e) { return errorString(e as Object); }
+  }
+
+  async createCustom(name: string, content: string, activate: boolean): Promise<string | undefined> {
+    try {
+      await this.ensureLoaded();
+      let routeKnown = true;
+      try { await this.recheckRoute(); }
+      catch (error) {
+        if (errorString(error as Object) !== 'host_unknown') { throw error as Error; }
+        routeKnown = false;
+      }
+      const generation = this.routeGeneration;
+      const canActivate = activate && routeKnown;
+      const profile = newId('p');
+      await ensureProfilesDir(this.filesDir);
+      const candidate = candidatePath(this.filesDir, profile);
+      const record: ProfileRecord = { id: profile, name: name, nameEdited: true, subscription: '', type: 'custom' };
+      // 新 ID 尚未成为运行目标。宿主状态未确认时，仅允许新增配置，不改变当前选择。
+      const eligible = (): boolean => routeKnown ? this.businessWritable(generation) :
+        generation === this.routeGeneration && !connection.busy;
+      try {
+        await writeProfileText(candidate, content, eligible);
+        await withProfileTask<void>(this.filesDir, profile, async (): Promise<void> => {
+          const env = canActivate ? this.importEnv(generation) :
+            { filesDir: this.filesDir, downloader: new DirectDownloader(this.filesDir), running: (): string => '' } as UpdateEnv;
+          await commitCandidate(env, profile, candidate, eligible, { create: record, selectOnCreate: canActivate });
+        });
+      } finally { await removeProfileFile(candidate); }
+      await this.refresh();
+      this.notifyChanged();
+      if (canActivate) { this.applyError = (await this.activateCurrentIfEmpty()) ?? ''; }
+      return undefined;
+    } catch (error) { return errorString(error as Object); }
+  }
+
+  async downloadCustomSource(url: string, canceled: () => boolean): Promise<string> {
+    await this.ensureLoaded();
+    await ensureProfilesDir(this.filesDir);
+    const candidate = candidatePath(this.filesDir, 'import');
+    try {
+      await new DirectDownloader(this.filesDir).download(url.trim(), candidate, { canceled: canceled, maxBytes: 8388608 });
+      return await fs.readText(candidate);
+    } finally { await removeProfileFile(candidate); }
   }
 
   async importLinks(text: string): Promise<ProfileBatchResult> {

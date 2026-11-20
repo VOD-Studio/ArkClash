@@ -1,4 +1,6 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
+import { confirmCustomDismiss, CustomProfileDraft } from './CustomProfileDraft';
+import { CustomProfileEditor } from './CustomProfileEditor';
 import { ProfileDetails } from './ProfileDetails';
 import { ProfileDraft } from './ProfileDraft';
 import { confirmProfileEditorDismiss, ProfileEditor } from './ProfileEditor';
@@ -12,10 +14,14 @@ export struct ProfileDetailsSheet {
   @Param @Require visible: boolean;
   @Local editing: boolean = false;
   @Local draft: ProfileDraft | undefined = undefined;
+  @Local customDraft: CustomProfileDraft | undefined = undefined;
 
   @Builder
   Editor() {
-    if (this.draft !== undefined) {
+    if (this.customDraft !== undefined) {
+      CustomProfileEditor({ store: this.store, draft: this.customDraft,
+        onClose: (): void => { this.editing = false; } })
+    } else if (this.draft !== undefined) {
       ProfileEditor({ store: this.store, draft: this.draft, visible: this.visible && this.editing,
         onSaved: (): void => {
           if (this.draft !== undefined) { this.draft.saving = false; }
@@ -29,7 +35,8 @@ export struct ProfileDetailsSheet {
   build() {
     Column() {
       ProfileDetails({ store: this.store, item: this.item, onEdit: (): void => {
-        this.draft = new ProfileDraft(this.item);
+        if (this.item.type === 'custom') { this.customDraft = new CustomProfileDraft(this.item); }
+        else { this.draft = new ProfileDraft(this.item); }
         this.editing = true;
       } })
     }
@@ -37,9 +44,12 @@ export struct ProfileDetailsSheet {
     .height('100%')
     .bindSheet($$this.editing, this.Editor, {
       height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
-      onWillDismiss: (action: DismissSheetAction): void =>
-        confirmProfileEditorDismiss(this.getUIContext(), this.draft, (): void => action.dismiss()),
-      onDisappear: (): void => { this.draft = undefined; }
+      onWillDismiss: (action: DismissSheetAction): void => {
+        if (this.customDraft !== undefined) {
+          confirmCustomDismiss(this.getUIContext(), this.customDraft, (): void => action.dismiss());
+        } else { confirmProfileEditorDismiss(this.getUIContext(), this.draft, (): void => action.dismiss()); }
+      },
+      onDisappear: (): void => { this.draft = undefined; this.customDraft = undefined; }
     })
   }
 }

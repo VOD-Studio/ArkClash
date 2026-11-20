@@ -5,6 +5,8 @@ import { EmptyState } from '../../components/EmptyState';
 import { ListSource } from '../../components/ListSource';
 import { TabPage } from '../../components/TabPage';
 import { PAGE_GUTTER } from '../../components/Theme';
+import { confirmCustomDismiss, CustomProfileDraft } from './CustomProfileDraft';
+import { CustomProfileEditor } from './CustomProfileEditor';
 import { ProfileCard } from './ProfileCard';
 import { ProfileDetails } from './ProfileDetails';
 import { ProfileDraft } from './ProfileDraft';
@@ -32,6 +34,7 @@ export struct ProfilesPage {
   @Local adding: boolean = false;
   @Local editShown: boolean = false;
   @Local draft: ProfileDraft | undefined = undefined;
+  @Local customDraft: CustomProfileDraft | undefined = undefined;
   @Local sortShown: boolean = false;
   @Local resultShown: boolean = false;
   @Local result: ProfileBatchResult | undefined = undefined;
@@ -47,7 +50,7 @@ export struct ProfilesPage {
   private reportedApplyError: string = '';
   private pendingResult: boolean = false;
   private pendingResultError: string = '';
-  private addChoice: 'file' | 'link' | undefined = undefined;
+  private addChoice: 'file' | 'link' | 'custom' | undefined = undefined;
 
   private clockVisible(visible: boolean): void {
     this.clockInView = visible;
@@ -118,7 +121,11 @@ export struct ProfilesPage {
     if (this.visible && this.clockInView) { this.getUIContext().getPromptAction().showToast({ message: message }); }
   }
   private openAdd(): void { this.addShown = true; }
-  private openEdit(item: ProfileItem): void { this.draft = new ProfileDraft(item); this.editShown = true; }
+  private openEdit(item: ProfileItem): void {
+    if (item.type === 'custom') { this.customDraft = new CustomProfileDraft(item); }
+    else { this.draft = new ProfileDraft(item); }
+    this.editShown = true;
+  }
 
   private menus(): HdsNavigationMenuItemOptions[] {
     const menus: HdsNavigationMenuItemOptions[] = [];
@@ -146,6 +153,7 @@ export struct ProfilesPage {
     if (!this.visible) { return; }
     if (choice === 'file') { this.importLocal(); }
     else if (choice === 'link') { this.openAdd(); }
+    else if (choice === 'custom') { this.customDraft = new CustomProfileDraft(); this.editShown = true; }
   }
 
   private async importLocal(): Promise<void> {
@@ -312,7 +320,10 @@ export struct ProfilesPage {
 
   @Builder
   EditSheet() {
-    if (this.draft !== undefined) {
+    if (this.customDraft !== undefined) {
+      CustomProfileEditor({ store: this.store, draft: this.customDraft,
+        onClose: (): void => { this.editShown = false; } })
+    } else if (this.draft !== undefined) {
       ProfileEditor({ store: this.store, draft: this.draft, visible: this.visible && this.editShown, onSaved: (): void => {
         if (this.draft !== undefined) { this.draft.saving = false; }
         this.editShown = false;
@@ -322,7 +333,7 @@ export struct ProfilesPage {
   }
 
   @Builder
-  AddOption(label: Resource, icon: Resource, choice: 'file' | 'link') {
+  AddOption(label: Resource, icon: Resource, choice: 'file' | 'link' | 'custom') {
     Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.NORMAL, stateEffect: true }) {
       Row({ space: 12 }) {
         SymbolGlyph(icon).fontSize(24).fontColor([$r('sys.color.font_primary')])
@@ -340,6 +351,7 @@ export struct ProfilesPage {
     Column({ space: 8 }) {
       this.AddOption($r('app.string.profile_import_file'), $r('sys.symbol.doc_text'), 'file')
       this.AddOption($r('app.string.subscription_link'), $r('sys.symbol.link'), 'link')
+      this.AddOption($r('app.string.custom_create'), $r('sys.symbol.plus'), 'custom')
     }
     .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 24 })
   }
@@ -383,9 +395,12 @@ export struct ProfilesPage {
             .width('100%').height('100%')
             .bindSheet($$this.editShown, this.EditSheet(), {
               height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
-              onWillDismiss: (action: DismissSheetAction): void =>
-                confirmProfileEditorDismiss(this.getUIContext(), this.draft, (): void => action.dismiss()),
-              onDisappear: (): void => { this.draft = undefined; } })
+              onWillDismiss: (action: DismissSheetAction): void => {
+                if (this.customDraft !== undefined) {
+                  confirmCustomDismiss(this.getUIContext(), this.customDraft, (): void => action.dismiss());
+                } else { confirmProfileEditorDismiss(this.getUIContext(), this.draft, (): void => action.dismiss()); }
+              },
+              onDisappear: (): void => { this.draft = undefined; this.customDraft = undefined; } })
           }
           .width('100%').height('100%')
           .bindSheet($$this.detailShown, this.DetailSheet(), { title: { title: $r('app.string.profile_details_title') },

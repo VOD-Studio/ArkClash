@@ -21,6 +21,7 @@ export interface UpdateEnv {
 
 export interface ProfileCandidateChange {
   create?: ProfileRecord;
+  selectOnCreate?: boolean;
   subscription?: SubscriptionRecord;
   state?: SubscriptionState;
   expectedSubscription?: SubscriptionRecord;
@@ -150,7 +151,7 @@ export async function commitCandidate(env: UpdateEnv, profile: string, candidate
           if (change.subscription !== undefined) {
             latest.subscriptions.push(change.subscription);
           }
-          if (latest.current === '') {
+          if (latest.current === '' && change.selectOnCreate !== false) {
             latest.current = profile;
           }
         }
