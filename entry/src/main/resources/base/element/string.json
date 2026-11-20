@@ -1713,6 +1713,14 @@
       "value": "Could not read a QR code from the selected image."
     },
     {
+      "name": "profile_qr_share",
+      "value": "Subscription QR code"
+    },
+    {
+      "name": "profile_qr_share_error",
+      "value": "Could not generate a QR code. You can copy the link instead."
+    },
+    {
       "name": "profile_import_file",
       "value": "File"
     },

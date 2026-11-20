@@ -1693,6 +1693,14 @@
       "value": "无法从选中的图片读取二维码。"
     },
     {
+      "name": "profile_qr_share",
+      "value": "订阅二维码"
+    },
+    {
+      "name": "profile_qr_share_error",
+      "value": "无法生成二维码，可以直接复制链接。"
+    },
+    {
       "name": "profile_import_file",
       "value": "文件"
     },

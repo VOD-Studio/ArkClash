@@ -20,6 +20,7 @@ export struct ProfileCard {
   @Event onEdit: () => void = (): void => {};
   @Event onRemove: () => void = (): void => {};
   @Event onCopy: () => void = (): void => {};
+  @Event onShare: () => void = (): void => {};
   @Event onExport: () => void = (): void => {};
   @Event onUpdate: () => void = (): void => {};
   @Param extensionAvailable: boolean = false;
@@ -86,6 +87,7 @@ export struct ProfileCard {
       MenuItem({ content: $r('app.string.profile_details_title') }).onClick((): void => this.onDetails())
       if (this.item.isSubscription) {
         MenuItem({ content: $r('app.string.action_copy_link') }).onClick((): void => this.onCopy())
+        MenuItem({ content: $r('app.string.profile_qr_share') }).onClick((): void => this.onShare())
       }
       MenuItem({ content: $r('app.string.profile_export') }).onClick((): void => this.onExport())
     }

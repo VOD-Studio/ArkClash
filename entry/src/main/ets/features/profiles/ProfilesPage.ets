@@ -16,6 +16,7 @@ import { ProfileDraft } from './ProfileDraft';
 import { confirmProfileEditorDismiss, ProfileEditor } from './ProfileEditor';
 import { describeError } from './ProfileErrors';
 import { ProfileImportSheet } from './ProfileImportSheet';
+import { ProfileQrShare } from './ProfileQrShare';
 import { ProfileBatchResult, ProfileItem, ProfileStore } from './Profiles';
 import { ProfileResults } from './ProfileResults';
 import { ProfileSortSheet } from './ProfileSortSheet';
@@ -39,6 +40,8 @@ export struct ProfilesPage {
   @Local adding: boolean = false;
   @Local private scanningQr: boolean = false;
   @Local private addSource: string = '';
+  @Local private qrShareShown: boolean = false;
+  @Local private qrShareSource: string = '';
   @Local editShown: boolean = false;
   @Local draft: ProfileDraft | undefined = undefined;
   @Local customDraft: CustomProfileDraft | undefined = undefined;
@@ -235,9 +238,9 @@ export struct ProfilesPage {
     const failure = await this.store.export(item.id);
     if (failure !== undefined) { this.toast(describeError(failure)); }
   }
-  private async copyLink(item: ProfileItem): Promise<void> {
+  private async copyLink(source: string): Promise<void> {
     try {
-      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, item.url);
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, source);
       await pasteboard.getSystemPasteboard().setData(data);
       this.toast($r('app.string.copied'));
     } catch (e) { this.toast(describeError('io')); }
@@ -350,7 +353,8 @@ export struct ProfilesPage {
               applying: this.store.pending === item.id, running: this.store.coreReady && this.store.running === item.id,
               removable: this.store.canRemove(item.id), onSelect: (): void => { this.select(item); },
               onEdit: (): void => this.openEdit(item), onRemove: (): void => this.confirmRemove(item),
-              onCopy: (): void => { this.copyLink(item); }, onExport: (): void => { this.export(item); },
+              onCopy: (): void => { this.copyLink(item.url); }, onExport: (): void => { this.export(item); },
+              onShare: (): void => { this.qrShareSource = item.url; this.qrShareShown = true; },
               onUpdate: (): void => { this.update(item); },
               extensionAvailable: !this.pickerMode && item.type !== 'custom',
               onExtension: (): void => this.onExtension(item.id),
@@ -430,6 +434,11 @@ export struct ProfilesPage {
   }
 
   @Builder
+  ShareSheet() {
+    ProfileQrShare({ source: this.qrShareSource, onCopy: (): void => { this.copyLink(this.qrShareSource); } })
+  }
+
+  @Builder
   PageSheets() {
     Column() {
       Column() {
@@ -471,7 +480,15 @@ export struct ProfilesPage {
 
   build() {
     Column() {
-      Column() { this.PageSheets() }
+      Column() {
+        Column() { this.PageSheets() }
+          .width('100%').height('100%')
+          .bindSheet($$this.qrShareShown, this.ShareSheet(), {
+            title: { title: $r('app.string.profile_qr_share') }, height: SheetSize.FIT_CONTENT,
+            systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+            onDisappear: (): void => { this.qrShareSource = ''; }
+          })
+      }
       .width('100%').height('100%')
       .bindSheet($$this.addMenuShown, this.AddMenu(), {
         title: { title: $r('app.string.action_add') },
