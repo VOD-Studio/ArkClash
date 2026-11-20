@@ -24,6 +24,9 @@ export function describeError(error: string): ResourceStr {
     case 'proxy_link_invalid':
     case 'local_proxy_input': return $r('app.string.local_proxy_link');
     case 'local_proxy_core_unavailable': return $r('app.string.local_proxy_core_unavailable');
+    case 'qr_invalid': return $r('app.string.profile_err_import_link');
+    case 'qr_camera': return $r('app.string.profile_qr_camera_error');
+    case 'qr_photo': return $r('app.string.profile_qr_photo_error');
     case 'canceled': return $r('app.string.profile_err_canceled');
     case 'timeout': return $r('app.string.profile_err_timeout');
     case 'dns': return $r('app.string.profile_err_dns');

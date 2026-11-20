@@ -1697,6 +1697,22 @@
       "value": "Enter a valid subscription URL or proxy share link."
     },
     {
+      "name": "profile_qr_scan",
+      "value": "Scan QR code"
+    },
+    {
+      "name": "profile_qr_photo",
+      "value": "Choose QR code image"
+    },
+    {
+      "name": "profile_qr_camera_error",
+      "value": "Camera scanning is unavailable. Choose a QR code image to import."
+    },
+    {
+      "name": "profile_qr_photo_error",
+      "value": "Could not read a QR code from the selected image."
+    },
+    {
       "name": "profile_import_file",
       "value": "File"
     },

@@ -1,10 +1,13 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
+import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
+import { readProfileQrPhoto, scanProfileQr } from '../../client/ProfileQrScanner';
 import { EmptyState } from '../../components/EmptyState';
 import { ListSource } from '../../components/ListSource';
 import { TabPage } from '../../components/TabPage';
 import { PAGE_GUTTER } from '../../components/Theme';
+import { errorString } from '../../shared/profiles/Errors';
 import { confirmCustomDismiss, CustomProfileDraft } from './CustomProfileDraft';
 import { CustomProfileEditor } from './CustomProfileEditor';
 import { ProfileCard } from './ProfileCard';
@@ -16,6 +19,8 @@ import { ProfileImportSheet } from './ProfileImportSheet';
 import { ProfileBatchResult, ProfileItem, ProfileStore } from './Profiles';
 import { ProfileResults } from './ProfileResults';
 import { ProfileSortSheet } from './ProfileSortSheet';
+
+type ProfileAddChoice = 'file' | 'link' | 'custom' | 'camera' | 'photo';
 
 @ComponentV2
 export struct ProfilesPage {
@@ -32,6 +37,8 @@ export struct ProfilesPage {
   @Local addShown: boolean = false;
   @Local addMenuShown: boolean = false;
   @Local adding: boolean = false;
+  @Local private scanningQr: boolean = false;
+  @Local private addSource: string = '';
   @Local editShown: boolean = false;
   @Local draft: ProfileDraft | undefined = undefined;
   @Local customDraft: CustomProfileDraft | undefined = undefined;
@@ -50,7 +57,10 @@ export struct ProfilesPage {
   private reportedApplyError: string = '';
   private pendingResult: boolean = false;
   private pendingResultError: string = '';
-  private addChoice: 'file' | 'link' | 'custom' | undefined = undefined;
+  private addChoice: ProfileAddChoice | undefined = undefined;
+  private pendingQr: string = '';
+  private pendingQrError: string = '';
+  private mounted: boolean = false;
 
   private clockVisible(visible: boolean): void {
     this.clockInView = visible;
@@ -58,16 +68,18 @@ export struct ProfilesPage {
     if (visible && this.visible) {
       this.currentTime = Date.now();
       this.clockTimer = setInterval((): void => { this.currentTime = Date.now(); }, 60000);
+      this.showQrResult();
     }
     this.consumeApplyError();
   }
 
-  aboutToDisappear(): void { this.clockVisible(false); }
+  aboutToDisappear(): void { this.mounted = false; this.clockVisible(false); }
 
   @Monitor('visible')
   onVisibilityChange(): void { this.clockVisible(this.clockInView); }
 
   aboutToAppear(): void {
+    this.mounted = true;
     this.rows.replace(this.store.items);
   }
 
@@ -120,7 +132,10 @@ export struct ProfilesPage {
   private toast(message: ResourceStr): void {
     if (this.visible && this.clockInView) { this.getUIContext().getPromptAction().showToast({ message: message }); }
   }
-  private openAdd(): void { this.addShown = true; }
+  private openAdd(source: string = ''): void {
+    this.addSource = source;
+    this.addShown = true;
+  }
   private openEdit(item: ProfileItem): void {
     if (item.type === 'custom') { this.customDraft = new CustomProfileDraft(item); }
     else { this.draft = new ProfileDraft(item); }
@@ -138,7 +153,8 @@ export struct ProfilesPage {
         action: (): void => { this.sortShown = true; } } });
     }
     menus.push({ content: { label: $r('app.string.action_add'), icon: $r('sys.symbol.plus'),
-      isEnabled: this.store.loaded && this.store.loadError === '', action: (): void => this.showAddMenu() } });
+      isEnabled: this.store.loaded && this.store.loadError === '' && !this.scanningQr,
+      action: (): void => this.showAddMenu() } });
     return menus;
   }
 
@@ -154,6 +170,32 @@ export struct ProfilesPage {
     if (choice === 'file') { this.importLocal(); }
     else if (choice === 'link') { this.openAdd(); }
     else if (choice === 'custom') { this.customDraft = new CustomProfileDraft(); this.editShown = true; }
+    else if (choice === 'camera' || choice === 'photo') { this.importQr(choice === 'camera'); }
+  }
+
+  private async importQr(camera: boolean): Promise<void> {
+    if (this.scanningQr) { return; }
+    this.scanningQr = true;
+    try {
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const source = camera ? await scanProfileQr(context) : await readProfileQrPhoto();
+      if (this.mounted) { this.pendingQr = source ?? ''; }
+    } catch (error) {
+      if (this.mounted) { this.pendingQrError = errorString(error as Object); }
+    } finally {
+      this.scanningQr = false;
+      this.showQrResult();
+    }
+  }
+
+  private showQrResult(): void {
+    if (!this.mounted || !this.visible || !this.clockInView) { return; }
+    const source = this.pendingQr;
+    const failure = this.pendingQrError;
+    this.pendingQr = '';
+    this.pendingQrError = '';
+    if (source !== '') { this.openAdd(source); }
+    if (failure !== '') { this.toast(describeError(failure)); }
   }
 
   private async importLocal(): Promise<void> {
@@ -333,7 +375,7 @@ export struct ProfilesPage {
   }
 
   @Builder
-  AddOption(label: Resource, icon: Resource, choice: 'file' | 'link' | 'custom') {
+  AddOption(label: Resource, icon: Resource, choice: ProfileAddChoice) {
     Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.NORMAL, stateEffect: true }) {
       Row({ space: 12 }) {
         SymbolGlyph(icon).fontSize(24).fontColor([$r('sys.color.font_primary')])
@@ -351,6 +393,8 @@ export struct ProfilesPage {
     Column({ space: 8 }) {
       this.AddOption($r('app.string.profile_import_file'), $r('sys.symbol.doc_text'), 'file')
       this.AddOption($r('app.string.profile_import_link'), $r('sys.symbol.link'), 'link')
+      this.AddOption($r('app.string.profile_qr_scan'), $r('sys.symbol.qrcode'), 'camera')
+      this.AddOption($r('app.string.profile_qr_photo'), $r('sys.symbol.picture'), 'photo')
       this.AddOption($r('app.string.custom_create'), $r('sys.symbol.plus'), 'custom')
     }
     .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 24 })
@@ -358,7 +402,7 @@ export struct ProfilesPage {
 
   @Builder
   AddSheet() {
-    ProfileImportSheet({ store: this.store, onDone: (): void => {
+    ProfileImportSheet({ store: this.store, initialSource: this.addSource, onDone: (): void => {
       this.adding = false; this.addShown = false;
     }, onBusy: (busy: boolean): void => { this.adding = busy; },
       onClose: (): void => { if (!this.adding) { this.addShown = false; } } })
@@ -421,6 +465,7 @@ export struct ProfilesPage {
     .onVisibleAreaChange([0.0, 1.0], (visible: boolean, ratio: number): void => this.clockVisible(visible && ratio > 0))
     .bindSheet($$this.addShown, this.AddSheet(), {
       height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
+      onDisappear: (): void => { this.addSource = ''; },
       onWillDismiss: (action: DismissSheetAction): void => { if (!this.adding) { action.dismiss(); } } })
   }
 

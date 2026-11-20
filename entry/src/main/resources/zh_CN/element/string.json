@@ -1677,6 +1677,22 @@
       "value": "请输入有效的订阅地址或节点分享链接。"
     },
     {
+      "name": "profile_qr_scan",
+      "value": "扫码导入"
+    },
+    {
+      "name": "profile_qr_photo",
+      "value": "从相册识码"
+    },
+    {
+      "name": "profile_qr_camera_error",
+      "value": "无法使用相机扫码，可以从相册选择二维码图片。"
+    },
+    {
+      "name": "profile_qr_photo_error",
+      "value": "无法从选中的图片读取二维码。"
+    },
+    {
       "name": "profile_import_file",
       "value": "文件"
     },
