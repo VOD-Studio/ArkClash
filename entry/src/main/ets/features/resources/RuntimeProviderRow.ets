@@ -1,6 +1,5 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { formatUpdatedAgo } from '../../components/Format';
-import { uiResourceText } from '../../components/ResourceText';
 import { providerErrorText, RuntimeProviderRowModel } from './RuntimeProvidersStore';
 
 @ComponentV2
@@ -21,16 +20,11 @@ export struct RuntimeProviderRow {
     }
   }
 
-  private countText(): string {
-    const ui = this.getUIContext();
-    const base = uiResourceText(ui, this.item.kind === 'proxy' ?
-      $r('app.string.provider_proxy_count', this.item.count) :
-      $r('app.string.provider_rule_count', this.item.count));
-    if (this.item.kind === 'rule' && (this.item.behavior !== '' || this.item.format !== '')) {
-      const meta = [this.item.behavior, this.item.format].filter((part: string): boolean => part !== '').join(' · ');
-      return `${base} · ${meta}`;
+  private ruleMetaText(): string {
+    if (this.item.kind !== 'rule') {
+      return '';
     }
-    return base;
+    return [this.item.behavior, this.item.format].filter((part: string): boolean => part !== '').join(' · ');
   }
 
   private updatedText(): ResourceStr {
@@ -67,12 +61,25 @@ export struct RuntimeProviderRow {
         .alignItems(VerticalAlign.Center)
 
         Row({ space: 6 }) {
-          Text(this.countText())
+          Text(this.item.kind === 'proxy' ?
+            $r('app.string.provider_proxy_count', this.item.count) :
+            $r('app.string.provider_rule_count', this.item.count))
             .fontFamily(this.appStyle.fontFamily)
             .fontSize(13)
             .fontColor($r('sys.color.font_secondary'))
+            .fontFeature('"tnum" on')
             .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (this.ruleMetaText() !== '') {
+            Text('·')
+              .fontFamily(this.appStyle.fontFamily)
+              .fontSize(13)
+              .fontColor($r('sys.color.font_tertiary'))
+            Text(this.ruleMetaText())
+              .fontFamily(this.appStyle.fontFamily)
+              .fontSize(13)
+              .fontColor($r('sys.color.font_secondary'))
+              .maxLines(1)
+          }
           Text('·')
             .fontFamily(this.appStyle.fontFamily)
             .fontSize(13)
@@ -83,6 +90,7 @@ export struct RuntimeProviderRow {
             .fontColor($r('sys.color.font_secondary'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
         }
         .width('100%')
 
