@@ -1000,3 +1000,193 @@ test('旧页面受理失败不能清掉新页面提交状态或回放Toast', asy
   assert.equal(page.submitting, true);
   assert.deepEqual(notices, []);
 }));
+
+function runtimeProvidersHarness(dir) {
+  const harness = createResourcesHarness(dir);
+  const sockets = [];
+  const calls = [];
+  const server = {
+    get: async () => JSON.stringify({ bootId: 'boot-1', configRevision: 1, profile: 'p1', revision: 1, items: [] }),
+    update: async () => JSON.stringify({ bootId: 'boot-1', configRevision: 1, profile: 'p1', revision: 2, items: [] }),
+    replace: async () => JSON.stringify({ bootId: 'boot-1', configRevision: 1, profile: 'p1', revision: 2, items: [] })
+  };
+  class FakeControllerSocket {
+    constructor(socketPath, onMessage) {
+      this.path = socketPath;
+      this.onMessage = onMessage;
+      this.active = false;
+      this.started = 0;
+      this.stopped = 0;
+      this.failed = '';
+      sockets.push(this);
+    }
+    start() { this.active = true; this.started++; }
+    stop() { this.active = false; this.stopped++; }
+    fail(reason) { this.active = false; this.failed = reason; }
+    emit(snapshot) { this.onMessage(JSON.stringify({ type: 'providers', snapshot })); }
+  }
+  const bindings = {
+    '@kit.NetworkKit': { http: { RequestMethod: { GET: 'GET', POST: 'POST' } } },
+    '../../client/ControllerSocket': { ControllerSocket: FakeControllerSocket },
+    './Controller': {
+      async call(_dir, method, reqPath, body) {
+        calls.push({ method, path: reqPath, body: body ? JSON.parse(body) : undefined });
+        if (reqPath === '/arkclash/providers') return await server.get();
+        if (reqPath === '/arkclash/providers/update') return await server.update(JSON.parse(body));
+        if (reqPath === '/arkclash/providers/replace') return await server.replace(JSON.parse(body));
+        throw new Error(`unexpected controller path ${reqPath}`);
+      }
+    },
+    '../shared/profiles/Store': {
+      async ensureProfilesDir(filesDir) { await fsp.mkdir(path.join(filesDir, 'profile-work'), { recursive: true }); },
+      newId(prefix) { return `${prefix}1`; },
+      profileWorkDir(filesDir) { return path.join(filesDir, 'profile-work'); },
+      async removeProfileFile(file) { await fsp.rm(file, { force: true }); }
+    }
+  };
+  // 允许 copyFile 在临时目录里执行真实文件复制。
+  const baseLoad = harness.load;
+  const origFileIo = bindings;
+  const storeMod = baseLoad('features/resources/RuntimeProvidersStore.ets', {
+    ...origFileIo,
+    '@kit.CoreFileKit': {
+      fileIo: {
+        OpenMode: { READ_ONLY: fs.constants.O_RDONLY },
+        async open(uri) {
+          const handle = await fsp.open(uri, fs.constants.O_RDONLY);
+          return { fd: handle.fd, handle };
+        },
+        async stat(fd) {
+          const st = fs.fstatSync(fd);
+          return { size: st.size };
+        },
+        async copyFile(srcFd, dstPath) {
+          const buf = fs.readFileSync(srcFd);
+          await fsp.writeFile(dstPath, buf);
+        },
+        async close(file) { await file.handle.close(); }
+      }
+    }
+  });
+  const store = new storeMod.RuntimeProvidersStore();
+  return { store, sockets, calls, server, context: harness.context };
+}
+
+test('运行中 Provider 明确区分同名 proxy 与 rule，离页退订且按单项互斥与配置代次保护', async () => sandbox(async dir => {
+  const h = runtimeProvidersHarness(dir);
+  const initialSnap = {
+    bootId: 'boot-1', configRevision: 1, profile: 'p1', revision: 1,
+    items: [
+      { kind: 'proxy', name: 'shared', vehicleType: 'http', count: 3, updatedAt: 1000, updatable: true, replaceable: true, phase: 'idle', outcome: 'none', error: '' },
+      { kind: 'rule', name: 'shared', vehicleType: 'http', count: 12, updatedAt: 2000, behavior: 'domain', format: 'yaml', updatable: true, replaceable: true, phase: 'idle', outcome: 'none', error: '' }
+    ]
+  };
+  h.server.get = async () => JSON.stringify(initialSnap);
+
+  // 未就绪时不订阅。
+  h.store.load(h.context);
+  h.store.setVisible(true);
+  assert.equal(h.sockets.length, 0);
+
+  // 核心就绪且可见后才订阅，并区分同名 proxy 与 rule。
+  h.store.setConnection(true, true, 'boot-1', 1);
+  await untilResource(() => h.store.loaded);
+  assert.equal(h.sockets.length, 1);
+  assert.equal(h.sockets[0].path, '/arkclash/providers/events');
+  assert.equal(h.sockets[0].active, true);
+  assert.equal(h.store.proxyItems.length, 1);
+  assert.equal(h.store.ruleItems.length, 1);
+  assert.equal(h.store.proxyItems[0].key, 'proxy:shared');
+  assert.equal(h.store.ruleItems[0].key, 'rule:shared');
+  assert.equal(h.store.ruleItems[0].behavior, 'domain');
+  assert.equal(h.store.ruleItems[0].format, 'yaml');
+
+  // 单项互斥：同一个 (proxy, shared) 并发刷新只发出 1 次请求，同时 (rule, shared) 可并行刷新。
+  const gate = deferredResource();
+  let proxyUpdateCalls = 0;
+  let ruleUpdateCalls = 0;
+  h.server.update = async body => {
+    if (body.kind === 'proxy') {
+      proxyUpdateCalls++;
+      await gate.promise;
+      return JSON.stringify({
+        bootId: 'boot-1', configRevision: 1, profile: 'p1', revision: 3,
+        items: [
+          { ...initialSnap.items[0], count: 5, outcome: 'updated' },
+          initialSnap.items[1]
+        ]
+      });
+    }
+    ruleUpdateCalls++;
+    return JSON.stringify({
+      bootId: 'boot-1', configRevision: 1, profile: 'p1', revision: 2,
+      items: [
+        initialSnap.items[0],
+        { ...initialSnap.items[1], count: 18, outcome: 'updated' }
+      ]
+    });
+  };
+  const firstProxyRefresh = h.store.refreshProvider('proxy', 'shared');
+  await untilResource(() => proxyUpdateCalls === 1);
+  await h.store.refreshProvider('proxy', 'shared');
+  assert.equal(proxyUpdateCalls, 1);
+  await h.store.refreshProvider('rule', 'shared');
+  assert.equal(ruleUpdateCalls, 1);
+  assert.equal(h.store.ruleItems[0].count, 18);
+
+  // 操作中切换配置（configRevision 变更）-> 旧操作返回结果不得污染新配置或弹出过期 Toast。
+  h.server.get = async () => JSON.stringify({ bootId: 'boot-1', configRevision: 2, profile: 'p2', revision: 1, items: [] });
+  h.store.setConnection(true, true, 'boot-1', 2);
+  await untilResource(() => h.store.proxyItems.length === 0 && h.store.ruleItems.length === 0);
+  const serialBefore = h.store.noticeSerial;
+  gate.resolve();
+  await firstProxyRefresh;
+  assert.equal(h.store.proxyItems.length, 0);
+  assert.equal(h.store.noticeSerial, serialBefore);
+
+  // 离开页面立即退订 WebSocket。
+  h.store.setVisible(false);
+  assert.equal(h.sockets.at(-1).active, false);
+  assert.equal(h.sockets.at(-1).stopped, 1);
+}));
+
+test('本地文件替换暂存并自动清理候选文件，失败时保留安全错误码', async () => sandbox(async dir => {
+  const h = runtimeProvidersHarness(dir);
+  const snap = {
+    bootId: 'boot-2', configRevision: 1, profile: 'p1', revision: 1,
+    items: [
+      { kind: 'rule', name: 'local-r', vehicleType: 'file', count: 2, updatedAt: 1000, behavior: 'domain', format: 'yaml', updatable: false, replaceable: true, phase: 'idle', outcome: 'none', error: '' }
+    ]
+  };
+  h.server.get = async () => JSON.stringify(snap);
+  h.store.load(h.context);
+  h.store.setVisible(true);
+  h.store.setConnection(true, false, 'boot-2', 1);
+  await untilResource(() => h.store.loaded);
+
+  const localSource = path.join(dir, 'picked-rules.yaml');
+  await fsp.writeFile(localSource, "payload:\n  - 'ok.example.test'\n");
+  let stagedPath = '';
+  h.server.replace = async body => {
+    stagedPath = body.candidate;
+    assert.ok(fs.existsSync(stagedPath), 'replacement candidate should be staged before core call');
+    return JSON.stringify({
+      bootId: 'boot-2', configRevision: 1, profile: 'p1', revision: 2,
+      items: [{ ...snap.items[0], count: 1, outcome: 'updated' }]
+    });
+  };
+  await h.store.replaceProvider('rule', 'local-r', localSource);
+  assert.equal(fs.existsSync(stagedPath), false, 'staged candidate must be cleaned up');
+  assert.equal(h.store.ruleItems[0].count, 1);
+  assert.equal(h.store.notice?.kind, 'replaced');
+
+  // 替换内容校验失败时展示脱敏错误码且自动清理暂存文件。
+  h.server.replace = async body => {
+    stagedPath = body.candidate;
+    throw new Error('provider_invalid_content');
+  };
+  await h.store.replaceProvider('rule', 'local-r', localSource);
+  assert.equal(fs.existsSync(stagedPath), false);
+  assert.equal(h.store.ruleItems[0].error, 'provider_invalid_content');
+  assert.equal(h.store.notice?.kind, 'error');
+}));

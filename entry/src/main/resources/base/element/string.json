@@ -4587,6 +4587,126 @@
     {
       "name": "profile_preview_err_build",
       "value": "Could not build the runtime configuration"
+    },
+    {
+      "name": "provider_section_title",
+      "value": "Runtime Providers"
+    },
+    {
+      "name": "provider_proxy_section",
+      "value": "Proxy Providers"
+    },
+    {
+      "name": "provider_rule_section",
+      "value": "Rule Providers"
+    },
+    {
+      "name": "provider_vehicle_http",
+      "value": "HTTP"
+    },
+    {
+      "name": "provider_vehicle_file",
+      "value": "File"
+    },
+    {
+      "name": "provider_vehicle_inline",
+      "value": "Inline"
+    },
+    {
+      "name": "provider_proxy_count",
+      "value": "%d nodes"
+    },
+    {
+      "name": "provider_rule_count",
+      "value": "%d rules"
+    },
+    {
+      "name": "provider_never_updated",
+      "value": "Not updated"
+    },
+    {
+      "name": "provider_updating",
+      "value": "Updating provider"
+    },
+    {
+      "name": "provider_loading",
+      "value": "Loading runtime providers"
+    },
+    {
+      "name": "provider_not_ready_title",
+      "value": "Core not ready"
+    },
+    {
+      "name": "provider_not_ready_hint",
+      "value": "Start the core or connect to inspect and manage running providers."
+    },
+    {
+      "name": "provider_empty_title",
+      "value": "No providers in running profile"
+    },
+    {
+      "name": "provider_empty_hint",
+      "value": "Proxy and rule providers declared in the active profile will appear here."
+    },
+    {
+      "name": "provider_connect_to_refresh",
+      "value": "Connect to refresh remote HTTP providers. Local file replacement is available now."
+    },
+    {
+      "name": "provider_replace_file",
+      "value": "Replace from local file"
+    },
+    {
+      "name": "provider_updated",
+      "value": "Updated %s"
+    },
+    {
+      "name": "provider_unchanged",
+      "value": "%s is already up to date"
+    },
+    {
+      "name": "provider_replaced",
+      "value": "Replaced %s"
+    },
+    {
+      "name": "provider_err_unavailable",
+      "value": "Running core is unavailable"
+    },
+    {
+      "name": "provider_err_stale_config",
+      "value": "Active profile changed during the operation"
+    },
+    {
+      "name": "provider_err_not_found",
+      "value": "Provider no longer exists in the running profile"
+    },
+    {
+      "name": "provider_err_not_updatable",
+      "value": "This provider does not support remote refresh"
+    },
+    {
+      "name": "provider_err_not_replaceable",
+      "value": "Inline providers cannot be replaced from a file"
+    },
+    {
+      "name": "provider_err_busy",
+      "value": "This provider is already updating"
+    },
+    {
+      "name": "provider_err_invalid_content",
+      "value": "File format or content does not match this provider"
+    },
+    {
+      "name": "provider_err_timeout",
+      "value": "Provider update timed out"
+    },
+    {
+      "name": "provider_err_io",
+      "value": "Could not read or write the provider file"
+    },
+    {
+      "name": "provider_err_update_failed",
+      "value": "Provider update failed; previous content kept"
     }
   ]
 }

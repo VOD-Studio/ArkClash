@@ -4567,6 +4567,126 @@
     {
       "name": "profile_preview_err_build",
       "value": "运行时配置构建失败"
+    },
+    {
+      "name": "provider_section_title",
+      "value": "运行中 Provider"
+    },
+    {
+      "name": "provider_proxy_section",
+      "value": "代理集合（Proxy Providers）"
+    },
+    {
+      "name": "provider_rule_section",
+      "value": "规则集合（Rule Providers）"
+    },
+    {
+      "name": "provider_vehicle_http",
+      "value": "HTTP"
+    },
+    {
+      "name": "provider_vehicle_file",
+      "value": "本地文件"
+    },
+    {
+      "name": "provider_vehicle_inline",
+      "value": "内联"
+    },
+    {
+      "name": "provider_proxy_count",
+      "value": "%d 个节点"
+    },
+    {
+      "name": "provider_rule_count",
+      "value": "%d 条规则"
+    },
+    {
+      "name": "provider_never_updated",
+      "value": "尚未更新"
+    },
+    {
+      "name": "provider_updating",
+      "value": "正在更新 Provider"
+    },
+    {
+      "name": "provider_loading",
+      "value": "正在读取运行中 Provider"
+    },
+    {
+      "name": "provider_not_ready_title",
+      "value": "内核尚未就绪"
+    },
+    {
+      "name": "provider_not_ready_hint",
+      "value": "启动内核或连接后，可在此查看并管理当前运行配置的 Provider。"
+    },
+    {
+      "name": "provider_empty_title",
+      "value": "当前配置没有 Provider"
+    },
+    {
+      "name": "provider_empty_hint",
+      "value": "运行配置中定义的代理集合与规则集合将显示在这里。"
+    },
+    {
+      "name": "provider_connect_to_refresh",
+      "value": "连接代理后可刷新远程 HTTP Provider，当前可执行本地文件替换。"
+    },
+    {
+      "name": "provider_replace_file",
+      "value": "从本地文件替换"
+    },
+    {
+      "name": "provider_updated",
+      "value": "已更新 %s"
+    },
+    {
+      "name": "provider_unchanged",
+      "value": "%s 已是最新"
+    },
+    {
+      "name": "provider_replaced",
+      "value": "已替换 %s"
+    },
+    {
+      "name": "provider_err_unavailable",
+      "value": "运行中的内核不可用"
+    },
+    {
+      "name": "provider_err_stale_config",
+      "value": "操作期间运行配置已切换"
+    },
+    {
+      "name": "provider_err_not_found",
+      "value": "当前配置中已不存在该 Provider"
+    },
+    {
+      "name": "provider_err_not_updatable",
+      "value": "该 Provider 不支持远程刷新"
+    },
+    {
+      "name": "provider_err_not_replaceable",
+      "value": "内联 Provider 不支持本地文件替换"
+    },
+    {
+      "name": "provider_err_busy",
+      "value": "该 Provider 正在更新中"
+    },
+    {
+      "name": "provider_err_invalid_content",
+      "value": "文件内容或格式与该 Provider 不匹配"
+    },
+    {
+      "name": "provider_err_timeout",
+      "value": "Provider 更新超时"
+    },
+    {
+      "name": "provider_err_io",
+      "value": "无法读取或写入 Provider 文件"
+    },
+    {
+      "name": "provider_err_update_failed",
+      "value": "Provider 更新失败，已保留原有效资源"
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
+import { pickDocumentFile } from '../../client/DocumentPicker';
 import { fetchConfigScript } from '../../client/ScriptDownloads';
 import { applyConfigScript } from '../../shared/profiles/ScriptApply';
 import { ConfigScript, readConfigScripts } from '../../shared/profiles/Scripts';
@@ -15,6 +16,8 @@ import { GEO_DEFAULT_URLS, GEO_RESOURCE_IDS, GeoResourceId, GeoResourceStatus, G
 import { GeoEditorDraft, GeoResourceEditor, geoErrorText } from './GeoResourceEditor';
 import { GeoResourceRow } from './GeoResourceRow';
 import { GeoResourceItem, ResourcesStore } from './Resources';
+import { RuntimeProviderRow } from './RuntimeProviderRow';
+import { providerErrorText, RuntimeProviderRowModel, RuntimeProvidersStore } from './RuntimeProvidersStore';
 
 @ComponentV2
 export struct ResourcesPage {
@@ -24,6 +27,7 @@ export struct ResourcesPage {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Local store: ResourcesStore = new ResourcesStore();
+  @Local providers: RuntimeProvidersStore = new RuntimeProvidersStore();
   @Local conn: Connection = connection;
   @Local shown: boolean = false;
   @Local editing: boolean = false;
@@ -35,6 +39,7 @@ export struct ResourcesPage {
   private active: boolean = false;
   private generation: number = 0;
   private consumedNotice: number = 0;
+  private consumedProviderNotice: number = 0;
   private actionOpen: boolean = false;
 
   aboutToDisappear(): void {
@@ -43,11 +48,14 @@ export struct ResourcesPage {
   }
 
   @Monitor('foreground', 'conn.state', 'conn.forward', 'conn.bootId', 'conn.tunAttached',
-    'conn.listenersOpen', 'conn.sessionMode')
+    'conn.listenersOpen', 'conn.sessionMode', 'conn.coreReady', 'conn.configRevision')
   syncLifecycle(): void {
     this.store.setConnection(this.conn.connected && !this.conn.busy, this.conn.bootId);
+    this.providers.setConnection(this.conn.coreReady && !this.conn.busy, this.conn.connected && !this.conn.busy,
+      this.conn.bootId, this.conn.configRevision);
     const visible = this.shown && this.foreground;
     this.store.setVisible(visible);
+    this.providers.setVisible(visible);
     if (visible === this.active) { return; }
     this.active = visible;
     ++this.generation;
@@ -57,6 +65,7 @@ export struct ResourcesPage {
       this.failuresShown = false;
       this.failures = [];
       this.store.clearNotice();
+      this.providers.clearNotice();
       this.automaticDraft = undefined;
       this.submitting = false;
     }
@@ -64,6 +73,7 @@ export struct ResourcesPage {
 
   private async restore(generation: number): Promise<void> {
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.providers.load(context);
     this.loadScripts(context, generation);
     try {
       await this.store.load(context);
@@ -393,6 +403,163 @@ export struct ResourcesPage {
     .width('100%')
   }
 
+  @Monitor('providers.noticeSerial')
+  consumeProviderNotice(): void {
+    if (this.consumedProviderNotice === this.providers.noticeSerial) { return; }
+    this.consumedProviderNotice = this.providers.noticeSerial;
+    const notice = this.providers.notice;
+    this.providers.clearNotice();
+    if (!this.active || notice === undefined) { return; }
+    if (notice.kind === 'updated') {
+      this.toast($r('app.string.provider_updated', notice.name));
+    } else if (notice.kind === 'unchanged') {
+      this.toast($r('app.string.provider_unchanged', notice.name));
+    } else if (notice.kind === 'replaced') {
+      this.toast($r('app.string.provider_replaced', notice.name));
+    } else {
+      this.toast(providerErrorText(notice.error));
+    }
+  }
+
+  private async pickAndReplaceProvider(item: RuntimeProviderRowModel): Promise<void> {
+    if (!this.active || !this.providers.canReplaceLocal || this.providers.isBusy(item.kind, item.name)) { return; }
+    const generation = this.generation;
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    let uri: string | undefined;
+    try {
+      uri = await pickDocumentFile(context);
+    } catch (_error) {
+      if (this.isCurrent(generation)) { this.toast($r('app.string.provider_err_io')); }
+      return;
+    }
+    if (!this.isCurrent(generation) || uri === undefined || uri === '') { return; }
+    await this.providers.replaceProvider(item.kind, item.name, uri);
+  }
+
+  private providerActions(item: RuntimeProviderRowModel): void {
+    if (!this.active || this.actionOpen || this.providers.isBusy(item.kind, item.name)) { return; }
+    const generation = this.generation;
+    let choice = '';
+    const sheets: SheetInfo[] = [];
+    if (item.updatable && this.providers.canRefreshRemote) {
+      sheets.push({ title: $r('app.string.action_update'), action: (): void => { choice = 'refresh'; } });
+    }
+    if (item.replaceable && this.providers.canReplaceLocal) {
+      sheets.push({ title: $r('app.string.provider_replace_file'), action: (): void => { choice = 'replace'; } });
+    }
+    if (sheets.length === 0) { return; }
+    this.actionOpen = true;
+    this.getUIContext().showActionSheet({
+      title: item.name,
+      message: item.kind === 'proxy' ? $r('app.string.provider_proxy_section') : $r('app.string.provider_rule_section'),
+      sheets: sheets,
+      alignment: DialogAlignment.Bottom,
+      systemMaterial: this.appStyle.sheetMaterial(),
+      autoCancel: true,
+      confirm: { value: $r('app.string.action_cancel'), action: (): void => {} },
+      onDidDisappear: (): void => {
+        this.actionOpen = false;
+        if (!this.isCurrent(generation)) { return; }
+        if (choice === 'refresh') {
+          this.providers.refreshProvider(item.kind, item.name);
+        } else if (choice === 'replace') {
+          this.pickAndReplaceProvider(item);
+        }
+      }
+    });
+  }
+
+  @Builder
+  private RuntimeProviderList(title: Resource, items: RuntimeProviderRowModel[]) {
+    if (items.length > 0) {
+      Text(title).fontFamily(this.appStyle.fontFamily).fontSize(14).fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_secondary')).width('100%').padding({ left: 16, right: 16 })
+      Column() {
+        ForEach(items, (item: RuntimeProviderRowModel, index: number) => {
+          if (index > 0) {
+            Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 16 })
+          }
+          RuntimeProviderRow({
+            item: item,
+            now: this.store.now,
+            canRefresh: this.providers.canRefreshRemote,
+            canReplace: this.providers.canReplaceLocal,
+            onRefresh: (): void => { this.providers.refreshProvider(item.kind, item.name); },
+            onActions: (): void => { this.providerActions(item); }
+          })
+        }, (item: RuntimeProviderRowModel): string => item.key)
+      }
+      .width('100%')
+      .borderRadius(22)
+      .clip(true)
+      .backgroundColor(this.appStyle.palette.cardBackground)
+    }
+  }
+
+  @Builder
+  private RuntimeProvidersSection() {
+    if (!this.providers.ready) {
+      Text($r('app.string.provider_section_title')).fontFamily(this.appStyle.fontFamily).fontSize(14)
+        .fontWeight(FontWeight.Medium).fontColor($r('sys.color.font_secondary')).width('100%')
+        .padding({ left: 16, right: 16 })
+      Column({ space: 4 }) {
+        Text($r('app.string.provider_not_ready_title')).fontFamily(this.appStyle.fontFamily).fontSize(15)
+          .fontColor($r('sys.color.font_primary'))
+        Text($r('app.string.provider_not_ready_hint')).fontFamily(this.appStyle.fontFamily).fontSize(13)
+          .fontColor($r('sys.color.font_secondary'))
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+      .borderRadius(22)
+      .backgroundColor(this.appStyle.palette.cardBackground)
+    } else if (!this.providers.loaded) {
+      Text($r('app.string.provider_section_title')).fontFamily(this.appStyle.fontFamily).fontSize(14)
+        .fontWeight(FontWeight.Medium).fontColor($r('sys.color.font_secondary')).width('100%')
+        .padding({ left: 16, right: 16 })
+      Row({ space: 10 }) {
+        LoadingProgress().width(20).height(20).color($r('sys.color.font_secondary'))
+        Text($r('app.string.provider_loading')).fontFamily(this.appStyle.fontFamily).fontSize(14)
+          .fontColor($r('sys.color.font_secondary'))
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+      .borderRadius(22)
+      .backgroundColor(this.appStyle.palette.cardBackground)
+    } else if (this.providers.error !== '') {
+      Text($r('app.string.provider_section_title')).fontFamily(this.appStyle.fontFamily).fontSize(14)
+        .fontWeight(FontWeight.Medium).fontColor($r('sys.color.font_secondary')).width('100%')
+        .padding({ left: 16, right: 16 })
+      Text(providerErrorText(this.providers.error)).fontFamily(this.appStyle.fontFamily).fontSize(13)
+        .fontColor($r('app.color.status_error')).width('100%')
+        .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+        .borderRadius(22)
+        .backgroundColor(this.appStyle.palette.cardBackground)
+    } else if (!this.providers.hasProviders) {
+      Text($r('app.string.provider_section_title')).fontFamily(this.appStyle.fontFamily).fontSize(14)
+        .fontWeight(FontWeight.Medium).fontColor($r('sys.color.font_secondary')).width('100%')
+        .padding({ left: 16, right: 16 })
+      Column({ space: 4 }) {
+        Text($r('app.string.provider_empty_title')).fontFamily(this.appStyle.fontFamily).fontSize(15)
+          .fontColor($r('sys.color.font_primary'))
+        Text($r('app.string.provider_empty_hint')).fontFamily(this.appStyle.fontFamily).fontSize(13)
+          .fontColor($r('sys.color.font_secondary'))
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+      .borderRadius(22)
+      .backgroundColor(this.appStyle.palette.cardBackground)
+    } else {
+      this.RuntimeProviderList($r('app.string.provider_proxy_section'), this.providers.proxyItems)
+      this.RuntimeProviderList($r('app.string.provider_rule_section'), this.providers.ruleItems)
+      if (!this.providers.connected) {
+        Text($r('app.string.provider_connect_to_refresh')).fontFamily(this.appStyle.fontFamily).fontSize(13)
+          .fontColor($r('sys.color.font_secondary')).width('100%').padding({ left: 16, right: 16 })
+      }
+    }
+  }
+
   @Builder
   ScriptResources() {
     if (this.remoteScripts.length > 0) {
@@ -487,6 +654,7 @@ export struct ResourcesPage {
               .clip(true)
               .backgroundColor(this.appStyle.palette.cardBackground)
             }
+            this.RuntimeProvidersSection()
             this.ScriptResources()
             if (this.store.settingsError !== '') {
               Column({ space: 12 }) {
