@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -43,6 +45,7 @@ type startOptions struct {
 	ProfileRules    profileAddedRules   `json:"-"`
 	StoreGeneration string              `json:"-"`
 	CustomRules     bool                `json:"-"`
+	ContentHash     string              `json:"-"`
 }
 
 var (
@@ -112,7 +115,7 @@ func start(opts startOptions) error {
 	constant.SetConfig(opts.ConfigPath)
 
 	var nextInbound inboundSettings
-	cfg, err := parseConfigWithInbound(opts.ConfigPath, opts, &nextInbound)
+	cfg, err := parseConfigWithInboundHash(opts.ConfigPath, &opts, &nextInbound)
 	if err != nil {
 		return err
 	}
@@ -159,16 +162,23 @@ func start(opts startOptions) error {
 	return nil
 }
 
+var errCustomTunUnsupported = errors.New("custom TUN listeners are not supported")
+
 func parseConfig(path string, opts startOptions) (*config.Config, error) {
 	return parseConfigWithInbound(path, opts, nil)
 }
 
 func parseConfigWithInbound(path string, opts startOptions, settings *inboundSettings) (*config.Config, error) {
-	rawCfg, err := buildRawConfig(context.Background(), path, opts)
+	return parseConfigWithInboundHash(path, &opts, settings)
+}
+
+func parseConfigWithInboundHash(path string, opts *startOptions, settings *inboundSettings) (*config.Config, error) {
+	rawCfg, hash, err := buildRawConfigWithHash(context.Background(), path, *opts)
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := prepareRawConfig(rawCfg, opts, settings)
+	opts.ContentHash = hash
+	cfg, err := prepareRawConfig(rawCfg, *opts, settings)
 	if err != nil && opts.Script.enabled() && !errors.Is(err, errDNSProxyServersRequired) &&
 		!errors.Is(err, errAddedRulesMatchTarget) {
 		return nil, errScriptConfig
@@ -177,44 +187,61 @@ func parseConfigWithInbound(path string, opts startOptions, settings *inboundSet
 }
 
 func buildRawConfig(ctx context.Context, path string, opts startOptions) (*config.RawConfig, error) {
+	rawCfg, _, err := buildRawConfigWithHash(ctx, path, opts)
+	return rawCfg, err
+}
+
+func buildRawConfigWithHash(ctx context.Context, path string, opts startOptions) (*config.RawConfig, string, error) {
 	if path == "" {
 		if opts.Profile != "" {
-			return nil, errors.New("selected profile requires a configuration path")
+			return nil, "", errors.New("selected profile requires a configuration path")
 		}
-		return config.DefaultRawConfig(), nil
+		return config.DefaultRawConfig(), "", nil
 	}
 	buf, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if len(buf) == 0 {
-		return nil, errors.New("selected configuration is empty")
+		return nil, "", errors.New("selected configuration is empty")
 	}
+	sum := sha256.Sum256(buf)
+	hash := hex.EncodeToString(sum[:])
 	if opts.Script.enabled() {
-		return scriptRawConfig(ctx, buf, opts.Script)
+		rawCfg, err := scriptRawConfig(ctx, buf, opts.Script)
+		return rawCfg, hash, err
 	}
-	return config.UnmarshalRawConfig(buf)
+	rawCfg, err := config.UnmarshalRawConfig(buf)
+	return rawCfg, hash, err
 }
 
-func prepareRawConfig(rawCfg *config.RawConfig, opts startOptions, settings *inboundSettings) (*config.Config, error) {
+// composeRawConfig 组装实际交给 mihomo 的原始配置；运行加载与运行时预览共用同一套规则。
+func composeRawConfig(rawCfg *config.RawConfig, opts startOptions) error {
 	if opts.Profile != "" && !opts.CustomRules {
 		rules := opts.AddedRules.effective(opts.ProfileRules)
 		if err := prependAddedRules(rawCfg, rules, opts.ProfileRules.MatchTarget, opts.ProfileRules.ExitTargets); err != nil {
-			return nil, err
+			return err
 		}
 		if err := opts.RuleSets.attach(rawCfg, opts.HomeDir, rules); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	applyOverrides(rawCfg, opts)
 	if opts.Profile != "" && opts.DNS.Entries.missingProxyServers(&rawCfg.DNS) {
-		return nil, errDNSProxyServersRequired
+		return errDNSProxyServersRequired
 	}
 	// 自定义 TUN 不经过平台 fd 所有权，不能让订阅绕过唯一的系统 VPN。
 	for _, mapping := range rawCfg.Listeners {
 		if kind, _ := mapping["type"].(string); kind == "tun" {
-			return nil, errors.New("custom TUN listeners are not supported")
+			return errCustomTunUnsupported
 		}
+	}
+	return nil
+}
+
+func prepareRawConfig(rawCfg *config.RawConfig, opts startOptions, settings *inboundSettings) (*config.Config, error) {
+	if err := composeRawConfig(rawCfg, opts); err != nil {
+		return nil, err
 	}
 	// 配置解析可能初始化缺失的 Geo，来源必须先固定为页面设置。
 	setGeoURLs(opts.Geo)
@@ -268,7 +295,7 @@ func reload(path, profile string, expectedProfile *string) error {
 		return err
 	}
 	var nextInbound inboundSettings
-	cfg, err := parseConfigWithInbound(path, next, &nextInbound)
+	cfg, err := parseConfigWithInboundHash(path, &next, &nextInbound)
 	if err != nil {
 		return err
 	}

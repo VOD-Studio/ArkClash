@@ -183,7 +183,7 @@ func applyBackup(req backupApplyRequest) error {
 		}
 	}
 	var inbound inboundSettings
-	cfg, err := parseConfigWithInbound(next.ConfigPath, next, &inbound)
+	cfg, err := parseConfigWithInboundHash(next.ConfigPath, &next, &inbound)
 	if err != nil {
 		return err
 	}

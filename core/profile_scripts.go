@@ -319,11 +319,11 @@ func applyProfileScript(ctx context.Context, request scriptApplyRequest) error {
 	}
 	next.Script = selection
 	path := next.ConfigPath
-	raw, err := buildRawConfig(ctx, path, next)
+	raw, hash, err := buildRawConfigWithHash(ctx, path, next)
 	if errors.Is(err, os.ErrNotExist) {
 		// 更新成功后，候选文件已原子改名成配置的固定路径。
 		path = filepath.Join(next.HomeDir, "profiles", request.Profile+".yaml")
-		raw, err = buildRawConfig(ctx, path, next)
+		raw, hash, err = buildRawConfigWithHash(ctx, path, next)
 	}
 	if err != nil {
 		if scriptError := new(script.Error); errors.As(err, &scriptError) {
@@ -353,7 +353,7 @@ func applyProfileScript(ctx context.Context, request scriptApplyRequest) error {
 	}
 	// 模式和局域网开关可以在脚本执行时变化，但不会增加配置版本。
 	next = current
-	next.ConfigPath, next.Script = path, selection
+	next.ConfigPath, next.Script, next.ContentHash = path, selection, hash
 	next.ProfileRules = standard
 	var inbounds inboundSettings
 	cfg, err := prepareRawConfig(raw, next, &inbounds)

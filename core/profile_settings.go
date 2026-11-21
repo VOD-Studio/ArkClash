@@ -122,7 +122,7 @@ func applyProfileSettingsLocked(next startOptions, path string, value any) (func
 }
 
 func parseProfileSettingsConfig(options *startOptions, inbounds *inboundSettings) (*config.Config, error) {
-	cfg, err := parseConfigWithInbound(options.ConfigPath, *options, inbounds)
+	cfg, err := parseConfigWithInboundHash(options.ConfigPath, options, inbounds)
 	// 订阅更新先加载候选，随后原子改名到正式路径。
 	var missing *os.PathError
 	if !errors.Is(err, os.ErrNotExist) || !errors.As(err, &missing) || missing.Path != options.ConfigPath ||
@@ -134,5 +134,5 @@ func parseProfileSettingsConfig(options *startOptions, inbounds *inboundSettings
 		return nil, err
 	}
 	options.ConfigPath = path
-	return parseConfigWithInbound(path, *options, inbounds)
+	return parseConfigWithInboundHash(path, options, inbounds)
 }

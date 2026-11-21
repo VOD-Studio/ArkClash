@@ -152,6 +152,7 @@ ZIP 快照与恢复机制、旧版目录兼容及 WebDAV 路由见 [ADR-0031](ad
 | `core/lifecycle.go` | 唯一核心状态、无 TUN 启动、attach/detach、热切换及 `applyOverrides` |
 | `core/inbound.go` | 最小业务入口设置、应用前屏蔽、恢复与真实资源校验 |
 | `core/api.go` | controller 上的 `/arkclash/` 路由、转给 ArkTS 的命令、事件推送、经内核下载 |
+| `core/profile_preview.go` | 只读构建已保存配置的运行时完整 YAML 预览，不改变运行中内核状态 |
 | `core/runtime.go` | 原子运行快照、boot/revision 与事件 |
 | `core/selection.go` | 幂等选择、原子保存、持久化失败补偿、转发前恢复 |
 | `core/delay.go` | 8 执行槽测速、请求取消与配置代次隔离 |
