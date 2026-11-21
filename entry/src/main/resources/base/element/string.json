@@ -4707,6 +4707,66 @@
     {
       "name": "provider_err_update_failed",
       "value": "Provider update failed; previous content kept"
+    },
+    {
+      "name": "proxy_save_to_library",
+      "value": "Save to local proxy library"
+    },
+    {
+      "name": "proxy_saved_to_library",
+      "value": "Saved \"%s\" to local proxy library"
+    },
+    {
+      "name": "proxy_saved_overwritten",
+      "value": "Overwrote \"%s\" in local proxy library"
+    },
+    {
+      "name": "proxy_save_conflict_title",
+      "value": "Duplicate name in local proxy library"
+    },
+    {
+      "name": "proxy_save_conflict_message",
+      "value": "\"%s\" already exists in the local proxy library. Choose how to proceed."
+    },
+    {
+      "name": "proxy_save_conflict_overwrite",
+      "value": "Overwrite existing node"
+    },
+    {
+      "name": "proxy_save_conflict_rename",
+      "value": "Save as \"%s\""
+    },
+    {
+      "name": "proxy_save_err_stale",
+      "value": "Active profile changed; refresh and try again"
+    },
+    {
+      "name": "proxy_save_err_not_found",
+      "value": "Node no longer exists in the running profile"
+    },
+    {
+      "name": "proxy_save_err_not_exportable",
+      "value": "This item cannot be saved to the local proxy library"
+    },
+    {
+      "name": "proxy_save_err_name_taken",
+      "value": "A node with this name already exists"
+    },
+    {
+      "name": "proxy_save_err_conflict",
+      "value": "Local proxy library changed concurrently; try again"
+    },
+    {
+      "name": "proxy_save_err_store",
+      "value": "Could not read or write the local proxy library"
+    },
+    {
+      "name": "proxy_save_err_invalid",
+      "value": "Node parameters failed local proxy validation"
+    },
+    {
+      "name": "proxy_save_err_failed",
+      "value": "Could not save node to local proxy library"
     }
   ]
 }

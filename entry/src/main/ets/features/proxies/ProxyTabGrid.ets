@@ -17,6 +17,7 @@ export struct ProxyTabGrid {
   @Param motionEnabled: boolean = false;
   @Event onChoose: (node: string) => void = () => {};
   @Event onTest: (node: string) => void = () => {};
+  @Event onSaveToLibrary: (node: string) => void = () => {};
   @Event onListScroll: (offset: number, source: ScrollSource) => void = () => {};
   @Event onScrollerReady: () => void = () => {};
   @Event onScrollerRelease: () => void = () => {};
@@ -73,7 +74,8 @@ export struct ProxyTabGrid {
                 motionEnabled: this.motionEnabled,
                 groupType: this.group.type,
                 onChoose: (node: string) => this.onChoose(node),
-                onTest: (node: string) => this.onTest(node)
+                onTest: (node: string) => this.onTest(node),
+                onSaveToLibrary: (node: string) => this.onSaveToLibrary(node)
               })
             }
             .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })

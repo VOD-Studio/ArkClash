@@ -38,6 +38,7 @@ export struct ProxyGroupList {
   @Event onListScroll: (offset: number, source: ScrollSource) => void = () => {};
   @Event onScrollerReady: () => void = () => {};
   @Event onScrollerRelease: () => void = () => {};
+  @Event onSaveToLibrary: (group: string, node: string) => void = () => {};
   @Local movingGroup: ProxyGroupView | undefined = undefined;
   @Local viewportHeight: number = 0;
   private textScale: number = 1;
@@ -296,7 +297,8 @@ export struct ProxyGroupList {
         row: $$.row, cardType: $$.group.cardType, active: this.active && $$.group.expanded,
         motionEnabled: this.motionEnabled, nestedSurface: true, groupType: $$.group.type,
         onChoose: (node: string) => this.browser.choose($$.group.name, node),
-        onTest: (node: string) => this.browser.test($$.group.name, node)
+        onTest: (node: string) => this.browser.test($$.group.name, node),
+        onSaveToLibrary: (node: string) => this.onSaveToLibrary($$.group.name, node)
       })
     }
     .width('100%')

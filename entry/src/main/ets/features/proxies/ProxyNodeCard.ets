@@ -7,6 +7,7 @@ import { ProxyDensity } from './ProxyLogic';
 import { proxyCardHeight, proxyTextScale } from './ProxyMetrics';
 import { ProxyNodeView } from './ProxyView';
 import { ProxyPressFeedback, ProxyPressState } from './ProxyPressFeedback';
+import { isExportableProxyNode } from './ProxySaveToLibrary';
 
 @ReusableV2
 @ComponentV2
@@ -22,6 +23,7 @@ export struct ProxyNodeCard {
   private press: ProxyPressState = new ProxyPressState();
   @Event onChoose: () => void = () => {};
   @Event onTest: () => void = () => {};
+  @Event onSaveToLibrary: () => void = () => {};
 
   aboutToAppear(): void {
     this.textScale = proxyTextScale(this.getUIContext());
@@ -92,6 +94,14 @@ export struct ProxyNodeCard {
           .selectIcon(true)
           .enabled(this.active && this.node.selectable)
           .onClick(() => this.onChoose())
+      }
+      if (isExportableProxyNode(this.node)) {
+        MenuItem({
+          content: $r('app.string.proxy_save_to_library'),
+          symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.plus_circle'))
+        })
+          .enabled(this.active)
+          .onClick(() => this.onSaveToLibrary())
       }
       if (!this.node.addressable || this.node.leafRetired || this.node.unresolved) {
         MenuItem({ content: this.restriction() })

@@ -4687,6 +4687,66 @@
     {
       "name": "provider_err_update_failed",
       "value": "Provider 更新失败，已保留原有效资源"
+    },
+    {
+      "name": "proxy_save_to_library",
+      "value": "保存到本地节点库"
+    },
+    {
+      "name": "proxy_saved_to_library",
+      "value": "已保存到本地节点库：%s"
+    },
+    {
+      "name": "proxy_saved_overwritten",
+      "value": "已覆盖本地节点：%s"
+    },
+    {
+      "name": "proxy_save_conflict_title",
+      "value": "本地节点库已存在同名节点"
+    },
+    {
+      "name": "proxy_save_conflict_message",
+      "value": "“%s”已存在于本地节点库，请选择处理方式。"
+    },
+    {
+      "name": "proxy_save_conflict_overwrite",
+      "value": "覆盖同名节点"
+    },
+    {
+      "name": "proxy_save_conflict_rename",
+      "value": "重命名为“%s”并保存"
+    },
+    {
+      "name": "proxy_save_err_stale",
+      "value": "当前运行配置已变化，请刷新后重试"
+    },
+    {
+      "name": "proxy_save_err_not_found",
+      "value": "运行配置中已不存在该节点"
+    },
+    {
+      "name": "proxy_save_err_not_exportable",
+      "value": "该条目不支持保存到本地节点库"
+    },
+    {
+      "name": "proxy_save_err_name_taken",
+      "value": "本地节点库中已存在同名节点"
+    },
+    {
+      "name": "proxy_save_err_conflict",
+      "value": "本地节点库已发生并发变更，请重试"
+    },
+    {
+      "name": "proxy_save_err_store",
+      "value": "读写本地节点库失败"
+    },
+    {
+      "name": "proxy_save_err_invalid",
+      "value": "节点参数未通过本地节点库校验"
+    },
+    {
+      "name": "proxy_save_err_failed",
+      "value": "保存到本地节点库失败"
     }
   ]
 }

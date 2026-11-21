@@ -13,6 +13,7 @@ export struct ProxyNodeLine {
   @Param groupType: string = '';
   @Event onChoose: (node: string) => void = () => {};
   @Event onTest: (node: string) => void = () => {};
+  @Event onSaveToLibrary: (node: string) => void = () => {};
 
   build() {
     Row({ space: 8 }) {
@@ -25,7 +26,8 @@ export struct ProxyNodeLine {
           nestedSurface: this.nestedSurface,
           groupType: this.groupType,
           onChoose: () => this.onChoose(node.id),
-          onTest: () => this.onTest(node.id)
+          onTest: () => this.onTest(node.id),
+          onSaveToLibrary: () => this.onSaveToLibrary(node.id)
         })
           .layoutWeight(1)
       }, (node: ProxyNodeView): string => node.key)

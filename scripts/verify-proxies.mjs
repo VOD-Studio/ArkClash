@@ -10,7 +10,7 @@ import test from 'node:test';
 async function sourceModule(relative, prelude = '') {
   const source = await readFile(new URL(relative, import.meta.url), 'utf8');
   const withoutImports = source.replace(/^import[\s\S]*?from\s+['"][^'"]+['"];\s*/gm, '');
-  const withoutObservers = withoutImports.replace(/^@ObservedV2\s*$/gm, '').replace(/@Trace\s+/g, '');
+  const withoutObservers = withoutImports.replace(/^@(ObservedV2|Concurrent)\s*$/gm, '').replace(/@Trace\s+/g, '');
   return `data:text/javascript;base64,${Buffer.from(prelude + stripTypeScriptTypes(withoutObservers)).toString('base64')}`;
 }
 
@@ -1125,4 +1125,114 @@ test('预热未连接的节点页与picker支持选择和测速，连断不清�
   assert.equal(module.attempts, 2);
   assert.equal(browser.online, true);
   browser.suspend();
+});
+
+test('代理节点保存到本地节点库按实例身份提取、校验并处理同名冲突', async () => {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'arkclash-save-proxy-'));
+  try {
+    await fsp.mkdir(path.join(dir, 'profiles'), { recursive: true });
+    const schemaUrl = await sourceModule('../entry/src/main/ets/shared/profiles/LocalProxySchema.ets');
+    const localProxiesUrl = await sourceModule('../entry/src/main/ets/shared/profiles/LocalProxies.ets',
+      `const util = { TextEncoder: class { encodeInto(text) { return new TextEncoder().encode(text); } } };\n` +
+      `import { newId, validProfileId } from ${JSON.stringify(storeUrl)};\n` +
+      `import { copyProxyKey, PROXY_TYPES, proxyMap, proxyText, proxyValue, REQUIRED_PROXY_KEYS, withProxyValue } from ${JSON.stringify(schemaUrl)};\n`);
+    const localProxyStoreUrl = await sourceModule('../entry/src/main/ets/shared/profiles/LocalProxyStore.ets',
+      `const taskpool = { async execute(fn, ...args) { return fn(...args); } };\n` +
+      `import { newId, profilesDir, readOptionalText, withProfileStorage, writeProfileText } from ${JSON.stringify(storeUrl)};\n` +
+      `import { applyProxyLinkPlan, decodeProxyStore, emptyLocalProxies, encodeProxyStore, localProxyProblem, newLocalProxy, planProxyLinks } from ${JSON.stringify(localProxiesUrl)};\n` +
+      `import { proxyText, withProxyValue } from ${JSON.stringify(schemaUrl)};\n`);
+    const definitionsById = new Map([
+      ['boot.1.a', {
+        bootId: 'boot', configRevision: 1, id: 'boot.1.a', name: 'HK-01', provider: 'prov-a',
+        definition: {
+          name: 'HK-01', type: 'vless', server: 'a.example.test', port: 443,
+          uuid: '11111111-1111-1111-1111-111111111111', tls: true, network: 'grpc',
+          'grpc-opts': { 'grpc-service-name': 'svc-a' }
+        }
+      }],
+      ['boot.1.b', {
+        bootId: 'boot', configRevision: 1, id: 'boot.1.b', name: 'HK-01', provider: 'prov-b',
+        definition: {
+          name: 'HK-01', type: 'trojan', server: 'b.example.test', port: 8443,
+          password: 'pass-b', network: 'ws', 'ws-opts': { path: '/ws-b', headers: { Host: 'b.cdn.test' } }
+        }
+      }]
+    ]);
+    let rejectNext = false;
+    const fetchedIds = [];
+    const bridgeKey = Symbol('saveProxyCoreBridge');
+    globalThis[bridgeKey] = {
+      async fetchRuntimeProxyDefinition(_dir, bootId, configRevision, id, _group) {
+        fetchedIds.push(id);
+        const entry = definitionsById.get(id);
+        if (!entry || entry.bootId !== bootId || entry.configRevision !== configRevision) {
+          throw new Error('proxy_not_found');
+        }
+        return structuredClone(entry);
+      },
+      async validateProxyDefinitions(_ctx, defs) {
+        return defs.map(() => rejectNext ? 'local_proxy_rejected' : '');
+      }
+    };
+    const saveUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxySaveToLibrary.ets',
+      `const bridge = globalThis[Object.getOwnPropertySymbols(globalThis).find(k => k.description === 'saveProxyCoreBridge')];\n` +
+      `const { fetchRuntimeProxyDefinition, validateProxyDefinitions } = bridge;\n` +
+      `import { checkProxyName, localProxyName, localProxyProblem } from ${JSON.stringify(localProxiesUrl)};\n` +
+      `import { proxyText, withProxyValue } from ${JSON.stringify(schemaUrl)};\n` +
+      `import { readLocalProxies, saveLocalProxy } from ${JSON.stringify(localProxyStoreUrl)};\n`);
+    const saveMod = await import(saveUrl);
+    const localProxyStore = await import(localProxyStoreUrl);
+
+    assert.equal(saveMod.isExportableProxyNode({ online: true, nested: false, leafRetired: false, type: 'Vless' }), true);
+    assert.equal(saveMod.isExportableProxyNode({ online: true, nested: true, leafRetired: false, type: 'Selector' }), false);
+    assert.equal(saveMod.isExportableProxyNode({ online: true, nested: false, leafRetired: false, type: 'Direct' }), false);
+    assert.equal(saveMod.isExportableProxyNode({ online: false, nested: false, leafRetired: false, type: 'Vless' }), false);
+
+    const context = { filesDir: dir };
+    // 1. 校验失败时不写入本地节点库。
+    rejectNext = true;
+    await assert.rejects(() => saveMod.prepareSaveRuntimeProxy(context, 'boot', 1, 'boot.1.a', 'Proxy'),
+      /local_proxy_rejected/);
+    assert.equal((await localProxyStore.readLocalProxies(dir)).proxies.length, 0);
+    rejectNext = false;
+
+    // 2. 首次保存 prov-a 的 HK-01 成功入库并完整保留 grpc-opts。
+    const first = await saveMod.prepareSaveRuntimeProxy(context, 'boot', 1, 'boot.1.a', 'Proxy');
+    assert.equal(first.status, 'saved');
+    assert.equal(first.savedName, 'HK-01');
+    let stored = await localProxyStore.readLocalProxies(dir);
+    assert.equal(stored.proxies.length, 1);
+    assert.equal(stored.proxies[0].definition.server, 'a.example.test');
+    assert.equal(stored.proxies[0].definition['grpc-opts']['grpc-service-name'], 'svc-a');
+
+    // 3. 保存 prov-b 同名 HK-01：按实例 ID 取到 b 的定义，并触发同名冲突提示。
+    const second = await saveMod.prepareSaveRuntimeProxy(context, 'boot', 1, 'boot.1.b', 'Proxy');
+    assert.equal(second.status, 'conflict');
+    assert.equal(second.conflict.existingName, 'HK-01');
+    assert.equal(second.conflict.suggestedName, 'HK-01 (2)');
+    assert.equal(second.conflict.definition.server, 'b.example.test');
+    assert.equal(second.conflict.definition['ws-opts'].path, '/ws-b');
+
+    // 4. 选择重命名保存 -> 两条并存且各自传输参数完整。
+    const renamed = await saveMod.resolveSaveProxyConflict(context, second.conflict, 'rename');
+    assert.equal(renamed, 'HK-01 (2)');
+    stored = await localProxyStore.readLocalProxies(dir);
+    assert.equal(stored.proxies.length, 2);
+    assert.equal(stored.proxies[0].definition.name, 'HK-01');
+    assert.equal(stored.proxies[0].definition.server, 'a.example.test');
+    assert.equal(stored.proxies[1].definition.name, 'HK-01 (2)');
+    assert.equal(stored.proxies[1].definition.server, 'b.example.test');
+    assert.equal(stored.proxies[1].definition['ws-opts'].path, '/ws-b');
+
+    // 5. 选择覆盖保存 -> 覆盖原 HK-01 为 prov-b 的定义。
+    const overwritten = await saveMod.resolveSaveProxyConflict(context, second.conflict, 'overwrite');
+    assert.equal(overwritten, 'HK-01');
+    stored = await localProxyStore.readLocalProxies(dir);
+    assert.equal(stored.proxies.length, 2);
+    assert.equal(stored.proxies[0].definition.name, 'HK-01');
+    assert.equal(stored.proxies[0].definition.server, 'b.example.test');
+    assert.deepEqual(fetchedIds, ['boot.1.a', 'boot.1.a', 'boot.1.b']);
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
 });
