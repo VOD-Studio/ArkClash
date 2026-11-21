@@ -10,245 +10,10 @@ import "C"
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync"
-	"sync/atomic"
 	"unsafe"
 
-	"github.com/metacubex/mihomo/component/process"
-	"github.com/metacubex/mihomo/config"
 	"github.com/metacubex/mihomo/constant"
-	"github.com/metacubex/mihomo/hub"
-	"github.com/metacubex/mihomo/hub/executor"
-	"github.com/metacubex/mihomo/listener"
-	"github.com/metacubex/mihomo/log"
-	"github.com/metacubex/mihomo/tunnel"
 )
-
-// startOptions is the JSON payload passed to ArkClashStart. JSON keeps the C
-// ABI stable while options grow.
-type startOptions struct {
-	HomeDir    string `json:"homeDir"`
-	ConfigPath string `json:"configPath"`
-	TunFd      int    `json:"tunFd"`
-	Controller string `json:"controller"`
-	Secret     string `json:"secret"`
-	Stack      string `json:"stack"`
-	// 以下由 VPN 进程从 runtime.json 和配置列表（entry/src/main/ets/shared/）读出后传入。
-	Profile  string `json:"profile"`  // 正在运行的配置的编号
-	Mode     string `json:"mode"`     // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
-	AllowLan *bool  `json:"allowLan"` // nil = 用配置里的值
-}
-
-var (
-	mu      sync.Mutex
-	running bool
-	// 本次启动的参数，热切换和 PATCH /arkclash/configs 会更新其中的配置路径、编号、模式和局域网代理。
-	current startOptions
-	// 正在运行的配置编号，nil = 没在运行。ArkTS 主线程会同步读它，不能等 mu（热切换可能要几秒）。
-	runningID atomic.Pointer[string]
-)
-
-func start(opts startOptions) error {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if running {
-		return errors.New("core is already running")
-	}
-	if opts.TunFd <= 0 {
-		return errors.New("invalid tun fd")
-	}
-
-	constant.SetHomeDir(opts.HomeDir)
-	constant.SetConfig(opts.ConfigPath)
-
-	cfg, err := parseConfig(opts.ConfigPath, opts)
-	if err != nil {
-		return err
-	}
-	hub.ApplyConfig(cfg)
-
-	if err := startTun(opts.TunFd, opts.Stack); err != nil {
-		executor.Shutdown()
-		return err
-	}
-
-	running = true
-	current = opts
-	runningID.Store(&opts.Profile)
-	beginRuntime()
-	resetProxyIdentities()
-	watchRuntimeRoutes(cfg)
-	publishRuntime()
-	log.Infoln("[ArkClash] core started")
-	return nil
-}
-
-func parseConfig(path string, opts startOptions) (*config.Config, error) {
-	buf, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	rawCfg, err := config.UnmarshalRawConfig(buf)
-	if err != nil {
-		return nil, err
-	}
-	applyOverrides(rawCfg, opts)
-	cfg, err := config.ParseRawConfig(rawCfg)
-	if err != nil {
-		return nil, err
-	}
-	if err := restoreSelections(cfg, opts); err != nil {
-		return nil, err
-	}
-	return cfg, nil
-}
-
-// reload 是热切换：解析 path，成功后换用新配置，profile 记为正在运行的配置。
-// 只调 executor.ApplyConfig，不走 hub.ApplyConfig：后者的 applyRoute 每次都会关掉 controller
-// 再重开，掐断发起热切换的请求和界面的 WebSocket（ADR-0010）。controller 的地址和 secret
-// 由 applyOverrides 固定，不需要重建。改 start 的解析和应用流程时，这里要一起看。
-func reload(path, profile, expectedProfile string) error {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if !running {
-		return errors.New("core is not running")
-	}
-	if expectedProfile != "" && current.Profile != expectedProfile {
-		return errors.New("profile_changed")
-	}
-	if err := checkProfilePath(path); err != nil {
-		return err
-	}
-	next := current
-	next.Profile = profile
-	next.ConfigPath = path
-	cfg, err := parseConfig(path, next)
-	if err != nil {
-		return err
-	}
-	cancelDelayTests()
-	constant.SetConfig(path)
-	executor.ApplyConfig(cfg, true)
-	current.ConfigPath = path
-	current.Profile = profile
-	runningID.Store(&profile)
-	runtimeConfigRevision++
-	resetProxyIdentities()
-	watchRuntimeRoutes(cfg)
-	publishRuntime()
-	log.Infoln("[ArkClash] reloaded profile %s", profile)
-	emit(reloadedEvent{Type: "reloaded", Profile: profile})
-	return nil
-}
-
-// 推给界面的「热切换完成」事件，格式和 entry/src/main/ets/client/ 里的解析一致。
-type reloadedEvent struct {
-	Type    string `json:"type"`
-	Profile string `json:"profile"`
-}
-
-// 热切换只接受配置目录下的文件，见 entry/src/main/ets/shared/profiles/Store.ets。
-func checkProfilePath(path string) error {
-	dir := filepath.Join(current.HomeDir, "profiles") + string(filepath.Separator)
-	if !strings.HasPrefix(filepath.Clean(path), dir) {
-		return fmt.Errorf("profile must be under %s", dir)
-	}
-	return nil
-}
-
-func runningProfile() (string, bool) {
-	p := runningID.Load()
-	if p == nil {
-		return "", false
-	}
-	return *p, true
-}
-
-// setRuntimeOptions 立即修改出站模式和局域网代理，并记下来供之后的热切换使用。
-func setRuntimeOptions(mode *string, allowLan *bool) error {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if !running {
-		return errors.New("core is not running")
-	}
-	if mode != nil {
-		m, ok := tunnel.ModeMapping[strings.ToLower(*mode)]
-		if !ok {
-			return fmt.Errorf("unknown mode %q", *mode)
-		}
-		tunnel.SetMode(m)
-		current.Mode = *mode
-	}
-	if allowLan != nil {
-		listener.SetAllowLan(*allowLan)
-		v := *allowLan
-		current.AllowLan = &v
-	}
-	publishRuntime()
-	return nil
-}
-
-// applyOverrides forces the settings ArkClash owns, whatever the profile says.
-func applyOverrides(rawCfg *config.RawConfig, opts startOptions) {
-	// The TUN is created by VpnExtensionAbility and handed over as an fd, so the
-	// profile must not try to create its own.
-	rawCfg.Tun.Enable = false
-
-	// 节点选择只从每配置文件恢复，避免 mihomo 全局同名组缓存覆盖它。
-	rawCfg.Profile.StoreSelected = false
-
-	// The UI process drives the core over this controller only.
-	rawCfg.ExternalController = opts.Controller
-	rawCfg.Secret = opts.Secret
-	rawCfg.ExternalControllerTLS = ""
-	rawCfg.ExternalControllerUnix = ""
-	rawCfg.ExternalControllerPipe = ""
-	rawCfg.ExternalUI = ""
-
-	// Process lookup scans /proc for every connection and cannot map to apps on
-	// HarmonyOS anyway; it only costs battery.
-	rawCfg.FindProcessMode = process.FindProcessOff
-
-	// DNS from the TUN is hijacked into mihomo, so the resolver has to be on.
-	if !rawCfg.DNS.Enable {
-		rawCfg.DNS.Enable = true
-		rawCfg.DNS.EnhancedMode = constant.DNSFakeIP
-	}
-
-	// 用户在界面上选过的出站模式和局域网代理优先于配置，热切换后不会被新配置改回去（ADR-0010）。
-	if m, ok := tunnel.ModeMapping[strings.ToLower(opts.Mode)]; ok {
-		rawCfg.Mode = m
-	}
-	if opts.AllowLan != nil {
-		rawCfg.AllowLan = *opts.AllowLan
-	}
-}
-
-func stop() {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if !running {
-		return
-	}
-	resetProxyIdentities()
-	stopRuntimeRoutes()
-	cancelDelayTests()
-	stopTun()
-	executor.Shutdown()
-	running = false
-	current = startOptions{}
-	runningID.Store(nil)
-	publishRuntime()
-}
 
 func errorString(err error) *C.char {
 	if err == nil {
@@ -270,8 +35,37 @@ func ArkClashStart(optionsJSON *C.char) *C.char {
 }
 
 //export ArkClashStop
-func ArkClashStop() {
-	stop()
+func ArkClashStop() *C.char {
+	return errorString(stop())
+}
+
+//export ArkClashAttachTun
+func ArkClashAttachTun(fd C.int, optionsJSON, bootID, profile *C.char, configRevision C.ulonglong) *C.char {
+	var network tunNetworkOptions
+	if err := json.Unmarshal([]byte(C.GoString(optionsJSON)), &network); err != nil {
+		return errorString(err)
+	}
+	return errorString(attachTun(int(fd), network, attachIdentity{
+		BootID: C.GoString(bootID), Profile: C.GoString(profile), ConfigRevision: uint64(configRevision),
+	}))
+}
+
+//export ArkClashDetachTun
+func ArkClashDetachTun() *C.char {
+	return errorString(detachTun())
+}
+
+//export ArkClashUpdateVpnState
+func ArkClashUpdateVpnState(intent, forward *C.char, vpnCreated C.int) *C.char {
+	mu.Lock()
+	defer mu.Unlock()
+	return errorString(updateVpnState(C.GoString(intent), C.GoString(forward), vpnCreated != 0))
+}
+
+//export ArkClashRuntimeStatus
+func ArkClashRuntimeStatus() *C.char {
+	data, _ := json.Marshal(runtimeSnapshot.Load())
+	return C.CString(string(data))
 }
 
 // ArkClashReload 热切换到 path 指向的配置，profile 是它的编号。成功返回 NULL，
@@ -279,7 +73,11 @@ func ArkClashStop() {
 //
 //export ArkClashReload
 func ArkClashReload(path, profile, expectedProfile *C.char) *C.char {
-	return errorString(reload(C.GoString(path), C.GoString(profile), C.GoString(expectedProfile)))
+	var expected *string
+	if expectedProfile != nil {
+		expected = new(C.GoString(expectedProfile))
+	}
+	return errorString(reload(C.GoString(path), C.GoString(profile), expected))
 }
 
 // ArkClashRunningProfile 返回正在运行的配置编号，没在运行时是空串。用 ArkClashFree 释放。

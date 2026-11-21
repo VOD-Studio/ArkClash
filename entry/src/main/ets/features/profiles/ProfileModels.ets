@@ -6,7 +6,9 @@ export class ProfileItem {
   @Trace name: string = '';
   @Trace nameEdited: boolean = false;
   @Trace subscription: string = '';
+  @Trace type: string = '';
   @Trace url: string = '';
+  @Trace ageSecretKey: string = '';
   @Trace autoUpdate: boolean = true;
   @Trace intervalMinutes: number = DEFAULT_INTERVAL_MINUTES;
   @Trace intervalHours: number = DEFAULT_INTERVAL_MINUTES / 60;
@@ -23,6 +25,7 @@ export class ProfileItem {
 export interface ProfileEdit {
   name: string;
   url: string;
+  ageSecretKey?: string;
   autoUpdate: boolean;
   intervalMinutes?: number;
   intervalHours?: number;
@@ -30,6 +33,7 @@ export interface ProfileEdit {
   baseContentRevision?: string;
   baseName?: string;
   baseUrl?: string;
+  baseAgeSecretKey?: string;
 }
 
 export interface ProfileBatchFailure {
@@ -62,7 +66,9 @@ export function mergeProfileItem(previous: ProfileItem | undefined, fresh: Profi
   previous.name = fresh.name;
   previous.nameEdited = fresh.nameEdited;
   previous.subscription = fresh.subscription;
+  previous.type = fresh.type;
   previous.url = fresh.url;
+  previous.ageSecretKey = fresh.ageSecretKey;
   previous.autoUpdate = fresh.autoUpdate;
   previous.intervalMinutes = fresh.intervalMinutes;
   previous.intervalHours = fresh.intervalHours;

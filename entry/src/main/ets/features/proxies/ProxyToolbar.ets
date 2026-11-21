@@ -1,16 +1,23 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { SymbolGlyphModifier } from '@kit.ArkUI';
+import { Connection, connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
-import { HEADER_ACTION } from '../../components/Theme';
+import {
+  HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER, SHEET_HEADER_HEIGHT, TAB_HEADER_HEIGHT,
+  TAB_TITLE_LINE_HEIGHT, TAB_TITLE_SIZE
+} from '../../components/Theme';
 import { ProxyBrowser } from './Proxies';
 import { copyProxyStyle, ProxyDensity, ProxyIconStyle, ProxySort } from './ProxyLogic';
 
 @ComponentV2
 export struct ProxyToolbar {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require browser: ProxyBrowser;
   @Param pickerMode: boolean = false;
   @Param active: boolean = true;
   @Param motionEnabled: boolean = false;
   @Local searchShown: boolean = false;
+  @Local link: Connection = connection;
   private densities: ProxyDensity[] = ['loose', 'standard', 'compact'];
   private sorts: ProxySort[] = ['none', 'delay', 'name'];
   private icons: ProxyIconStyle[] = ['filled', 'icon', 'hidden'];
@@ -127,6 +134,11 @@ export struct ProxyToolbar {
   @Builder
   private styleMenu() {
     Menu() {
+      if (!this.link.coreReady) {
+        MenuItem({ content: $r('app.string.proxy_start_core') })
+          .enabled(this.active && !this.link.coreStarting)
+          .onClick(() => this.browser.startCore())
+      }
       if ((this.browser.groups[this.browser.groupIndex]?.pinned ?? '') !== '') {
         MenuItem({ content: $r('app.string.proxy_clear_pin') })
           .enabled(this.active && (this.browser.online || this.browser.offlineWritable))
@@ -165,28 +177,38 @@ export struct ProxyToolbar {
     Button({ type: ButtonType.Circle }) {
       if (this.browser.groups[this.browser.groupIndex]?.testing === true && this.active) {
         LoadingProgress()
-          .width(24)
-          .height(24)
+          .width(HEADER_ICON_SIZE)
+          .height(HEADER_ICON_SIZE)
           .color($r('sys.color.font_primary'))
           .enableLoading(this.active)
       } else {
-        AppGlyph({ name: 'bolt', iconSize: 24 })
+        AppGlyph({ name: 'bolt', iconSize: HEADER_ICON_SIZE })
       }
     }
     .attributeModifier(HEADER_ACTION)
-    .accessibilityText($r('app.string.proxy_test_current_group'))
-    .enabled(this.active && this.browser.online && !(this.browser.groups[this.browser.groupIndex]?.testing ?? false))
-    .onClick(() => this.browser.test(this.browser.currentGroup))
+    .systemMaterial(this.appStyle.headerMaterial())
+    .accessibilityText(this.link.coreReady ?
+      $r('app.string.proxy_test_current_group') : $r('app.string.proxy_start_core'))
+    .enabled(this.active && !this.link.coreStarting &&
+      (!this.link.coreReady || !(this.browser.groups[this.browser.groupIndex]?.testing ?? false)))
+    .onClick(() => {
+      if (this.link.coreReady) {
+        this.browser.test(this.browser.currentGroup);
+      } else {
+        this.browser.startCore();
+      }
+    })
   }
 
   build() {
-    Row({ space: 8 }) {
+    Row({ space: HEADER_GAP }) {
       if (this.searchShown || this.pickerMode) {
         TextInput({ text: this.browser.query, placeholder: $r('app.string.proxy_search') })
+          .fontFamily(this.appStyle.fontFamily)
           .layoutWeight(1)
           .height(44)
           .fontSize(17)
-          .backgroundColor($r('app.color.card_background'))
+          .backgroundColor(this.appStyle.palette.cardBackground)
           .borderRadius(22)
           .enterKeyType(EnterKeyType.Search)
           .onChange((query: string) => this.browser.setQuery(query))
@@ -195,33 +217,37 @@ export struct ProxyToolbar {
         }
         if (!this.pickerMode) {
           Button({ type: ButtonType.Circle }) {
-            AppGlyph({ name: 'close', iconSize: 24 })
+            AppGlyph({ name: 'close', iconSize: HEADER_ICON_SIZE })
           }
           .attributeModifier(HEADER_ACTION)
+          .systemMaterial(this.appStyle.headerMaterial())
           .accessibilityText($r('app.string.proxy_search_close'))
           .onClick(() => this.closeSearch())
         }
       } else {
         Text($r('app.string.tab_proxies'))
-          .fontSize(24)
-          .lineHeight(30)
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(TAB_TITLE_SIZE)
+          .lineHeight(TAB_TITLE_LINE_HEIGHT)
           .fontWeight(600)
           .fontColor($r('sys.color.font_primary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
-        Row({ space: 8 }) {
+        Row({ space: HEADER_GAP }) {
           Button({ type: ButtonType.Circle }) {
-            AppGlyph({ name: 'search', iconSize: 24 })
+            AppGlyph({ name: 'search', iconSize: HEADER_ICON_SIZE })
           }
           .attributeModifier(HEADER_ACTION)
+          .systemMaterial(this.appStyle.headerMaterial())
           .accessibilityText($r('app.string.proxy_search'))
           .onClick(() => { this.searchShown = true; })
         }
         Button({ type: ButtonType.Circle }) {
-          AppGlyph({ name: 'more', iconSize: 24 })
+          AppGlyph({ name: 'more', iconSize: HEADER_ICON_SIZE })
         }
         .attributeModifier(HEADER_ACTION)
+        .systemMaterial(this.appStyle.headerMaterial())
         .accessibilityText($r('app.string.proxy_style'))
         .bindMenu(this.styleMenu, {
           placement: Placement.BottomRight,
@@ -230,7 +256,7 @@ export struct ProxyToolbar {
       }
     }
     .width('100%')
-    .height(this.pickerMode ? 56 : 72)
-    .padding({ left: 16, right: 16 })
+    .height(this.pickerMode ? SHEET_HEADER_HEIGHT : TAB_HEADER_HEIGHT)
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
   }
 }

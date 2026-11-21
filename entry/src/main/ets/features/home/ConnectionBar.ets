@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { connection, Connection, ConnectionState } from '../../client/Connection';
 import { getMainGroup, GroupSummary } from '../../client/Controller';
@@ -15,6 +16,7 @@ const BUTTON_SIZE = 40;
  */
 @ComponentV2
 export struct ConnectionBar {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param expanded: boolean = false;
   @Event onOpen: () => void = () => {};
   @Local conn: Connection = connection;
@@ -24,13 +26,13 @@ export struct ConnectionBar {
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
   private generation: number = 0;
 
-  @Monitor('expanded', 'conn.state', 'conn.routeRevision', 'conn.mode')
+  @Monitor('expanded', 'conn.state', 'conn.coreReady', 'conn.routeRevision', 'conn.mode')
   refresh(): void {
     const generation = ++this.generation;
     this.group = undefined;
-    if (this.expanded && this.conn.connected) {
+    if (this.expanded && this.conn.coreReady) {
       getMainGroup(this.context.filesDir).then((group: GroupSummary | undefined): void => {
-        if (generation === this.generation && this.expanded && this.conn.connected) {
+        if (generation === this.generation && this.expanded && this.conn.coreReady) {
           this.group = group;
         }
       }).catch(() => {});
@@ -44,22 +46,22 @@ export struct ConnectionBar {
           LoadingProgress()
             .width(22)
             .height(22)
-            .color(this.connectedLike() ? $r('app.color.on_brand') : $r('app.color.brand'))
+            .color(this.connectedLike() ? this.appStyle.palette.onBrand : this.appStyle.palette.brand)
         } else {
           SymbolGlyph(this.connectedLike() ? $r('sys.symbol.pause') : $r('sys.symbol.power'))
             .fontSize(20)
-            .fontColor([this.connectedLike() ? $r('app.color.on_brand') : $r('app.color.brand')])
+            .fontColor([this.connectedLike() ? this.appStyle.palette.onBrand : this.appStyle.palette.brand])
         }
       }
       .width(BUTTON_SIZE)
       .height(BUTTON_SIZE)
-      .backgroundColor(this.connectedLike() ? $r('app.color.brand') : $r('app.color.brand_soft'))
+      .backgroundColor(this.connectedLike() ? this.appStyle.palette.brand : this.appStyle.palette.brandSoft)
       .enabled(this.conn.state !== ConnectionState.Disconnecting)
       .accessibilityText(homeRunActionLabel(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
-        this.conn.tunAttached, this.conn.hostState))
+        this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState))
       .onClick((): void => {
         const shouldStop = homeShouldStopRuntime(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
-          this.conn.tunAttached, this.conn.hostState);
+          this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState);
         const operation = shouldStop ? this.conn.disconnect(this.context) : this.conn.connect(this.context);
         operation.catch((error: Error): void => {
           this.getUIContext().getPromptAction().showToast({ message: this.conn.error || error.message });
@@ -69,12 +71,14 @@ export struct ConnectionBar {
       if (this.expanded) {
         Column({ space: 2 }) {
           Text(this.primaryText())
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(14)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('sys.color.font_primary'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
           Text(this.secondaryText())
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(12)
             .fontColor($r('sys.color.font_secondary'))
             .fontFeature('"tnum" on')
@@ -94,7 +98,7 @@ export struct ConnectionBar {
   }
 
   private connectedLike(): boolean {
-    return homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached) ||
+    return homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated) ||
       this.conn.state === ConnectionState.Disconnecting;
   }
 
@@ -102,11 +106,11 @@ export struct ConnectionBar {
     if (this.conn.hostState === 'unknown' && !this.conn.busy) {
       return $r('app.string.dash_runtime_unknown');
     }
-    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached) &&
+    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated) &&
       this.conn.state !== ConnectionState.Disconnecting) {
       return $r('app.string.dash_cleanup_required');
     }
-    if (this.conn.connected && this.group !== undefined) {
+    if (this.conn.coreReady && this.group !== undefined) {
       return this.group.node;
     }
     switch (this.conn.state) {
@@ -125,7 +129,7 @@ export struct ConnectionBar {
     if (this.conn.hostState === 'unknown' && !this.conn.busy) {
       return $r('app.string.dash_runtime_tap_to_confirm');
     }
-    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached)) {
+    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated)) {
       return $r('app.string.dash_stop_retry');
     }
     if (!this.conn.connected) {

@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { i18n } from '@kit.LocalizationKit';
 import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
@@ -9,11 +10,13 @@ import { exitIpQualityLabel, exitIpTypeLabel } from './DashboardIpQuality';
 interface DashboardExitDetailField {
   label: ResourceStr;
   content: ResourceStr;
+  loading?: boolean;
   retry?: boolean;
 }
 
 @ComponentV2
 export struct DashboardExitDetails {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param visible: boolean = false;
   @Event onRefresh: () => void = (): void => {};
   @Local probe: ExitIpProbe = exitIpProbe;
@@ -77,19 +80,31 @@ export struct DashboardExitDetails {
   DetailField(field: DashboardExitDetailField) {
     Row({ space: 16 }) {
       Text(field.label)
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(13)
         .lineHeight(18)
         .fontColor($r('sys.color.font_secondary'))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .constraintSize({ maxWidth: '38%' })
-      Text(field.content)
-        .fontSize(14)
-        .lineHeight(20)
-        .fontColor($r('sys.color.font_primary'))
-        .textAlign(TextAlign.End)
-        .wordBreak(WordBreak.BREAK_ALL)
-        .layoutWeight(1)
+      if (field.loading) {
+        Blank().layoutWeight(1)
+        Row()
+          .width(88)
+          .height(18)
+          .borderRadius(5)
+          .backgroundColor(this.appStyle.palette.track)
+          .opacity(0.55)
+      } else {
+        Text(field.content)
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(14)
+          .lineHeight(20)
+          .fontColor($r('sys.color.font_primary'))
+          .textAlign(TextAlign.End)
+          .wordBreak(WordBreak.BREAK_ALL)
+          .layoutWeight(1)
+      }
     }
     .width('100%')
     .alignItems(VerticalAlign.Top)
@@ -108,34 +123,52 @@ export struct DashboardExitDetails {
           Column({ space: 16 }) {
             Column({ space: 6 }) {
               Text($r('app.string.exit_ip'))
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(13)
                 .lineHeight(18)
                 .fontColor($r('sys.color.font_secondary'))
-              Text(this.address())
-                .fontSize(22)
-                .lineHeight(28)
-                .fontWeight(600)
-                .fontColor($r('sys.color.font_primary'))
-                .width('100%')
-                .wordBreak(WordBreak.BREAK_ALL)
-                .copyOption(this.settings.hideIp ? CopyOptions.None : CopyOptions.LocalDevice)
+              if (this.probe.result === undefined && this.probe.busy && !this.settings.hideIp) {
+                Row()
+                  .width('64%')
+                  .height(24)
+                  .borderRadius(6)
+                  .backgroundColor(this.appStyle.palette.track)
+                  .opacity(0.55)
+                  .margin({ top: 2, bottom: 2 })
+              } else {
+                Text(this.address())
+                  .fontFamily(this.appStyle.fontFamily)
+                  .fontSize(22)
+                  .lineHeight(28)
+                  .fontWeight(600)
+                  .fontColor($r('sys.color.font_primary'))
+                  .width('100%')
+                  .wordBreak(WordBreak.BREAK_ALL)
+                  .copyOption(this.settings.hideIp ? CopyOptions.None : CopyOptions.LocalDevice)
+              }
             }
             .width('100%')
             .alignItems(HorizontalAlign.Start)
-            this.DetailField({ label: $r('app.string.region_label'), content: this.country() })
-            this.DetailField({ label: $r('app.string.dash_ip_organization'), content: this.probe.result?.org || '—' })
-            this.DetailField({ label: $r('app.string.dash_ip_asn'), content: this.probe.result?.asn || '—' })
+            this.DetailField({ label: $r('app.string.region_label'), content: this.country(),
+              loading: this.probe.result === undefined && this.probe.busy })
+            this.DetailField({ label: $r('app.string.dash_ip_organization'), content: this.probe.result?.org || '—',
+              loading: this.probe.result === undefined && this.probe.busy })
+            this.DetailField({ label: $r('app.string.dash_ip_asn'), content: this.probe.result?.asn || '—',
+              loading: this.probe.result === undefined && this.probe.busy })
             this.DetailField({ label: $r('app.string.dash_ip_type'),
-              content: exitIpTypeLabel(this.probe.quality, this.probe.qualityBusy) })
+              content: exitIpTypeLabel(this.probe.quality, false),
+              loading: this.probe.quality === undefined && this.probe.qualityBusy })
             this.DetailField({ label: $r('app.string.dash_ip_quality'),
               content: this.probe.qualityFailed ? $r('app.string.dash_exit_failed') :
-                exitIpQualityLabel(this.probe.quality, this.probe.qualityBusy), retry: this.probe.qualityFailed })
+                exitIpQualityLabel(this.probe.quality, false),
+              loading: this.probe.quality === undefined && this.probe.qualityBusy,
+              retry: this.probe.qualityFailed })
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
           .padding(16)
           .borderRadius(22)
-          .backgroundColor($r('app.color.tile_background'))
+          .backgroundColor(this.appStyle.palette.tileBackground)
           Column({ space: 16 }) {
             this.DetailField({ label: $r('app.string.dash_probe_source'), content: this.probe.result?.source || '—' })
             this.DetailField({ label: $r('app.string.dash_ip_quality_source'), content: this.probe.quality?.source || '—' })
@@ -143,6 +176,7 @@ export struct DashboardExitDetails {
               new Date(this.probe.result.checkedAt).toLocaleString() : '—' })
             Row({ space: 16 }) {
               Text($r('app.string.dash_hide_ip'))
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(15)
                 .lineHeight(20)
                 .layoutWeight(1)
@@ -156,7 +190,7 @@ export struct DashboardExitDetails {
           .width('100%')
           .padding(16)
           .borderRadius(22)
-          .backgroundColor($r('app.color.tile_background'))
+          .backgroundColor(this.appStyle.palette.tileBackground)
         }
         .width('100%')
         .alignItems(HorizontalAlign.Start)
@@ -167,6 +201,7 @@ export struct DashboardExitDetails {
       .align(Alignment.TopStart)
       .scrollBar(BarState.Off)
       Button($r('app.string.dash_copy_ip'))
+        .fontFamily(this.appStyle.fontFamily)
         .width('100%')
         .height(40)
         .enabled(this.visible && !this.copying && !this.settings.hideIp && this.probe.result !== undefined)

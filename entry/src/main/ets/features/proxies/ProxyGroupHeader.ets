@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { curves } from '@kit.ArkUI';
 import { uiResourceText } from '../../components/ResourceText';
 import { AppGlyph } from '../../components/AppGlyph';
@@ -8,6 +9,7 @@ const PROXY_GROUP_MONOGRAM = new RegExp('[\\p{L}\\p{N}]', 'u');
 
 @ComponentV2
 export struct ProxyGroupHeader {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require group: ProxyGroupView;
   @Param online: boolean = false;
   @Param offlineWritable: boolean = false;
@@ -80,16 +82,17 @@ export struct ProxyGroupHeader {
                     .onError(() => { this.iconFailed = true; })
                 } else {
                   Text(this.monogram())
+                    .fontFamily(this.appStyle.fontFamily)
                     .fontSize((this.group.iconStyle === 'filled' ? this.iconExtent() - 12 : this.iconExtent()) * 0.62)
                     .fontWeight(600)
-                    .fontColor(this.group.iconStyle === 'filled' ? $r('sys.color.font_secondary') : $r('app.color.brand'))
+                    .fontColor(this.group.iconStyle === 'filled' ? $r('sys.color.font_secondary') : this.appStyle.palette.brand)
                     .maxFontScale(1)
                 }
               }
               .width(this.iconExtent())
               .height(this.iconExtent())
               .borderRadius(14)
-              .backgroundColor(this.group.iconStyle === 'filled' ? $r('app.color.surface_block') : Color.Transparent)
+              .backgroundColor(this.group.iconStyle === 'filled' ? this.appStyle.palette.surfaceBlock : Color.Transparent)
               .margin({ left: this.group.iconStyle === 'icon' ? 2 : 0, right: this.group.iconStyle === 'icon' ? 10 : 12 })
             } else {
               Blank()
@@ -97,6 +100,7 @@ export struct ProxyGroupHeader {
             }
             Column({ space: 2 }) {
               Text(this.group.name)
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(16)
                 .lineHeight(21)
                 .fontWeight(600)
@@ -105,6 +109,7 @@ export struct ProxyGroupHeader {
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .width('100%')
               Text(this.group.now)
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(12)
                 .lineHeight(16)
                 .fontWeight(600)
@@ -123,6 +128,7 @@ export struct ProxyGroupHeader {
               .height(32)
           } else {
             Text(this.group.type)
+              .fontFamily(this.appStyle.fontFamily)
               .fontSize(12)
               .lineHeight(16)
               .fontWeight(600)
@@ -137,7 +143,7 @@ export struct ProxyGroupHeader {
             .width(32)
             .height(32)
             .borderRadius(16)
-            .backgroundColor($r('app.color.surface_block'))
+            .backgroundColor(this.appStyle.palette.surfaceBlock)
           }
         }
         .width('100%')
@@ -146,7 +152,7 @@ export struct ProxyGroupHeader {
       .height(22 + 37 * this.textScale)
       .padding(6)
       // 卡片色边框给按压反馈留出 4vp 内边距，不缩小整行按钮的命中区。
-      .border({ width: 4, color: $r('app.color.card_background') })
+      .border({ width: 4, color: this.appStyle.palette.cardBackground })
       .borderRadius(24)
       .backgroundColor(Color.Transparent)
       .accessibilityText(this.group.name)
@@ -187,7 +193,7 @@ export struct ProxyGroupHeader {
           .onClick(() => this.onTest())
         }
         .borderRadius(16)
-        .backgroundColor($r('app.color.surface_block'))
+        .backgroundColor(this.appStyle.palette.surfaceBlock)
         // Block 会连子按钮一起拦住；默认命中保留子按钮，并隔离下层的折叠按钮。
         .hitTestBehavior(HitTestMode.Default)
         .margin({ right: this.collapsible ? 48 : 10 })
@@ -198,7 +204,7 @@ export struct ProxyGroupHeader {
     .height(22 + 37 * this.textScale)
     .borderRadius({ topLeft: 24, topRight: 24,
       bottomLeft: this.bottomRadius(), bottomRight: this.bottomRadius() })
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .shadow({ radius: 16 * this.group.lift, offsetY: 4 * this.group.lift,
       color: $r('app.color.dashboard_shadow') })
     .bindContextMenu(this.groupMenu, ResponseType.LongPress)

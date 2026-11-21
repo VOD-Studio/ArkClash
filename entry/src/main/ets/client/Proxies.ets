@@ -279,7 +279,7 @@ function proxyWireNode(ref: ProxyMemberReference, wire: ProxyWireNode): ProxyNod
 export async function readOnlineProxies(filesDir: string, profile: string,
   summary: ProfileSummary | undefined): Promise<ProxySnapshot> {
   const before = JSON.parse(await call(filesDir, http.RequestMethod.GET, '/arkclash/status')) as RuntimeStatus;
-  if (before.profile !== profile) {
+  if (!before.running || before.profile !== profile) {
     throw new Error('proxy_profile_changed');
   }
   const replies = await Promise.all<string>([
@@ -291,7 +291,7 @@ export async function readOnlineProxies(filesDir: string, profile: string,
   const selections = JSON.parse(replies[1]) as ProxySelectionsResponse;
   const after = JSON.parse(await call(filesDir, http.RequestMethod.GET, '/arkclash/status')) as RuntimeStatus;
   if (selections.profile !== profile || after.profile !== profile || before.bootId !== after.bootId ||
-    before.revision !== after.revision || raw.proxies === undefined || raw.nodes === undefined ||
+    !after.running || before.configRevision !== after.configRevision || raw.proxies === undefined || raw.nodes === undefined ||
     raw.members === undefined || raw.actual === undefined || selections.selected === undefined) {
     throw new Error('proxy_snapshot_changed');
   }
@@ -373,7 +373,7 @@ export async function readOnlineProxies(filesDir: string, profile: string,
   }
   return {
     profile: profile, bootId: after.bootId,
-    revision: `${after.bootId}/${snapshotRevision(profile, summary, nodes, memberNodes)}`,
+    revision: `${after.bootId}/${snapshotRevision(profile, undefined, nodes, memberNodes)}`,
     memberNodes: memberNodes, actualNodes: actualNodes,
     configRevision: after.configRevision, online: true, offlineWritable: false,
     mode: replies[2] as OutboundMode, nodes: nodes, groups: groups, selected: selections.selected
@@ -628,7 +628,7 @@ class ProxyDelayScheduler {
       const path = `/arkclash/delay?profile=${encodeURIComponent(job.target.profile)}` +
         `&id=${encodeURIComponent(job.target.id)}&url=${encodeURIComponent(job.target.url)}` +
         `&group=${encodeURIComponent(job.target.group)}&expectedBootId=${encodeURIComponent(job.target.expectedBootId)}` +
-        `&expectedRevision=${job.target.expectedRevision}&timeout=${PROXY_TEST_TIMEOUT}`;
+        `&expectedRevision=${job.target.expectedRevision}`;
       const response = await request.request(`http://${CONTROLLER_ADDRESS}${path}`, {
         method: http.RequestMethod.GET, header: header, connectTimeout: 3000,
         readTimeout: PROXY_TEST_TIMEOUT + 2000, expectDataType: http.HttpDataType.STRING

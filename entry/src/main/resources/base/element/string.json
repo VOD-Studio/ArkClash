@@ -1,6 +1,178 @@
 {
   "string": [
     {
+      "name": "tools_resources",
+      "value": "Resources"
+    },
+    {
+      "name": "geo_not_downloaded",
+      "value": "Not downloaded"
+    },
+    {
+      "name": "geo_loading",
+      "value": "Loading resources"
+    },
+    {
+      "name": "geo_queued",
+      "value": "Queued"
+    },
+    {
+      "name": "geo_updating",
+      "value": "Updating"
+    },
+    {
+      "name": "geo_row_actions",
+      "value": "Tap to edit the URL; long press for resource actions."
+    },
+    {
+      "name": "geo_connect_to_update",
+      "value": "Connect to update"
+    },
+    {
+      "name": "geo_edit_url",
+      "value": "%s URL"
+    },
+    {
+      "name": "geo_url",
+      "value": "Download URL"
+    },
+    {
+      "name": "geo_url_hint",
+      "value": "Use an HTTP or HTTPS URL without a username or password, up to 2048 characters. Saving does not download the resource."
+    },
+    {
+      "name": "geo_interval",
+      "value": "Update interval"
+    },
+    {
+      "name": "geo_interval_hours",
+      "value": "Interval in hours"
+    },
+    {
+      "name": "geo_interval_hint",
+      "value": "Enter a whole number from 1 to 8760 hours. Automatic updates only run while connected."
+    },
+    {
+      "name": "geo_restore_default",
+      "value": "Restore default URL"
+    },
+    {
+      "name": "geo_unsaved_title",
+      "value": "Unsaved changes"
+    },
+    {
+      "name": "geo_unsaved_message",
+      "value": "Keep editing or discard your changes?"
+    },
+    {
+      "name": "geo_discard",
+      "value": "Discard changes"
+    },
+    {
+      "name": "geo_keep_editing",
+      "value": "Keep editing"
+    },
+    {
+      "name": "geo_saved",
+      "value": "Settings saved"
+    },
+    {
+      "name": "geo_saved_pending",
+      "value": "Saved; waiting to apply to the core"
+    },
+    {
+      "name": "geo_updated",
+      "value": "%s updated"
+    },
+    {
+      "name": "geo_unchanged",
+      "value": "%s is already up to date"
+    },
+    {
+      "name": "geo_batch_result",
+      "value": "Resources: %1$d completed, %2$d unsuccessful"
+    },
+    {
+      "name": "geo_failures",
+      "value": "Unsuccessful updates"
+    },
+    {
+      "name": "geo_link_copied",
+      "value": "Link copied"
+    },
+    {
+      "name": "geo_copy_failed",
+      "value": "Could not copy the link"
+    },
+    {
+      "name": "geo_section_title",
+      "value": "Geo resources"
+    },
+    {
+      "name": "geo_auto_update",
+      "value": "Auto update"
+    },
+    {
+      "name": "geo_interval_value",
+      "value": "%d hours"
+    },
+    {
+      "name": "geo_reset_settings",
+      "value": "Restore default settings"
+    },
+    {
+      "name": "geo_reset_message",
+      "value": "Restore all four default URLs and enable updates every 24 hours? Downloaded databases will be kept."
+    },
+    {
+      "name": "geo_invalid_settings",
+      "value": "Resource settings are invalid. Restore defaults to repair them."
+    },
+    {
+      "name": "geo_invalid_url",
+      "value": "Enter a valid HTTP or HTTPS URL with a host, no username or password, and no more than 2048 characters."
+    },
+    {
+      "name": "geo_invalid_interval",
+      "value": "Enter a whole number from 1 to 8760 hours."
+    },
+    {
+      "name": "geo_settings_conflict",
+      "value": "Settings changed. Please review and confirm again."
+    },
+    {
+      "name": "geo_invalid_data",
+      "value": "Invalid resource data"
+    },
+    {
+      "name": "geo_metadata_invalid",
+      "value": "Resource metadata is damaged. Update this resource manually to repair it."
+    },
+    {
+      "name": "geo_timeout",
+      "value": "Resource download timed out"
+    },
+    {
+      "name": "geo_download_failed",
+      "value": "Resource download failed"
+    },
+    {
+      "name": "geo_canceled",
+      "value": "Resource update canceled"
+    },
+    {
+      "name": "geo_stale_boot",
+      "value": "The core connection changed. Please try again after reconnecting."
+    },
+    {
+      "name": "geo_http_error",
+      "value": "Download server returned HTTP %s"
+    },
+    {
+      "name": "geo_io",
+      "value": "Could not read or save resource files"
+    },
+    {
       "name": "module_desc",
       "value": "ArkClash"
     },
@@ -137,24 +309,184 @@
       "value": "Connections"
     },
     {
-      "name": "tools_logs",
-      "value": "Logs"
-    },
-    {
-      "name": "tools_settings",
-      "value": "Settings"
-    },
-    {
       "name": "tools_about",
       "value": "About"
     },
     {
-      "name": "coming_soon",
-      "value": "Under construction"
+      "name": "tools_theme",
+      "value": "Theme"
     },
     {
-      "name": "coming_soon_hint",
-      "value": "This page arrives in a later build."
+      "name": "theme_mode",
+      "value": "Appearance"
+    },
+    {
+      "name": "theme_system",
+      "value": "Follow system"
+    },
+    {
+      "name": "theme_light",
+      "value": "Light"
+    },
+    {
+      "name": "theme_dark",
+      "value": "Dark"
+    },
+    {
+      "name": "theme_pure_black_mode",
+      "value": "Dark background"
+    },
+    {
+      "name": "theme_standard",
+      "value": "Standard"
+    },
+    {
+      "name": "theme_pure_black",
+      "value": "Pure black"
+    },
+    {
+      "name": "theme_color",
+      "value": "Theme color"
+    },
+    {
+      "name": "theme_color_style",
+      "value": "Color style"
+    },
+    {
+      "name": "theme_vivid",
+      "value": "Vivid"
+    },
+    {
+      "name": "theme_tinted",
+      "value": "Tinted"
+    },
+    {
+      "name": "theme_soft",
+      "value": "Soft"
+    },
+    {
+      "name": "theme_monochrome",
+      "value": "Monochrome"
+    },
+    {
+      "name": "theme_add_color",
+      "value": "Add color"
+    },
+    {
+      "name": "theme_custom_color",
+      "value": "Custom color"
+    },
+    {
+      "name": "theme_hex",
+      "value": "Hex color"
+    },
+    {
+      "name": "theme_hue",
+      "value": "Hue"
+    },
+    {
+      "name": "theme_saturation",
+      "value": "Saturation"
+    },
+    {
+      "name": "theme_value",
+      "value": "Brightness"
+    },
+    {
+      "name": "theme_edit",
+      "value": "Edit"
+    },
+    {
+      "name": "theme_delete",
+      "value": "Delete"
+    },
+    {
+      "name": "theme_delete_color",
+      "value": "Delete this color?"
+    },
+    {
+      "name": "theme_reset",
+      "value": "Reset"
+    },
+    {
+      "name": "theme_reset_colors",
+      "value": "Reset theme colors?"
+    },
+    {
+      "name": "theme_confirm",
+      "value": "Save"
+    },
+    {
+      "name": "theme_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "theme_navigation",
+      "value": "Navigation bar"
+    },
+    {
+      "name": "theme_floating",
+      "value": "Floating"
+    },
+    {
+      "name": "theme_docked",
+      "value": "Docked"
+    },
+    {
+      "name": "theme_tab_motion",
+      "value": "Tab animation"
+    },
+    {
+      "name": "theme_slide",
+      "value": "Slide"
+    },
+    {
+      "name": "theme_fade",
+      "value": "Fade"
+    },
+    {
+      "name": "theme_glass",
+      "value": "Immersive glass"
+    },
+    {
+      "name": "theme_none",
+      "value": "None"
+    },
+    {
+      "name": "theme_ultra",
+      "value": "Ultra"
+    },
+    {
+      "name": "theme_font",
+      "value": "Font family"
+    },
+    {
+      "name": "theme_font_retry",
+      "value": "Could not load fonts. Retry"
+    },
+    {
+      "name": "theme_default",
+      "value": "Default"
+    },
+    {
+      "name": "theme_text_scale",
+      "value": "Text size"
+    },
+    {
+      "name": "theme_custom",
+      "value": "Custom"
+    },
+    {
+      "name": "theme_text_sample",
+      "value": "The quick brown fox jumps over the lazy dog."
+    },
+    {
+      "name": "theme_save_failed",
+      "value": "Could not save theme settings"
+    },
+    {
+      "name": "coming_soon",
+      "value": "Under construction"
     },
     {
       "name": "about_version",
@@ -934,7 +1266,7 @@
     },
     {
       "name": "profile_batch_hint",
-      "value": "Enter one subscription URL per line to import multiple profiles"
+      "value": "One link per line. Proxy links become one profile."
     },
     {
       "name": "profile_batch_result",
@@ -1286,7 +1618,11 @@
     },
     {
       "name": "proxy_test_offline",
-      "value": "Connect to test node latency."
+      "value": "Start the core to test node latency."
+    },
+    {
+      "name": "proxy_start_core",
+      "value": "Start core"
     },
     {
       "name": "proxy_test_queued",
@@ -1351,6 +1687,54 @@
     {
       "name": "profile_import_link",
       "value": "Import from link"
+    },
+    {
+      "name": "profile_link_field",
+      "value": "Link"
+    },
+    {
+      "name": "profile_err_import_link",
+      "value": "Enter a valid subscription URL or proxy share link."
+    },
+    {
+      "name": "profile_qr_scan",
+      "value": "Scan QR code"
+    },
+    {
+      "name": "profile_qr_photo",
+      "value": "Choose QR code image"
+    },
+    {
+      "name": "profile_qr_camera_error",
+      "value": "Camera scanning is unavailable. Choose a QR code image to import."
+    },
+    {
+      "name": "profile_qr_photo_error",
+      "value": "Could not read a QR code from the selected image."
+    },
+    {
+      "name": "profile_qr_share",
+      "value": "Subscription QR code"
+    },
+    {
+      "name": "profile_qr_share_error",
+      "value": "Could not generate a QR code. You can copy the link instead."
+    },
+    {
+      "name": "profile_age_key",
+      "value": "age private key"
+    },
+    {
+      "name": "profile_age_required",
+      "value": "This subscription is encrypted. Enter its age private key and try again."
+    },
+    {
+      "name": "profile_age_decrypt",
+      "value": "Could not decrypt the subscription. Check the age private key and the source."
+    },
+    {
+      "name": "profile_age_core_unavailable",
+      "value": "Start the core to decrypt this subscription."
     },
     {
       "name": "profile_import_file",
@@ -1611,6 +1995,2778 @@
     {
       "name": "dash_probe_checked_at_failed",
       "value": "Failed · Last OK"
+    },
+    {
+      "name": "tools_dns",
+      "value": "DNS queries"
+    },
+    {
+      "name": "diagnostics_live",
+      "value": "Live connections"
+    },
+    {
+      "name": "diagnostics_recent",
+      "value": "Recent requests"
+    },
+    {
+      "name": "diagnostics_search",
+      "value": "Search records"
+    },
+    {
+      "name": "diagnostics_search_hint",
+      "value": "Search"
+    },
+    {
+      "name": "diagnostics_filters",
+      "value": "Filters"
+    },
+    {
+      "name": "diagnostics_grouping",
+      "value": "Group by"
+    },
+    {
+      "name": "diagnostics_group_none",
+      "value": "No grouping"
+    },
+    {
+      "name": "diagnostics_group_host",
+      "value": "Host"
+    },
+    {
+      "name": "diagnostics_group_rule",
+      "value": "Rule"
+    },
+    {
+      "name": "diagnostics_group_exit",
+      "value": "Exit"
+    },
+    {
+      "name": "diagnostics_unknown",
+      "value": "Unknown"
+    },
+    {
+      "name": "diagnostics_disconnected",
+      "value": "Diagnostics unavailable"
+    },
+    {
+      "name": "diagnostics_connect_hint",
+      "value": "Records are available once the core is ready."
+    },
+    {
+      "name": "diagnostics_connecting",
+      "value": "Connecting to diagnostics"
+    },
+    {
+      "name": "diagnostics_no_records",
+      "value": "No records yet"
+    },
+    {
+      "name": "diagnostics_collect_hint",
+      "value": "The app records activity even in the background."
+    },
+    {
+      "name": "diagnostics_no_matches",
+      "value": "No matching records"
+    },
+    {
+      "name": "diagnostics_adjust_filters",
+      "value": "Adjust the search or filters."
+    },
+    {
+      "name": "diagnostics_invalid_request",
+      "value": "Invalid diagnostics request"
+    },
+    {
+      "name": "diagnostics_stale_runtime",
+      "value": "The active configuration changed"
+    },
+    {
+      "name": "diagnostics_not_ready",
+      "value": "Diagnostics are not ready"
+    },
+    {
+      "name": "diagnostics_operation_failed",
+      "value": "Diagnostics operation failed"
+    },
+    {
+      "name": "diagnostics_invalid_data",
+      "value": "Invalid diagnostics data"
+    },
+    {
+      "name": "diagnostics_stream_failed",
+      "value": "Diagnostics stream failed"
+    },
+    {
+      "name": "diagnostics_preferences_failed",
+      "value": "Could not save or load display preferences"
+    },
+    {
+      "name": "diagnostics_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "diagnostics_retry_preferences",
+      "value": "Retry preferences"
+    },
+    {
+      "name": "diagnostics_close_one",
+      "value": "Close connection"
+    },
+    {
+      "name": "diagnostics_close_all",
+      "value": "Close all"
+    },
+    {
+      "name": "diagnostics_close_all_hint",
+      "value": "Close every live connection, including those hidden by filters?"
+    },
+    {
+      "name": "diagnostics_clear_cache",
+      "value": "Clear DNS cache"
+    },
+    {
+      "name": "diagnostics_copy_host",
+      "value": "Copy host"
+    },
+    {
+      "name": "diagnostics_copy_endpoint",
+      "value": "Copy destination endpoint"
+    },
+    {
+      "name": "diagnostics_copy_value",
+      "value": "Copy value"
+    },
+    {
+      "name": "diagnostics_copied",
+      "value": "Copied"
+    },
+    {
+      "name": "diagnostics_copy_failed",
+      "value": "Could not copy"
+    },
+    {
+      "name": "diagnostics_closed",
+      "value": "Close request completed"
+    },
+    {
+      "name": "diagnostics_cache_cleared",
+      "value": "DNS cache cleared"
+    },
+    {
+      "name": "diagnostics_latest",
+      "value": "Back to latest"
+    },
+    {
+      "name": "diagnostics_paused",
+      "value": "Auto-follow paused"
+    },
+    {
+      "name": "diagnostics_gap",
+      "value": "%d interruptions · %d merged events · %d evicted records"
+    },
+    {
+      "name": "diagnostics_details",
+      "value": "Details"
+    },
+    {
+      "name": "diagnostics_connection_details",
+      "value": "Connection details"
+    },
+    {
+      "name": "diagnostics_request_details",
+      "value": "Request details"
+    },
+    {
+      "name": "diagnostics_basic_info",
+      "value": "Basic info"
+    },
+    {
+      "name": "diagnostics_address",
+      "value": "Address"
+    },
+    {
+      "name": "diagnostics_creation_time",
+      "value": "Creation time"
+    },
+    {
+      "name": "diagnostics_network_type",
+      "value": "Network type"
+    },
+    {
+      "name": "diagnostics_time",
+      "value": "Time"
+    },
+    {
+      "name": "diagnostics_target",
+      "value": "Target"
+    },
+    {
+      "name": "diagnostics_protocol",
+      "value": "Protocol"
+    },
+    {
+      "name": "diagnostics_network",
+      "value": "Network"
+    },
+    {
+      "name": "diagnostics_rule",
+      "value": "Rule"
+    },
+    {
+      "name": "diagnostics_rule_payload",
+      "value": "Rule payload"
+    },
+    {
+      "name": "diagnostics_exit",
+      "value": "Exit"
+    },
+    {
+      "name": "diagnostics_traffic",
+      "value": "Traffic"
+    },
+    {
+      "name": "diagnostics_download",
+      "value": "Download"
+    },
+    {
+      "name": "diagnostics_upload",
+      "value": "Upload"
+    },
+    {
+      "name": "diagnostics_download_speed",
+      "value": "Download speed"
+    },
+    {
+      "name": "diagnostics_upload_speed",
+      "value": "Upload speed"
+    },
+    {
+      "name": "diagnostics_duration",
+      "value": "Duration"
+    },
+    {
+      "name": "diagnostics_domain",
+      "value": "Domain"
+    },
+    {
+      "name": "diagnostics_type",
+      "value": "Type"
+    },
+    {
+      "name": "diagnostics_initiator",
+      "value": "Initiator"
+    },
+    {
+      "name": "diagnostics_result",
+      "value": "Result"
+    },
+    {
+      "name": "diagnostics_elapsed",
+      "value": "Delay"
+    },
+    {
+      "name": "diagnostics_upstream",
+      "value": "Upstream"
+    },
+    {
+      "name": "diagnostics_host",
+      "value": "Host"
+    },
+    {
+      "name": "diagnostics_source",
+      "value": "Source"
+    },
+    {
+      "name": "diagnostics_destination",
+      "value": "Destination"
+    },
+    {
+      "name": "diagnostics_source_geo",
+      "value": "Source Geo"
+    },
+    {
+      "name": "diagnostics_destination_geo",
+      "value": "Destination Geo"
+    },
+    {
+      "name": "diagnostics_source_asn",
+      "value": "Source ASN"
+    },
+    {
+      "name": "diagnostics_destination_asn",
+      "value": "Destination ASN"
+    },
+    {
+      "name": "diagnostics_dns_mode",
+      "value": "DNS mode"
+    },
+    {
+      "name": "diagnostics_remote_destination",
+      "value": "Remote destination"
+    },
+    {
+      "name": "diagnostics_special_proxy",
+      "value": "Special proxy"
+    },
+    {
+      "name": "diagnostics_special_rules",
+      "value": "Special rules"
+    },
+    {
+      "name": "diagnostics_sniff_host",
+      "value": "Sniffed host"
+    },
+    {
+      "name": "diagnostics_chains",
+      "value": "Proxy chain"
+    },
+    {
+      "name": "diagnostics_provider_chains",
+      "value": "Provider chain"
+    },
+    {
+      "name": "diagnostics_answers",
+      "value": "Answers"
+    },
+    {
+      "name": "diagnostics_error",
+      "value": "Error"
+    },
+    {
+      "name": "diagnostics_rcode",
+      "value": "Response code"
+    },
+    {
+      "name": "diagnostics_cache",
+      "value": "Cache"
+    },
+    {
+      "name": "diagnostics_cached",
+      "value": "Cached"
+    },
+    {
+      "name": "diagnostics_network_query",
+      "value": "Network query"
+    },
+    {
+      "name": "diagnostics_initiator_app",
+      "value": "Application query"
+    },
+    {
+      "name": "diagnostics_initiator_rule",
+      "value": "Rule resolution"
+    },
+    {
+      "name": "diagnostics_initiator_direct",
+      "value": "DIRECT resolution"
+    },
+    {
+      "name": "diagnostics_initiator_proxy",
+      "value": "Proxy server resolution"
+    },
+    {
+      "name": "diagnostics_initiator_other",
+      "value": "Other"
+    },
+    {
+      "name": "diagnostics_resize_column",
+      "value": "Resize column"
+    },
+    {
+      "name": "diagnostics_reset_columns",
+      "value": "Reset column widths"
+    },
+    {
+      "name": "diagnostics_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "diagnostics_close",
+      "value": "Close"
+    },
+    {
+      "name": "diagnostics_more",
+      "value": "More actions"
+    },
+    {
+      "name": "tools_settings",
+      "value": "Settings"
+    },
+    {
+      "name": "tools_other",
+      "value": "Other"
+    },
+    {
+      "name": "tools_advanced_config",
+      "value": "Advanced configuration"
+    },
+    {
+      "name": "network_title",
+      "value": "Network"
+    },
+    {
+      "name": "network_vpn",
+      "value": "VPN"
+    },
+    {
+      "name": "network_ipv6",
+      "value": "IPv6"
+    },
+    {
+      "name": "network_options",
+      "value": "Options"
+    },
+    {
+      "name": "network_system_proxy",
+      "value": "System proxy"
+    },
+    {
+      "name": "network_bypass_domains",
+      "value": "System proxy exceptions"
+    },
+    {
+      "name": "network_dns_hijacking",
+      "value": "DNS hijacking"
+    },
+    {
+      "name": "network_stack",
+      "value": "Stack mode"
+    },
+    {
+      "name": "network_congestion",
+      "value": "TCP congestion control"
+    },
+    {
+      "name": "network_bypass_private",
+      "value": "Bypass private routes"
+    },
+    {
+      "name": "network_routes",
+      "value": "Route addresses"
+    },
+    {
+      "name": "network_exclusions",
+      "value": "Excluded route addresses"
+    },
+    {
+      "name": "network_platform_limit",
+      "value": "HarmonyOS VPN does not provide system proxy or app bypass controls."
+    },
+    {
+      "name": "network_applies_on_connect",
+      "value": "Changes take effect the next time you connect."
+    },
+    {
+      "name": "network_saved",
+      "value": "Network settings saved"
+    },
+    {
+      "name": "network_reconnect",
+      "value": "Network settings saved. Reconnect to apply."
+    },
+    {
+      "name": "network_load_retry",
+      "value": "Retry loading network settings"
+    },
+    {
+      "name": "network_save_failed",
+      "value": "Could not save network settings"
+    },
+    {
+      "name": "network_mtu_range",
+      "value": "Enter an MTU between %d and %d"
+    },
+    {
+      "name": "network_route_hint",
+      "value": "Enter one CIDR per line."
+    },
+    {
+      "name": "network_invalid_cidr",
+      "value": "Enter valid IPv4 or IPv6 CIDR prefixes."
+    },
+    {
+      "name": "network_route_limit",
+      "value": "Enter up to %d CIDR prefixes."
+    },
+    {
+      "name": "network_route_expansion",
+      "value": "These exclusions produce too many routes. Try broader prefixes."
+    },
+    {
+      "name": "dns_override_listen",
+      "value": "Listen"
+    },
+    {
+      "name": "dns_override_mode",
+      "value": "DNS mode"
+    },
+    {
+      "name": "dns_override_fake_ip_filter",
+      "value": "Fake-IP filter"
+    },
+    {
+      "name": "dns_override_fake_ip_mode",
+      "value": "Fake-IP filter mode"
+    },
+    {
+      "name": "dns_override_empty",
+      "value": "No overrides"
+    },
+    {
+      "name": "dns_override_description",
+      "value": "Added entries override the DNS configuration in every profile. Other entries use the profile’s own values."
+    },
+    {
+      "name": "dns_override_add",
+      "value": "Add override"
+    },
+    {
+      "name": "dns_override_remove",
+      "value": "Remove override"
+    },
+    {
+      "name": "dns_override_count",
+      "value": "%d items"
+    },
+    {
+      "name": "dns_override_empty_value",
+      "value": "Empty"
+    },
+    {
+      "name": "dns_override_list_hint",
+      "value": "Enter one item per line."
+    },
+    {
+      "name": "dns_override_saved",
+      "value": "DNS overrides saved"
+    },
+    {
+      "name": "dns_override_invalid",
+      "value": "Check the entry format and its compatibility with the current profile."
+    },
+    {
+      "name": "dns_override_conflict",
+      "value": "DNS settings changed. Review them and retry."
+    },
+    {
+      "name": "dns_override_listen_failed",
+      "value": "The DNS listen address could not be bound."
+    },
+    {
+      "name": "dns_override_unavailable",
+      "value": "The core is changing state. Try again shortly."
+    },
+    {
+      "name": "dns_override_save_failed",
+      "value": "Could not save DNS overrides."
+    },
+    {
+      "name": "dns_override_load_failed",
+      "value": "Could not read DNS overrides."
+    },
+    {
+      "name": "dns_override_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "added_rules_title",
+      "value": "Added rules"
+    },
+    {
+      "name": "added_rules_basic",
+      "value": "Basic information"
+    },
+    {
+      "name": "added_rules_params",
+      "value": "Additional parameters"
+    },
+    {
+      "name": "added_rules_type",
+      "value": "Rule type"
+    },
+    {
+      "name": "added_rules_content",
+      "value": "Content"
+    },
+    {
+      "name": "added_rules_content_hint",
+      "value": "Enter rule content"
+    },
+    {
+      "name": "added_rules_target",
+      "value": "Routing policy"
+    },
+    {
+      "name": "added_rules_no_resolve",
+      "value": "Skip hostname resolution"
+    },
+    {
+      "name": "added_rules_source_ip",
+      "value": "Match source IP"
+    },
+    {
+      "name": "added_rules_add",
+      "value": "Add rule"
+    },
+    {
+      "name": "added_rules_edit",
+      "value": "Edit rule"
+    },
+    {
+      "name": "added_rules_presets",
+      "value": "Quick actions"
+    },
+    {
+      "name": "added_rules_confirm",
+      "value": "Confirm"
+    },
+    {
+      "name": "added_rules_quic",
+      "value": "Block QUIC"
+    },
+    {
+      "name": "added_rules_stun",
+      "value": "Block STUN"
+    },
+    {
+      "name": "added_rules_dot",
+      "value": "Block DNS over TLS"
+    },
+    {
+      "name": "added_rules_loopback",
+      "value": "Prevent proxy loops"
+    },
+    {
+      "name": "added_rules_lan",
+      "value": "LAN direct"
+    },
+    {
+      "name": "added_rules_system",
+      "value": "Apple and Microsoft direct"
+    },
+    {
+      "name": "added_rules_tracker",
+      "value": "BT trackers direct"
+    },
+    {
+      "name": "added_rules_select",
+      "value": "Select rules"
+    },
+    {
+      "name": "added_rules_select_all",
+      "value": "Select all visible rules"
+    },
+    {
+      "name": "added_rules_delete_count",
+      "value": "Delete %d rules?"
+    },
+    {
+      "name": "added_rules_search_hint",
+      "value": "Search type, content, or policy"
+    },
+    {
+      "name": "added_rules_empty",
+      "value": "No rules"
+    },
+    {
+      "name": "added_rules_load_failed",
+      "value": "Could not read added rules."
+    },
+    {
+      "name": "added_rules_invalid",
+      "value": "Check the rule content and its compatibility with the current profile."
+    },
+    {
+      "name": "added_rules_conflict",
+      "value": "Rules changed. Review the list and retry."
+    },
+    {
+      "name": "added_rules_unavailable",
+      "value": "The core is changing state. Try again shortly."
+    },
+    {
+      "name": "added_rules_save_failed",
+      "value": "Could not save the added rules."
+    },
+    {
+      "name": "added_rules_saved",
+      "value": "Added rules saved"
+    },
+    {
+      "name": "added_rules_unsaved",
+      "value": "There are unsaved changes."
+    },
+    {
+      "name": "added_rules_resume",
+      "value": "Continue editing"
+    },
+    {
+      "name": "added_rules_discard",
+      "value": "Discard changes"
+    },
+    {
+      "name": "dns_override_use_hosts",
+      "value": "Use Hosts"
+    },
+    {
+      "name": "dns_override_system_hosts",
+      "value": "Use system Hosts"
+    },
+    {
+      "name": "dns_override_ipv6_timeout",
+      "value": "IPv6 timeout (ms)"
+    },
+    {
+      "name": "dns_override_respect_rules",
+      "value": "Respect routing rules"
+    },
+    {
+      "name": "dns_override_cache_algorithm",
+      "value": "Cache algorithm"
+    },
+    {
+      "name": "dns_override_cache_size",
+      "value": "Maximum cache entries"
+    },
+    {
+      "name": "dns_override_fake_range",
+      "value": "Fake-IP IPv4 range"
+    },
+    {
+      "name": "dns_override_fake_range6",
+      "value": "Fake-IP IPv6 range"
+    },
+    {
+      "name": "dns_override_fallback_lazy",
+      "value": "Query Fallback on demand"
+    },
+    {
+      "name": "dns_override_direct_policy",
+      "value": "Direct follows Nameserver Policy"
+    },
+    {
+      "name": "dns_override_fallback_filter",
+      "value": "Fallback Filter"
+    },
+    {
+      "name": "dns_override_domain",
+      "value": "Domain"
+    },
+    {
+      "name": "dns_override_policy_hint",
+      "value": "Enter one pattern = server per line. Repeat the pattern for multiple servers."
+    },
+    {
+      "name": "dns_override_proxy_servers_required",
+      "value": "Set Proxy Server Nameserver to use this override."
+    },
+    {
+      "name": "network_excluded_apps",
+      "value": "Apps excluded from VPN"
+    },
+    {
+      "name": "network_platform_unsupported",
+      "value": "Unavailable"
+    },
+    {
+      "name": "network_invalid_bundle",
+      "value": "Enter valid HarmonyOS application bundle names."
+    },
+    {
+      "name": "network_app_limit",
+      "value": "Enter up to %d applications."
+    },
+    {
+      "name": "network_excluded_apps_hint",
+      "value": "Enter one application bundle name per line. Changes apply when VPN reconnects."
+    },
+    {
+      "name": "action_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "profile_extension",
+      "value": "Override"
+    },
+    {
+      "name": "script_title",
+      "value": "Scripts"
+    },
+    {
+      "name": "script_new",
+      "value": "Start from scratch"
+    },
+    {
+      "name": "script_import_url",
+      "value": "Import from URL"
+    },
+    {
+      "name": "script_url",
+      "value": "URL"
+    },
+    {
+      "name": "script_sync",
+      "value": "Sync"
+    },
+    {
+      "name": "script_synced",
+      "value": "Script synced"
+    },
+    {
+      "name": "script_local",
+      "value": "Local"
+    },
+    {
+      "name": "script_remote",
+      "value": "Remote"
+    },
+    {
+      "name": "script_no_items",
+      "value": "No scripts yet"
+    },
+    {
+      "name": "script_unnamed",
+      "value": "Unnamed"
+    },
+    {
+      "name": "script_name_hint",
+      "value": "Enter a script name"
+    },
+    {
+      "name": "script_delete_title",
+      "value": "Delete script?"
+    },
+    {
+      "name": "script_delete_bound",
+      "value": "Profiles using this script: %s. Choose another script or clear the selection before applying."
+    },
+    {
+      "name": "script_deleted",
+      "value": "Script deleted"
+    },
+    {
+      "name": "script_saved",
+      "value": "Script saved"
+    },
+    {
+      "name": "script_applied",
+      "value": "Applied"
+    },
+    {
+      "name": "script_saved_apply_error",
+      "value": "Saved. Apply failed: %s"
+    },
+    {
+      "name": "script_pending_core",
+      "value": "Saved. Applies when the profile is loaded."
+    },
+    {
+      "name": "script_remote_edit_hint",
+      "value": "Syncing replaces local edits with the remote version."
+    },
+    {
+      "name": "standard_rules_title",
+      "value": "Profile rules"
+    },
+    {
+      "name": "standard_match_target",
+      "value": "MATCH target"
+    },
+    {
+      "name": "standard_follow_profile",
+      "value": "Follow profile"
+    },
+    {
+      "name": "standard_global_rules",
+      "value": "Global rules for this profile"
+    },
+    {
+      "name": "standard_target_load_failed",
+      "value": "Couldn't load profile targets. Tap to retry."
+    },
+    {
+      "name": "standard_basic_target",
+      "value": "Built-in policy"
+    },
+    {
+      "name": "standard_group_target",
+      "value": "Proxy group · %s"
+    },
+    {
+      "name": "standard_node_target",
+      "value": "Proxy · %s"
+    },
+    {
+      "name": "standard_match_target_missing",
+      "value": "Choose a MATCH target. The profile has no usable MATCH rule or the selected target is unavailable."
+    },
+    {
+      "name": "script_extend_script",
+      "value": "Extension script"
+    },
+    {
+      "name": "script_go_to_manage",
+      "value": "Manage scripts"
+    },
+    {
+      "name": "script_go_to_rules",
+      "value": "Configure added rules"
+    },
+    {
+      "name": "script_apply_now",
+      "value": "Apply now"
+    },
+    {
+      "name": "script_clear_missing",
+      "value": "Tap to clear the selection"
+    },
+    {
+      "name": "script_undo",
+      "value": "Undo"
+    },
+    {
+      "name": "script_redo",
+      "value": "Redo"
+    },
+    {
+      "name": "script_complete",
+      "value": "Show completions"
+    },
+    {
+      "name": "script_copy_selection",
+      "value": "Copy selection"
+    },
+    {
+      "name": "script_editor_wrap",
+      "value": "Word wrap"
+    },
+    {
+      "name": "script_editor_font",
+      "value": "Editor font size"
+    },
+    {
+      "name": "script_font_standard",
+      "value": "Standard size"
+    },
+    {
+      "name": "script_font_large",
+      "value": "Large"
+    },
+    {
+      "name": "script_font_extra_large",
+      "value": "Extra large"
+    },
+    {
+      "name": "script_editor_failed",
+      "value": "Could not load the JavaScript editor"
+    },
+    {
+      "name": "script_err_store",
+      "value": "Could not read script data"
+    },
+    {
+      "name": "script_err_missing",
+      "value": "Selected script is missing"
+    },
+    {
+      "name": "script_err_empty",
+      "value": "The remote script is empty"
+    },
+    {
+      "name": "script_err_encoding",
+      "value": "Script must use UTF-8 encoding"
+    },
+    {
+      "name": "script_err_size",
+      "value": "Script or configuration exceeds the size limit"
+    },
+    {
+      "name": "script_err_config",
+      "value": "Invalid configuration after applying the script"
+    },
+    {
+      "name": "script_err_syntax",
+      "value": "JavaScript syntax error"
+    },
+    {
+      "name": "script_err_execution",
+      "value": "JavaScript execution failed"
+    },
+    {
+      "name": "script_err_entry",
+      "value": "The script must define a main(config) function"
+    },
+    {
+      "name": "script_err_pending",
+      "value": "The Promise returned by main() did not settle"
+    },
+    {
+      "name": "script_err_return",
+      "value": "main() must return a serializable configuration object"
+    },
+    {
+      "name": "script_err_timeout",
+      "value": "The script exceeded the 10-second time limit"
+    },
+    {
+      "name": "script_err_memory",
+      "value": "The script exceeded its memory limit"
+    },
+    {
+      "name": "script_err_stack",
+      "value": "The script exceeded its stack limit"
+    },
+    {
+      "name": "script_err_position",
+      "value": "%1$s (line %2$s, column %3$s)"
+    },
+    {
+      "name": "script_sync_error",
+      "value": "Could not sync %s"
+    },
+    {
+      "name": "script_import_file",
+      "value": "Import from file"
+    },
+    {
+      "name": "rule_set_title",
+      "value": "Rule Sets"
+    },
+    {
+      "name": "rule_set_new",
+      "value": "Start from scratch"
+    },
+    {
+      "name": "rule_set_auto",
+      "value": "Auto detect"
+    },
+    {
+      "name": "rule_set_invalid",
+      "value": "Check the rule set name, URL, and options."
+    },
+    {
+      "name": "rule_set_bad_content",
+      "value": "The file is empty, too large, or contains rules that do not match this format or behavior."
+    },
+    {
+      "name": "rule_set_download_error",
+      "value": "Could not download the rule set."
+    },
+    {
+      "name": "rule_set_in_use",
+      "value": "Remove this rule set from Added Rules before deleting it."
+    },
+    {
+      "name": "rule_set_failed",
+      "value": "Could not complete the rule set operation."
+    },
+    {
+      "name": "rule_set_empty",
+      "value": "No rule sets"
+    },
+    {
+      "name": "rule_set_batch_failed",
+      "value": "Could not import items %s. Their URLs are still in the form."
+    },
+    {
+      "name": "rule_set_saved",
+      "value": "Rule sets saved"
+    },
+    {
+      "name": "rule_set_synced",
+      "value": "Rule set synced"
+    },
+    {
+      "name": "rule_set_sync",
+      "value": "Sync"
+    },
+    {
+      "name": "rule_set_local",
+      "value": "Local"
+    },
+    {
+      "name": "rule_set_remote",
+      "value": "Remote"
+    },
+    {
+      "name": "rule_set_name",
+      "value": "Name"
+    },
+    {
+      "name": "rule_set_urls",
+      "value": "One URL per line"
+    },
+    {
+      "name": "rule_set_behavior",
+      "value": "Behavior"
+    },
+    {
+      "name": "rule_set_format",
+      "value": "Format"
+    },
+    {
+      "name": "rule_set_content_hint",
+      "value": "One rule per line, or a YAML payload"
+    },
+    {
+      "name": "rule_set_preview_partial",
+      "value": "Preview limited to the first 256 KiB."
+    },
+    {
+      "name": "rule_set_delete",
+      "value": "Delete “%s”?"
+    },
+    {
+      "name": "rule_set_choose",
+      "value": "Choose a rule set"
+    },
+    {
+      "name": "local_proxy_field_name",
+      "value": "Name"
+    },
+    {
+      "name": "local_proxy_field_server",
+      "value": "Server"
+    },
+    {
+      "name": "local_proxy_field_port",
+      "value": "Port"
+    },
+    {
+      "name": "local_proxy_field_udp",
+      "value": "UDP"
+    },
+    {
+      "name": "local_proxy_field_openVpnCa",
+      "value": "CA certificate"
+    },
+    {
+      "name": "local_proxy_field_zeroTierNetwork",
+      "value": "Network ID"
+    },
+    {
+      "name": "local_proxy_field_networkName",
+      "value": "Network name"
+    },
+    {
+      "name": "local_proxy_field_networkSecret",
+      "value": "Network secret"
+    },
+    {
+      "name": "local_proxy_field_peers",
+      "value": "Peers"
+    },
+    {
+      "name": "local_proxy_field_virtualIpv4",
+      "value": "Virtual IPv4"
+    },
+    {
+      "name": "local_proxy_field_hostname",
+      "value": "Hostname"
+    },
+    {
+      "name": "local_proxy_field_exitNodes",
+      "value": "Exit nodes"
+    },
+    {
+      "name": "local_proxy_field_username",
+      "value": "Username"
+    },
+    {
+      "name": "local_proxy_field_password",
+      "value": "Password"
+    },
+    {
+      "name": "local_proxy_field_psk",
+      "value": "Pre-shared key"
+    },
+    {
+      "name": "local_proxy_field_key",
+      "value": "Key"
+    },
+    {
+      "name": "local_proxy_field_privateKey",
+      "value": "Private key"
+    },
+    {
+      "name": "local_proxy_field_publicKey",
+      "value": "Public key"
+    },
+    {
+      "name": "local_proxy_field_privateKeyPassphrase",
+      "value": "Private key passphrase"
+    },
+    {
+      "name": "local_proxy_field_preSharedKey",
+      "value": "Pre-shared key"
+    },
+    {
+      "name": "local_proxy_field_authStr",
+      "value": "Password"
+    },
+    {
+      "name": "local_proxy_field_cipher",
+      "value": "Cipher"
+    },
+    {
+      "name": "local_proxy_field_protocol",
+      "value": "Protocol"
+    },
+    {
+      "name": "local_proxy_field_obfs",
+      "value": "Obfuscation"
+    },
+    {
+      "name": "local_proxy_field_transport",
+      "value": "Transport"
+    },
+    {
+      "name": "local_proxy_field_up",
+      "value": "Upload bandwidth"
+    },
+    {
+      "name": "local_proxy_field_down",
+      "value": "Download bandwidth"
+    },
+    {
+      "name": "local_proxy_field_network",
+      "value": "Network"
+    },
+    {
+      "name": "local_proxy_field_wsHeaders",
+      "value": "WebSocket headers"
+    },
+    {
+      "name": "local_proxy_field_httpHeaders",
+      "value": "HTTP headers"
+    },
+    {
+      "name": "local_proxy_field_headers",
+      "value": "Request headers"
+    },
+    {
+      "name": "local_proxy_field_skipCertVerify",
+      "value": "Skip certificate verification"
+    },
+    {
+      "name": "local_proxy_field_clientFingerprint",
+      "value": "Client fingerprint"
+    },
+    {
+      "name": "local_proxy_field_plugin",
+      "value": "Plugin"
+    },
+    {
+      "name": "local_proxy_field_pluginMode",
+      "value": "Plugin mode"
+    },
+    {
+      "name": "local_proxy_field_pluginHost",
+      "value": "Plugin host"
+    },
+    {
+      "name": "local_proxy_field_pluginPath",
+      "value": "Plugin path"
+    },
+    {
+      "name": "local_proxy_field_pluginUsername",
+      "value": "Plugin username"
+    },
+    {
+      "name": "local_proxy_field_pluginPassword",
+      "value": "Plugin password"
+    },
+    {
+      "name": "local_proxy_field_pluginVersion",
+      "value": "Protocol version"
+    },
+    {
+      "name": "local_proxy_field_pluginKey",
+      "value": "Key"
+    },
+    {
+      "name": "local_proxy_field_pluginCrypt",
+      "value": "Plugin cipher"
+    },
+    {
+      "name": "local_proxy_field_pluginSkipCertVerify",
+      "value": "Skip certificate verification"
+    },
+    {
+      "name": "local_proxy_field_protocolParam",
+      "value": "Protocol parameter"
+    },
+    {
+      "name": "local_proxy_field_obfsParam",
+      "value": "Obfuscation parameter"
+    },
+    {
+      "name": "local_proxy_field_obfsPassword",
+      "value": "Obfuscation password"
+    },
+    {
+      "name": "local_proxy_field_obfsSecret",
+      "value": "Obfuscation password"
+    },
+    {
+      "name": "local_proxy_field_obfsMode",
+      "value": "Obfuscation mode"
+    },
+    {
+      "name": "local_proxy_field_obfsHost",
+      "value": "Obfuscation host"
+    },
+    {
+      "name": "local_proxy_field_version",
+      "value": "Protocol version"
+    },
+    {
+      "name": "local_proxy_field_ports",
+      "value": "Port hopping"
+    },
+    {
+      "name": "local_proxy_field_hopInterval",
+      "value": "Hop interval"
+    },
+    {
+      "name": "local_proxy_field_congestionController",
+      "value": "Congestion control"
+    },
+    {
+      "name": "local_proxy_field_udpRelayMode",
+      "value": "UDP relay mode"
+    },
+    {
+      "name": "local_proxy_field_allowedIps",
+      "value": "Allowed IPs"
+    },
+    {
+      "name": "local_proxy_field_remoteDnsResolve",
+      "value": "Remote DNS resolution"
+    },
+    {
+      "name": "local_proxy_field_interfaceName",
+      "value": "Interface name"
+    },
+    {
+      "name": "local_proxy_field_routingMark",
+      "value": "Routing mark"
+    },
+    {
+      "name": "local_proxy_field_ipVersion",
+      "value": "IP version"
+    },
+    {
+      "name": "local_proxy_resources",
+      "value": "Custom resources"
+    },
+    {
+      "name": "local_proxy_title",
+      "value": "Proxies"
+    },
+    {
+      "name": "local_proxy_add",
+      "value": "Add proxy"
+    },
+    {
+      "name": "local_proxy_edit",
+      "value": "Edit proxy"
+    },
+    {
+      "name": "local_proxy_empty",
+      "value": "No proxies"
+    },
+    {
+      "name": "local_proxy_search",
+      "value": "Search by name, type, or server"
+    },
+    {
+      "name": "local_proxy_quick_edit",
+      "value": "Quick edit"
+    },
+    {
+      "name": "local_proxy_basic",
+      "value": "Basic information"
+    },
+    {
+      "name": "local_proxy_auth",
+      "value": "Authentication"
+    },
+    {
+      "name": "local_proxy_network",
+      "value": "Network"
+    },
+    {
+      "name": "local_proxy_transport",
+      "value": "Transport"
+    },
+    {
+      "name": "local_proxy_connection",
+      "value": "Connection"
+    },
+    {
+      "name": "local_proxy_other",
+      "value": "Other"
+    },
+    {
+      "name": "local_proxy_options",
+      "value": "Options"
+    },
+    {
+      "name": "local_proxy_add_option",
+      "value": "Add option"
+    },
+    {
+      "name": "local_proxy_remove_option",
+      "value": "Remove option"
+    },
+    {
+      "name": "local_proxy_optional_field",
+      "value": "Optional"
+    },
+    {
+      "name": "local_proxy_required_field",
+      "value": "Required"
+    },
+    {
+      "name": "local_proxy_item_count",
+      "value": "%d items"
+    },
+    {
+      "name": "local_proxy_list_hint",
+      "value": "One item per line"
+    },
+    {
+      "name": "local_proxy_map_hint",
+      "value": "One key: value pair per line"
+    },
+    {
+      "name": "local_proxy_saved",
+      "value": "Proxy library saved"
+    },
+    {
+      "name": "local_proxy_saved_pending",
+      "value": "Saved, pending core validation"
+    },
+    {
+      "name": "local_proxy_deleted",
+      "value": "Proxies deleted"
+    },
+    {
+      "name": "local_proxy_links_remove",
+      "value": "Proxies to remove: %s"
+    },
+    {
+      "name": "local_proxy_links_add",
+      "value": "Proxies to add: %s"
+    },
+    {
+      "name": "local_proxy_line",
+      "value": "Line %d: %s"
+    },
+    {
+      "name": "local_proxy_name_format",
+      "value": "Names can contain up to 255 characters, with no commas or line breaks."
+    },
+    {
+      "name": "local_proxy_name_reserved",
+      "value": "This name is reserved by the core."
+    },
+    {
+      "name": "local_proxy_name_taken",
+      "value": "A proxy already uses this name."
+    },
+    {
+      "name": "local_proxy_port",
+      "value": "Enter a port between 1 and 65535."
+    },
+    {
+      "name": "local_proxy_type",
+      "value": "Proxy type"
+    },
+    {
+      "name": "local_proxy_unsupported",
+      "value": "Unsupported proxy type."
+    },
+    {
+      "name": "local_proxy_server_length",
+      "value": "The server field can contain up to 512 characters."
+    },
+    {
+      "name": "local_proxy_required",
+      "value": "Fill in the required fields."
+    },
+    {
+      "name": "local_proxy_rejected",
+      "value": "Mihomo rejected this proxy definition. Check the protocol settings."
+    },
+    {
+      "name": "local_proxy_input",
+      "value": "The proxy library or share-link text exceeds the size limit."
+    },
+    {
+      "name": "local_proxy_conflict",
+      "value": "The proxy library changed. Reopen the editor to use the latest version."
+    },
+    {
+      "name": "local_proxy_core_unavailable",
+      "value": "Core unavailable. Validation pending."
+    },
+    {
+      "name": "local_proxy_store",
+      "value": "Could not read or save the proxy library."
+    },
+    {
+      "name": "local_proxy_link",
+      "value": "Invalid share link."
+    },
+    {
+      "name": "local_proxy_single_link",
+      "value": "Enter a share link for exactly one proxy."
+    },
+    {
+      "name": "local_proxy_map",
+      "value": "Use a unique key: value pair on each line."
+    },
+    {
+      "name": "proxy_filters_title",
+      "value": "Filters"
+    },
+    {
+      "name": "proxy_filter_label",
+      "value": "Label"
+    },
+    {
+      "name": "proxy_filter_regex",
+      "value": "Regular expression"
+    },
+    {
+      "name": "proxy_filter_label_invalid",
+      "value": "Enter a filter label."
+    },
+    {
+      "name": "proxy_filter_duplicate",
+      "value": "A filter with this label already exists."
+    },
+    {
+      "name": "proxy_filter_expression_invalid",
+      "value": "Enter a regular expression."
+    },
+    {
+      "name": "proxy_filter_regex_error",
+      "value": "Invalid regular expression in part %d."
+    },
+    {
+      "name": "proxy_filter_error",
+      "value": "Could not read or save filters."
+    },
+    {
+      "name": "proxy_filter_saved",
+      "value": "Filters saved"
+    },
+    {
+      "name": "proxy_filter_empty",
+      "value": "No saved filters"
+    },
+    {
+      "name": "proxy_filter_search",
+      "value": "Search labels and expressions"
+    },
+    {
+      "name": "proxy_filter_delete",
+      "value": "Delete %d filters?"
+    },
+    {
+      "name": "proxy_filter_insert",
+      "value": "Insert filter"
+    },
+    {
+      "name": "proxy_filter_include",
+      "value": "Include matches (filter)"
+    },
+    {
+      "name": "proxy_filter_exclude",
+      "value": "Exclude matches (exclude-filter)"
+    },
+    {
+      "name": "proxy_filter_target",
+      "value": "Apply to"
+    },
+    {
+      "name": "proxy_filter_group_choice",
+      "value": "Group · %s"
+    },
+    {
+      "name": "proxy_filter_provider_choice",
+      "value": "Provider · %s"
+    },
+    {
+      "name": "proxy_filter_field",
+      "value": "Match type"
+    },
+    {
+      "name": "proxy_filter_choose_target",
+      "value": "Choose a group or provider"
+    },
+    {
+      "name": "proxy_filter_choose_preset",
+      "value": "Choose a filter"
+    },
+    {
+      "name": "proxy_filter_no_targets",
+      "value": "This configuration has no editable groups or providers."
+    },
+    {
+      "name": "proxy_filter_bad_yaml",
+      "value": "Fix the YAML before adding a filter."
+    },
+    {
+      "name": "proxy_filter_bad_target",
+      "value": "Could not insert into the chosen field. Check the field in the YAML editor."
+    },
+    {
+      "name": "proxy_filter_already_present",
+      "value": "The selected filter is already present."
+    },
+    {
+      "name": "icon_sets_title",
+      "value": "Icon Sets"
+    },
+    {
+      "name": "icon_sets_empty",
+      "value": "No icons"
+    },
+    {
+      "name": "icon_set_embedded",
+      "value": "Embedded image"
+    },
+    {
+      "name": "icon_set_input",
+      "value": "Check the name or HTTP/HTTPS address."
+    },
+    {
+      "name": "icon_set_invalid",
+      "value": "This JSON does not contain a supported icon set."
+    },
+    {
+      "name": "icon_set_size",
+      "value": "The icon set or library exceeds its size limit."
+    },
+    {
+      "name": "icon_set_download_error",
+      "value": "Could not download the icon set."
+    },
+    {
+      "name": "icon_set_conflict",
+      "value": "The icon library changed. Reopen the item and try again."
+    },
+    {
+      "name": "icon_set_error",
+      "value": "Could not load or save the icon set."
+    },
+    {
+      "name": "icon_set_saved",
+      "value": "Icon sets saved"
+    },
+    {
+      "name": "icon_set_synced",
+      "value": "Icon set synced"
+    },
+    {
+      "name": "icon_set_delete",
+      "value": "Delete “%s”?"
+    },
+    {
+      "name": "icon_set_name_optional",
+      "value": "Name (optional)"
+    },
+    {
+      "name": "icon_set_search",
+      "value": "Search icons"
+    },
+    {
+      "name": "icon_set_recommended",
+      "value": "Recommended"
+    },
+    {
+      "name": "icon_set_target",
+      "value": "Could not edit this group’s icon field."
+    },
+    {
+      "name": "icon_set_icon_url",
+      "value": "Icon URL"
+    },
+    {
+      "name": "icon_set_choose_group",
+      "value": "Choose a proxy group"
+    },
+    {
+      "name": "icon_set_remove_icon",
+      "value": "Remove icon"
+    },
+    {
+      "name": "icon_set_choose_icon",
+      "value": "Choose icon"
+    },
+    {
+      "name": "icon_set_no_groups",
+      "value": "No editable proxy groups"
+    },
+    {
+      "name": "tools_general",
+      "value": "General"
+    },
+    {
+      "name": "tools_logs",
+      "value": "Logs"
+    },
+    {
+      "name": "general_inbound_section",
+      "value": "Inbound"
+    },
+    {
+      "name": "general_core_section",
+      "value": "Requests and core"
+    },
+    {
+      "name": "general_ports",
+      "value": "Proxy ports"
+    },
+    {
+      "name": "general_ports_hint",
+      "value": "Use 1024–49151. Mixed is required. Enter 0 to disable the other ports."
+    },
+    {
+      "name": "general_auth",
+      "value": "Inbound authentication"
+    },
+    {
+      "name": "general_controller",
+      "value": "External controller"
+    },
+    {
+      "name": "general_controller_pending",
+      "value": "Port unavailable"
+    },
+    {
+      "name": "general_controller_secret",
+      "value": "Controller secret"
+    },
+    {
+      "name": "general_new_secret",
+      "value": "Generate new secret"
+    },
+    {
+      "name": "general_ua",
+      "value": "Subscription User-Agent"
+    },
+    {
+      "name": "general_ua_hint",
+      "value": "Leave empty to use the default User-Agent."
+    },
+    {
+      "name": "general_hosts",
+      "value": "Global Hosts"
+    },
+    {
+      "name": "general_hosts_hint",
+      "value": "Enter a domain and one or more addresses or an alias per line, separated by spaces."
+    },
+    {
+      "name": "general_delay_timeout",
+      "value": "Delay-test timeout"
+    },
+    {
+      "name": "general_close_connections",
+      "value": "Close connections on node change"
+    },
+    {
+      "name": "general_capture_logs",
+      "value": "Capture logs"
+    },
+    {
+      "name": "general_log_level",
+      "value": "Core log level"
+    },
+    {
+      "name": "general_log_debug",
+      "value": "Debug"
+    },
+    {
+      "name": "general_log_info",
+      "value": "Info"
+    },
+    {
+      "name": "general_log_warning",
+      "value": "Warning"
+    },
+    {
+      "name": "general_log_error",
+      "value": "Error"
+    },
+    {
+      "name": "general_log_silent",
+      "value": "Silent"
+    },
+    {
+      "name": "general_inherit",
+      "value": "Follow profile"
+    },
+    {
+      "name": "general_default",
+      "value": "Default"
+    },
+    {
+      "name": "general_on",
+      "value": "On"
+    },
+    {
+      "name": "general_off",
+      "value": "Off"
+    },
+    {
+      "name": "general_port_busy",
+      "value": "A proxy port could not be opened. Check the port and try again."
+    },
+    {
+      "name": "general_controller_busy",
+      "value": "Port 9090 could not be opened."
+    },
+    {
+      "name": "general_invalid",
+      "value": "Check the settings and port ranges."
+    },
+    {
+      "name": "general_conflict",
+      "value": "Settings changed. Reopen the form and try again."
+    },
+    {
+      "name": "general_save_failed",
+      "value": "Could not apply settings."
+    },
+    {
+      "name": "general_saved",
+      "value": "Settings saved"
+    },
+    {
+      "name": "logs_filter",
+      "value": "Level"
+    },
+    {
+      "name": "logs_all_levels",
+      "value": "All levels"
+    },
+    {
+      "name": "logs_search",
+      "value": "Search logs"
+    },
+    {
+      "name": "logs_export",
+      "value": "Export logs"
+    },
+    {
+      "name": "logs_exported",
+      "value": "Logs exported"
+    },
+    {
+      "name": "logs_export_failed",
+      "value": "Could not export logs."
+    },
+    {
+      "name": "logs_pause",
+      "value": "Pause"
+    },
+    {
+      "name": "logs_resume",
+      "value": "Resume"
+    },
+    {
+      "name": "logs_capture_off",
+      "value": "Log capture is off."
+    },
+    {
+      "name": "logs_silent",
+      "value": "The core log level is Silent."
+    },
+    {
+      "name": "logs_disconnected",
+      "value": "Log stream disconnected."
+    },
+    {
+      "name": "logs_connecting",
+      "value": "Connecting to log stream…"
+    },
+    {
+      "name": "logs_empty",
+      "value": "No captured logs yet."
+    },
+    {
+      "name": "logs_no_matches",
+      "value": "No matching logs."
+    },
+    {
+      "name": "logs_gap",
+      "value": "Some logs were missed during capture."
+    },
+    {
+      "name": "logs_evicted",
+      "value": "%d older logs removed."
+    },
+    {
+      "name": "general_unavailable",
+      "value": "Proxy status is unconfirmed. Retry after the core is ready."
+    },
+    {
+      "name": "general_storage_failed",
+      "value": "Could not save settings to storage."
+    },
+    {
+      "name": "script_none",
+      "value": "No script"
+    },
+    {
+      "name": "added_rules_exit_new",
+      "value": "New named exit"
+    },
+    {
+      "name": "added_rules_exit_option",
+      "value": "Exit: %s"
+    },
+    {
+      "name": "added_rules_exit_name",
+      "value": "Exit name"
+    },
+    {
+      "name": "added_rules_exit_hint",
+      "value": "For example, Media"
+    },
+    {
+      "name": "added_rules_exit_invalid",
+      "value": "Enter a name without commas or reserved policy names."
+    },
+    {
+      "name": "added_rules_exits",
+      "value": "Named exits"
+    },
+    {
+      "name": "added_rules_exit_auto",
+      "value": "Automatic"
+    },
+    {
+      "name": "added_rules_exit_auto_hint",
+      "value": "Uses a same-named outbound, then MATCH, then DIRECT."
+    },
+    {
+      "name": "added_rules_exit_missing",
+      "value": "Saved outbound %s is unavailable."
+    },
+    {
+      "name": "live_status_title",
+      "value": "Live status"
+    },
+    {
+      "name": "live_status_count",
+      "value": "Live status, %d items"
+    },
+    {
+      "name": "live_status_core_ready",
+      "value": "Ready"
+    },
+    {
+      "name": "live_status_core_starting",
+      "value": "Starting…"
+    },
+    {
+      "name": "live_status_core_stopped",
+      "value": "Stopped"
+    },
+    {
+      "name": "live_status_core_unknown",
+      "value": "Status unavailable"
+    },
+    {
+      "name": "live_status_start_core",
+      "value": "Start core"
+    },
+    {
+      "name": "live_status_app_update",
+      "value": "App update"
+    },
+    {
+      "name": "live_status_check",
+      "value": "Check for updates"
+    },
+    {
+      "name": "live_status_checking",
+      "value": "Checking…"
+    },
+    {
+      "name": "live_status_update_current",
+      "value": "%s is up to date"
+    },
+    {
+      "name": "live_status_update_available",
+      "value": "%s is available"
+    },
+    {
+      "name": "live_status_update_failed",
+      "value": "Check failed. Tap to retry."
+    },
+    {
+      "name": "general_auto_check_update",
+      "value": "Automatically check for app updates"
+    },
+    {
+      "name": "live_status_verifying",
+      "value": "Verifying SHA-256…"
+    },
+    {
+      "name": "live_status_download_ready",
+      "value": "Verified and ready to save"
+    },
+    {
+      "name": "live_status_saving_package",
+      "value": "Saving package…"
+    },
+    {
+      "name": "live_status_gallery_available",
+      "value": "Update available in AppGallery"
+    },
+    {
+      "name": "live_status_install_update",
+      "value": "Update in AppGallery"
+    },
+    {
+      "name": "live_status_install_failed",
+      "value": "Could not open the AppGallery update"
+    },
+    {
+      "name": "live_status_download_unsigned",
+      "value": "Download unsigned HAP"
+    },
+    {
+      "name": "live_status_download_debug",
+      "value": "Download maintainer-signed HAP"
+    },
+    {
+      "name": "live_status_save_package",
+      "value": "Save HAP"
+    },
+    {
+      "name": "live_status_package_saved",
+      "value": "Package saved"
+    },
+    {
+      "name": "live_status_download_failed",
+      "value": "Could not download the update"
+    },
+    {
+      "name": "live_status_checksum_failed",
+      "value": "Update package verification failed"
+    },
+    {
+      "name": "live_status_save_failed",
+      "value": "Could not save the update package"
+    },
+    {
+      "name": "live_status_view_release",
+      "value": "View release"
+    },
+    {
+      "name": "live_status_release_failed",
+      "value": "Could not open the release page."
+    },
+    {
+      "name": "live_status_resources_active",
+      "value": "%d updating"
+    },
+    {
+      "name": "live_status_resources_failed",
+      "value": "%d failed"
+    },
+    {
+      "name": "live_status_resources_unavailable",
+      "value": "Status unavailable"
+    },
+    {
+      "name": "live_status_bytes_total",
+      "value": "%s / %s"
+    },
+    {
+      "name": "live_status_bytes_received",
+      "value": "%s downloaded"
+    },
+    {
+      "name": "live_status_resource_failed",
+      "value": "Update failed"
+    },
+    {
+      "name": "backup_title",
+      "value": "Backup & restore"
+    },
+    {
+      "name": "backup_local",
+      "value": "Local"
+    },
+    {
+      "name": "backup_remote",
+      "value": "WebDAV"
+    },
+    {
+      "name": "backup_remote_hint",
+      "value": "Connect WebDAV to upload and restore backups."
+    },
+    {
+      "name": "backup_bind",
+      "value": "Connect WebDAV"
+    },
+    {
+      "name": "backup_address",
+      "value": "Server address"
+    },
+    {
+      "name": "backup_username",
+      "value": "Username"
+    },
+    {
+      "name": "backup_password",
+      "value": "Password"
+    },
+    {
+      "name": "backup_filename",
+      "value": "Remote filename"
+    },
+    {
+      "name": "backup_save",
+      "value": "Save"
+    },
+    {
+      "name": "backup_unbind",
+      "value": "Disconnect WebDAV"
+    },
+    {
+      "name": "backup_confirm_unbind",
+      "value": "Remove the connection from this device. The remote backup file stays in place."
+    },
+    {
+      "name": "backup_checking",
+      "value": "Checking connection…"
+    },
+    {
+      "name": "backup_connected",
+      "value": "Connected"
+    },
+    {
+      "name": "backup_export",
+      "value": "Back up"
+    },
+    {
+      "name": "backup_restore",
+      "value": "Restore"
+    },
+    {
+      "name": "backup_policy",
+      "value": "Restore strategy"
+    },
+    {
+      "name": "backup_merge",
+      "value": "Merge"
+    },
+    {
+      "name": "backup_replace",
+      "value": "Replace"
+    },
+    {
+      "name": "backup_selected",
+      "value": "Selected"
+    },
+    {
+      "name": "backup_profiles",
+      "value": "Profiles and resources"
+    },
+    {
+      "name": "backup_all",
+      "value": "All data"
+    },
+    {
+      "name": "backup_restore_hint",
+      "value": "Restoring profiles and resources includes scripts, rules and proxies and keeps this device’s app settings."
+    },
+    {
+      "name": "backup_sensitive",
+      "value": "The ZIP is unencrypted and contains subscriptions, proxies, and credentials in the selected scope."
+    },
+    {
+      "name": "backup_confirm_overwrite",
+      "value": "Replace will remove %d local profiles or resources missing from the backup."
+    },
+    {
+      "name": "backup_exported",
+      "value": "Backup complete"
+    },
+    {
+      "name": "backup_restored",
+      "value": "Restore complete"
+    },
+    {
+      "name": "backup_restore_pending",
+      "value": "Data restored. Applying the configuration is pending."
+    },
+    {
+      "name": "backup_retry_apply",
+      "value": "Retry applying the restored configuration"
+    },
+    {
+      "name": "backup_empty",
+      "value": "This backup contains no data in the selected scope."
+    },
+    {
+      "name": "backup_phase_snapshot",
+      "value": "Preparing snapshot…"
+    },
+    {
+      "name": "backup_phase_pack",
+      "value": "Creating ZIP…"
+    },
+    {
+      "name": "backup_phase_write",
+      "value": "Writing backup…"
+    },
+    {
+      "name": "backup_phase_read",
+      "value": "Reading backup…"
+    },
+    {
+      "name": "backup_phase_unpack",
+      "value": "Extracting ZIP…"
+    },
+    {
+      "name": "backup_phase_validate",
+      "value": "Validating restore…"
+    },
+    {
+      "name": "backup_phase_commit",
+      "value": "Saving restored data…"
+    },
+    {
+      "name": "backup_phase_apply",
+      "value": "Applying restored configuration…"
+    },
+    {
+      "name": "backup_error_invalid",
+      "value": "The backup is incomplete or failed validation."
+    },
+    {
+      "name": "backup_error_version",
+      "value": "This backup format version is unsupported."
+    },
+    {
+      "name": "backup_error_limit",
+      "value": "The backup exceeds its size limits."
+    },
+    {
+      "name": "backup_error_conflict",
+      "value": "Local data changed. Try again."
+    },
+    {
+      "name": "backup_error_dav_settings",
+      "value": "Check the WebDAV address, username, password, and filename."
+    },
+    {
+      "name": "backup_error_dav_network",
+      "value": "Could not connect to WebDAV. Check the network and server certificate."
+    },
+    {
+      "name": "backup_error_dav_response",
+      "value": "WebDAV returned an incomplete or invalid response."
+    },
+    {
+      "name": "backup_error_http",
+      "value": "The WebDAV request failed (HTTP %d)."
+    },
+    {
+      "name": "backup_error_io",
+      "value": "Could not read or write the backup."
+    },
+    {
+      "name": "custom_create",
+      "value": "New custom profile"
+    },
+    {
+      "name": "custom_profile",
+      "value": "Custom profile"
+    },
+    {
+      "name": "custom_unnamed",
+      "value": "Enter a profile name"
+    },
+    {
+      "name": "custom_groups",
+      "value": "Proxy groups"
+    },
+    {
+      "name": "custom_group",
+      "value": "Edit proxy group"
+    },
+    {
+      "name": "custom_rules",
+      "value": "Rules"
+    },
+    {
+      "name": "custom_rule",
+      "value": "Edit rule"
+    },
+    {
+      "name": "custom_nodes",
+      "value": "Nodes and dialers"
+    },
+    {
+      "name": "custom_issues",
+      "value": "Configuration issues"
+    },
+    {
+      "name": "custom_proxy_providers",
+      "value": "Proxy providers"
+    },
+    {
+      "name": "custom_rule_providers",
+      "value": "Rule providers"
+    },
+    {
+      "name": "custom_sniffer",
+      "value": "Sniffer"
+    },
+    {
+      "name": "custom_import",
+      "value": "Import structure"
+    },
+    {
+      "name": "custom_source",
+      "value": "Profile YAML"
+    },
+    {
+      "name": "custom_from_link",
+      "value": "Import from URL"
+    },
+    {
+      "name": "custom_add_group",
+      "value": "Add group"
+    },
+    {
+      "name": "custom_add_rule",
+      "value": "Add rule"
+    },
+    {
+      "name": "custom_from_library",
+      "value": "Add from node library"
+    },
+    {
+      "name": "custom_filter_preset",
+      "value": "Filter preset"
+    },
+    {
+      "name": "custom_choose_target",
+      "value": "Choose target"
+    },
+    {
+      "name": "custom_choose_member",
+      "value": "Add member"
+    },
+    {
+      "name": "custom_choose_provider",
+      "value": "Add provider"
+    },
+    {
+      "name": "custom_dialer",
+      "value": "Choose dialer"
+    },
+    {
+      "name": "custom_no_dialer",
+      "value": "No dialer"
+    },
+    {
+      "name": "custom_dialer_hint",
+      "value": "Tap a node to set its dialer."
+    },
+    {
+      "name": "custom_members",
+      "value": "Members · one per line"
+    },
+    {
+      "name": "custom_group_providers",
+      "value": "Providers · one per line"
+    },
+    {
+      "name": "custom_group_options",
+      "value": "Group options (YAML)"
+    },
+    {
+      "name": "custom_type",
+      "value": "Type"
+    },
+    {
+      "name": "custom_rule_payload",
+      "value": "Match condition"
+    },
+    {
+      "name": "custom_rule_target",
+      "value": "Target"
+    },
+    {
+      "name": "custom_rule_options",
+      "value": "Rule parameters"
+    },
+    {
+      "name": "custom_sub_rules",
+      "value": "Sub-rules"
+    },
+    {
+      "name": "custom_search",
+      "value": "Search"
+    },
+    {
+      "name": "custom_empty",
+      "value": "No entries yet"
+    },
+    {
+      "name": "custom_no_choices",
+      "value": "No matching entries"
+    },
+    {
+      "name": "custom_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "custom_move_up",
+      "value": "Move up"
+    },
+    {
+      "name": "custom_move_down",
+      "value": "Move down"
+    },
+    {
+      "name": "custom_continue",
+      "value": "Continue"
+    },
+    {
+      "name": "custom_import_replace",
+      "value": "Replace this configuration with the imported YAML?"
+    },
+    {
+      "name": "custom_remove_target",
+      "value": "Remove this entry? Existing references will need attention."
+    },
+    {
+      "name": "custom_invalid_shape",
+      "value": "The YAML section has an unexpected structure."
+    },
+    {
+      "name": "custom_saved",
+      "value": "Custom profile saved"
+    },
+    {
+      "name": "custom_saved_warning",
+      "value": "Profile saved with unresolved references"
+    },
+    {
+      "name": "custom_warning",
+      "value": "Warning"
+    },
+    {
+      "name": "custom_error",
+      "value": "Error"
+    },
+    {
+      "name": "custom_issue_name",
+      "value": "Invalid node or group name: %s"
+    },
+    {
+      "name": "custom_issue_duplicate",
+      "value": "Duplicate node or group name: %s"
+    },
+    {
+      "name": "custom_issue_type",
+      "value": "Unsupported or missing type in %1$s: %2$s"
+    },
+    {
+      "name": "custom_issue_empty_group",
+      "value": "%s has no member source"
+    },
+    {
+      "name": "custom_issue_target",
+      "value": "%1$s references missing target %2$s"
+    },
+    {
+      "name": "custom_issue_provider",
+      "value": "%1$s references missing provider %2$s"
+    },
+    {
+      "name": "custom_issue_fallback",
+      "value": "%1$s has invalid fallback %2$s"
+    },
+    {
+      "name": "custom_issue_cycle",
+      "value": "Proxy dependency cycle: %s"
+    },
+    {
+      "name": "custom_issue_rule",
+      "value": "Invalid rule at %s"
+    },
+    {
+      "name": "custom_issue_rule_provider",
+      "value": "Rule %1$s references missing rule provider %2$s"
+    },
+    {
+      "name": "custom_issue_sub_rule",
+      "value": "Rule %1$s references missing sub-rule %2$s"
+    },
+    {
+      "name": "custom_discard_title",
+      "value": "Discard changes?"
+    },
+    {
+      "name": "err_invalid_yaml_position",
+      "value": "Invalid YAML (line %1$s, col %2$s)"
+    },
+    {
+      "name": "yaml_copy_all",
+      "value": "Copy all"
+    },
+    {
+      "name": "yaml_editor_failed",
+      "value": "Could not load the YAML editor"
+    },
+    {
+      "name": "profile_runtime_preview",
+      "value": "Runtime config"
+    },
+    {
+      "name": "profile_preview_loading",
+      "value": "Building runtime configuration…"
+    },
+    {
+      "name": "profile_preview_host_unavailable",
+      "value": "Proxy host is not ready. Start the core to build the runtime configuration."
+    },
+    {
+      "name": "profile_preview_start_core",
+      "value": "Start core & retry"
+    },
+    {
+      "name": "profile_preview_version_applied",
+      "value": "Running config #%1$s · Saved %2$s"
+    },
+    {
+      "name": "profile_preview_version_applied_only",
+      "value": "Running config #%s"
+    },
+    {
+      "name": "profile_preview_version_saved",
+      "value": "Saved version %s"
+    },
+    {
+      "name": "profile_preview_version_unsaved",
+      "value": "Saved profile version"
+    },
+    {
+      "name": "profile_preview_not_applied",
+      "value": "This preview is not currently applied to the running core."
+    },
+    {
+      "name": "profile_preview_err_custom_tun",
+      "value": "Custom TUN listeners are not supported"
+    },
+    {
+      "name": "profile_preview_err_too_large",
+      "value": "Runtime configuration exceeds the preview size limit"
+    },
+    {
+      "name": "profile_preview_err_rule_set",
+      "value": "A referenced rule set is missing or invalid"
+    },
+    {
+      "name": "profile_preview_err_build",
+      "value": "Could not build the runtime configuration"
+    },
+    {
+      "name": "provider_section_title",
+      "value": "Runtime Providers"
+    },
+    {
+      "name": "provider_proxy_section",
+      "value": "Proxy Providers"
+    },
+    {
+      "name": "provider_rule_section",
+      "value": "Rule Providers"
+    },
+    {
+      "name": "provider_vehicle_http",
+      "value": "HTTP"
+    },
+    {
+      "name": "provider_vehicle_file",
+      "value": "File"
+    },
+    {
+      "name": "provider_vehicle_inline",
+      "value": "Inline"
+    },
+    {
+      "name": "provider_proxy_count",
+      "value": "%d nodes"
+    },
+    {
+      "name": "provider_rule_count",
+      "value": "%d rules"
+    },
+    {
+      "name": "provider_never_updated",
+      "value": "Not updated"
+    },
+    {
+      "name": "provider_updating",
+      "value": "Updating provider"
+    },
+    {
+      "name": "provider_loading",
+      "value": "Loading runtime providers"
+    },
+    {
+      "name": "provider_not_ready_title",
+      "value": "Core not ready"
+    },
+    {
+      "name": "provider_not_ready_hint",
+      "value": "Start the core or connect to inspect and manage running providers."
+    },
+    {
+      "name": "provider_empty_title",
+      "value": "No providers in running profile"
+    },
+    {
+      "name": "provider_empty_hint",
+      "value": "Proxy and rule providers declared in the active profile will appear here."
+    },
+    {
+      "name": "provider_connect_to_refresh",
+      "value": "Connect to refresh remote HTTP providers. Local file replacement is available now."
+    },
+    {
+      "name": "provider_replace_file",
+      "value": "Replace from local file"
+    },
+    {
+      "name": "provider_updated",
+      "value": "Updated %s"
+    },
+    {
+      "name": "provider_unchanged",
+      "value": "%s is already up to date"
+    },
+    {
+      "name": "provider_replaced",
+      "value": "Replaced %s"
+    },
+    {
+      "name": "provider_err_unavailable",
+      "value": "Running core is unavailable"
+    },
+    {
+      "name": "provider_err_stale_config",
+      "value": "Active profile changed during the operation"
+    },
+    {
+      "name": "provider_err_not_found",
+      "value": "Provider no longer exists in the running profile"
+    },
+    {
+      "name": "provider_err_not_updatable",
+      "value": "This provider does not support remote refresh"
+    },
+    {
+      "name": "provider_err_not_replaceable",
+      "value": "Inline providers cannot be replaced from a file"
+    },
+    {
+      "name": "provider_err_busy",
+      "value": "This provider is already updating"
+    },
+    {
+      "name": "provider_err_invalid_content",
+      "value": "File format or content does not match this provider"
+    },
+    {
+      "name": "provider_err_timeout",
+      "value": "Provider update timed out"
+    },
+    {
+      "name": "provider_err_io",
+      "value": "Could not read or write the provider file"
+    },
+    {
+      "name": "provider_err_update_failed",
+      "value": "Provider update failed; previous content kept"
+    },
+    {
+      "name": "proxy_save_to_library",
+      "value": "Save to local proxy library"
+    },
+    {
+      "name": "proxy_saved_to_library",
+      "value": "Saved \"%s\" to local proxy library"
+    },
+    {
+      "name": "proxy_saved_overwritten",
+      "value": "Overwrote \"%s\" in local proxy library"
+    },
+    {
+      "name": "proxy_save_conflict_title",
+      "value": "Duplicate name in local proxy library"
+    },
+    {
+      "name": "proxy_save_conflict_message",
+      "value": "\"%s\" already exists in the local proxy library. Choose how to proceed."
+    },
+    {
+      "name": "proxy_save_conflict_overwrite",
+      "value": "Overwrite existing node"
+    },
+    {
+      "name": "proxy_save_conflict_rename",
+      "value": "Save as \"%s\""
+    },
+    {
+      "name": "proxy_save_err_stale",
+      "value": "Active profile changed; refresh and try again"
+    },
+    {
+      "name": "proxy_save_err_not_found",
+      "value": "Node no longer exists in the running profile"
+    },
+    {
+      "name": "proxy_save_err_not_exportable",
+      "value": "This item cannot be saved to the local proxy library"
+    },
+    {
+      "name": "proxy_save_err_name_taken",
+      "value": "A node with this name already exists"
+    },
+    {
+      "name": "proxy_save_err_conflict",
+      "value": "Local proxy library changed concurrently; try again"
+    },
+    {
+      "name": "proxy_save_err_store",
+      "value": "Could not read or write the local proxy library"
+    },
+    {
+      "name": "proxy_save_err_invalid",
+      "value": "Node parameters failed local proxy validation"
+    },
+    {
+      "name": "proxy_save_err_failed",
+      "value": "Could not save node to local proxy library"
     }
   ]
 }

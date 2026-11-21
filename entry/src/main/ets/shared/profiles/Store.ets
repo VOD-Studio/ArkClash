@@ -59,6 +59,15 @@ export function profilesDir(filesDir: string): string {
   return `${filesDir}/profiles`;
 }
 
+export async function profileDataPath(filesDir: string, file: string): Promise<string> {
+  const home = await fs.access(`${profilesDir(filesDir)}/.backup-store`) ? profilesDir(filesDir) : filesDir;
+  return `${home}/${file}`;
+}
+
+export function profileWorkDir(filesDir: string): string {
+  return `${filesDir}/profile-work`;
+}
+
 export function listPath(filesDir: string): string {
   return `${profilesDir(filesDir)}/list.json`;
 }
@@ -79,7 +88,7 @@ export function yamlPath(filesDir: string, profile: string): string {
 }
 
 export function candidatePath(filesDir: string, profile: string): string {
-  return `${profilesDir(filesDir)}/${newId(checkedId(profile) + '.')}.candidate`;
+  return `${profileWorkDir(filesDir)}/${newId(checkedId(profile) + '.')}.candidate`;
 }
 
 export function summaryPath(filesDir: string, profile: string): string {
@@ -108,16 +117,16 @@ export function missingFile(error: Object): boolean {
 }
 
 export async function ensureProfilesDir(filesDir: string): Promise<void> {
-  const path = profilesDir(filesDir);
-  if (await fs.access(path)) {
-    return;
-  }
+  await ensureProfileDirectory(profilesDir(filesDir));
+  await ensureProfileDirectory(profileWorkDir(filesDir));
+}
+
+async function ensureProfileDirectory(path: string): Promise<void> {
+  if (await fs.access(path)) { return; }
   try {
     await fs.mkdir(path, true);
-  } catch (e) {
-    if (!(await fs.access(path))) {
-      throw new ProfileError('io');
-    }
+  } catch (_error) {
+    if (!(await fs.access(path))) { throw new ProfileError('io'); }
   }
 }
 
@@ -192,6 +201,7 @@ function parseList(text: string): ProfileList {
     for (const sub of list.subscriptions) {
       if (sub === null || !validProfileId(sub.id) || subscriptions.has(sub.id) ||
         typeof sub.url !== 'string' || typeof sub.autoUpdate !== 'boolean' ||
+        (sub.ageSecretKey !== undefined && typeof sub.ageSecretKey !== 'string') ||
         !Number.isFinite(intervalMinutes(sub)) || intervalMinutes(sub) < 1) {
         throw new ProfileError('corrupt');
       }
@@ -228,7 +238,11 @@ export function readList(filesDir: string): ProfileList {
 }
 
 export async function readListAsync(filesDir: string): Promise<ProfileList> {
-  const text = await readOptionalText(listPath(filesDir));
+  return readProfileListFile(listPath(filesDir));
+}
+
+export async function readProfileListFile(path: string): Promise<ProfileList> {
+  const text = await readOptionalText(path);
   return text === undefined ? emptyList() : parseList(text);
 }
 
@@ -312,6 +326,13 @@ export async function writeSelected(filesDir: string, profileId: string,
 }
 
 export async function withProfileStorage<T>(filesDir: string, operation: () => Promise<T>): Promise<T> {
+  return withProfileDataLock<T>(filesDir, async (): Promise<T> => {
+    await ensureProfilesDir(filesDir);
+    return operation();
+  });
+}
+
+export async function withProfileDataLock<T>(filesDir: string, operation: () => Promise<T>): Promise<T> {
   const previous = storageQueues.get(filesDir) ?? Promise.resolve();
   let release: () => void = (): void => {};
   const gate = new Promise<void>((resolve: () => void): void => { release = resolve; });
@@ -320,8 +341,7 @@ export async function withProfileStorage<T>(filesDir: string, operation: () => P
   await previous;
   let file: fs.File | undefined = undefined;
   try {
-    await ensureProfilesDir(filesDir);
-    file = await fs.open(`${profilesDir(filesDir)}/.storage.lock`, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE);
+    file = await fs.open(`${filesDir}/.profile-storage.lock`, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE);
     await file.lock(true);
     return await operation();
   } finally {
@@ -347,7 +367,7 @@ export async function withProfileTask<T>(filesDir: string, resource: string,
   let file: fs.File | undefined = undefined;
   try {
     await ensureProfilesDir(filesDir);
-    file = await fs.open(`${profilesDir(filesDir)}/.${resource}.task.lock`, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE);
+    file = await fs.open(`${profileWorkDir(filesDir)}/.${resource}.task.lock`, fs.OpenMode.CREATE | fs.OpenMode.READ_WRITE);
     try { file.tryLock(true); } catch (e) { throw new ProfileError('busy'); }
     return await operation();
   } finally {

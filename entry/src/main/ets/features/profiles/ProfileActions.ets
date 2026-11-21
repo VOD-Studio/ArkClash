@@ -1,6 +1,7 @@
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { validSubscriptionUrl } from '../../shared/profiles/Download';
 import { ProfileError } from '../../shared/profiles/Errors';
+import { isProxyShareLink } from '../../shared/profiles/ShareProfile';
 import {
   candidatePath, checkProfileCommit, findProfile, findSubscription, intervalMinutes, listPath, newId, ProfileList,
   ProfileRecord, readListAsync, readOptionalText, removeProfileFile, selectedPath, statePath, SubscriptionRecord,
@@ -22,8 +23,9 @@ export function parseProfileLinks(text: string, existingUrls: string[]): Profile
     if (line === '') {
       continue;
     }
-    for (const source of line.split(new RegExp('\\s+'))) {
-      if (!validSubscriptionUrl(source)) {
+    const sources = isProxyShareLink(line) ? [line] : line.split(new RegExp('\\s+'));
+    for (const source of sources) {
+      if (!validSubscriptionUrl(source) && !isProxyShareLink(source)) {
         result.errors.push(index + 1);
       } else if (seen.has(source)) {
         result.skipped++;
@@ -69,9 +71,15 @@ function applyMetadata(list: ProfileList, id: string, edit: ProfileEdit): boolea
     if (list.subscriptions.some((other: SubscriptionRecord): boolean => other.id !== sub.id && other.url === source)) {
       throw new ProfileError('link_exists');
     }
-    sourceChanged = source !== sub.url;
+    const oldKey = sub.ageSecretKey ?? '';
+    const newKey = edit.ageSecretKey?.trim() ?? oldKey;
+    if (edit.baseAgeSecretKey !== undefined && oldKey !== edit.baseAgeSecretKey && oldKey !== newKey) {
+      throw new ProfileError('conflict');
+    }
+    sourceChanged = source !== sub.url || newKey !== oldKey;
     if (sourceChanged) {
       sub.url = source;
+      sub.ageSecretKey = newKey === '' ? undefined : newKey;
       sub.revision = newId('s');
     }
     sub.autoUpdate = edit.autoUpdate;

@@ -1,23 +1,35 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
+import { common } from '@kit.AbilityKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
+import { readProfileQrPhoto, scanProfileQr } from '../../client/ProfileQrScanner';
 import { EmptyState } from '../../components/EmptyState';
 import { ListSource } from '../../components/ListSource';
 import { TabPage } from '../../components/TabPage';
-import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { PAGE_GUTTER } from '../../components/Theme';
+import { errorString } from '../../shared/profiles/Errors';
+import { confirmCustomDismiss, CustomProfileDraft } from './CustomProfileDraft';
+import { CustomProfileEditor } from './CustomProfileEditor';
 import { ProfileCard } from './ProfileCard';
 import { ProfileDetails } from './ProfileDetails';
 import { ProfileDraft } from './ProfileDraft';
 import { confirmProfileEditorDismiss, ProfileEditor } from './ProfileEditor';
 import { describeError } from './ProfileErrors';
 import { ProfileImportSheet } from './ProfileImportSheet';
+import { ProfileQrShare } from './ProfileQrShare';
 import { ProfileBatchResult, ProfileItem, ProfileStore } from './Profiles';
 import { ProfileResults } from './ProfileResults';
 import { ProfileSortSheet } from './ProfileSortSheet';
 
+type ProfileAddChoice = 'file' | 'link' | 'custom' | 'camera' | 'photo';
+
 @ComponentV2
 export struct ProfilesPage {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require store: ProfileStore;
   @Param @Require scroller: Scroller;
+  @Event onExtension: (profile: string) => void = (_profile: string): void => {};
+  @Event onRuntimePreview: (profile: string, name: string) => void = (_profile: string, _name: string): void => {};
   @Event onScrollDirection: (down: boolean) => void = (): void => {};
   @Param topInset: number = 0;
   @Param pickerMode: boolean = false;
@@ -27,8 +39,13 @@ export struct ProfilesPage {
   @Local addShown: boolean = false;
   @Local addMenuShown: boolean = false;
   @Local adding: boolean = false;
+  @Local private scanningQr: boolean = false;
+  @Local private addSource: string = '';
+  @Local private qrShareShown: boolean = false;
+  @Local private qrShareSource: string = '';
   @Local editShown: boolean = false;
   @Local draft: ProfileDraft | undefined = undefined;
+  @Local customDraft: CustomProfileDraft | undefined = undefined;
   @Local sortShown: boolean = false;
   @Local resultShown: boolean = false;
   @Local result: ProfileBatchResult | undefined = undefined;
@@ -44,7 +61,10 @@ export struct ProfilesPage {
   private reportedApplyError: string = '';
   private pendingResult: boolean = false;
   private pendingResultError: string = '';
-  private addChoice: 'file' | 'link' | undefined = undefined;
+  private addChoice: ProfileAddChoice | undefined = undefined;
+  private pendingQr: string = '';
+  private pendingQrError: string = '';
+  private mounted: boolean = false;
 
   private clockVisible(visible: boolean): void {
     this.clockInView = visible;
@@ -52,16 +72,18 @@ export struct ProfilesPage {
     if (visible && this.visible) {
       this.currentTime = Date.now();
       this.clockTimer = setInterval((): void => { this.currentTime = Date.now(); }, 60000);
+      this.showQrResult();
     }
     this.consumeApplyError();
   }
 
-  aboutToDisappear(): void { this.clockVisible(false); }
+  aboutToDisappear(): void { this.mounted = false; this.clockVisible(false); }
 
   @Monitor('visible')
   onVisibilityChange(): void { this.clockVisible(this.clockInView); }
 
   aboutToAppear(): void {
+    this.mounted = true;
     this.rows.replace(this.store.items);
   }
 
@@ -114,8 +136,15 @@ export struct ProfilesPage {
   private toast(message: ResourceStr): void {
     if (this.visible && this.clockInView) { this.getUIContext().getPromptAction().showToast({ message: message }); }
   }
-  private openAdd(): void { this.addShown = true; }
-  private openEdit(item: ProfileItem): void { this.draft = new ProfileDraft(item); this.editShown = true; }
+  private openAdd(source: string = ''): void {
+    this.addSource = source;
+    this.addShown = true;
+  }
+  private openEdit(item: ProfileItem): void {
+    if (item.type === 'custom') { this.customDraft = new CustomProfileDraft(item); }
+    else { this.draft = new ProfileDraft(item); }
+    this.editShown = true;
+  }
 
   private menus(): HdsNavigationMenuItemOptions[] {
     const menus: HdsNavigationMenuItemOptions[] = [];
@@ -128,7 +157,8 @@ export struct ProfilesPage {
         action: (): void => { this.sortShown = true; } } });
     }
     menus.push({ content: { label: $r('app.string.action_add'), icon: $r('sys.symbol.plus'),
-      isEnabled: this.store.loaded && this.store.loadError === '', action: (): void => this.showAddMenu() } });
+      isEnabled: this.store.loaded && this.store.loadError === '' && !this.scanningQr,
+      action: (): void => this.showAddMenu() } });
     return menus;
   }
 
@@ -143,6 +173,33 @@ export struct ProfilesPage {
     if (!this.visible) { return; }
     if (choice === 'file') { this.importLocal(); }
     else if (choice === 'link') { this.openAdd(); }
+    else if (choice === 'custom') { this.customDraft = new CustomProfileDraft(); this.editShown = true; }
+    else if (choice === 'camera' || choice === 'photo') { this.importQr(choice === 'camera'); }
+  }
+
+  private async importQr(camera: boolean): Promise<void> {
+    if (this.scanningQr) { return; }
+    this.scanningQr = true;
+    try {
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const source = camera ? await scanProfileQr(context) : await readProfileQrPhoto();
+      if (this.mounted) { this.pendingQr = source ?? ''; }
+    } catch (error) {
+      if (this.mounted) { this.pendingQrError = errorString(error as Object); }
+    } finally {
+      this.scanningQr = false;
+      this.showQrResult();
+    }
+  }
+
+  private showQrResult(): void {
+    if (!this.mounted || !this.visible || !this.clockInView) { return; }
+    const source = this.pendingQr;
+    const failure = this.pendingQrError;
+    this.pendingQr = '';
+    this.pendingQrError = '';
+    if (source !== '') { this.openAdd(source); }
+    if (failure !== '') { this.toast(describeError(failure)); }
   }
 
   private async importLocal(): Promise<void> {
@@ -182,9 +239,9 @@ export struct ProfilesPage {
     const failure = await this.store.export(item.id);
     if (failure !== undefined) { this.toast(describeError(failure)); }
   }
-  private async copyLink(item: ProfileItem): Promise<void> {
+  private async copyLink(source: string): Promise<void> {
     try {
-      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, item.url);
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, source);
       await pasteboard.getSystemPasteboard().setData(data);
       this.toast($r('app.string.copied'));
     } catch (e) { this.toast(describeError('io')); }
@@ -216,9 +273,11 @@ export struct ProfilesPage {
     if (this.removeItem !== undefined) {
       Column({ space: 16 }) {
         Text($r('app.string.delete_confirm_title', this.removeItem.name))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(20).fontWeight(600).fontColor($r('sys.color.font_primary'))
           .width('100%')
         Text($r('app.string.delete_confirm_message'))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(15).fontColor($r('sys.color.font_secondary'))
           .width('100%')
         Button({ type: ButtonType.Normal, role: ButtonRole.ERROR, stateEffect: true }) {
@@ -226,7 +285,7 @@ export struct ProfilesPage {
             if (this.removing) {
               LoadingProgress().width(20).height(20).color($r('app.color.status_error'))
             }
-            Text($r('app.string.action_delete')).fontSize(17).fontColor($r('app.color.status_error'))
+            Text($r('app.string.action_delete')).fontFamily(this.appStyle.fontFamily).fontSize(17).fontColor($r('app.color.status_error'))
           }
           .justifyContent(FlexAlign.Center)
         }
@@ -235,6 +294,7 @@ export struct ProfilesPage {
         .enabled(!this.removing && this.store.canRemove(this.removeItem.id))
         .onClick((): void => { this.remove(); })
         Button($r('app.string.action_cancel'))
+          .fontFamily(this.appStyle.fontFamily)
           .buttonStyle(ButtonStyleMode.NORMAL)
           .width('100%').height(48)
           .enabled(!this.removing)
@@ -269,13 +329,14 @@ export struct ProfilesPage {
   @Builder
   ProfileList() {
       if (!this.store.loaded) {
-        ListItem() { LoadingProgress().width(32).height(32).color($r('app.color.brand')) }
+        ListItem() { LoadingProgress().width(32).height(32).color(this.appStyle.palette.brand) }
       } else if (this.store.loadError !== '') {
         ListItem() {
           Column({ space: 12 }) {
             Text($r('app.string.profile_load_error', describeError(this.store.loadError)))
+              .fontFamily(this.appStyle.fontFamily)
               .fontColor($r('app.color.status_error'))
-            Button($r('app.string.action_update')).onClick((): void => this.store.retryLoad())
+            Button($r('app.string.action_update')).fontFamily(this.appStyle.fontFamily).onClick((): void => this.store.retryLoad())
           }.width('100%').padding(16)
         }
       } else if (this.store.items.length === 0) {
@@ -290,11 +351,16 @@ export struct ProfilesPage {
         LazyForEach(this.rows, (item: ProfileItem) => {
           ListItem() {
             ProfileCard({ item: item, selected: this.store.selectedId() === item.id, currentTime: this.currentTime,
-              applying: this.store.pending === item.id, running: this.store.connected && this.store.running === item.id,
+              applying: this.store.pending === item.id, running: this.store.coreReady && this.store.running === item.id,
               removable: this.store.canRemove(item.id), onSelect: (): void => { this.select(item); },
               onEdit: (): void => this.openEdit(item), onRemove: (): void => this.confirmRemove(item),
-              onCopy: (): void => { this.copyLink(item); }, onExport: (): void => { this.export(item); },
+              onCopy: (): void => { this.copyLink(item.url); }, onExport: (): void => { this.export(item); },
+              onShare: (): void => { this.qrShareSource = item.url; this.qrShareShown = true; },
               onUpdate: (): void => { this.update(item); },
+              extensionAvailable: !this.pickerMode && item.type !== 'custom',
+              onExtension: (): void => this.onExtension(item.id),
+              runtimePreviewAvailable: !this.pickerMode,
+              onRuntimePreview: (): void => this.onRuntimePreview(item.id, item.name),
               onDetails: (): void => { this.detailItem = item; this.detailShown = true; } })
           }
         }, (item: ProfileItem): string => item.id)
@@ -303,7 +369,10 @@ export struct ProfilesPage {
 
   @Builder
   EditSheet() {
-    if (this.draft !== undefined) {
+    if (this.customDraft !== undefined) {
+      CustomProfileEditor({ store: this.store, draft: this.customDraft,
+        onClose: (): void => { this.editShown = false; } })
+    } else if (this.draft !== undefined) {
       ProfileEditor({ store: this.store, draft: this.draft, visible: this.visible && this.editShown, onSaved: (): void => {
         if (this.draft !== undefined) { this.draft.saving = false; }
         this.editShown = false;
@@ -313,16 +382,16 @@ export struct ProfilesPage {
   }
 
   @Builder
-  AddOption(label: Resource, icon: Resource, choice: 'file' | 'link') {
+  AddOption(label: Resource, icon: Resource, choice: ProfileAddChoice) {
     Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.NORMAL, stateEffect: true }) {
       Row({ space: 12 }) {
         SymbolGlyph(icon).fontSize(24).fontColor([$r('sys.color.font_primary')])
-        Text(label).fontSize(17).fontColor($r('sys.color.font_primary')).layoutWeight(1)
+        Text(label).fontFamily(this.appStyle.fontFamily).fontSize(17).fontColor($r('sys.color.font_primary')).layoutWeight(1)
       }
       .width('100%')
     }
     .width('100%').height(56).padding({ left: 16, right: 16 })
-    .backgroundColor($r('app.color.card_background')).borderRadius(24)
+    .backgroundColor(this.appStyle.palette.cardBackground).borderRadius(24)
     .onClick((): void => { this.addChoice = choice; this.addMenuShown = false; })
   }
 
@@ -330,14 +399,17 @@ export struct ProfilesPage {
   AddMenu() {
     Column({ space: 8 }) {
       this.AddOption($r('app.string.profile_import_file'), $r('sys.symbol.doc_text'), 'file')
-      this.AddOption($r('app.string.subscription_link'), $r('sys.symbol.link'), 'link')
+      this.AddOption($r('app.string.profile_import_link'), $r('sys.symbol.link'), 'link')
+      this.AddOption($r('app.string.profile_qr_scan'), $r('sys.symbol.qrcode'), 'camera')
+      this.AddOption($r('app.string.profile_qr_photo'), $r('sys.symbol.picture'), 'photo')
+      this.AddOption($r('app.string.custom_create'), $r('sys.symbol.plus'), 'custom')
     }
     .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 24 })
   }
 
   @Builder
   AddSheet() {
-    ProfileImportSheet({ store: this.store, onDone: (): void => {
+    ProfileImportSheet({ store: this.store, initialSource: this.addSource, onDone: (): void => {
       this.adding = false; this.addShown = false;
     }, onBusy: (busy: boolean): void => { this.adding = busy; },
       onClose: (): void => { if (!this.adding) { this.addShown = false; } } })
@@ -356,12 +428,24 @@ export struct ProfilesPage {
   @Builder
   DetailSheet() {
     if (this.detailItem !== undefined) {
-      ProfileDetails({ store: this.store, item: this.detailItem, onEdit: (): void => {
+      ProfileDetails({ store: this.store, item: this.detailItem,
+        runtimePreviewAvailable: !this.pickerMode,
+        onRuntimePreview: (): void => {
+          const item = this.detailItem;
+          this.detailShown = false;
+          if (item !== undefined) { this.onRuntimePreview(item.id, item.name); }
+        },
+        onEdit: (): void => {
         const item = this.detailItem;
         this.detailShown = false;
         if (item !== undefined) { this.openEdit(item); }
       } })
     }
+  }
+
+  @Builder
+  ShareSheet() {
+    ProfileQrShare({ source: this.qrShareSource, onCopy: (): void => { this.copyLink(this.qrShareSource); } })
   }
 
   @Builder
@@ -373,22 +457,25 @@ export struct ProfilesPage {
           Column() { this.Content() }
             .width('100%').height('100%')
             .bindSheet($$this.editShown, this.EditSheet(), {
-              height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
-              onWillDismiss: (action: DismissSheetAction): void =>
-                confirmProfileEditorDismiss(this.getUIContext(), this.draft, (): void => action.dismiss()),
-              onDisappear: (): void => { this.draft = undefined; } })
+              height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
+              onWillDismiss: (action: DismissSheetAction): void => {
+                if (this.customDraft !== undefined) {
+                  confirmCustomDismiss(this.getUIContext(), this.customDraft, (): void => action.dismiss());
+                } else { confirmProfileEditorDismiss(this.getUIContext(), this.draft, (): void => action.dismiss()); }
+              },
+              onDisappear: (): void => { this.draft = undefined; this.customDraft = undefined; } })
           }
           .width('100%').height('100%')
           .bindSheet($$this.detailShown, this.DetailSheet(), { title: { title: $r('app.string.profile_details_title') },
-            height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true })
+            height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: true })
         }
         .width('100%').height('100%')
         .bindSheet($$this.sortShown, this.SortSheet(), {
-          height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false })
+          height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false })
       }
       .width('100%').height('100%')
       .bindSheet($$this.resultShown, this.ResultSheet(), { title: { title: $r('app.string.action_update_all') },
-        height: SheetSize.FIT_CONTENT, systemMaterial: sheetMaterial(), showClose: true })
+        height: SheetSize.FIT_CONTENT, systemMaterial: this.appStyle.sheetMaterial(), showClose: true })
     }
     .width('100%').height('100%')
     .onSizeChange((_previous: SizeOptions, next: SizeOptions): void => {
@@ -396,25 +483,34 @@ export struct ProfilesPage {
     })
     .onVisibleAreaChange([0.0, 1.0], (visible: boolean, ratio: number): void => this.clockVisible(visible && ratio > 0))
     .bindSheet($$this.addShown, this.AddSheet(), {
-      height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
+      height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
+      onDisappear: (): void => { this.addSource = ''; },
       onWillDismiss: (action: DismissSheetAction): void => { if (!this.adding) { action.dismiss(); } } })
   }
 
   build() {
     Column() {
-      Column() { this.PageSheets() }
+      Column() {
+        Column() { this.PageSheets() }
+          .width('100%').height('100%')
+          .bindSheet($$this.qrShareShown, this.ShareSheet(), {
+            title: { title: $r('app.string.profile_qr_share') }, height: SheetSize.FIT_CONTENT,
+            systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+            onDisappear: (): void => { this.qrShareSource = ''; }
+          })
+      }
       .width('100%').height('100%')
       .bindSheet($$this.addMenuShown, this.AddMenu(), {
         title: { title: $r('app.string.action_add') },
         height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
-        systemMaterial: sheetMaterial(), showClose: true,
+        systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
         onDisappear: (): void => this.finishAddMenu()
       })
     }
     .width('100%').height('100%')
     .bindSheet($$this.removeShown, this.RemoveSheet(), {
       height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
-      systemMaterial: sheetMaterial(), showClose: false, enableOutsideInteractive: false,
+      systemMaterial: this.appStyle.sheetMaterial(), showClose: false, enableOutsideInteractive: false,
       onWillDismiss: (action: DismissSheetAction): void => { if (!this.removing) { action.dismiss(); } },
       onDisappear: (): void => { if (!this.removeShown) { this.removeItem = undefined; } }
     })

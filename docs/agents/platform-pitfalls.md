@@ -20,6 +20,12 @@ ARM64 的运行问题已在真机（Pura 70 Ultra，API 26）上验证；x86_64 
 - `make core-smoke ABI=x86_64` 在已连接模拟器上验证动态加载前已有线程、加载后新线程及 C→Go→C 调用，完成后清理临时文件。不使用 `LD_PRELOAD`，不卸载 Go 共享库。
 - Go 升级后两种架构都要重新构建、检查 TLS 和运行冒烟；x86 额外复查编译器生成的辅助调用。详细决定见 [ADR-0014](../adr/0014-x86-emulator-toolchain.md)。
 
+### Go 1.27.4 升级复查（2026-11-16）
+
+- ARM64 与 x86_64 原有补丁无需修改；两种架构均通过 `make core`（含禁止静态 TLS 重定位检查）和 `make hap`。`make test TESTS=core` 通过；`make lint` 无错误，缺少 shellcheck、actionlint，相关检查跳过。
+- API 26 x86_64 模拟器通过 `make core-smoke ABI=x86_64`：加载前 4 线程、加载后 16 线程，42,002 次 API 调用，耗时 55.871 ms。该数字仅为原生冒烟耗时，不代表启动或网络性能。
+- `make run ABI=x86_64` 因未配置签名而未能安装。ARM64 真机启动、TUN 与代理转发尚未验证；冷启动、8 小时待机耗电、新连接延迟及 24 小时稳定性均无本轮测量值，需签名后在同一真机、同一配置下与升级前版本及同类客户端对比。
+
 ## 2. 内核自己的流量绕回 VPN
 
 - **现象**：DNS 查询超时、连接不断增加，VPN 进程内存迅速超过 1 GiB。一次真机快照里有 20,284 条指向默认 DoT 上游 853 端口的 TUN 连接、40,695 个 goroutine；GC 仍在运行。
@@ -56,3 +62,14 @@ ARM64 的运行问题已在真机（Pura 70 Ultra，API 26）上验证；x86_64 
 - 自动组的通知回调只做有界原子标记和入队，不取得核心锁、不重入组方法。不能用通用异步分发器冒充同步标记，也不能在每个健康结果完成时重置 URLTest 原有缓存、提前改变真实选择。
 - provider 的后台 Fetcher 不能强引用带 finalizer 的包装器，否则热切换后旧下载、健康检查和文件监听无法回收。更新通知使用弱引用，配置退休后同时解除本应用的订阅与定时任务。
 - 升级 mihomo 后先确认两个补丁能应用并通过 `make core`，再复查真实拨号取消、普通 DNS 与探测并发、provider 退休、缓存到期选路及同名成员身份。真机转发与长时间待机仍按独立门禁验证。
+- `CORE_RACE=1 make test TESTS=core` 揭示 File provider 文件监听与手动更新并发读取/写入 Fetcher hash 的竞态。`scripts/mihomo-provider-hash.patch` 在已有 loadBufMutex 下取得 hash 快照，网络读取仍在锁外；不改变更新与通知语义。
+- `scripts/mihomo-provider-manage.patch` 为运行中 Provider 管理与节点入库补充三组最小钩子：在 `adapter.ParseProxy` 保存节点原始配置深拷贝（`ArkClashRawDefinition`，直接节点与 provider 成员统一经过该入口），为 `ProxySetProvider` / `RuleSetProvider` 暴露返回变化标记的 `ArkClashUpdate`、`ArkClashReplace`、`ArkClashFormat` 与无锁原子时间戳 `ArkClashUpdatedAt`，并将 `rules/provider.baseProvider.strategy` 改为原子指针以避免替换与并发规则匹配产生数据竞态。升级 mihomo 后需确认该补丁可干净应用并通过 `CORE_RACE=1` 宿主测试。
+
+## 7. 系统与 Go 不能共同关闭同一个 TUN fd
+
+- OpenHarmony `NetworkVpnClient::DestroyVpn()` 会关闭 create 返回的原始 fd。Go 必须在真正获取 TUN 接口时复制，不能把原件直接交给 `os.NewFile`。
+- `scripts/mihomo-tun-fd.patch` 给 Linux `sing_tun.tunNew` 加 `F_DUPFD_CLOEXEC`；平台只关闭原件，Go listener 只关闭副本。固定版本的外部 fd 分支直接包装文件，没有包装后返回错误的路径。
+- stack 在 Start 前登记到 listener，构造失败走已有 Close 回滚。不能在 `sing_tun.New` 外层出错后再盲目 close；Close 出错后保留不确定性，不能重试关闭可能已被复用的 fd。
+- `CORE_LINUX_FD=1 make test TESTS=core` 在 macOS 上交叉编译后用本机 Docker（默认 `alpine:latest`，可设 `CORE_LINUX_IMAGE`）验证原 fd、副本、构造回滚与复用；Linux 主机直接执行。未配置此项的 macOS 回归会明确跳过 Linux fd 用例。
+- 升级 mihomo/sing-tun 后复查外部 fd 分支、stack 启动回滚及一次性关闭；Linux 容器通过不能替代手机 TUN 成功转发和至少 20 轮连断的 fd/线程验收。无 TUN 预热和驻留边界见 [ADR-0017](../adr/0017-core-ready-without-vpn.md)。
+

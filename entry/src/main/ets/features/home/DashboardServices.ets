@@ -1,7 +1,9 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
-import { DASHBOARD_CARD, PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, DASHBOARD_CARD, HEADER_ACTION, HEADER_GAP,
+  HEADER_ICON_SIZE, PAGE_GUTTER, SHEET_HEADER_HEIGHT } from '../../components/Theme';
 import { uiResourceText } from '../../components/ResourceText';
 import { DashboardCardHeader } from './DashboardCardHeader';
 import { DashboardServiceRow, serviceConnectivityLabel } from './DashboardServiceRow';
@@ -11,6 +13,7 @@ import { serviceInfo, ServiceSlot } from './Services';
 
 @ComponentV2
 export struct DashboardServices {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param visible: boolean = false;
   @Param interactive: boolean = true;
   @Param profileId: string = '';
@@ -113,10 +116,11 @@ export struct DashboardServices {
 
   @Builder
   SheetHeader() {
-    Row({ space: 8 }) {
+    Row({ space: HEADER_GAP }) {
       Text(this.managing ? $r('app.string.dash_service_manage') : $r('app.string.card_services'))
-        .fontSize(20)
-        .lineHeight(26)
+        .fontFamily(this.appStyle.fontFamily)
+        .fontSize(COMPACT_TITLE_SIZE)
+        .lineHeight(COMPACT_TITLE_LINE_HEIGHT)
         .fontWeight(600)
         .fontColor($r('sys.color.font_primary'))
         .maxLines(1)
@@ -125,13 +129,14 @@ export struct DashboardServices {
       if (!this.managing) {
         Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL, stateEffect: true }) {
           if (this.state.busy) {
-            LoadingProgress().width(22).height(22).color($r('app.color.brand'))
+            LoadingProgress().width(HEADER_ICON_SIZE).height(HEADER_ICON_SIZE).color(this.appStyle.palette.brand)
               .hitTestBehavior(HitTestMode.None)
           } else {
-            AppGlyph({ name: 'sync', iconSize: 22, iconColor: $r('sys.color.font_primary') })
+            AppGlyph({ name: 'sync', iconSize: HEADER_ICON_SIZE, iconColor: $r('sys.color.font_primary') })
           }
         }
-        .width(40).height(40).padding(0)
+        .attributeModifier(HEADER_ACTION)
+        .systemMaterial(this.appStyle.headerMaterial())
         .enabled(!this.conn.busy && !this.conn.modePending)
         .accessibilityText(this.state.busy ? $r('app.string.action_cancel') : $r('app.string.dash_check_all'))
         .onClick((): void => {
@@ -144,22 +149,25 @@ export struct DashboardServices {
         })
       }
       Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL, stateEffect: true }) {
-        AppGlyph({ name: this.managing ? 'check' : 'edit', iconSize: 22,
-          iconColor: this.managing ? $r('app.color.brand') : $r('sys.color.font_primary') })
+        AppGlyph({ name: this.managing ? 'check' : 'edit', iconSize: HEADER_ICON_SIZE,
+          iconColor: this.managing ? this.appStyle.palette.brand : $r('sys.color.font_primary') })
       }
-      .width(40).height(40).padding(0)
+      .attributeModifier(HEADER_ACTION)
+      .systemMaterial(this.appStyle.headerMaterial())
       .enabled(!this.settings.saving && !this.settings.hasDraft)
       .accessibilityText(this.managing ? $r('app.string.dash_done') : $r('app.string.dash_service_manage'))
       .onClick((): void => { this.managing = !this.managing; })
       Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL, stateEffect: true }) {
-        AppGlyph({ name: 'close', iconSize: 22, iconColor: $r('sys.color.font_primary') })
+        AppGlyph({ name: 'close', iconSize: HEADER_ICON_SIZE, iconColor: $r('sys.color.font_primary') })
       }
-      .width(40).height(40).padding(0)
+      .attributeModifier(HEADER_ACTION)
+      .systemMaterial(this.appStyle.headerMaterial())
       .accessibilityText($r('app.string.action_close'))
       .onClick((): void => { this.details = false; })
     }
     .width('100%')
-    .constraintSize({ minHeight: 52 })
+    .height(SHEET_HEADER_HEIGHT)
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
   }
 
   @Builder
@@ -179,15 +187,16 @@ export struct DashboardServices {
         }
       }
       .width('100%')
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
       .layoutWeight(1)
       .scrollBar(BarState.Off)
-      .divider({ strokeWidth: 0.5, color: $r('app.color.divider'), startMargin: 64, endMargin: 16 })
+      .divider({ strokeWidth: 0.5, color: this.appStyle.palette.divider, startMargin: 64, endMargin: 16 })
       .enabled(!this.settings.saving && !this.settings.hasDraft)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .height('100%')
-    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8, bottom: 24 })
+    .padding({ top: 8, bottom: 24 })
   }
 
   build() {
@@ -207,7 +216,7 @@ export struct DashboardServices {
                           .height(18)
                           .objectFit(ImageFit.Contain)
                       } else {
-                        Text(slot.id.slice(0, 1).toUpperCase()).fontSize(14)
+                        Text(slot.id.slice(0, 1).toUpperCase()).fontFamily(this.appStyle.fontFamily).fontSize(14)
                       }
                     }
                     .width(30)
@@ -219,11 +228,12 @@ export struct DashboardServices {
                         this.state.results[slot.id]?.reachability === 'reachable' ? $r('app.color.status_connected') :
                         this.state.results[slot.id] === undefined && !this.state.failed ?
                           $r('sys.color.font_tertiary') : $r('app.color.warning'))
-                      .stroke($r('app.color.tile_background'))
+                      .stroke(this.appStyle.palette.tileBackground)
                       .strokeWidth(2)
                   }
                   Text(this.state.failed && this.state.results[slot.id] === undefined ? $r('app.string.dash_probe_failed') :
                     serviceConnectivityLabel(this.state.results[slot.id], this.state.busyIds.includes(slot.id)))
+                    .fontFamily(this.appStyle.fontFamily)
                     .fontSize(12)
                     .lineHeight(16)
                     .fontWeight(600)
@@ -238,7 +248,7 @@ export struct DashboardServices {
                 .height(44)
                 .padding({ left: 7, right: 12 })
                 .borderRadius(16)
-                .backgroundColor($r('app.color.tile_background'))
+                .backgroundColor(this.appStyle.palette.tileBackground)
                 .accessibilityText(uiResourceText(this.getUIContext(), serviceInfo(slot.id)?.name ?? slot.id))
               }, (slot: ServiceSlot): string => slot.id)
             }
@@ -250,10 +260,11 @@ export struct DashboardServices {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .onClick((): void => { if (this.interactive) { this.details = true; } })
     .bindSheet($$this.details, this.Details, {
       detents: [SheetSize.MEDIUM, SheetSize.LARGE],
-      systemMaterial: sheetMaterial(), showClose: false,
+      systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
       onDisappear: (): void => { this.managing = false; }
     })
   }

@@ -1,5 +1,5 @@
+import { AppearanceState, appAppearance } from '../components/AppearanceState';
 import { connection, Connection } from '../client/Connection';
-import { sheetMaterial } from '../components/Theme';
 import { HomePage } from '../features/home/HomePage';
 import { ProfileDetailsSheet } from '../features/profiles/ProfileDetailsSheet';
 import { ProfileImportSheet } from '../features/profiles/ProfileImportSheet';
@@ -8,6 +8,7 @@ import { SummaryGroup } from '../shared/profiles/Summary';
 
 @ComponentV2
 export struct DashboardTab {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require store: ProfileStore;
   @Param @Require scroller: Scroller;
   @Param topInset: number = 0;
@@ -18,6 +19,8 @@ export struct DashboardTab {
   @Event onSwitchProfile: () => void = () => {};
   @Event onOpenProfiles: () => void = () => {};
   @Event onOpenProxies: () => void = () => {};
+  @Event onOpenResources: () => void = () => {};
+  @Event onRuntimePreview: (profile: string, name: string) => void = (_profile: string, _name: string): void => {};
   @Local conn: Connection = connection;
   @Local detailShown: boolean = false;
   @Local detailItem: ProfileItem | undefined = undefined;
@@ -41,7 +44,13 @@ export struct DashboardTab {
   @Builder
   Details() {
     if (this.detailItem !== undefined) {
-      ProfileDetailsSheet({ store: this.store, item: this.detailItem, visible: this.visible && this.detailShown })
+      ProfileDetailsSheet({ store: this.store, item: this.detailItem, visible: this.visible && this.detailShown,
+        runtimePreviewAvailable: true,
+        onRuntimePreview: (): void => {
+          const item = this.detailItem;
+          this.detailShown = false;
+          if (item !== undefined) { this.onRuntimePreview(item.id, item.name); }
+        } })
     }
   }
 
@@ -88,21 +97,22 @@ export struct DashboardTab {
             const active = this.activeProfile;
             if (active !== undefined) { this.store.update(active.id); }
           },
-          onOpenProxies: (): void => this.onOpenProxies()
+          onOpenProxies: (): void => this.onOpenProxies(),
+          onOpenResources: (): void => this.onOpenResources()
         })
       }
       .width('100%')
       .height('100%')
       .bindSheet($$this.detailShown, this.Details, {
         title: { title: $r('app.string.profile_details_title') },
-        detents: [SheetSize.MEDIUM, SheetSize.LARGE], systemMaterial: sheetMaterial(), showClose: true,
+        detents: [SheetSize.MEDIUM, SheetSize.LARGE], systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
         onDisappear: (): void => { this.detailItem = undefined; }
       })
     }
     .width('100%')
     .height('100%')
     .bindSheet($$this.addShown, this.Import, {
-      height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: false,
+      height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
       onWillDismiss: (action: DismissSheetAction): void => { if (!this.adding) { action.dismiss(); } }
     })
   }

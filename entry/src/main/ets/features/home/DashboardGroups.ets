@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { getMainGroup, GroupSummary } from '../../client/Controller';
@@ -8,6 +9,7 @@ import { DashboardGroupAvatar } from './DashboardGroupAvatar';
 
 @ComponentV2
 export struct DashboardGroups {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param visible: boolean = false;
   @Param interactive: boolean = true;
   @Param profileReady: boolean = false;
@@ -33,28 +35,30 @@ export struct DashboardGroups {
     this.generation++;
   }
 
-  @Monitor('visible', 'profileId', 'routeRevision', 'conn.routeRevision', 'conn.state', 'conn.mode')
+  @Monitor('visible', 'profileId', 'routeRevision', 'conn.routeRevision', 'conn.state', 'conn.coreReady', 'conn.mode')
   sync(): void {
-    const target = `${this.profileId}:${this.routeRevision}:${this.conn.routeRevision}:${this.conn.mode}`;
-    if (target !== this.target || !this.conn.connected) {
+    if (this.profileId !== this.target || !this.conn.coreReady) {
       this.summary = undefined;
       this.failed = false;
-      this.target = target;
+      this.target = this.profileId;
     }
     this.generation++;
     this.loading = false;
-    if (this.visible && this.conn.connected) {
+    if (this.visible && this.conn.coreReady) {
       this.refresh();
     }
   }
 
   private async refresh(): Promise<void> {
     const generation = ++this.generation;
-    this.loading = true;
+    const cold = this.summary === undefined && this.summaryGroups.length === 0;
+    if (cold) {
+      this.loading = true;
+    }
     this.failed = false;
     try {
       const summary = await getMainGroup(this.context.filesDir);
-      if (generation === this.generation && this.visible && this.conn.connected) {
+      if (generation === this.generation && this.visible && this.conn.coreReady) {
         this.summary = summary;
       }
     } catch (e) {
@@ -72,21 +76,19 @@ export struct DashboardGroups {
     if (this.conn.mode === 'direct') {
       return [];
     }
-    if (this.conn.connected) {
-      return this.summary?.groups ?? [];
+    if (this.conn.coreReady && this.summary !== undefined) {
+      return this.summary.groups;
     }
     return this.summaryGroups;
   }
 
   private iconSource(name: string): string {
-    const icons = this.conn.connected ? this.summary?.groupIcons : this.summaryGroupIcons;
+    const icons = (this.conn.coreReady && this.summary !== undefined) ?
+      this.summary.groupIcons : this.summaryGroupIcons;
     return icons === undefined ? '' : icons[name] ?? '';
   }
 
   private hint(): ResourceStr {
-    if (this.loading) {
-      return $r('app.string.dash_groups_loading');
-    }
     if (this.failed) {
       return $r('app.string.dash_groups_failed');
     }
@@ -122,12 +124,13 @@ export struct DashboardGroups {
           .layoutWeight(1)
         if (this.summary !== undefined && this.summary.delay < 0) {
           Text($r('app.string.dash_delay_timeout'))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(11)
             .fontWeight(600)
             .fontColor($r('app.color.warning'))
             .padding({ left: 7, right: 7, top: 3, bottom: 3 })
             .borderRadius(7)
-            .backgroundColor($r('app.color.tile_background'))
+            .backgroundColor(this.appStyle.palette.tileBackground)
         }
       }
       .width('100%')
@@ -135,11 +138,14 @@ export struct DashboardGroups {
         Row({ space: 8 }) {
           Text() {
             Span(`${this.names().length}`)
+              .fontFamily(this.appStyle.fontFamily)
               .fontSize(40)
               .fontWeight(FontWeight.Bold)
               .letterSpacing(-0.8)
             Span(' ')
+              .fontFamily(this.appStyle.fontFamily)
             Span($r('app.string.group_count_unit'))
+              .fontFamily(this.appStyle.fontFamily)
               .fontSize(15)
               .fontWeight(600)
               .fontColor($r('sys.color.font_secondary'))
@@ -156,6 +162,7 @@ export struct DashboardGroups {
             }, (name: string): string => name)
             if (this.names().length > 4) {
               Text(`+${this.names().length - 4}`)
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(this.avatarSize() * 0.3)
                 .fontWeight(600)
                 .textAlign(TextAlign.Center)
@@ -163,8 +170,8 @@ export struct DashboardGroups {
                 .width(this.avatarSize())
                 .height(this.avatarSize())
                 .borderRadius(this.avatarSize() * 0.35)
-                .backgroundColor($r('app.color.tile_background'))
-                .border({ width: this.avatarSize() * 0.075, color: $r('app.color.card_background') })
+                .backgroundColor(this.appStyle.palette.tileBackground)
+                .border({ width: this.avatarSize() * 0.075, color: this.appStyle.palette.cardBackground })
                 .position({ x: 4 * this.avatarSize() * 0.8, y: 0 })
             }
           }
@@ -173,6 +180,24 @@ export struct DashboardGroups {
         }
         .width('100%')
         .onAreaChange((_previous: Area, current: Area): void => { this.figureWidth = Number(current.width); })
+      } else if (this.loading) {
+        Row({ space: 8 }) {
+          Row()
+            .width(96)
+            .height(36)
+            .borderRadius(8)
+            .backgroundColor(this.appStyle.palette.track)
+            .opacity(0.55)
+          Blank().layoutWeight(1)
+          Row()
+            .width(88)
+            .height(36)
+            .borderRadius(14)
+            .backgroundColor(this.appStyle.palette.track)
+            .opacity(0.55)
+        }
+        .width('100%')
+        .height(44)
       } else {
         Column({ space: 6 }) {
           Stack() {
@@ -181,8 +206,9 @@ export struct DashboardGroups {
           .width(64)
           .height(64)
           .borderRadius(22)
-          .backgroundColor($r('app.color.tile_background'))
+          .backgroundColor(this.appStyle.palette.tileBackground)
           Text(this.hint())
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(15)
             .lineHeight(20)
             .fontWeight(600)
@@ -190,6 +216,7 @@ export struct DashboardGroups {
             .textAlign(TextAlign.Center)
           if (this.failed) {
             Button($r('app.string.dash_retry'))
+              .fontFamily(this.appStyle.fontFamily)
               .enabled(this.interactive && !this.loading)
               .onClick((): void => { this.refresh(); })
           }
@@ -200,6 +227,7 @@ export struct DashboardGroups {
     }
     .alignItems(HorizontalAlign.Start)
     .attributeModifier(DASHBOARD_CARD)
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .onClick((): void => { if (this.interactive && this.names().length > 0) { this.onOpen(); } })
   }
 }

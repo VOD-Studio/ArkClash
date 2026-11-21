@@ -1,0 +1,27 @@
+--- a/common/convert/converter.go
++++ b/common/convert/converter.go
+@@ -8,8 +8,6 @@
+ 	"net/url"
+ 	"strconv"
+ 	"strings"
+-
+-	"github.com/metacubex/mihomo/log"
+ )
+ 
+ // ConvertsV2Ray convert V2Ray subscribe proxies data to mihomo proxies config
+@@ -231,7 +229,6 @@
+ 			vless := make(map[string]any, 20)
+ 			err = handleVShareLink(names, urlVLess, scheme, vless)
+ 			if err != nil {
+-				log.Warnln("error:%s line:%s", err.Error(), line)
+ 				continue
+ 			}
+ 			if flow := query.Get("flow"); flow != "" {
+@@ -256,7 +253,6 @@
+ 				vmess := make(map[string]any, 20)
+ 				err = handleVShareLink(names, urlVMess, scheme, vmess)
+ 				if err != nil {
+-					log.Warnln("error:%s line:%s", err.Error(), line)
+ 					continue
+ 				}
+ 				vmess["alterId"] = 0

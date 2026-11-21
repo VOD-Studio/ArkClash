@@ -32,7 +32,7 @@ func findDelayProxy(id, groupName string) (C.Proxy, error) {
 
 func getDelay(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	timeout := 8000
+	timeout := 0
 	if text := query.Get("timeout"); text != "" {
 		value, err := strconv.Atoi(text)
 		if err != nil || value < 1 || value > 8000 {
@@ -54,10 +54,16 @@ func getDelay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mu.Lock()
+	if timeout == 0 {
+		timeout = current.General.DelayTimeout
+		if timeout == 0 {
+			timeout = 8000
+		}
+	}
 	profile := current.Profile
 	bootID := runtimeBootID
 	revision := runtimeConfigRevision
-	valid := running && query.Get("profile") == profile && query.Get("expectedBootId") == bootID &&
+	valid := running && profile != "" && query.Get("profile") == profile && query.Get("expectedBootId") == bootID &&
 		query.Get("expectedRevision") == strconv.FormatUint(revision, 10)
 	var proxy C.Proxy
 	var ctx context.Context
@@ -91,7 +97,7 @@ func getDelay(w http.ResponseWriter, r *http.Request) {
 	}
 	mu.Lock()
 	member, present := currentProxyMember(query.Get("id"), query.Get("group"))
-	valid = running && current.Profile == profile && runtimeBootID == bootID && runtimeConfigRevision == revision &&
+	valid = running && profile != "" && current.Profile == profile && runtimeBootID == bootID && runtimeConfigRevision == revision &&
 		present && member == proxy
 	mu.Unlock()
 	if !valid {

@@ -1,5 +1,8 @@
-import { PAGE_GUTTER, sheetMaterial } from '../../components/Theme';
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
+import { HEADER_ACTION, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { errorString } from '../../shared/profiles/Errors';
+import { isProxyShareLink } from '../../shared/profiles/ShareProfile';
+import { ProfileAgeKeyField } from './ProfileAgeKeyField';
 import { describeError } from './ProfileErrors';
 import { ProfileBatchResult } from './ProfileModels';
 import { ProfileStore } from './Profiles';
@@ -8,13 +11,16 @@ import { ProfileSheetHeader } from './ProfileSheetHeader';
 
 @ComponentV2
 export struct ProfileImportSheet {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require store: ProfileStore;
   @Param batch: boolean = false;
+  @Param initialSource: string = '';
   @Event onDone: () => void = (): void => {};
   @Event onBusy: (busy: boolean) => void = (): void => {};
   @Event onClose: () => void = (): void => {};
   @Local source: string = '';
   @Local label: string = '';
+  @Local private ageSecretKey: string = '';
   @Local importingMany: boolean = false;
   @Local batchSource: string = '';
   @Local adding: boolean = false;
@@ -22,7 +28,11 @@ export struct ProfileImportSheet {
   @Local resultShown: boolean = false;
   private visible: boolean = false;
 
-  aboutToAppear(): void { this.visible = true; this.importingMany = this.batch; }
+  aboutToAppear(): void {
+    this.visible = true;
+    this.importingMany = this.batch;
+    this.source = this.initialSource;
+  }
   aboutToDisappear(): void { this.visible = false; }
 
   private toastFailure(failure: string): void {
@@ -50,7 +60,7 @@ export struct ProfileImportSheet {
         const result = await this.store.importLinks(this.batchSource);
         if (this.visible) { this.result = result; this.resultShown = true; }
       } else {
-        const failure = await this.store.addSubscription(this.source, this.label);
+        const failure = await this.store.importLink(this.source, this.label, this.ageSecretKey);
         if (failure === undefined) { if (this.visible) { this.onDone(); } }
         else { this.toastFailure(failure); }
       }
@@ -71,10 +81,11 @@ export struct ProfileImportSheet {
   ImportActions() {
     Button({ type: ButtonType.Circle }) {
       SymbolGlyph(this.importingMany ? $r('sys.symbol.doc_text') : $r('sys.symbol.sort'))
-        .fontSize(24)
+        .fontSize(HEADER_ICON_SIZE)
         .fontColor([$r('sys.color.font_primary')])
     }
-    .width(40).height(40).backgroundColor(Color.Transparent)
+    .attributeModifier(HEADER_ACTION)
+    .systemMaterial(this.appStyle.headerMaterial())
     .enabled(!this.adding)
     .accessibilityText(this.importingMany ? $r('app.string.profile_import_single') : $r('app.string.profile_import_batch'))
     .onClick((): void => this.toggleBatch())
@@ -89,17 +100,19 @@ export struct ProfileImportSheet {
         Column({ space: 24 }) {
           if (this.importingMany) {
             TextArea({ text: this.batchSource, placeholder: $r('app.string.profile_batch_hint') })
+              .fontFamily(this.appStyle.fontFamily)
               .height(200)
               .fontSize(17)
               .fontColor($r('sys.color.font_primary'))
-              .backgroundColor($r('app.color.card_background'))
+              .backgroundColor(this.appStyle.palette.cardBackground)
               .borderRadius(24)
               .onChange((text: string): void => { this.batchSource = text; })
           } else {
             Column() {
               Row({ space: 16 }) {
-                Text($r('app.string.field_name')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+                Text($r('app.string.field_name')).fontFamily(this.appStyle.fontFamily).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
                 TextInput({ text: this.label, placeholder: $r('app.string.profile_field_optional') })
+                  .fontFamily(this.appStyle.fontFamily)
                   .maxLength(64)
                   .layoutWeight(1)
                   .height(56)
@@ -113,11 +126,11 @@ export struct ProfileImportSheet {
               }
               .padding({ left: 16, right: 16 })
               .width('100%')
-              Row().height(0.5).width('100%').backgroundColor($r('app.color.divider')).margin({ left: 16, right: 14 })
+              Row().height(0.5).width('100%').backgroundColor(this.appStyle.palette.divider).margin({ left: 16, right: 14 })
               Row({ space: 16 }) {
-                Text($r('app.string.subscription_link')).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
+                Text($r('app.string.profile_link_field')).fontFamily(this.appStyle.fontFamily).fontSize(17).lineHeight(22).fontColor($r('sys.color.font_primary'))
                 TextInput({ text: this.source, placeholder: $r('app.string.profile_field_required') })
-                  .maxLength(2048)
+                  .fontFamily(this.appStyle.fontFamily)
                   .layoutWeight(1)
                   .height(56)
                   .fontSize(17)
@@ -131,8 +144,14 @@ export struct ProfileImportSheet {
               }
               .padding({ left: 16, right: 16 })
               .width('100%')
+              if (!isProxyShareLink(this.source.trim())) {
+                Row().height(0.5).width('100%').backgroundColor(this.appStyle.palette.divider)
+                  .margin({ left: 16, right: 14 })
+                ProfileAgeKeyField({ secretKey: this.ageSecretKey,
+                  onKeyChange: (text: string): void => { this.ageSecretKey = text; } })
+              }
             }
-            .backgroundColor($r('app.color.card_background'))
+            .backgroundColor(this.appStyle.palette.cardBackground)
             .borderRadius(24).clip(true)
           }
         }
@@ -148,6 +167,6 @@ export struct ProfileImportSheet {
     .height('100%')
     .width('100%')
     .bindSheet($$this.resultShown, this.BatchResults(), { title: { title: $r('app.string.profile_import_batch') },
-      preferType: SheetType.BOTTOM, height: SheetSize.LARGE, systemMaterial: sheetMaterial(), showClose: true })
+      preferType: SheetType.BOTTOM, height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: true })
   }
 }

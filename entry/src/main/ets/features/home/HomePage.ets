@@ -1,9 +1,9 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { accessibility } from '@kit.AccessibilityKit';
 import { curves, UIUtils } from '@kit.ArkUI';
 import { HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { TabPage } from '../../components/TabPage';
-import { sheetMaterial } from '../../components/Theme';
 import { uiResourceText } from '../../components/ResourceText';
 import { DashboardConnections } from './DashboardConnections';
 import { DashboardGroups } from './DashboardGroups';
@@ -20,9 +20,11 @@ import { DashboardStatus } from './DashboardStatus';
 import { DashboardVpn } from './DashboardVpn';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DashboardEditMotion } from './DashboardEditMotion';
+import { DashboardLiveStatus } from './DashboardLiveStatus';
 
 @ComponentV2
 export struct HomePage {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require scroller: Scroller;
   @Event onScrollDirection: (down: boolean) => void = () => {};
   @Param topInset: number = 0;
@@ -50,6 +52,7 @@ export struct HomePage {
   @Event onSwitchProfile: () => void = () => {};
   @Event onUpdateProfile: () => void = () => {};
   @Event onOpenProxies: () => void = () => {};
+  @Event onOpenResources: () => void = () => {};
   @Event onEditingChanged: (editing: boolean) => void = () => {};
   @Local settings: DashboardSettings = dashboardSettings;
   @Local editing: boolean = false;
@@ -150,7 +153,7 @@ export struct HomePage {
       title: $r('app.string.profile_unsaved_title'),
       message: this.settings.failure === 'conflict' ? $r('app.string.dash_save_conflict') :
         $r('app.string.profile_unsaved_message'),
-      alignment: DialogAlignment.Bottom, systemMaterial: sheetMaterial(), autoCancel: true,
+      alignment: DialogAlignment.Bottom, systemMaterial: this.appStyle.sheetMaterial(), autoCancel: true,
       sheets: [
         { title: $r('app.string.dash_retry_save'), action: (): void => { choice = 'retry'; } },
         { title: $r('app.string.profile_discard'), action: (): void => { choice = 'discard'; } }
@@ -243,7 +246,7 @@ export struct HomePage {
       .width(28)
       .height(28)
       .padding(0)
-      .backgroundColor($r('app.color.brand'))
+      .backgroundColor(this.appStyle.palette.brand)
       .accessibilityText(uiResourceText(this.getUIContext(), dashboardCardTitle(id)))
       .onClick((): void => { this.saveCards([...this.settings.cards, id]); })
       Stack() {
@@ -252,9 +255,10 @@ export struct HomePage {
       .width(40)
       .height(40)
       .borderRadius(14)
-      .backgroundColor($r('app.color.card_background'))
+      .backgroundColor(this.appStyle.palette.cardBackground)
       Column() {
         Text(dashboardCardTitle(id))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(15)
           .lineHeight(20)
           .fontWeight(600)
@@ -262,6 +266,7 @@ export struct HomePage {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         if (dashboardCardDescription(id) !== '') {
           Text(dashboardCardDescription(id))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(12)
             .fontColor($r('sys.color.font_secondary'))
             .maxLines(1)
@@ -275,7 +280,7 @@ export struct HomePage {
     .height(64)
     .padding({ left: 12, right: 8 })
     .borderRadius(22)
-    .backgroundColor($r('app.color.dash_addable_background'))
+    .backgroundColor(this.appStyle.palette.dashAddableBackground)
     .enabled(!this.settings.saving && !this.settings.hasDraft)
     .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.cardTransition)
   }
@@ -367,6 +372,7 @@ export struct HomePage {
           if (this.editing && this.availableCards().length > 0) {
             Column({ space: 8 }) {
               Text($r('app.string.dash_add_cards'))
+                .fontFamily(this.appStyle.fontFamily)
                 .fontSize(13)
                 .fontWeight(600)
                 .fontColor($r('sys.color.font_secondary'))
@@ -388,9 +394,17 @@ export struct HomePage {
       }
     }
 
+  @Builder
+  LiveStatusAction() {
+    if (!this.editing) {
+      DashboardLiveStatus({ visible: this.visible, onOpenResources: (): void => this.onOpenResources() })
+    }
+  }
+
   build() {
     TabPage({ title: this.editing ? $r('app.string.dash_edit_cards') : $r('app.string.tab_home'),
       topInset: this.topInset, scroller: this.scroller, content: (): void => this.DashboardContent(),
-      menus: this.menus(), onScrollDirection: (down: boolean): void => { this.onScrollDirection(down); } })
+      menus: this.menus(), headerAction: (): void => this.LiveStatusAction(),
+      onScrollDirection: (down: boolean): void => { this.onScrollDirection(down); } })
   }
 }

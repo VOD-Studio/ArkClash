@@ -10,7 +10,7 @@ import test from 'node:test';
 async function sourceModule(relative, prelude = '') {
   const source = await readFile(new URL(relative, import.meta.url), 'utf8');
   const withoutImports = source.replace(/^import[\s\S]*?from\s+['"][^'"]+['"];\s*/gm, '');
-  const withoutObservers = withoutImports.replace(/^@ObservedV2\s*$/gm, '').replace(/@Trace\s+/g, '');
+  const withoutObservers = withoutImports.replace(/^@(ObservedV2|Concurrent)\s*$/gm, '').replace(/@Trace\s+/g, '');
   return `data:text/javascript;base64,${Buffer.from(prelude + stripTypeScriptTypes(withoutObservers)).toString('base64')}`;
 }
 
@@ -19,11 +19,11 @@ const client = await import(clientUrl);
 const logicUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyLogic.ets',
   `import { isProxyGroup, proxyMemberNode, PROXY_TEST_URL } from ${JSON.stringify(clientUrl)};\n`);
 const logic = await import(logicUrl);
-const listUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyListSource.ets',
-  `const DataOperationType = { ADD: 'add', DELETE: 'delete', CHANGE: 'change', RELOAD: 'reload' };\n`);
+const listUrl = await sourceModule('../entry/src/main/ets/components/KeyedListSource.ets',
+  `const DataOperationType = { ADD: 'add', DELETE: 'delete', CHANGE: 'change', EXCHANGE: 'exchange' };\n`);
 const proxyList = await import(listUrl);
 const viewUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyView.ets',
-  `import { ProxyListSource } from ${JSON.stringify(listUrl)};\n` +
+  `import { KeyedListSource } from ${JSON.stringify(listUrl)};\n` +
   `import { isProxyGroup, proxyMemberNode } from ${JSON.stringify(clientUrl)};\n` +
   `import { canTestProxy, proxyDelayKey, proxyGroupNames, proxyMembers, proxyPinnedMemberId, resolveProxyLeaf, selectableProxyGroup } from ${JSON.stringify(logicUrl)};\n`);
 const view = await import(viewUrl);
@@ -213,7 +213,7 @@ test('独立定位和测速操作保留重复失败通知', async () => {
     `import { ControllerSocket } from ${JSON.stringify(socketUrl)};\n`);
   const browserUrl = await sourceModule('../entry/src/main/ets/features/proxies/Proxies.ets',
     `import { ProfileEvents } from ${JSON.stringify(eventsUrl)};\n` +
-    `import { ProxyListSource } from ${JSON.stringify(listUrl)};\n` +
+    `import { KeyedListSource } from ${JSON.stringify(listUrl)};\n` +
     `import { ProxyAppearance } from ${JSON.stringify(harness.appearanceUrl)};\n` +
     `import { ProxySelectionSession } from ${JSON.stringify(harness.selectionUrl)};\n` +
     `import { ProxyTestSession } from ${JSON.stringify(harness.probesUrl)};\n` +
@@ -288,7 +288,7 @@ test('真实视图展开和快速反向保留组身份，向LazyForEach发送局
     });
     return previous;
   };
-  const source = new proxyList.ProxyListSource();
+  const source = new proxyList.KeyedListSource();
   source.replace(rebuild([]));
   const group = previous.find(candidate => candidate.name === 'Main');
   const groupEvents = [];
@@ -653,7 +653,7 @@ test('过期视图提交保留草稿，重试按最新revision只提交自己的
 
 test('在线provider同名节点保留真实协议、历史和嵌套测速归属', async () => {
   const harness = await consumerHarness();
-  const status = { profile: 'one', bootId: 'fixture', revision: 1, configRevision: 1 };
+  const status = { running: true, profile: 'one', bootId: 'fixture', revision: 1, configRevision: 1 };
   const url = 'https://example.org/204';
   const ref = (id, name, provider = '') => ({ id, name, provider, selectable: true });
   const graph = {
@@ -705,7 +705,8 @@ test('在线provider同名节点保留真实协议、历史和嵌套测速归属
 });
 
 async function readConsumerGraph(harness, graph) {
-  const status = { profile: 'one', bootId: 'fixture', revision: 1, configRevision: 1 };
+  const status = { running: true, profile: 'one', bootId: 'fixture', revision: 1, configRevision: 1,
+    tunAttached: false, vpnCreated: false, forward: 'stopped' };
   const pending = harness.client.readOnlineProxies('/fixture', 'one', undefined);
   await drainConsumers();
   harness.native.commands.shift().resolve(JSON.stringify(status));
@@ -716,7 +717,8 @@ async function readConsumerGraph(harness, graph) {
     else assert.fail(`unexpected snapshot request ${command.path}`);
   }
   await drainConsumers();
-  harness.native.commands.shift().resolve(JSON.stringify(status));
+  harness.native.commands.shift().resolve(JSON.stringify({ ...status, revision: status.revision + 1,
+    tunAttached: true, vpnCreated: true, forward: 'running' }));
   return await pending;
 }
 
@@ -907,10 +909,16 @@ test('已有同名自动首选可明确清除组pin，actual仍标记第二实�
   tests.cancel();
 });
 
+async function controllerConsumer(fixtureUrl) {
+  const request = await sourceModule('../entry/src/main/ets/shared/ControllerRequest.ets',
+    `import { http, CONTROLLER_ADDRESS, readRuntime } from ${JSON.stringify(fixtureUrl)};\n`);
+  return import(await sourceModule('../entry/src/main/ets/client/Controller.ets',
+    `import { http } from ${JSON.stringify(fixtureUrl)};\nimport { call } from ${JSON.stringify(request)};\n`));
+}
+
 test('实际Controller首页摘要保留自动组第二同名实例历史及可见组图标', async () => {
   const harness = await consumerHarness();
-  const controller = await import(await sourceModule('../entry/src/main/ets/client/Controller.ets',
-    `import { http, CONTROLLER_ADDRESS, readRuntime } from ${JSON.stringify(harness.fixtureUrl)};\n`));
+  const controller = await controllerConsumer(harness.fixtureUrl);
   const pending = controller.getMainGroup('/fixture');
   await drainConsumers();
   const mode = harness.native.requests.shift();
@@ -1011,8 +1019,7 @@ test('URLTest缓存中的退休actual保持摘要和嵌套解析，当前成员�
 
 test('实际Controller摘要沿URLTest退休actual取旧实例，明确retired且不误取新同名历史', async () => {
   const harness = await consumerHarness();
-  const controller = await import(await sourceModule('../entry/src/main/ets/client/Controller.ets',
-    `import { http, CONTROLLER_ADDRESS, readRuntime } from ${JSON.stringify(harness.fixtureUrl)};\n`));
+  const controller = await controllerConsumer(harness.fixtureUrl);
   const pending = controller.getMainGroup('/fixture');
   await drainConsumers();
   const mode = harness.native.requests.shift();
@@ -1027,4 +1034,205 @@ test('实际Controller摘要沿URLTest退休actual取旧实例，明确retired�
   assert.equal(summary.node, 'Shared');
   assert.equal(summary.delay, 77);
   assert.equal(summary.retired, true);
+});
+
+test('预热未连接的节点页与picker支持选择和测速，连断不清结果，拒绝后缓存页可显式重试', async () => {
+  const harness = await consumerHarness();
+  const browserUrl = await sourceModule('../entry/src/main/ets/features/proxies/Proxies.ets',
+    `import { KeyedListSource } from ${JSON.stringify(listUrl)};\n` +
+    `import { ProxyAppearance } from ${JSON.stringify(harness.appearanceUrl)};\n` +
+    `import { ProxySelectionSession } from ${JSON.stringify(harness.selectionUrl)};\n` +
+    `import { ProxyTestSession } from ${JSON.stringify(harness.probesUrl)};\n` +
+    `import { proxyColumnCount, proxyGroupNames, validProxyView } from ${JSON.stringify(logicUrl)};\n` +
+    `import { applyProxyDelayViews, buildProxyViews } from ${JSON.stringify(viewUrl)};\n` +
+    `let current; export function setSnapshot(next) { current = next; }\n` +
+    `export let attempts = 0;\n` +
+    `export const connection = { coreReady: true, coreStarting: false, connected: false, busy: false,
+      offlineWritable: false, bootId: 'warm', mode: 'rule',
+      async ensureReady(_context, automatic) {
+        assertExplicit(automatic); attempts++;
+        if (attempts === 1) throw new Error('authorization_denied');
+        this.coreReady = true;
+      } };\n` +
+    `function assertExplicit(automatic) { if (automatic !== false) throw new Error('not_explicit'); }\n` +
+    `class ProfileEvents { start() {} stop() {} }\n` +
+    `async function readOnlineProxies() { return current; }\n` +
+    `async function readOfflineProxies() { return { ...current, online: false }; }\n`);
+  const module = await import(browserUrl);
+  const current = snapshot();
+  current.online = true;
+  current.offlineWritable = false;
+  current.bootId = 'warm';
+  current.configRevision = 7;
+  module.setSnapshot(current);
+  const browser = new module.ProxyBrowser();
+  const input = {
+    context: { filesDir: '/fixture' }, profile: 'one', summary: undefined, ready: true,
+    visible: true, online: true, offlineWritable: false, bootId: 'warm', mode: 'rule',
+    picker: false, initialGroup: 'Main'
+  };
+  browser.configure(input);
+  await browser.refresh();
+  const selected = current.nodes.Main.now;
+  browser.test('Main', 'beta HK');
+  await drainConsumers();
+  assert.equal(new URL(harness.native.requests[0].url).searchParams.get('id'), 'beta HK');
+  const pending = harness.native.requests[0];
+  module.connection.connected = true;
+  module.connection.busy = true;
+  browser.configure({ ...input });
+  await browser.refresh();
+  assert.equal(browser.tests.activeBatches.size, 1);
+  pending.reply(200, '{"delay":42}');
+  await drainConsumers();
+  assert.equal([...browser.tests.latest.values()][0], 42);
+  module.connection.connected = false;
+  browser.configure({ ...input, picker: true });
+  await browser.refresh();
+  assert.equal([...browser.tests.latest.values()][0], 42);
+  browser.test('Main');
+  await drainConsumers();
+  assert.deepEqual(harness.native.requests.slice(1).map(request =>
+    new URL(request.url).searchParams.get('id')).sort(), ['Alpha US', 'Gamma JP', 'beta HK'].sort());
+  assert.equal(current.nodes.Main.now, selected);
+  assert.equal(harness.native.commands.length, 0, '测速不得修改出口');
+  browser.choose('Main', 'beta HK');
+  await drainConsumers();
+  const command = harness.native.commands.shift();
+  assert.equal(command.path, '/arkclash/selection');
+  assert.equal(JSON.parse(command.body).nodeId, 'beta HK');
+  command.resolve(JSON.stringify({
+    changed: true, selected: 'beta HK', selectedId: 'beta HK', pinned: '', cleanupFailed: false
+  }));
+  await drainConsumers();
+  assert.equal(current.nodes.Main.now, 'beta HK');
+  module.setSnapshot({ ...current, configRevision: 8 });
+  await browser.refresh();
+  assert.equal(browser.tests.latest.size, 0);
+  assert.equal(browser.tests.activeBatches.size, 0);
+  module.connection.coreReady = false;
+  browser.configure({ ...input, online: false });
+  await browser.refresh();
+  assert.ok(browser.groups.length > 0, '拒绝后保留缓存节点');
+  await browser.startCore();
+  assert.equal(module.attempts, 1);
+  assert.equal(browser.notice, 'notReady');
+  module.connection.coreStarting = true;
+  await browser.startCore();
+  assert.equal(module.attempts, 1);
+  module.connection.coreStarting = false;
+  await browser.startCore();
+  assert.equal(module.attempts, 2);
+  assert.equal(browser.online, true);
+  browser.suspend();
+});
+
+test('代理节点保存到本地节点库按实例身份提取、校验并处理同名冲突', async () => {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'arkclash-save-proxy-'));
+  try {
+    await fsp.mkdir(path.join(dir, 'profiles'), { recursive: true });
+    const schemaUrl = await sourceModule('../entry/src/main/ets/shared/profiles/LocalProxySchema.ets');
+    const localProxiesUrl = await sourceModule('../entry/src/main/ets/shared/profiles/LocalProxies.ets',
+      `const util = { TextEncoder: class { encodeInto(text) { return new TextEncoder().encode(text); } } };\n` +
+      `import { newId, validProfileId } from ${JSON.stringify(storeUrl)};\n` +
+      `import { copyProxyKey, PROXY_TYPES, proxyMap, proxyText, proxyValue, REQUIRED_PROXY_KEYS, withProxyValue } from ${JSON.stringify(schemaUrl)};\n`);
+    const localProxyStoreUrl = await sourceModule('../entry/src/main/ets/shared/profiles/LocalProxyStore.ets',
+      `const taskpool = { async execute(fn, ...args) { return fn(...args); } };\n` +
+      `import { newId, profilesDir, readOptionalText, withProfileStorage, writeProfileText } from ${JSON.stringify(storeUrl)};\n` +
+      `import { applyProxyLinkPlan, decodeProxyStore, emptyLocalProxies, encodeProxyStore, localProxyProblem, newLocalProxy, planProxyLinks } from ${JSON.stringify(localProxiesUrl)};\n` +
+      `import { proxyText, withProxyValue } from ${JSON.stringify(schemaUrl)};\n`);
+    const definitionsById = new Map([
+      ['boot.1.a', {
+        bootId: 'boot', configRevision: 1, id: 'boot.1.a', name: 'HK-01', provider: 'prov-a',
+        definition: {
+          name: 'HK-01', type: 'vless', server: 'a.example.test', port: 443,
+          uuid: '11111111-1111-1111-1111-111111111111', tls: true, network: 'grpc',
+          'grpc-opts': { 'grpc-service-name': 'svc-a' }
+        }
+      }],
+      ['boot.1.b', {
+        bootId: 'boot', configRevision: 1, id: 'boot.1.b', name: 'HK-01', provider: 'prov-b',
+        definition: {
+          name: 'HK-01', type: 'trojan', server: 'b.example.test', port: 8443,
+          password: 'pass-b', network: 'ws', 'ws-opts': { path: '/ws-b', headers: { Host: 'b.cdn.test' } }
+        }
+      }]
+    ]);
+    let rejectNext = false;
+    const fetchedIds = [];
+    const bridgeKey = Symbol('saveProxyCoreBridge');
+    globalThis[bridgeKey] = {
+      async fetchRuntimeProxyDefinition(_dir, bootId, configRevision, id, _group) {
+        fetchedIds.push(id);
+        const entry = definitionsById.get(id);
+        if (!entry || entry.bootId !== bootId || entry.configRevision !== configRevision) {
+          throw new Error('proxy_not_found');
+        }
+        return structuredClone(entry);
+      },
+      async validateProxyDefinitions(_ctx, defs) {
+        return defs.map(() => rejectNext ? 'local_proxy_rejected' : '');
+      }
+    };
+    const saveUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxySaveToLibrary.ets',
+      `const bridge = globalThis[Object.getOwnPropertySymbols(globalThis).find(k => k.description === 'saveProxyCoreBridge')];\n` +
+      `const { fetchRuntimeProxyDefinition, validateProxyDefinitions } = bridge;\n` +
+      `import { checkProxyName, localProxyName, localProxyProblem } from ${JSON.stringify(localProxiesUrl)};\n` +
+      `import { proxyText, withProxyValue } from ${JSON.stringify(schemaUrl)};\n` +
+      `import { readLocalProxies, saveLocalProxy } from ${JSON.stringify(localProxyStoreUrl)};\n`);
+    const saveMod = await import(saveUrl);
+    const localProxyStore = await import(localProxyStoreUrl);
+
+    assert.equal(saveMod.isExportableProxyNode({ online: true, nested: false, leafRetired: false, type: 'Vless' }), true);
+    assert.equal(saveMod.isExportableProxyNode({ online: true, nested: true, leafRetired: false, type: 'Selector' }), false);
+    assert.equal(saveMod.isExportableProxyNode({ online: true, nested: false, leafRetired: false, type: 'Direct' }), false);
+    assert.equal(saveMod.isExportableProxyNode({ online: false, nested: false, leafRetired: false, type: 'Vless' }), false);
+
+    const context = { filesDir: dir };
+    // 1. 校验失败时不写入本地节点库。
+    rejectNext = true;
+    await assert.rejects(() => saveMod.prepareSaveRuntimeProxy(context, 'boot', 1, 'boot.1.a', 'Proxy'),
+      /local_proxy_rejected/);
+    assert.equal((await localProxyStore.readLocalProxies(dir)).proxies.length, 0);
+    rejectNext = false;
+
+    // 2. 首次保存 prov-a 的 HK-01 成功入库并完整保留 grpc-opts。
+    const first = await saveMod.prepareSaveRuntimeProxy(context, 'boot', 1, 'boot.1.a', 'Proxy');
+    assert.equal(first.status, 'saved');
+    assert.equal(first.savedName, 'HK-01');
+    let stored = await localProxyStore.readLocalProxies(dir);
+    assert.equal(stored.proxies.length, 1);
+    assert.equal(stored.proxies[0].definition.server, 'a.example.test');
+    assert.equal(stored.proxies[0].definition['grpc-opts']['grpc-service-name'], 'svc-a');
+
+    // 3. 保存 prov-b 同名 HK-01：按实例 ID 取到 b 的定义，并触发同名冲突提示。
+    const second = await saveMod.prepareSaveRuntimeProxy(context, 'boot', 1, 'boot.1.b', 'Proxy');
+    assert.equal(second.status, 'conflict');
+    assert.equal(second.conflict.existingName, 'HK-01');
+    assert.equal(second.conflict.suggestedName, 'HK-01 (2)');
+    assert.equal(second.conflict.definition.server, 'b.example.test');
+    assert.equal(second.conflict.definition['ws-opts'].path, '/ws-b');
+
+    // 4. 选择重命名保存 -> 两条并存且各自传输参数完整。
+    const renamed = await saveMod.resolveSaveProxyConflict(context, second.conflict, 'rename');
+    assert.equal(renamed, 'HK-01 (2)');
+    stored = await localProxyStore.readLocalProxies(dir);
+    assert.equal(stored.proxies.length, 2);
+    assert.equal(stored.proxies[0].definition.name, 'HK-01');
+    assert.equal(stored.proxies[0].definition.server, 'a.example.test');
+    assert.equal(stored.proxies[1].definition.name, 'HK-01 (2)');
+    assert.equal(stored.proxies[1].definition.server, 'b.example.test');
+    assert.equal(stored.proxies[1].definition['ws-opts'].path, '/ws-b');
+
+    // 5. 选择覆盖保存 -> 覆盖原 HK-01 为 prov-b 的定义。
+    const overwritten = await saveMod.resolveSaveProxyConflict(context, second.conflict, 'overwrite');
+    assert.equal(overwritten, 'HK-01');
+    stored = await localProxyStore.readLocalProxies(dir);
+    assert.equal(stored.proxies.length, 2);
+    assert.equal(stored.proxies[0].definition.name, 'HK-01');
+    assert.equal(stored.proxies[0].definition.server, 'b.example.test');
+    assert.deepEqual(fetchedIds, ['boot.1.a', 'boot.1.a', 'boot.1.b']);
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
 });

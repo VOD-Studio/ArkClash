@@ -1,0 +1,14 @@
+--- a/component/resource/fetcher.go
++++ b/component/resource/fetcher.go
+@@ -114,7 +114,10 @@
+ }
+ 
+ func (f *Fetcher[V]) Update() (V, bool, error) {
+-	buf, hash, err := f.vehicle.Read(f.ctx, f.hash)
++	f.loadBufMutex.Lock()
++	previousHash := f.hash
++	f.loadBufMutex.Unlock()
++	buf, hash, err := f.vehicle.Read(f.ctx, previousHash)
+ 	if err != nil {
+ 		f.backoff.AddAttempt() // add a failed attempt to backoff
+ 		return lo.Empty[V](), false, err

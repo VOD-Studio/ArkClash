@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { ListSource } from '../../components/ListSource';
 import { PAGE_GUTTER } from '../../components/Theme';
 import { describeError } from './ProfileErrors';
@@ -73,6 +74,7 @@ export struct ProfileSortSheet {
 @ComponentV2
 @ReusableV2
 struct ProfileSortRow {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require item: ProfileItem;
   @Param first: boolean = false;
   @Param last: boolean = false;
@@ -82,6 +84,7 @@ struct ProfileSortRow {
     Column() {
       Row({ space: 16 }) {
         Text(this.item.name)
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(17).lineHeight(22)
           .layoutWeight(1)
           .maxLines(1)
@@ -95,12 +98,12 @@ struct ProfileSortRow {
       }
       .width('100%').constraintSize({ minHeight: 56 })
       if (!this.last) {
-        Divider().strokeWidth(0.5).color($r('app.color.divider')).opacity(this.dragging ? 0 : 1)
+        Divider().strokeWidth(0.5).color(this.appStyle.palette.divider).opacity(this.dragging ? 0 : 1)
       }
     }
     .width('100%')
     .padding({ left: 16, right: 16 })
-    .backgroundColor($r('app.color.card_background'))
+    .backgroundColor(this.appStyle.palette.cardBackground)
     .borderRadius({ topLeft: this.first || this.dragging ? 24 : 0, topRight: this.first || this.dragging ? 24 : 0,
       bottomLeft: this.last || this.dragging ? 24 : 0, bottomRight: this.last || this.dragging ? 24 : 0 })
   }

@@ -12,6 +12,7 @@ export struct ProxyTabs {
   @Local pageIndex: number = 0;
   @Event onListScroll: (offset: number, source: ScrollSource, scroller: Scroller) => void = () => {};
   @Event onScrollerReady: (scroller: Scroller) => void = () => {};
+  @Event onSaveToLibrary: (group: string, node: string) => void = () => {};
   private controller: SwiperController = new SwiperController();
   private pendingIndex: number = -1;
   private requestedIndex: number = -1;
@@ -150,6 +151,7 @@ export struct ProxyTabs {
           contentInset: this.contentInset, motionEnabled: this.motionEnabled,
           onChoose: (node: string) => this.browser.choose(group.name, node),
           onTest: (node: string) => this.browser.test(group.name, node),
+          onSaveToLibrary: (node: string) => this.onSaveToLibrary(group.name, node),
           onScrollerReady: (): void => this.groupReady(group),
           onScrollerRelease: (): void => this.groupRelease(group),
           onListScroll: (offset: number, source: ScrollSource) => this.didScroll(group, offset, source)

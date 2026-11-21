@@ -15,11 +15,13 @@ export interface UpdateEnv {
   // 成功返回表示内核已应用；资格检查由提交方在记账后执行。
   reload?: (path: string, profile: string, expectedProfile?: string) => Promise<void>;
   prefetch?: (path: string) => void;
+  updateResources?: (eligible: () => boolean) => Promise<void>;
   eligible?: () => boolean;
 }
 
 export interface ProfileCandidateChange {
   create?: ProfileRecord;
+  selectOnCreate?: boolean;
   subscription?: SubscriptionRecord;
   state?: SubscriptionState;
   expectedSubscription?: SubscriptionRecord;
@@ -97,7 +99,10 @@ export async function commitCandidate(env: UpdateEnv, profile: string, candidate
     checkProfileCommit(eligible);
     if (!unchanged && env.reload !== undefined && env.running() === profile) {
       try { await env.reload(candidate, profile, profile); }
-      catch (e) { throw new ProfileError(errorCode(errorString(e as Object)) === 'conflict' ? 'conflict' : 'rejected'); }
+      catch (e) {
+        const reason = errorCode(errorString(e as Object));
+        throw new ProfileError(reason === 'conflict' || reason === 'added_rules_match_target' ? reason : 'rejected');
+      }
       applied = true;
       checkProfileCommit(eligible);
     }
@@ -146,7 +151,7 @@ export async function commitCandidate(env: UpdateEnv, profile: string, candidate
           if (change.subscription !== undefined) {
             latest.subscriptions.push(change.subscription);
           }
-          if (latest.current === '') {
+          if (latest.current === '' && change.selectOnCreate !== false) {
             latest.current = profile;
           }
         }

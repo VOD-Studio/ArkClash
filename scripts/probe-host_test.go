@@ -47,12 +47,13 @@ func installProbeConfig(t *testing.T, text string) *config.Config {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.ParseRawConfig(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
 	mu.Lock()
 	stopRuntimeRoutes()
+	cfg, err := config.ParseRawConfig(raw)
+	if err != nil {
+		mu.Unlock()
+		t.Fatal(err)
+	}
 	tunnel.UpdateProxies(cfg.Proxies, cfg.Providers)
 	tunnel.UpdateRules(cfg.Rules, cfg.SubRules, cfg.RuleProviders)
 	tunnel.SetMode(cfg.General.Mode)

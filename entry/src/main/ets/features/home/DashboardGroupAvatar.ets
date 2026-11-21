@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { AppGlyph } from '../../components/AppGlyph';
 
 const DASHBOARD_GROUP_LETTER: RegExp = new RegExp('[\\p{L}\\p{N}]', 'u');
@@ -17,6 +18,7 @@ export function dashboardGroupMonogram(name: string): string {
 
 @ComponentV2
 export struct DashboardGroupAvatar {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param groupName: string = '';
   @Param iconSource: string = '';
   @Param badgeSize: number = 40;
@@ -38,6 +40,7 @@ export struct DashboardGroupAvatar {
   Monogram() {
     if (this.mark !== '') {
       Text(this.mark)
+        .fontFamily(this.appStyle.fontFamily)
         .fontSize(this.badgeSize * 0.434)
         .lineHeight(this.badgeSize * 0.434)
         .fontWeight(600)
@@ -66,8 +69,8 @@ export struct DashboardGroupAvatar {
     .width(this.badgeSize)
     .height(this.badgeSize)
     .borderRadius(this.badgeSize * 0.35)
-    .backgroundColor($r('app.color.tile_background'))
-    .border({ width: this.badgeSize * 0.075, color: $r('app.color.card_background') })
+    .backgroundColor(this.appStyle.palette.tileBackground)
+    .border({ width: this.badgeSize * 0.075, color: this.appStyle.palette.cardBackground })
     .clip(true)
     .accessibilityText(this.groupName)
   }

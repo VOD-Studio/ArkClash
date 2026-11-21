@@ -1,5 +1,8 @@
 import core from 'libarkclash.so';
-import { errorString, ProfileError } from '../shared/profiles/Errors';
+import { handleScriptDownload } from './ScriptUpdates';
+import { ProfileError } from '../shared/profiles/Errors';
+import { IconSetDownloadCommand } from '../shared/profiles/IconSetModel';
+import { downloadIconSet } from '../shared/profiles/IconSets';
 import { checkProfileCommit, findProfile, readListAsync, readStateAsync, validProfileId } from '../shared/profiles/Store';
 import { downloadNewSubscription, UpdateEnv, UpdateOutcome, UpdateScheduler } from '../shared/profiles/Updater';
 
@@ -13,17 +16,14 @@ interface VpnProfileAddCommand {
   subscription: string;
   url: string;
   label?: string;
+  ageSecretKey?: string;
 }
 
-interface VpnProfileErrorReply { message: string; }
 interface VpnProfileOkReply { ok: boolean; }
 interface VpnProfileUpdatedEvent { type: string; subscription: string; ok: boolean; }
 
-function send(id: number, status: number, body: Object): void {
-  core.reply(id, status, JSON.stringify(body));
-}
-
-async function handle(scheduler: UpdateScheduler, env: UpdateEnv, name: string, body: string): Promise<Object> {
+export async function handleProfileCommand(scheduler: UpdateScheduler, env: UpdateEnv,
+  name: string, body: string): Promise<Object> {
   const generation = scheduler.operationGeneration();
   const eligible = (): boolean => scheduler.acceptsGeneration(generation) && env.eligible?.() !== false;
   checkProfileCommit(eligible);
@@ -44,6 +44,9 @@ async function handle(scheduler: UpdateScheduler, env: UpdateEnv, name: string, 
         typeof command.url !== 'string') {
         throw new ProfileError('url_invalid');
       }
+      if (command.ageSecretKey !== undefined && typeof command.ageSecretKey !== 'string') {
+        throw new ProfileError('age_decrypt');
+      }
       const saved = findProfile(await readListAsync(env.filesDir), command.profile);
       if (saved !== undefined) {
         if (saved.subscription !== command.subscription) { throw new ProfileError('conflict'); }
@@ -53,7 +56,14 @@ async function handle(scheduler: UpdateScheduler, env: UpdateEnv, name: string, 
         return reply;
       }
       return await downloadNewSubscription(env, command.profile, command.subscription, command.url,
-        command.label ?? '', eligible);
+        command.label ?? '', eligible, command.ageSecretKey ?? '');
+    }
+    case 'script-download':
+      return handleScriptDownload(env.filesDir, env.downloader, body, eligible);
+    case 'icon-set-download': {
+      await downloadIconSet(env.filesDir, env.downloader, JSON.parse(body) as IconSetDownloadCommand, eligible);
+      const reply: VpnProfileOkReply = { ok: true };
+      return reply;
     }
     case 'changed': {
       scheduler.reschedule();
@@ -62,17 +72,6 @@ async function handle(scheduler: UpdateScheduler, env: UpdateEnv, name: string, 
     }
     default: throw new ProfileError('unsupported_input');
   }
-}
-
-export function serveProfileCommands(scheduler: UpdateScheduler, env: UpdateEnv): void {
-  core.onCommand((id: number, name: string, body: string): void => {
-    handle(scheduler, env, name, body).then((result: Object): void => {
-      send(id, 200, result);
-    }).catch((error: Error): void => {
-      const reply: VpnProfileErrorReply = { message: errorString(error) };
-      send(id, 500, reply);
-    });
-  });
 }
 
 export function emitUpdated(outcome: UpdateOutcome): void {

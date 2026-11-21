@@ -4,10 +4,11 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { connection as networkConnection } from '@kit.NetworkKit';
 import { OutboundMode, RuntimeStatus, setAllowLan, setMode } from './Controller';
 import { ControllerSocket } from './ControllerSocket';
-import { CoreHostState, CoreStartError, readCoreHostStatus, startCore, stopCore, updateRuntimeOptions } from './CoreClient';
+import { CoreHostState, connectVpn, disconnectVpn, readCoreHostStatus, startCore, stopCore, updateRuntimeOptions } from './CoreClient';
 import { flushProxySelections } from './Proxies';
 import { traffic } from './Traffic';
 import { runtimeMayBeActive } from '../shared/Runtime';
+import { flushGeoSettings } from '../shared/GeoResources';
 
 const PREF_CONNECT_DURATION = 'lastConnectDuration';
 const PREF_MODE = 'outboundMode';
@@ -36,12 +37,19 @@ export class Connection {
   @Trace allowLan: boolean | undefined = undefined;
   @Trace intent: 'started' | 'stopped' = 'stopped';
   @Trace forward: 'stopped' | 'preparing' | 'running' | 'paused' | 'failed' = 'stopped';
+  @Trace panelOpen: boolean = false;
   @Trace sessionMode: 'tun' | 'proxyOnly' = 'tun';
   @Trace listenersOpen: boolean = false;
   @Trace tunAttached: boolean = false;
+  @Trace vpnCreated: boolean = false;
+  @Trace coreReady: boolean = false;
+  @Trace coreStarting: boolean = false;
+  private automaticFailed: boolean = false;
+  private readyPending?: Promise<void>;
   @Trace modePending: boolean = false;
   @Trace modeError: string = '';
   @Trace routeRevision: string = '';
+  private coreGeneration: number = 0;
   @Trace hostState: CoreHostState = 'unknown';
   private prefs?: preferences.Preferences;
   private filesDir: string = '';
@@ -50,7 +58,11 @@ export class Connection {
   private startPending?: Promise<void>;
   private settingsPending: Promise<void> = Promise.resolve();
   private foreground: boolean = false;
+  private diagnosticsReceiverMounted: boolean = false;
+  private diagnosticsCapture?: ControllerSocket;
+  private diagnosticsBootId: string = '';
   @Trace bootId: string = '';
+  @Trace configRevision: number = 0;
   private revision: number = -1;
   private routeEpoch: number = 0;
   private network?: networkConnection.NetConnection;
@@ -71,8 +83,8 @@ export class Connection {
   }
 
   get connected(): boolean {
-    return this.state === ConnectionState.Connected && this.forward === 'running' &&
-      (this.sessionMode === 'tun' ? this.tunAttached : this.listenersOpen);
+    return this.coreReady && this.state === ConnectionState.Connected && this.forward === 'running' &&
+      this.vpnCreated && this.tunAttached && this.listenersOpen;
   }
 
   get offlineWritable(): boolean {
@@ -87,6 +99,11 @@ export class Connection {
     this.connectDuration = this.prefs.getSync(PREF_CONNECT_DURATION, 0) as number;
     this.allowLan = this.prefs.hasSync(PREF_ALLOW_LAN) ? this.prefs.getSync(PREF_ALLOW_LAN, false) as boolean : undefined;
     // 历史连接标记不能证明当前隧道存在；首帧只恢复用户偏好。
+  }
+
+  setDiagnosticsReceiverMounted(mounted: boolean): void {
+    this.diagnosticsReceiverMounted = mounted;
+    this.syncDiagnosticsCapture();
   }
 
   observe(context: common.UIAbilityContext, visible: boolean): void {
@@ -110,9 +127,72 @@ export class Connection {
     }
   }
 
+  async ensureReady(context: common.UIAbilityContext, automatic: boolean = false): Promise<void> {
+    if (automatic && (!this.foreground || this.automaticFailed)) {
+      return;
+    }
+    if (this.readyPending !== undefined) {
+      return this.readyPending;
+    }
+    const generation = this.coreGeneration;
+    this.coreStarting = true;
+    const pending = this.prepareCore(context, generation, automatic);
+    this.readyPending = pending;
+    try {
+      await pending;
+    } catch (error) {
+      if (automatic) {
+        this.automaticFailed = true;
+      }
+      throw error as Error;
+    } finally {
+      if (this.readyPending === pending) {
+        this.readyPending = undefined;
+        this.coreStarting = false;
+      }
+    }
+  }
+
+  private async prepareCore(context: common.UIAbilityContext, generation: number, automatic: boolean): Promise<void> {
+    try {
+      await this.settingsPending;
+      await flushGeoSettings();
+      await flushProxySelections(this.filesDir);
+      if (generation !== this.coreGeneration || (automatic && !this.foreground)) {
+        return;
+      }
+      const status = await startCore(context, this.userMode(), this.allowLan,
+        (): boolean => generation === this.coreGeneration && (!automatic || this.foreground));
+      if (generation === this.coreGeneration) {
+        this.applyStatus(status);
+      }
+    } catch (error) {
+      if (generation === this.coreGeneration) {
+        const host = await readCoreHostStatus(context);
+        if (generation === this.coreGeneration) {
+          if (host.state === 'stopped') {
+            this.applyStopped();
+          } else if (host.status !== undefined) {
+            this.applyStatus(host.status);
+          } else {
+            this.markUnknown((error as Error).message);
+          }
+          this.error = (error as Error).message;
+        }
+      }
+      throw error as Error;
+    }
+  }
   async connect(context: common.UIAbilityContext): Promise<void> {
     if (this.busy || this.connected) {
       return;
+    }
+    if (this.readyPending !== undefined) {
+      const waitingGeneration = this.generation;
+      await this.readyPending.catch((): void => {});
+      if (waitingGeneration !== this.generation || this.busy || this.connected) {
+        return;
+      }
     }
     const generation = ++this.generation;
     this.intent = 'started';
@@ -134,26 +214,20 @@ export class Connection {
 
   private async performConnect(context: common.UIAbilityContext, generation: number, begin: number): Promise<void> {
     try {
+      await this.ensureReady(context);
+      if (generation !== this.generation) {
+        return;
+      }
+      this.state = ConnectionState.Connecting;
+      this.intent = 'started';
+      this.forward = 'preparing';
+      this.events.stop();
       const host = await readCoreHostStatus(context);
-      if (generation !== this.generation) {
-        return;
+      if (host.status === undefined || host.state !== 'running') {
+        throw new Error('内核未就绪，请重试');
       }
-      if (host.state === 'unknown') {
-        throw new CoreStartError('尚未确认代理状态，请重试', true);
-      }
-      if (host.state === 'running' && host.status !== undefined) {
-        this.applyStatus(host.status);
-        return;
-      }
-      this.hostState = 'stopped';
-      await this.settingsPending.catch((): void => {});
-      await flushProxySelections(this.filesDir);
-      if (generation !== this.generation) {
-        return;
-      }
-      this.hostState = 'unknown';
-      const status = await startCore(context, this.userMode(), this.allowLan,
-        (): boolean => generation === this.generation && this.intent === 'started');
+      const status = await connectVpn(context, host.status,
+        (): boolean => generation === this.generation);
       if (generation !== this.generation) {
         return;
       }
@@ -167,13 +241,14 @@ export class Connection {
       if (generation !== this.generation) {
         return;
       }
-      if (host?.state === 'stopped') {
+      if (host?.state === 'running' && host.status !== undefined) {
+        this.applyStatus(host.status);
+      } else if (host?.state === 'stopped') {
         this.applyStopped();
-        this.forward = 'failed';
-        this.error = (error as Error).message;
       } else {
         this.markUnknown((error as Error).message);
       }
+      this.error = (error as Error).message;
       throw error as Error;
     }
     try {
@@ -188,22 +263,41 @@ export class Connection {
     if (this.state === ConnectionState.Disconnecting) {
       throw new Error('代理正在停止，请稍后重试');
     }
-    ++this.generation;
+    const generation = ++this.generation;
     this.intent = 'stopped';
     this.error = '';
     this.state = ConnectionState.Disconnecting;
-    this.hostState = 'unknown';
     this.events.stop();
     const pending = this.startPending;
     let failure: Error | undefined = undefined;
     try {
-      await stopCore(context);
+      await this.readyPending?.catch((): void => {});
+      const host = await readCoreHostStatus(context);
+      if (host.state === 'running' && host.status !== undefined) {
+        const status = await disconnectVpn(context, host.status,
+          (): boolean => generation === this.generation);
+        if (generation === this.generation) {
+          this.applyStatus(status);
+        }
+      } else if (host.state === 'unknown') {
+        ++this.coreGeneration;
+        await stopCore(context);
+      }
     } catch (error) {
       failure = error as Error;
     }
     // 取消期间系统可能晚于第一次 stop 才创建扩展，必须等启动代次收尾后重新取证。
     await pending?.catch((): void => {});
     const host = await readCoreHostStatus(context).catch((): undefined => undefined);
+    if (generation !== this.generation) {
+      return;
+    }
+    if (failure === undefined && host?.state === 'running' && host.status !== undefined &&
+      host.status.forward === 'stopped' && !host.status.vpnCreated &&
+      !host.status.tunAttached && !host.status.listenersOpen) {
+      this.applyStatus(host.status);
+      return;
+    }
     if (host?.state === 'stopped') {
       this.applyStopped();
       return;
@@ -267,6 +361,7 @@ export class Connection {
 
   private markUnknown(message: string): void {
     this.hostState = 'unknown';
+    this.coreReady = false;
     this.state = ConnectionState.Disconnected;
     this.forward = 'failed';
     this.error = message;
@@ -276,16 +371,20 @@ export class Connection {
 
   private applyStopped(): void {
     this.hostState = 'stopped';
+    this.coreReady = false;
     this.state = ConnectionState.Disconnected;
     this.intent = 'stopped';
     this.forward = 'stopped';
     this.connectedAt = 0;
+    this.configRevision = 0;
     this.listenersOpen = false;
     this.tunAttached = false;
+    this.vpnCreated = false;
     this.error = '';
     traffic.reset();
     this.invalidateRoute();
     this.syncEvents();
+    this.syncDiagnosticsCapture();
   }
 
   private applyStatus(status: RuntimeStatus): void {
@@ -294,22 +393,26 @@ export class Connection {
     }
     this.bootId = status.bootId;
     this.revision = status.revision;
+    this.configRevision = status.configRevision;
     this.coreVersion = status.version;
     this.hostState = status.running ? 'running' : 'stopped';
+    this.coreReady = status.running;
+    this.vpnCreated = status.vpnCreated;
     this.intent = status.intent;
     this.forward = status.forward;
     this.sessionMode = status.sessionMode;
+    this.panelOpen = status.panelOpen === true;
     this.listenersOpen = status.listenersOpen;
     this.tunAttached = status.tunAttached;
     this.connectedAt = status.startedAt;
     if (status.mode === 'rule' || status.mode === 'global' || status.mode === 'direct') {
       this.mode = status.mode;
     }
-    this.state = status.running && status.forward === 'running' &&
-      (status.sessionMode === 'tun' ? status.tunAttached : status.listenersOpen) ?
-      ConnectionState.Connected : ConnectionState.Disconnected;
+    this.state = status.running && status.forward === 'running' && status.vpnCreated &&
+      status.tunAttached && status.listenersOpen ? ConnectionState.Connected : ConnectionState.Disconnected;
     this.routeRevision = `${this.bootId}/${this.revision}/${this.routeEpoch}`;
     this.syncEvents();
+    this.syncDiagnosticsCapture();
   }
 
   private userMode(): string {
@@ -381,11 +484,30 @@ export class Connection {
   }
 
   private syncEvents(): void {
-    if (this.foreground && !this.busy && this.hostState !== 'stopped' && this.intent === 'started') {
+    if (this.foreground && !this.busy && this.coreReady) {
       this.events.start(this.filesDir);
     } else {
       this.events.stop();
     }
+  }
+
+  private syncDiagnosticsCapture(): void {
+    if (!this.diagnosticsReceiverMounted || this.hostState === 'stopped' ||
+      this.diagnosticsBootId !== this.bootId) {
+      this.diagnosticsCapture?.stop();
+      this.diagnosticsCapture = undefined;
+      this.diagnosticsBootId = '';
+    }
+    // 失去状态查询不代表内核或已有租约已失效；只凭认证状态开始订阅。
+    if (!this.diagnosticsReceiverMounted || !this.coreReady || this.hostState !== 'running' || this.bootId === '') {
+      return;
+    }
+    if (this.diagnosticsCapture === undefined) {
+      const path = `/arkclash/diagnostics/capture?expectedBootId=${encodeURIComponent(this.bootId)}`;
+      this.diagnosticsCapture = new ControllerSocket(path, (): void => {}, undefined, 'ready');
+      this.diagnosticsBootId = this.bootId;
+    }
+    this.diagnosticsCapture.start(this.filesDir);
   }
 
   private invalidateRoute(): void {

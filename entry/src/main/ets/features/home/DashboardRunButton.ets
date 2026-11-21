@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { curves } from '@kit.ArkUI';
 import { uiResourceText } from '../../components/ResourceText';
 import { DashboardLoadingRotation } from './DashboardLoadingRotation';
@@ -9,6 +10,7 @@ const RUN_BUTTON_SHAPE = 'M54 4 C71 2 86 4 92 14 C102 31 93 58 84 77 C78 90 69 1
 
 @ComponentV2
 struct RunButtonFace {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param running: boolean = false;
   @Param busy: boolean = false;
   @Param motionEnabled: boolean = false;
@@ -53,7 +55,7 @@ struct RunButtonFace {
       DashboardLoadingRotation({ active: this.busy, visible: this.visible, motionEnabled: this.motionEnabled }) {
         Shape() {
           Path().commands(RUN_BUTTON_SHAPE)
-            .fill($r('app.color.brand'))
+            .fill(this.appStyle.palette.brand)
             .strokeWidth(0)
         }
         .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
@@ -66,7 +68,7 @@ struct RunButtonFace {
       }
       SymbolGlyph(this.running ? $r('sys.symbol.pause_fill') : $r('sys.symbol.play_fill'))
         .fontSize(30)
-        .fontColor([$r('app.color.on_brand')])
+        .fontColor([this.appStyle.palette.onBrand])
         .width(30)
         .height(30)
         .opacity(this.busy ? 0 : 1)
@@ -76,7 +78,7 @@ struct RunButtonFace {
       LoadingProgress()
         .width(30)
         .height(30)
-        .color($r('app.color.on_brand'))
+        .color(this.appStyle.palette.onBrand)
         .enableLoading(this.loadingShown)
         .opacity(this.busy ? 1 : 0)
         .animation(this.loadingAnimation())
@@ -128,6 +130,7 @@ function runButtonContent(configuration: ButtonConfiguration) {
 
 @ComponentV2
 export struct DashboardRunButton {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param running: boolean = false;
   @Param busy: boolean = false;
   @Param available: boolean = false;
@@ -139,6 +142,7 @@ export struct DashboardRunButton {
 
   build() {
     Button({ type: ButtonType.Normal })
+      .fontFamily(this.appStyle.fontFamily)
       .contentModifier(new RunButtonContent(this.running, this.busy, this.visible, this.motionEnabled))
       .width(88)
       .height(88)

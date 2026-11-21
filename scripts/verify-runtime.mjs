@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
 import test, { beforeEach } from 'node:test';
+import './vpn-lifecycle-cases.mjs';
 
 const require = createRequire(import.meta.url);
 const ts = require(process.env.ARKCLASH_TYPESCRIPT);
@@ -16,19 +17,31 @@ class Clock extends Date { static now() { return state.now; } }
 const context = { filesDir: '/isolated-fixture', applicationInfo: { name: 'fixture.application' } };
 const ready = {
   profile: 'fixture', running: true, intent: 'started', forward: 'running', sessionMode: 'tun',
-  tunAttached: true, listenersOpen: false, startedAt: 1, bootId: 'fixture.boot', revision: 1, configRevision: 1,
+  tunAttached: true, vpnCreated: true, listenersOpen: true, startedAt: 1, bootId: 'fixture.boot', revision: 1, configRevision: 1,
   mode: 'rule', version: 'fixture'
 };
 const kits = {
   '@kit.AbilityKit': {},
   '@kit.CryptoArchitectureKit': { cryptoFramework: {
-    createRandom: () => ({ generateRandomSync: () => ({ data: new Uint8Array(16).fill(7) }) })
+    createRandom: () => ({ generateRandomSync: () => ({ data: new Uint8Array(16).fill(++state.random) }) })
   } },
   '@kit.NetworkKit': {
     http: {
-      RequestMethod: { GET: 'GET' }, HttpDataType: { STRING: 0 },
+      RequestMethod: { GET: 'GET', POST: 'POST' }, HttpDataType: { STRING: 0 },
       createHttp: () => ({
-        async request() {
+        async request(url, options) {
+          if (options.method === 'POST') {
+            state.commands.push({ url, body: JSON.parse(options.extraData) });
+            await state.commandGate;
+            if (state.commandError) throw state.commandError;
+            state.status = url.endsWith('/disconnect') ? {
+              ...state.status, intent: 'stopped', forward: 'stopped', vpnCreated: false,
+              tunAttached: false, listenersOpen: false, startedAt: 0, revision: state.status.revision + 1
+            } : { ...state.status, ...ready, bootId: state.status.bootId,
+              configRevision: state.status.configRevision, revision: state.status.revision + 1 };
+            if (state.commandTimeout) throw new Error('HTTP timeout');
+            return { responseCode: 200, result: JSON.stringify(state.status) };
+          }
           const status = state.status;
           state.requestingStatus = true;
           await state.statusGate;
@@ -42,8 +55,10 @@ const kits = {
       async startVpnExtensionAbility() {
         state.started++;
         await state.startGate;
+        if (state.denyAuthorization) { throw undefined; }
         if (state.startError) { throw state.startError; }
         state.active = true;
+        state.instance = { secret: state.runtime.secret, instance: `instance.${state.started}` };
       },
       async stopVpnExtensionAbility() {
         state.stopped++;
@@ -67,6 +82,7 @@ const kits = {
   '../shared/profiles/Store': {
     async withProfileStorage(_filesDir, operation) { await state.storageGate; return operation(); }
   },
+  './VpnNetworkSettings': { async readVpnNetworkSettings() { return state.networkSettings; } },
   './Controller': {}
 };
 const module = { exports: {} };
@@ -108,12 +124,43 @@ const prefs = {
   putSync(key, value) { state.saved[key] = value; },
   async flush() { if (state.flushError) { throw new Error('fixture preference storage failure'); } }
 };
-const { Connection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
+
+// 使用真实设置队列和原子写辅助函数，仅在平台写调用处控制提交完成。
+const geoSettings = loadConsumer('../entry/src/main/ets/shared/GeoResources.ets', {
+  '@kit.BasicServicesKit': {},
+  '@kit.ArkTS': { url: { URL: { parseURL: source => new URL(source) } } },
+  '@kit.CoreFileKit': { fileIo: {
+    OpenMode: { CREATE: 1, WRITE_ONLY: 2, TRUNC: 4, READ_WRITE: 8 },
+    async access() { return false; },
+    async readText() {
+      if (state.geoText === undefined) throw Object.assign(new Error('missing'), { code: 13900002 });
+      return state.geoText;
+    },
+    async open() { return { fd: 1, async lock() {} }; },
+    async write(_fd, text) {
+      state.geoWriting = true;
+      await state.geoSaveGate;
+      if (state.geoSaveError) throw new Error('disk failure');
+      state.geoTemporary = text;
+      return Buffer.byteLength(text);
+    },
+    async close() {},
+    async rename() { state.geoText = state.geoTemporary; }
+  } }
+});
+const connectionBindings = {
   '@kit.AbilityKit': {}, '@kit.BasicServicesKit': {}, '@kit.NetworkKit': {},
   '@kit.ArkData': { preferences: { getPreferencesSync: () => prefs } },
-  './Controller': {}, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } },
+  './Controller': {},
   './CoreClient': core, './Proxies': { flushProxySelections: async () => {} },
-  './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': { runtimeMayBeActive: async () => state.active }
+  './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': {
+    CONTROLLER_ADDRESS: '127.0.0.1:19090', readRuntime: async () => state.runtime,
+    runtimeMayBeActive: async () => state.active
+  },
+  '../shared/GeoResources': geoSettings
+};
+const { Connection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
+  ...connectionBindings, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } }
 });
 const runControls = loadConsumer('../entry/src/main/ets/features/home/HomeRunControls.ets', {});
 
@@ -122,8 +169,67 @@ beforeEach(() => {
     runtime: { secret: 'fixture-session', stack: 'gvisor', mode: 'rule' },
     receipt: undefined, startError: undefined, stopError: undefined, stopCleans: false,
     active: false, flushError: false, saved: {}, writingRuntime: false,
-    instance: undefined, requestingStatus: false, statusGate: Promise.resolve(), startGate: Promise.resolve(),
-    runtimeWriteGate: Promise.resolve(), storageGate: Promise.resolve() });
+    instance: { secret: 'fixture-session', instance: 'fixture.instance' },
+    random: 0, commands: [], commandGate: Promise.resolve(), commandTimeout: false, commandError: undefined,
+    denyAuthorization: false, networkSettings: undefined,
+    requestingStatus: false, statusGate: Promise.resolve(), startGate: Promise.resolve(),
+    runtimeWriteGate: Promise.resolve(), storageGate: Promise.resolve(),
+    geoText: undefined, geoTemporary: undefined, geoWriting: false, geoSaveError: false, geoSaveGate: Promise.resolve() });
+});
+
+test('DNS 覆写离线按版本提交，在线超时只凭落盘版本确认', async () => {
+  let disk;
+  let active = false;
+  let request;
+  let timeoutAfterCommit = true;
+  const dns = loadConsumer('../entry/src/main/ets/client/DnsOverrides.ets', {
+    '@kit.AbilityKit': {}, '@kit.BasicServicesKit': {},
+    '@kit.ArkTS': { url: { URL: { parseURL: value => new URL(value) } },
+      util: { TextEncoder: class { encodeInto(value) { return Buffer.from(value); } } } },
+    '@kit.NetworkKit': { http: { RequestMethod: { POST: 'POST' } } },
+    '@kit.CoreFileKit': { fileIo: { async readText() {
+      if (disk === undefined) throw Object.assign(new Error('missing'), { code: 13900002 });
+      return disk;
+    } } },
+    '../shared/Files': { async writeTextAsync(_path, value) { disk = value; } },
+    '../shared/Runtime': { async runtimeMayBeActive() { return active; } },
+    '../shared/profiles/Store': { newId: prefix => prefix + ++state.random, withProfileStorage: (_dir, op) => op(),
+      async profileDataPath(dir, name) { return dir + '/' + name; } },
+    './CoreClient': { async readCoreHostStatus() {
+      return active ? { state: 'running', status: { bootId: 'dns.boot' } } : { state: 'stopped' };
+    } },
+    './Controller': { async call(_dir, _method, route, body) {
+      assert.equal(route, '/arkclash/dns/settings');
+      request = JSON.parse(body);
+      if (timeoutAfterCommit) disk = JSON.stringify(request.settings);
+      throw new Error('timeout');
+    } }
+  });
+  const initial = await dns.readDnsOverrides(context.filesDir);
+  await assert.rejects(dns.saveDnsOverrides(context, initial.revision, { nameserver: [] }), /dns_override_invalid/);
+  await assert.rejects(dns.saveDnsOverrides(context, initial.revision, { 'fake-ip-range6': '198.18.0.1/16' }),
+    /dns_override_invalid/);
+  const policy = dns.parseDnsPolicyText('+.example.test = 1.1.1.1\n+.other.test = 9.9.9.9\n' +
+    '+.example.test = https://dns.example.test/dns-query?flag=1');
+  assert.throws(() => dns.parseDnsPolicyText('+.example.test'), /dns_override_invalid/);
+  assert.deepEqual(JSON.parse(JSON.stringify(policy)), [
+    { pattern: '+.example.test', servers: ['1.1.1.1', 'https://dns.example.test/dns-query?flag=1'] },
+    { pattern: '+.other.test', servers: ['9.9.9.9'] }
+  ]);
+  assert.equal(dns.dnsPolicyText(policy),
+    '+.example.test = 1.1.1.1\n+.example.test = https://dns.example.test/dns-query?flag=1\n+.other.test = 9.9.9.9');
+  const entries = { ipv6: false, 'default-nameserver': ['2001:4860:4860::8888'], fallback: [],
+    'nameserver-policy': policy, 'cache-max-size': 0, 'fake-ip-range6': 'fd00::1/64', 'fallback-filter.geoip': false };
+  const saved = await dns.saveDnsOverrides(context, initial.revision, entries);
+  assert.deepEqual(JSON.parse(disk).entries, JSON.parse(JSON.stringify(entries)));
+  await assert.rejects(dns.saveDnsOverrides(context, initial.revision, {}), /dns_override_conflict/);
+  active = true;
+  const removed = await dns.saveDnsOverrides(context, saved.revision, {});
+  assert.equal(request.bootId, 'dns.boot');
+  assert.equal(request.expectedRevision, saved.revision);
+  assert.deepEqual(JSON.parse(disk), { revision: removed.revision, entries: {} });
+  timeoutAfterCommit = false;
+  await assert.rejects(dns.saveDnsOverrides(context, removed.revision, { 'prefer-h3': true }), /timeout/);
 });
 
 test('连接等待已进入提交的离线配置，取消不会启动扩展', async () => {
@@ -138,6 +244,55 @@ test('连接等待已进入提交的离线配置，取消不会启动扩展', as
   await assert.rejects(pending, /启动已取消/);
   assert.equal(state.started, 0);
   assert.equal(state.runtime.secret, 'fixture-session');
+});
+
+test('Connection等待真实Geo设置提交后才能启动', async () => {
+  let release;
+  state.geoSaveGate = new Promise(resolve => { release = resolve; });
+  const saving = geoSettings.saveGeoSettings(context.filesDir, geoSettings.defaultGeoSettings());
+  const connection = new Connection();
+  connection.restore(context);
+  state.status = ready;
+  const connecting = connection.connect(context);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(state.geoWriting, true);
+  assert.equal(state.started, 0);
+  release();
+  await saving;
+  await connecting;
+  assert.equal(state.started, 1);
+  assert.equal(JSON.parse(state.geoText).revision, (await geoSettings.readGeoSettings(context.filesDir)).revision);
+});
+
+test('Geo保存等待期间断开仅取消转发，预热核心继续就绪', async () => {
+  let release;
+  state.status = warm;
+  state.geoSaveGate = new Promise(resolve => { release = resolve; });
+  const saving = geoSettings.saveGeoSettings(context.filesDir, geoSettings.defaultGeoSettings());
+  const connection = new Connection();
+  connection.restore(context);
+  const connecting = connection.connect(context);
+  await new Promise(resolve => setImmediate(resolve));
+  const stopping = connection.disconnect(context);
+  release();
+  await Promise.all([saving, connecting, stopping]);
+  assert.equal(state.started, 1);
+  assert.equal(state.stopped, 0);
+  assert.equal(connection.coreReady, true);
+  assert.equal(connection.connected, false);
+  assert.equal(state.commands.some(command => command.url.endsWith('/connect')), false);
+});
+
+test('Geo保存失败阻止连接，显式恢复后屏障可再次使用', async () => {
+  state.geoSaveError = true;
+  await assert.rejects(geoSettings.saveGeoSettings(context.filesDir, geoSettings.defaultGeoSettings()), /geo_io/);
+  const connection = new Connection();
+  connection.restore(context);
+  await assert.rejects(connection.connect(context), /geo_io/);
+  assert.equal(state.started, 0);
+  state.geoSaveError = false;
+  await geoSettings.resetGeoSettings(context.filesDir);
+  await geoSettings.flushGeoSettings();
 });
 
 test('只有controller可达且没有TUN时不能宣称连接成功', async () => {
@@ -188,7 +343,7 @@ test('扩展启动前失败后，下一次按钮动作可直接连接', async ()
   state.startError = new Error('fixture extension start rejected');
   await assert.rejects(connection.connect(context), /fixture extension start rejected/);
   assert.equal(runControls.homeShouldStopRuntime(connection.intent, connection.forward,
-    connection.listenersOpen, connection.tunAttached, connection.hostState), false);
+    connection.listenersOpen, connection.tunAttached, connection.vpnCreated, connection.hostState), false);
   state.startError = undefined;
   state.status = ready;
   await connection.connect(context);
@@ -385,11 +540,11 @@ test('首次进入未知状态不会自行生成启动意图，死宿主恢复�
   assert.equal(connection.intent, 'stopped');
   assert.equal(connection.offlineWritable, false);
   assert.equal(runControls.homeRuntimeAppearsStarted(connection.intent, connection.forward,
-    connection.listenersOpen, connection.tunAttached), false);
+    connection.listenersOpen, connection.tunAttached, connection.vpnCreated), false);
   assert.equal(runControls.homeShouldStopRuntime(connection.intent, connection.forward,
-    connection.listenersOpen, connection.tunAttached, connection.hostState), true);
+    connection.listenersOpen, connection.tunAttached, connection.vpnCreated, connection.hostState), true);
   assert.equal(runControls.homeRunActionLabel(connection.intent, connection.forward,
-    connection.listenersOpen, connection.tunAttached, connection.hostState), 'app.string.dash_runtime_stop_confirm');
+    connection.listenersOpen, connection.tunAttached, connection.vpnCreated, connection.hostState), 'app.string.dash_runtime_stop_confirm');
   state.active = false;
   assert.equal(await connection.recheck(context), false);
   state.status = ready;
@@ -514,7 +669,8 @@ function runtimeConsumers() {
     '@kit.ArkData': { preferences: { getPreferencesSync: () => prefs } },
     './Controller': {}, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } },
     './CoreClient': client, './Proxies': { flushProxySelections: async () => {} },
-    './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': runtime
+    './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': runtime,
+    '../shared/GeoResources': geoSettings
   });
   const connection = new ConsumerConnection();
   connection.restore(localContext);
@@ -555,7 +711,7 @@ test('真实消费者遇到复用secret的新活实例时拒绝旧清理回执�
   assert.equal(connection.intent, 'stopped');
   assert.equal(connection.offlineWritable, false);
   assert.equal(runControls.homeShouldStopRuntime(connection.intent, connection.forward,
-    connection.listenersOpen, connection.tunAttached, connection.hostState), true);
+    connection.listenersOpen, connection.tunAttached, connection.vpnCreated, connection.hostState), true);
   await assert.rejects(connection.disconnect(localContext), /system refused stop/);
   assert.equal(connection.hostState, 'unknown');
   fixture.stopError = undefined;
@@ -605,4 +761,304 @@ test('旧安装只有runtime及新扩展尚未写实例时，有其它本应用�
   fixture.processes = [{ pid: 41 }];
   assert.equal(await connection.recheck(localContext), false);
   assert.equal(connection.offlineWritable, true);
+});
+
+test('诊断配置身份不随普通运行revision变化，旧快照不得回退身份', () => {
+  const connection = new Connection();
+  connection.applyStatus({ ...ready, revision: 10, configRevision: 4 });
+  const route = connection.routeRevision;
+  connection.applyStatus({ ...ready, revision: 11, configRevision: 4 });
+  assert.notEqual(connection.routeRevision, route);
+  assert.equal(connection.configRevision, 4);
+  connection.applyStatus({ ...ready, revision: 9, configRevision: 99 });
+  assert.equal(connection.configRevision, 4);
+  connection.applyStatus({ ...ready, bootId: 'new.diagnostics.boot', revision: 1, configRevision: 1 });
+  assert.equal(connection.bootId, 'new.diagnostics.boot');
+  assert.equal(connection.configRevision, 1);
+  connection.applyStopped();
+  assert.equal(connection.configRevision, 0);
+});
+
+test('旧运行文件不恢复历史连接意图', async () => {
+  const { files, runtime } = runtimeFixture();
+  files.set('/fixture/runtime.json', JSON.stringify({
+    secret: 'legacy-secret', stack: 'gvisor', mode: 'rule', vpnIntent: 'started'
+  }));
+  const config = await runtime.readRuntime('/fixture');
+  assert.equal(config.vpnIntent, 'stopped');
+  assert.equal(config.vpnOperation, '');
+});
+
+test('偏好短提交保留后来写入的断开操作 token 和网络快照', async () => {
+  let release;
+  state.storageGate = new Promise(resolve => { release = resolve; });
+  state.runtime = { secret: 'session', stack: 'gvisor', mode: 'rule',
+    vpnIntent: 'started', vpnOperation: 'connect-operation' };
+  const saving = core.updateRuntimeOptions(context.filesDir, 'global', true);
+  state.runtime = { ...state.runtime, vpnIntent: 'stopped', vpnOperation: 'disconnect-operation',
+    network: { stack: 'mixed', mtu: 1400 } };
+  release();
+  await saving;
+  assert.equal(state.runtime.vpnIntent, 'stopped');
+  assert.equal(state.runtime.vpnOperation, 'disconnect-operation');
+  assert.equal(state.runtime.mode, 'global');
+  assert.equal(state.runtime.allowLan, true);
+  assert.deepEqual(state.runtime.network, { stack: 'mixed', mtu: 1400 });
+});
+
+const warm = { ...ready, intent: 'stopped', forward: 'stopped', tunAttached: false,
+  vpnCreated: false, listenersOpen: false, startedAt: 0 };
+
+test('预热允许空配置，不连接VPN且复用同一认证实例', async () => {
+  const connection = new Connection();
+  connection.restore(context);
+  state.status = { ...warm, profile: '' };
+  await connection.ensureReady(context);
+  assert.equal(connection.coreReady, true);
+  assert.equal(connection.connected, false);
+  assert.equal(connection.coreStarting, false);
+  assert.equal(connection.state, 0);
+  assert.equal(state.commands.length, 0);
+  const secret = state.runtime.secret;
+  await connection.ensureReady(context);
+  assert.equal(state.started, 1);
+  assert.equal(state.runtime.secret, secret);
+});
+
+test('诊断捕获绑定已挂载的UI接收端和认证boot，不随前后台、普通断开或配置切换停止', async () => {
+  const captures = [];
+  const { Connection: CaptureConnection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
+    ...connectionBindings,
+    '@kit.NetworkKit': {
+      connection: { createNetConnection: () => ({ on() {}, register(done) { done(); }, unregister() {} }) },
+      webSocket: { createWebSocket() {
+        const handlers = new Map();
+        return {
+          closed: false,
+          on(name, listener) { handlers.set(name, listener); },
+          off(name) { handlers.delete(name); },
+          async connect(address, options) {
+            const url = new URL(address);
+            if (url.pathname === '/arkclash/diagnostics/capture') {
+              assert.equal(options.header.Authorization, 'Bearer fixture-session');
+              assert.deepEqual([...url.searchParams.keys()], ['expectedBootId']);
+              captures.push({ boot: url.searchParams.get('expectedBootId'), socket: this });
+              handlers.get('message')(undefined, 'ready');
+            }
+            handlers.get('open')(undefined);
+            return true;
+          },
+          async close() { this.closed = true; }
+        };
+      } }
+    }
+  });
+  const connection = new CaptureConnection();
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const bootId = 'fixture+boot&query';
+  connection.restore(context);
+  state.active = true;
+  connection.setDiagnosticsReceiverMounted(true);
+  await settle();
+  assert.equal(captures.length, 0);
+
+  state.status = { ...warm, bootId };
+  await connection.recheck(context);
+  await settle();
+  assert.equal(captures.length, 1);
+  assert.equal(captures[0].boot, bootId);
+  assert.equal(connection.connected, false);
+  connection.observe(context, true);
+  await settle();
+  connection.observe(context, false);
+  state.status = undefined;
+  await assert.rejects(connection.recheck(context), /尚未确认代理状态/);
+  assert.equal(connection.hostState, 'unknown');
+  assert.equal(captures[0].socket.closed, false);
+
+  state.status = { ...ready, bootId, configRevision: 2, revision: 2 };
+  await connection.recheck(context);
+  await connection.disconnect(context);
+  assert.equal(connection.connected, false);
+  assert.equal(connection.configRevision, 2);
+  assert.equal(captures.length, 1);
+  assert.equal(captures[0].socket.closed, false);
+
+  connection.diagnosticsCapture.fail('fixture');
+  assert.equal(captures[0].socket.closed, true);
+  connection.observe(context, true);
+  await settle();
+  assert.equal(captures.length, 2, 'authenticated foreground recheck re-arms inactive transport');
+
+  state.status = { ...warm, bootId: 'new.boot' };
+  await connection.recheck(context);
+  await settle();
+  assert.equal(captures.length, 3);
+  assert.equal(captures[1].socket.closed, true);
+  assert.equal(captures[2].boot, 'new.boot');
+  connection.setDiagnosticsReceiverMounted(false);
+  assert.equal(captures[2].socket.closed, true);
+  await connection.recheck(context);
+  assert.equal(captures.length, 3);
+
+  connection.setDiagnosticsReceiverMounted(true);
+  await settle();
+  assert.equal(captures.length, 4);
+  state.status = undefined;
+  state.active = false;
+  assert.equal(await connection.recheck(context), false);
+  assert.equal(captures[3].socket.closed, true);
+  connection.observe(context, false);
+  connection.setDiagnosticsReceiverMounted(false);
+});
+
+test('预热单飞，连接和普通断开保持同一核心', async () => {
+  state.status = warm;
+  const results = await Promise.all([
+    core.startCore(context, 'rule', undefined, () => true),
+    core.startCore(context, 'rule', undefined, () => true)
+  ]);
+  assert.equal(results[0].bootId, results[1].bootId);
+  assert.equal(state.started, 1);
+  const connection = new Connection();
+  connection.restore(context);
+  await connection.connect(context);
+  assert.equal(connection.connected, true);
+  await connection.disconnect(context);
+  assert.equal(connection.connected, false);
+  assert.equal(connection.coreReady, true);
+  assert.equal(connection.offlineWritable, false);
+  assert.equal(state.stopped, 0);
+  assert.equal(state.started, 1);
+  assert.equal(connection.bootId, warm.bootId);
+  assert.equal(connection.configRevision, warm.configRevision);
+  assert.deepEqual(state.commands.map(command => command.url.split('/').at(-1)), ['connect', 'disconnect']);
+});
+
+test('系统 Promise 拒绝授权后立即结束启动，不等待 controller 或销毁不存在的 VPN', async () => {
+  let deny;
+  state.startGate = new Promise((_resolve, reject) => { deny = reject; });
+  const pending = core.startCore(context, 'rule', undefined, () => true);
+  while (state.started === 0) await Promise.resolve();
+  assert.equal((await core.readCoreHostStatus(context)).state, 'unknown');
+  deny();
+  await assert.rejects(pending, /授权被拒绝/);
+  assert.equal((await core.readCoreHostStatus(context)).state, 'stopped');
+  assert.equal(state.stopped, 0);
+  assert.equal(state.now, 1000);
+});
+
+test('自动预热拒绝本会话不重弹，显式动作可重试', async () => {
+  const connection = new Connection();
+  connection.restore(context);
+  connection.foreground = true;
+  state.denyAuthorization = true;
+  await assert.rejects(connection.ensureReady(context, true), /授权被拒绝/);
+  await connection.ensureReady(context, true);
+  assert.equal(state.started, 1);
+  state.denyAuthorization = false;
+  state.status = warm;
+  await connection.ensureReady(context);
+  assert.equal(connection.coreReady, true);
+  assert.equal(state.started, 2);
+  assert.equal(state.commands.length, 0);
+});
+
+test('HTTP超时但服务端已完成时仅凭认证回读成功', async () => {
+  state.status = warm;
+  const status = await core.startCore(context, 'rule', undefined, () => true);
+  state.commandTimeout = true;
+  const connected = await core.connectVpn(context, status, () => true);
+  assert.equal(connected.forward, 'running');
+  const stopped = await core.disconnectVpn(context, connected, () => true);
+  assert.equal(stopped.forward, 'stopped');
+  assert.equal(state.stopped, 0);
+});
+
+test('迟到连接响应不能越过新操作token或实例', async () => {
+  for (const change of ['token', 'instance']) {
+    state.status = warm;
+    const status = await core.startCore(context, 'rule', undefined, () => true);
+    let release;
+    state.commandGate = new Promise(resolve => { release = resolve; });
+    const previous = state.commands.length;
+    const pending = core.connectVpn(context, status, () => true);
+    const rejected = assert.rejects(pending, /尚未确认/);
+    while (state.commands.length === previous) await Promise.resolve();
+    if (change === 'token') state.runtime = { ...state.runtime, vpnOperation: 'new-operation', vpnIntent: 'stopped' };
+    else state.instance = { ...state.instance, instance: 'new-instance' };
+    release();
+    await rejected;
+  }
+});
+
+test('宿主未知时预热不覆盖secret、不拉起扩展', async () => {
+  state.active = true;
+  const secret = state.runtime.secret;
+  await assert.rejects(core.startCore(context, 'rule', undefined, () => true), /尚未确认/);
+  assert.equal(state.runtime.secret, secret);
+  assert.equal(state.started, 0);
+});
+
+test('自动预热等待本地设置时进入后台不启动、不进入Connecting', async () => {
+  let release;
+  const connection = new Connection();
+  connection.restore(context);
+  connection.foreground = true;
+  connection.settingsPending = new Promise(resolve => { release = resolve; });
+  const pending = connection.ensureReady(context, true);
+  assert.equal(connection.coreStarting, true);
+  assert.equal(connection.state, 0);
+  connection.foreground = false;
+  release();
+  await pending;
+  assert.equal(state.started, 0);
+  assert.equal(connection.coreStarting, false);
+});
+
+test('HTTP失败且事实未完成不能冒充连接成功', async () => {
+  state.status = warm;
+  const status = await core.startCore(context, 'rule', undefined, () => true);
+  state.commandError = new Error('transport failure');
+  await assert.rejects(core.connectVpn(context, status, () => true), /尚未确认/);
+  assert.equal(state.status.tunAttached, false);
+});
+
+test('自动预热途中显式连接复用启动，真实attach后才连接', async () => {
+  let release;
+  state.startGate = new Promise(resolve => { release = resolve; });
+  state.status = warm;
+  const connection = new Connection();
+  connection.restore(context);
+  connection.foreground = true;
+  const warming = connection.ensureReady(context, true);
+  while (state.started === 0) await Promise.resolve();
+  const connecting = connection.connect(context);
+  assert.equal(connection.connected, false);
+  assert.equal(state.commands.length, 0);
+  release();
+  await Promise.all([warming, connecting]);
+  assert.equal(state.started, 1);
+  assert.equal(state.commands.length, 1);
+  assert.equal(connection.connected, true);
+});
+
+test('自动预热系统启动等待期间断开不销毁核心或自动attach', async () => {
+  let release;
+  state.startGate = new Promise(resolve => { release = resolve; });
+  state.status = warm;
+  const connection = new Connection();
+  connection.restore(context);
+  connection.foreground = true;
+  const warming = connection.ensureReady(context, true);
+  while (state.started === 0) await Promise.resolve();
+  const stopping = connection.disconnect(context);
+  release();
+  await Promise.all([warming, stopping]);
+  assert.equal(state.started, 1);
+  assert.equal(state.stopped, 0);
+  assert.equal(connection.coreReady, true);
+  assert.equal(connection.connected, false);
+  assert.equal(connection.offlineWritable, false);
+  assert.equal(state.commands.some(command => command.url.endsWith('/connect')), false);
 });

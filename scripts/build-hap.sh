@@ -18,10 +18,12 @@ case "$ABI" in
 esac
 cd "$ROOT"
 
-if [[ ! -f "entry/libs/$ABI/libclash.so" ]]; then
-  echo "缺少 entry/libs/$ABI/libclash.so，先运行 make core ABI=$ABI" >&2
-  exit 1
-fi
+for native_lib in libclash.so libarkstore_impl.so; do
+  if [[ ! -f "entry/libs/$ABI/$native_lib" ]]; then
+    echo "缺少 entry/libs/$ABI/${native_lib}，先运行 make core ABI=$ABI" >&2
+    exit 1
+  fi
+done
 if [[ ! -f entry/src/main/resources/rawfile/geo/VERSION ]]; then
   echo "警告：没有 Geo 数据或版本标记，内核首次启动会去 GitHub 下载（make geodata 可内置）" >&2
 fi
@@ -29,6 +31,7 @@ fi
 OUTPUTS=entry/build/default/outputs/default
 # 清掉上次的产物，避免把旧的签名包当成这次的。
 rm -rf "$OUTPUTS"
+bash "$ROOT/scripts/build-script-editor.sh"
 "$OHPM" install --all
 "$HVIGORW" assembleHap --mode module -p product=default -p buildMode="$MODE" --no-daemon
 

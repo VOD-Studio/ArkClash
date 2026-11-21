@@ -1,5 +1,7 @@
+import { AppearanceState, appAppearance } from './AppearanceState';
 @ComponentV2
 export struct Delay {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param delayValue: number = 0;
   @Param stage: 'idle' | 'queued' | 'running' = 'idle';
   @Param canTest: boolean = true;
@@ -38,7 +40,7 @@ export struct Delay {
         LoadingProgress()
           .width(20)
           .height(20)
-          .color($r('app.color.brand'))
+          .color(this.appStyle.palette.brand)
           .enableLoading(this.active)
       } else if (this.stage === 'queued') {
         SymbolGlyph($r('sys.symbol.clock'))
@@ -50,6 +52,7 @@ export struct Delay {
           .fontColor([$r('sys.color.font_tertiary')])
       } else {
         Text(this.delayLabel())
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.delayColor())

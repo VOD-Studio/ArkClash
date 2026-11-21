@@ -3,7 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OHOS_SDK="${OHOS_SDK:-/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony}"
+# shellcheck source=scripts/env.sh
+source "$ROOT/scripts/env.sh"
 LLVM="$OHOS_SDK/native/llvm/bin"
 ABI="${ABI:-arm64-v8a}"
 case "$ABI" in
@@ -78,6 +79,9 @@ echo "replace github.com/metacubex/gvisor => $PATCHED_DIR/gvisor" >> "$PATCHED_D
 bash "$ROOT/scripts/prepare-mihomo.sh" "$PATCHED_DIR/mihomo"
 "$GO" mod edit -modfile "$PATCHED_DIR/go.mod" "-replace=github.com/metacubex/mihomo=$PATCHED_DIR/mihomo"
 
+quickjs_dir="$(bash "$ROOT/scripts/prepare-quickjs.sh")"
+export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$quickjs_dir\""
+
 # HarmonyOS uses musl, so this is a GOOS=linux build linked by the OHOS clang.
 CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH" \
   CC="$LLVM/$TRIPLE-clang" \
@@ -85,6 +89,13 @@ CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH" \
   "$GO" build -buildmode=c-shared -tags with_gvisor -trimpath -modfile "$PATCHED_DIR/go.mod" \
     -ldflags "-s -w -extldflags=-Wl,-soname,libclash.so -X github.com/metacubex/mihomo/constant.Version=$MIHOMO_VERSION" \
     -o "$OUT/libclash.so" .
+
+# 备份库在界面进程延迟加载，不链接 mihomo。
+CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH" CC="$LLVM/$TRIPLE-clang" \
+  "$GO" build -buildmode=c-shared -trimpath \
+    -ldflags "-s -w -extldflags=-Wl,-soname,libarkstore_impl.so" \
+    -o "$OUT/libarkstore_impl.so" ./backupstore
+rm -f "$OUT/libarkstore_impl.h"
 
 # The C++ bridge uses the hand-written arkclash.h instead.
 rm -f "$OUT/libclash.h"
@@ -98,4 +109,9 @@ if grep -Eq "$TLS_RELOC" <<<"$RELOCS"; then
   echo "libclash.so still has initial-exec TLS relocations; is $PATCH applied?" >&2
   exit 1
 fi
-echo "built $OUT/libclash.so (mihomo $MIHOMO_VERSION)"
+RELOCS="$("$LLVM/llvm-readelf" -r "$OUT/libarkstore_impl.so")"
+if grep -Eq "$TLS_RELOC" <<<"$RELOCS"; then
+  echo "libarkstore_impl.so uses initial-exec TLS" >&2
+  exit 1
+fi
+echo "built $OUT/libclash.so (mihomo $MIHOMO_VERSION) and libarkstore_impl.so"

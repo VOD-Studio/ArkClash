@@ -2,7 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { OutboundMode } from '../../client/Controller';
 import { ProfileSummary } from '../../shared/profiles/Summary';
 import { ProxyDelayPhase, ProxyNodeSnapshot, ProxySnapshot, isProxyGroup, proxyMemberNode } from '../../client/Proxies';
-import { ProxyListSource } from './ProxyListSource';
+import { KeyedListSource } from '../../components/KeyedListSource';
 import {
   canTestProxy, ProxyDensity, ProxyIconStyle, ProxyStyle, ProxyViewState,
   proxyDelayKey, proxyGroupNames, proxyMembers, proxyPinnedMemberId, resolveProxyLeaf, selectableProxyGroup
@@ -17,6 +17,7 @@ export interface ProxyBrowserInput {
   online: boolean;
   offlineWritable: boolean;
   bootId: string;
+  configRevision: number;
   mode: OutboundMode;
   picker: boolean;
   initialGroup: string;
@@ -123,7 +124,7 @@ export class ProxyGroupView {
   @Trace floating: number = 0;
   @Trace lift: number = 0;
   @Trace reveal: ProxyGroupReveal = new ProxyGroupReveal();
-  readonly rows: ProxyListSource<ProxyNodeRow> = new ProxyListSource<ProxyNodeRow>();
+  readonly rows: KeyedListSource<ProxyNodeRow> = new KeyedListSource<ProxyNodeRow>();
   nodes: ProxyNodeView[] = [];
   allNodes: Map<string, ProxyNodeView> = new Map<string, ProxyNodeView>();
 

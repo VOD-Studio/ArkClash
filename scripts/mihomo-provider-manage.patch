@@ -1,0 +1,319 @@
+--- /dev/null
++++ b/adapter/arkclash_raw.go
+@@ -0,0 +1,51 @@
++package adapter
++
++import "fmt"
++
++// ArkClashRawDefinition 返回节点解析时的原始配置深拷贝；内置节点与策略组返回 nil。
++func (p *Proxy) ArkClashRawDefinition() map[string]any {
++	if p == nil || len(p.rawDefinition) == 0 {
++		return nil
++	}
++	return cloneRawMapping(p.rawDefinition)
++}
++
++func (p *Proxy) setArkClashRawDefinition(mapping map[string]any) {
++	p.rawDefinition = cloneRawMapping(mapping)
++}
++
++func cloneRawMapping(source map[string]any) map[string]any {
++	if source == nil {
++		return nil
++	}
++	result := make(map[string]any, len(source))
++	for key, value := range source {
++		result[key] = cloneRawValue(value)
++	}
++	return result
++}
++
++func cloneRawValue(value any) any {
++	switch typed := value.(type) {
++	case map[string]any:
++		return cloneRawMapping(typed)
++	case map[any]any:
++		result := make(map[string]any, len(typed))
++		for key, item := range typed {
++			result[fmt.Sprint(key)] = cloneRawValue(item)
++		}
++		return result
++	case []any:
++		result := make([]any, len(typed))
++		for i, item := range typed {
++			result[i] = cloneRawValue(item)
++		}
++		return result
++	case []string:
++		result := make([]string, len(typed))
++		copy(result, typed)
++		return result
++	default:
++		return value
++	}
++}
+--- a/adapter/adapter.go
++++ b/adapter/adapter.go
+@@ -36,6 +36,7 @@
+ 	alive   atomic.Bool
+ 	history *queue.Queue[C.DelayHistory]
+ 	extra   xsync.Map[string, *internalProxyState]
++	rawDefinition map[string]any
+ }
+ 
+ // Adapter implements C.Proxy
+--- a/adapter/parser.go
++++ b/adapter/parser.go
+@@ -246,7 +246,9 @@
+ 	}
+ 
+ 	proxy = outbound.NewAutoCloseProxyAdapter(proxy)
+-	return NewProxy(proxy), nil
++	wrapped := NewProxy(proxy)
++	wrapped.setArkClashRawDefinition(mapping)
++	return wrapped, nil
+ }
+ 
+ type proxyOption struct {
+--- a/component/resource/fetcher.go
++++ b/component/resource/fetcher.go
+@@ -6,6 +6,7 @@
+ 	"io/fs"
+ 	"os"
+ 	"sync"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"github.com/metacubex/mihomo/common/utils"
+@@ -28,6 +29,7 @@
+ 	vehicle      P.Vehicle
+ 	bundleFile   BundleFile
+ 	updatedAt    time.Time
++	updatedNano  atomic.Int64
+ 	hash         utils.HashType
+ 	parser       Parser[V]
+ 	interval     time.Duration
+@@ -47,6 +49,14 @@
+ 
+ func (f *Fetcher[V]) VehicleType() P.VehicleType {
+ 	return f.vehicle.Type()
++}
++
++func (f *Fetcher[V]) ArkClashUpdatedAt() time.Time {
++	nano := f.updatedNano.Load()
++	if nano <= 0 {
++		return time.Time{}
++	}
++	return time.Unix(0, nano)
+ }
+ 
+ func (f *Fetcher[V]) UpdatedAt() time.Time {
+@@ -60,6 +70,7 @@
+ 		modTime := stat.ModTime()
+ 		contents, _, err := f.loadBuf(buf, utils.MakeHash(buf), false)
+ 		f.updatedAt = modTime // reset updatedAt to file's modTime
++		f.updatedNano.Store(modTime.UnixNano())
+ 
+ 		if err == nil {
+ 			err = f.startPullLoop(time.Since(modTime) > f.interval)
+@@ -82,6 +93,7 @@
+ 			}
+ 			contents, _, err := f.loadBuf(buf, utils.MakeHash(buf), true)
+ 			f.updatedAt = modTime // reset updatedAt to file's modTime
++			f.updatedNano.Store(modTime.UnixNano())
+ 
+ 			if err == nil {
+ 				log.Infoln("[Provider] %s extract successful from bundle file", f.Name())
+@@ -139,6 +151,7 @@
+ 			_ = os.Chtimes(f.vehicle.Path(), now, now)
+ 		}
+ 		f.updatedAt = now
++		f.updatedNano.Store(now.UnixNano())
+ 		f.backoff.Reset() // no error, reset backoff
+ 		return lo.Empty[V](), true, nil
+ 	}
+@@ -160,6 +173,7 @@
+ 		}
+ 	}
+ 	f.updatedAt = now
++	f.updatedNano.Store(now.UnixNano())
+ 	f.hash = hash
+ 
+ 	if f.onUpdate != nil {
+--- /dev/null
++++ b/adapter/provider/arkclash_manage.go
+@@ -0,0 +1,23 @@
++package provider
++
++import "time"
++
++// ArkClashUpdate 执行远程更新并返回内容是否发生变化。
++func (pp *proxySetProvider) ArkClashUpdate() (bool, error) {
++	_, same, err := pp.Fetcher.Update()
++	return !same, err
++}
++
++// ArkClashReplace 使用已通过上层读取的候选字节执行原子校验与替换。
++func (pp *proxySetProvider) ArkClashReplace(buf []byte) (bool, error) {
++	_, same, err := pp.Fetcher.SideUpdate(buf)
++	return !same, err
++}
++
++func (pp *proxySetProvider) ArkClashUpdatedAt() time.Time {
++	return pp.Fetcher.ArkClashUpdatedAt()
++}
++
++func (ip *inlineProvider) ArkClashUpdatedAt() time.Time {
++	return ip.updateAt
++}
+--- /dev/null
++++ b/rules/provider/arkclash_manage.go
+@@ -0,0 +1,35 @@
++package provider
++
++import (
++	"time"
++
++	P "github.com/metacubex/mihomo/constant/provider"
++)
++
++func (rp *ruleSetProvider) ArkClashFormat() P.RuleFormat {
++	return rp.format
++}
++
++// ArkClashUpdate 执行远程更新并返回内容是否发生变化。
++func (rp *ruleSetProvider) ArkClashUpdate() (bool, error) {
++	_, same, err := rp.Fetcher.Update()
++	return !same, err
++}
++
++// ArkClashReplace 使用候选字节执行原子校验与替换。
++func (rp *ruleSetProvider) ArkClashReplace(buf []byte) (bool, error) {
++	_, same, err := rp.Fetcher.SideUpdate(buf)
++	return !same, err
++}
++
++func (rp *ruleSetProvider) ArkClashUpdatedAt() time.Time {
++	return rp.Fetcher.ArkClashUpdatedAt()
++}
++
++func (i *inlineProvider) ArkClashFormat() P.RuleFormat {
++	return P.TextRule
++}
++
++func (i *inlineProvider) ArkClashUpdatedAt() time.Time {
++	return i.updateAt
++}
+--- a/rules/provider/provider.go
++++ b/rules/provider/provider.go
+@@ -7,6 +7,7 @@
+ 	"io"
+ 	"runtime"
+ 	"strings"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"github.com/metacubex/mihomo/common/pool"
+@@ -61,9 +62,24 @@
+ 
+ type baseProvider struct {
+ 	behavior P.RuleBehavior
+-	strategy ruleStrategy
++	strategy atomic.Pointer[ruleStrategy]
+ }
+ 
++func (bp *baseProvider) loadStrategy() ruleStrategy {
++	if ptr := bp.strategy.Load(); ptr != nil {
++		return *ptr
++	}
++	return nil
++}
++
++func (bp *baseProvider) setStrategy(s ruleStrategy) {
++	if s == nil {
++		bp.strategy.Store(nil)
++		return
++	}
++	bp.strategy.Store(&s)
++}
++
+ func (bp *baseProvider) Type() P.ProviderType {
+ 	return P.Rule
+ }
+@@ -73,15 +89,19 @@
+ }
+ 
+ func (bp *baseProvider) Count() int {
+-	return bp.strategy.Count()
++	if s := bp.loadStrategy(); s != nil {
++		return s.Count()
++	}
++	return 0
+ }
+ 
+ func (bp *baseProvider) Match(metadata *C.Metadata, helper C.RuleMatchHelper) bool {
+-	return bp.strategy != nil && bp.strategy.Match(metadata, helper)
++	s := bp.loadStrategy()
++	return s != nil && s.Match(metadata, helper)
+ }
+ 
+ func (bp *baseProvider) Strategy() any {
+-	return bp.strategy
++	return bp.loadStrategy()
+ }
+ 
+ type ruleSetProvider struct {
+@@ -110,7 +130,7 @@
+ 			Behavior:    rp.behavior.String(),
+ 			Format:      rp.format.String(),
+ 			Name:        rp.Fetcher.Name(),
+-			RuleCount:   rp.strategy.Count(),
++			RuleCount:   rp.Count(),
+ 			Type:        rp.Type().String(),
+ 			UpdatedAt:   rp.UpdatedAt(),
+ 			VehicleType: rp.VehicleType().String(),
+@@ -131,14 +151,15 @@
+ 	}
+ 
+ 	onUpdate := func(strategy ruleStrategy) {
+-		rp.strategy = strategy
++		rp.setStrategy(strategy)
+ 		tunnel.RuleUpdateCallback().Emit(rp)
+ 	}
+ 
+-	rp.strategy = newStrategy(behavior, parse)
+-	if len(payload) > 0 { // using as fallback rules
+-		rp.strategy = rulesParseInline(payload, rp.strategy)
++	strategy := newStrategy(behavior, parse)
++	if len(payload) > 0 { // using as fallback rules
++		strategy = rulesParseInline(payload, strategy)
+ 	}
++	rp.setStrategy(strategy)
+ 	rp.Fetcher = resource.NewFetcher(name, interval, vehicle, bundleFile, func(bytes []byte) (ruleStrategy, error) {
+ 		return rulesParse(bytes, newStrategy(behavior, parse), format)
+ 	}, onUpdate)
+@@ -311,7 +332,7 @@
+ 		providerForApi{
+ 			Behavior:    i.behavior.String(),
+ 			Name:        i.Name(),
+-			RuleCount:   i.strategy.Count(),
++			RuleCount:   i.Count(),
+ 			Type:        i.Type().String(),
+ 			VehicleType: i.VehicleType().String(),
+ 			UpdatedAt:   i.updateAt,
+@@ -323,13 +344,13 @@
+ 	ip := &inlineProvider{
+ 		baseProvider: baseProvider{
+ 			behavior: behavior,
+-			strategy: newStrategy(behavior, parse),
+ 		},
+ 		payload:  payload,
+ 		name:     name,
+ 		updateAt: time.Now(),
+ 	}
+-	ip.strategy = rulesParseInline(payload, ip.strategy)
++	strategy := newStrategy(behavior, parse)
++	ip.setStrategy(rulesParseInline(payload, strategy))
+ 
+ 	wrapper := &InlineProvider{
+ 		ip,

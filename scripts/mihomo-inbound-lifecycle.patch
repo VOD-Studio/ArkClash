@@ -1,0 +1,554 @@
+--- a/adapter/inbound/listen.go
++++ b/adapter/inbound/listen.go
+@@ -69,7 +69,11 @@
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	return l.newListenConfig().Listen(ctx, network, address)
++	listener, err := l.newListenConfig().Listen(ctx, network, address)
++	if err != nil {
++		return nil, err
++	}
++	return ArkClashOwnListener(listener), nil
+ }
+ 
+ func (l ListenConfig) ListenPacket(ctx context.Context, network, address string) (net.PacketConn, error) {
+--- /dev/null
++++ b/adapter/inbound/arkclash_listener.go
+@@ -0,0 +1,141 @@
++package inbound
++
++import (
++	"errors"
++	"net"
++	"sync"
++	"sync/atomic"
++)
++
++var arkClashListenerOwnership atomic.Bool
++
++// EnableArkClashListenerOwnership 仅影响此后创建的监听器；Close 同步关闭已接受的原始连接。
++func EnableArkClashListenerOwnership() {
++	arkClashListenerOwnership.Store(true)
++}
++
++type arkClashListener struct {
++	net.Listener
++	mu        sync.Mutex
++	accepting sync.WaitGroup
++	closing   bool
++	conns     map[*arkClashConn]struct{}
++	errs      []error
++	once      sync.Once
++	err       error
++}
++
++func newArkClashListener(listener net.Listener) *arkClashListener {
++	return &arkClashListener{Listener: listener, conns: make(map[*arkClashConn]struct{})}
++}
++
++// ArkClashOwnListener 为直接创建的业务监听器复用同一所有权边界；未启用时返回原对象。
++func ArkClashOwnListener(listener net.Listener) net.Listener {
++	if !arkClashListenerOwnership.Load() {
++		return listener
++	}
++	if _, owned := listener.(*arkClashListener); owned {
++		return listener
++	}
++	return newArkClashListener(listener)
++}
++
++func (l *arkClashListener) Accept() (net.Conn, error) {
++	l.mu.Lock()
++	if l.closing {
++		l.mu.Unlock()
++		return nil, net.ErrClosed
++	}
++	l.accepting.Add(1)
++	l.mu.Unlock()
++	defer l.accepting.Done()
++
++	conn, err := l.Listener.Accept()
++	l.mu.Lock()
++	if err != nil {
++		l.mu.Unlock()
++		return nil, err
++	}
++	var socket *arkClashConn
++	var result net.Conn
++	if tcp, ok := conn.(*net.TCPConn); ok {
++		owned := &arkClashTCPConn{TCPConn: tcp, ownership: arkClashConn{Conn: conn, owner: l}}
++		socket, result = &owned.ownership, owned
++	} else {
++		socket = &arkClashConn{Conn: conn, owner: l}
++		result = socket
++	}
++	if l.closing {
++		l.mu.Unlock()
++		_ = socket.Close()
++		return nil, net.ErrClosed
++	}
++	l.conns[socket] = struct{}{}
++	l.mu.Unlock()
++	return result, nil
++}
++
++func (l *arkClashListener) Close() error {
++	l.once.Do(func() {
++		l.mu.Lock()
++		l.closing = true
++		l.mu.Unlock()
++		err := l.Listener.Close()
++		if errors.Is(err, net.ErrClosed) {
++			err = nil
++		}
++		// 阻止迟到的 Accept 越过清理边界；不能等待调用 Close 的业务处理器自身。
++		l.accepting.Wait()
++		l.mu.Lock()
++		conns := make([]*arkClashConn, 0, len(l.conns))
++		for conn := range l.conns {
++			conns = append(conns, conn)
++		}
++		l.mu.Unlock()
++		for _, conn := range conns {
++			_ = conn.Close()
++		}
++		l.mu.Lock()
++		l.err = errors.Join(append(l.errs, err)...)
++		l.mu.Unlock()
++	})
++	return l.err
++}
++
++type arkClashConn struct {
++	net.Conn
++	owner *arkClashListener
++	once  sync.Once
++	err   error
++}
++
++func (c *arkClashConn) Close() error {
++	c.once.Do(func() {
++		c.err = c.Conn.Close()
++		c.owner.mu.Lock()
++		delete(c.owner.conns, c)
++		if c.err != nil {
++			c.owner.errs = append(c.owner.errs, c.err)
++		}
++		c.owner.mu.Unlock()
++	})
++	return c.err
++}
++
++func (c *arkClashConn) Upstream() any {
++	return c.Conn
++}
++
++// 保留原生 TCP 的半关闭、keepalive 和 syscall 能力，不额外分配关闭状态。
++type arkClashTCPConn struct {
++	*net.TCPConn
++	ownership arkClashConn
++}
++
++func (c *arkClashTCPConn) Close() error {
++	return c.ownership.Close()
++}
++
++func (c *arkClashTCPConn) Upstream() any {
++	return c.TCPConn
++}
+--- a/listener/auth/auth.go
++++ b/listener/auth/auth.go
+@@ -1,23 +1,30 @@
+ package auth
+ 
+ import (
++	"sync"
++
+ 	"github.com/metacubex/mihomo/component/auth"
+ )
+ 
+ type authStore struct {
++	mu            sync.RWMutex
+ 	authenticator auth.Authenticator
+ }
+ 
+ func (a *authStore) Authenticator() auth.Authenticator {
++	a.mu.RLock()
++	defer a.mu.RUnlock()
+ 	return a.authenticator
+ }
+ 
+ func (a *authStore) SetAuthenticator(authenticator auth.Authenticator) {
++	a.mu.Lock()
+ 	a.authenticator = authenticator
++	a.mu.Unlock()
+ }
+ 
+ func NewAuthStore(authenticator auth.Authenticator) auth.AuthStore {
+-	return &authStore{authenticator}
++	return &authStore{authenticator: authenticator}
+ }
+ 
+ var Default auth.AuthStore = NewAuthStore(nil)
+--- a/log/log.go
++++ b/log/log.go
+@@ -5,0 +6 @@
++	"sync/atomic"
+@@ -15 +16,2 @@
+-	level  = INFO
++	level  atomic.Int64
++	arkClashObserver atomic.Pointer[func(Event)]
+@@ -18,0 +21 @@
++	level.Store(int64(INFO))
+@@ -30,0 +34 @@
++	Template string
+@@ -75 +79 @@
+-	return level
++	return LogLevel(level.Load())
+@@ -79 +83 @@
+-	level = newLevel
++	level.Store(int64(newLevel))
+@@ -83 +87 @@
+-	if data.LogLevel < level {
++	if data.LogLevel < Level() {
+@@ -98,0 +103,9 @@
++// SetArkClashLogObserver 的回调运行在产生日志的协程，只能非阻塞入队。
++func SetArkClashLogObserver(observer func(Event)) {
++	if observer == nil {
++		arkClashObserver.Store(nil)
++		return
++	}
++	arkClashObserver.Store(&observer)
++}
++
+@@ -100 +113 @@
+-	return Event{
++	event := Event{
+@@ -102,0 +116 @@
++		Template: format,
+@@ -103,0 +118,4 @@
++	if observer := arkClashObserver.Load(); observer != nil && logLevel >= Level() {
++		(*observer)(event)
++	}
++	return event
+--- /dev/null
++++ b/adapter/inbound/arkclash_listener_test.go
+@@ -0,0 +1,180 @@
++package inbound
++
++import (
++	"context"
++	"errors"
++	"io"
++	"net"
++	"sync"
++	"testing"
++	"time"
++)
++
++func TestArkClashListenConfigOwnership(t *testing.T) {
++	if arkClashListenerOwnership.Load() {
++		t.Fatal("listener ownership must be opt-in")
++	}
++	lc := NewListenConfig()
++	plain, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer plain.Close()
++	client, err := net.Dial("tcp", plain.Addr().String())
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer client.Close()
++	conn, err := plain.Accept()
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer conn.Close()
++	if err := plain.Close(); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := conn.Write([]byte("x")); err != nil {
++		t.Fatalf("default listener closed an accepted connection: %v", err)
++	}
++	if err := client.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
++		t.Fatal(err)
++	}
++	var data [1]byte
++	if _, err := io.ReadFull(client, data[:]); err != nil || data[0] != 'x' {
++		t.Fatalf("default accepted connection stopped working: %q, %v", data, err)
++	}
++
++	EnableArkClashListenerOwnership()
++	defer arkClashListenerOwnership.Store(false)
++	owned, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer owned.Close()
++	client2, err := net.Dial("tcp", owned.Addr().String())
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer client2.Close()
++	conn2, err := owned.Accept()
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer conn2.Close()
++	if _, ok := conn2.(interface{ CloseWrite() error }); !ok {
++		t.Fatal("accepted TCP connection lost half-close support")
++	}
++	if err := owned.Close(); err != nil {
++		t.Fatal(err)
++	}
++	if err := client2.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := client2.Read(data[:]); !errors.Is(err, io.EOF) {
++		t.Fatalf("raw pre-handshake connection remained open: %v", err)
++	}
++	if err := conn2.Close(); err != nil {
++		t.Fatalf("second connection close: %v", err)
++	}
++	if err := owned.Close(); err != nil {
++		t.Fatalf("second listener close: %v", err)
++	}
++}
++
++type arkClashTestConn struct {
++	net.Conn
++	closeErr error
++	closes   int
++}
++
++func (c *arkClashTestConn) Close() error {
++	c.closes++
++	_ = c.Conn.Close()
++	return c.closeErr
++}
++
++type arkClashTestListener struct {
++	net.Listener
++	started  chan struct{}
++	release  chan struct{}
++	closed   chan struct{}
++	conn     net.Conn
++	closeErr error
++	closes   int
++}
++
++func (l *arkClashTestListener) Accept() (net.Conn, error) {
++	close(l.started)
++	<-l.release
++	return l.conn, nil
++}
++
++func (l *arkClashTestListener) Close() error {
++	l.closes++
++	close(l.closed)
++	return l.closeErr
++}
++
++func TestArkClashListenerJoinsLateAcceptAndPreservesErrors(t *testing.T) {
++	a, b := net.Pipe()
++	defer b.Close()
++	connErr := errors.New("accepted socket close failure")
++	listenerErr := errors.New("listener close failure")
++	rawConn := &arkClashTestConn{Conn: a, closeErr: connErr}
++	raw := &arkClashTestListener{
++		started: make(chan struct{}), release: make(chan struct{}), closed: make(chan struct{}),
++		conn: rawConn, closeErr: listenerErr,
++	}
++	owned := newArkClashListener(raw)
++	accepted := make(chan error, 1)
++	go func() {
++		_, err := owned.Accept()
++		accepted <- err
++	}()
++	<-raw.started
++	closed := make(chan error, 1)
++	go func() { closed <- owned.Close() }()
++	<-raw.closed
++	select {
++	case err := <-closed:
++		t.Fatalf("Close did not join the in-flight Accept: %v", err)
++	default:
++	}
++	close(raw.release)
++	if err := <-accepted; !errors.Is(err, net.ErrClosed) {
++		t.Fatalf("late connection escaped closed listener: %v", err)
++	}
++	err := <-closed
++	if !errors.Is(err, listenerErr) || !errors.Is(err, connErr) {
++		t.Fatalf("cleanup lost close failures: %v", err)
++	}
++	if again := owned.Close(); again != err {
++		t.Fatalf("repeated close changed the result: %v", again)
++	}
++	if raw.closes != 1 || rawConn.closes != 1 {
++		t.Fatalf("repeated close touched released resources: listener=%d socket=%d", raw.closes, rawConn.closes)
++	}
++}
++
++func TestArkClashConnCloseRemovesOwnershipOnce(t *testing.T) {
++	a, b := net.Pipe()
++	defer b.Close()
++	raw := &arkClashTestConn{Conn: a}
++	owner := newArkClashListener(nil)
++	conn := &arkClashConn{Conn: raw, owner: owner}
++	owner.conns[conn] = struct{}{}
++	var workers sync.WaitGroup
++	for i := 0; i < 8; i++ {
++		workers.Add(1)
++		go func() {
++			defer workers.Done()
++			if err := conn.Close(); err != nil {
++				t.Errorf("close: %v", err)
++			}
++		}()
++	}
++	workers.Wait()
++	if raw.closes != 1 || len(owner.conns) != 0 {
++		t.Fatalf("close did not release ownership once: closes=%d remaining=%d", raw.closes, len(owner.conns))
++	}
++}
+--- /dev/null
++++ b/listener/auth/arkclash_auth_test.go
+@@ -0,0 +1,38 @@
++package auth
++
++import (
++	"sync"
++	"testing"
++
++	"github.com/metacubex/mihomo/component/auth"
++)
++
++func TestArkClashAuthenticatorPublication(t *testing.T) {
++	valid := auth.NewAuthenticator([]auth.AuthUser{{User: "user", Pass: "pass"}})
++	store := NewAuthStore(valid)
++	if got := store.Authenticator(); got != valid {
++		t.Fatal("initial authenticator changed")
++	}
++	var workers sync.WaitGroup
++	for i := 0; i < 4; i++ {
++		workers.Add(1)
++		go func() {
++			defer workers.Done()
++			for j := 0; j < 1000; j++ {
++				got := store.Authenticator()
++				if got != nil && !got.Verify("user", "pass") {
++					t.Error("published authenticator changed credentials")
++				}
++			}
++		}()
++	}
++	for i := 0; i < 1000; i++ {
++		store.SetAuthenticator(nil)
++		store.SetAuthenticator(valid)
++	}
++	workers.Wait()
++	store.SetAuthenticator(nil)
++	if store.Authenticator() != nil {
++		t.Fatal("nil authenticator was not published")
++	}
++}
+--- /dev/null
++++ b/log/arkclash_log_test.go
+@@ -0,0 +1,35 @@
++package log
++
++import (
++	"sync"
++	"testing"
++)
++
++func TestArkClashLevelPublication(t *testing.T) {
++	previous := Level()
++	defer SetLevel(previous)
++	SetLevel(SILENT)
++	var workers sync.WaitGroup
++	for i := 0; i < 4; i++ {
++		workers.Add(1)
++		go func() {
++			defer workers.Done()
++			for j := 0; j < 1000; j++ {
++				current := Level()
++				if current != SILENT && current != ERROR {
++					t.Errorf("unexpected published level: %v", current)
++				}
++				print(Event{LogLevel: DEBUG, Payload: "filtered"})
++			}
++		}()
++	}
++	for i := 0; i < 1000; i++ {
++		SetLevel(ERROR)
++		SetLevel(SILENT)
++	}
++	workers.Wait()
++	SetLevel(INFO)
++	if Level() != INFO {
++		t.Fatal("level did not preserve SetLevel semantics")
++	}
++}
+--- a/listener/redir/tcp.go
++++ b/listener/redir/tcp.go
+@@ -41,6 +41,7 @@
+ 	l, err := net.Listen("tcp", addr)
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	l = inbound.ArkClashOwnListener(l)
+ 
+ 	rl := &Listener{
+--- a/listener/redir/tcp_linux.go
++++ b/listener/redir/tcp_linux.go
+@@ -8,6 +8,7 @@
+ 	"syscall"
+ 	"unsafe"
+ 
++	N "github.com/metacubex/mihomo/common/net"
+ 	"github.com/metacubex/mihomo/transport/socks5"
+ 
+ 	"golang.org/x/sys/unix"
+@@ -19,7 +20,7 @@
+ )
+ 
+ func parserPacket(conn net.Conn) (socks5.Addr, error) {
+-	c, ok := conn.(*net.TCPConn)
++	c, ok := N.FindUpstream[*net.TCPConn](conn, nil)
+ 	if !ok {
+ 		return nil, errors.New("only work with TCP connection")
+ 	}
+--- a/listener/redir/tcp_freebsd.go
++++ b/listener/redir/tcp_freebsd.go
+@@ -8,6 +8,7 @@
+ 	"syscall"
+ 	"unsafe"
+ 
++	N "github.com/metacubex/mihomo/common/net"
+ 	"github.com/metacubex/mihomo/transport/socks5"
+ 
+ 	"golang.org/x/sys/unix"
+@@ -19,7 +20,7 @@
+ )
+ 
+ func parserPacket(conn net.Conn) (socks5.Addr, error) {
+-	c, ok := conn.(*net.TCPConn)
++	c, ok := N.FindUpstream[*net.TCPConn](conn, nil)
+ 	if !ok {
+ 		return nil, errors.New("only work with TCP connection")
+ 	}
+--- a/listener/tproxy/tproxy.go
++++ b/listener/tproxy/tproxy.go
+@@ -67,6 +67,7 @@
+ 	if err != nil {
+ 		return nil, err
+ 	}
++	l = inbound.ArkClashOwnListener(l)
+ 
+ 	rl := &Listener{
+ 		listener: l,

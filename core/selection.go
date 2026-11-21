@@ -86,6 +86,9 @@ func saveSelections(home, profile string, selected map[string]string) error {
 
 // 在启用转发之前恢复配置自己的选择；provider 成员尚未初始化时由组在加载后解析。
 func restoreSelections(cfg *config.Config, opts startOptions) error {
+	if opts.Profile == "" {
+		return nil
+	}
 	selected, err := readSelections(opts.HomeDir, opts.Profile)
 	if err != nil {
 		return err
@@ -121,7 +124,11 @@ func checkSelectionNode(req selectionRequest, group outboundgroup.ProxyGroup) er
 func commitSelection(req selectionRequest) (selectionResult, error) {
 	mu.Lock()
 	defer mu.Unlock()
-	if !running || req.Profile != current.Profile {
+	return commitSelectionLocked(req)
+}
+
+func commitSelectionLocked(req selectionRequest) (selectionResult, error) {
+	if !running || current.Profile == "" || req.Profile != current.Profile {
 		return selectionResult{}, errors.New("selection_profile_changed")
 	}
 	if req.OperationID == "" || len(req.OperationID) > 96 || req.Group == "" || len(req.Group) > 1024 || len(req.Name) > 1024 {
@@ -216,7 +223,11 @@ func commitSelection(req selectionRequest) (selectionResult, error) {
 		result.Pinned = ""
 	}
 	if changed {
-		if req.CloseConnections {
+		closeConnections := req.CloseConnections
+		if current.General.CloseConnections != nil {
+			closeConnections = *current.General.CloseConnections
+		}
+		if closeConnections {
 			statistic.DefaultManager.Range(func(connection statistic.Tracker) bool {
 				if connection.Close() != nil {
 					result.CleanupFailed = true
@@ -258,6 +269,11 @@ func postSelection(w http.ResponseWriter, r *http.Request) {
 
 func getSelections(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
+	if !running || current.Profile == "" {
+		mu.Unlock()
+		writeError(w, r, http.StatusConflict, errors.New("selection_profile_changed"))
+		return
+	}
 	profile := current.Profile
 	selected, err := readSelections(current.HomeDir, profile)
 	mu.Unlock()

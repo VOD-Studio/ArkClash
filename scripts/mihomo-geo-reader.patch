@@ -1,0 +1,189 @@
+--- a/component/mmdb/mmdb.go
++++ b/component/mmdb/mmdb.go
+@@ -2,8 +2,8 @@
+ 
+ import (
+ 	"sync"
++	"sync/atomic"
+ 
+-	mihomoOnce "github.com/metacubex/mihomo/common/once"
+ 	C "github.com/metacubex/mihomo/constant"
+ 	"github.com/metacubex/mihomo/log"
+ 
+@@ -19,28 +19,39 @@
+ )
+ 
+ var (
+-	ipReader  IPReader
+-	asnReader ASNReader
+-	ipOnce    sync.Once
+-	asnOnce   sync.Once
++	ipReader  atomic.Pointer[IPReader]
++	asnReader atomic.Pointer[ASNReader]
++	ipMu      sync.Mutex
++	asnMu     sync.Mutex
+ )
+ 
++func newIPReader(reader *maxminddb.Reader) *IPReader {
++	instance := &IPReader{Reader: reader}
++	switch reader.Metadata.DatabaseType {
++	case "sing-geoip":
++		instance.databaseType = typeSing
++	case "Meta-geoip0":
++		instance.databaseType = typeMetaV0
++	default:
++		instance.databaseType = typeMaxmind
++	}
++	return instance
++}
++
+ func LoadFromBytes(buffer []byte) {
+-	ipOnce.Do(func() {
+-		mmdb, err := maxminddb.FromBytes(buffer)
+-		if err != nil {
+-			log.Fatalln("Can't load mmdb: %s", err.Error())
+-		}
+-		ipReader = IPReader{Reader: mmdb}
+-		switch mmdb.Metadata.DatabaseType {
+-		case "sing-geoip":
+-			ipReader.databaseType = typeSing
+-		case "Meta-geoip0":
+-			ipReader.databaseType = typeMetaV0
+-		default:
+-			ipReader.databaseType = typeMaxmind
+-		}
+-	})
++	if ipReader.Load() != nil {
++		return
++	}
++	ipMu.Lock()
++	defer ipMu.Unlock()
++	if ipReader.Load() != nil {
++		return
++	}
++	mmdb, err := maxminddb.FromBytes(buffer)
++	if err != nil {
++		log.Fatalln("Can't load mmdb: %s", err.Error())
++	}
++	ipReader.Store(newIPReader(mmdb))
+ }
+ 
+ func Verify(path string) bool {
+@@ -52,45 +63,69 @@
+ }
+ 
+ func IPInstance() IPReader {
+-	ipOnce.Do(func() {
++	if reader := ipReader.Load(); reader != nil {
++		return *reader
++	}
++	ipMu.Lock()
++	defer ipMu.Unlock()
++	reader := ipReader.Load()
++	if reader == nil {
+ 		mmdbPath := C.Path.MMDB()
+ 		log.Infoln("Load MMDB file: %s", mmdbPath)
+ 		mmdb, err := maxminddb.Open(mmdbPath)
+ 		if err != nil {
+ 			log.Fatalln("Can't load MMDB: %s", err.Error())
+ 		}
+-		ipReader = IPReader{Reader: mmdb}
+-		switch mmdb.Metadata.DatabaseType {
+-		case "sing-geoip":
+-			ipReader.databaseType = typeSing
+-		case "Meta-geoip0":
+-			ipReader.databaseType = typeMetaV0
+-		default:
+-			ipReader.databaseType = typeMaxmind
+-		}
+-	})
+-
+-	return ipReader
++		reader = newIPReader(mmdb)
++		ipReader.Store(reader)
++	}
++	return *reader
+ }
+ 
+ func ASNInstance() ASNReader {
+-	asnOnce.Do(func() {
++	if reader := asnReader.Load(); reader != nil {
++		return *reader
++	}
++	asnMu.Lock()
++	defer asnMu.Unlock()
++	reader := asnReader.Load()
++	if reader == nil {
+ 		ASNPath := C.Path.ASN()
+ 		log.Infoln("Load ASN file: %s", ASNPath)
+ 		asn, err := maxminddb.Open(ASNPath)
+ 		if err != nil {
+ 			log.Fatalln("Can't load ASN: %s", err.Error())
+ 		}
+-		asnReader = ASNReader{Reader: asn}
+-	})
++		reader = &ASNReader{Reader: asn}
++		asnReader.Store(reader)
++	}
++	return *reader
++}
+ 
+-	return asnReader
++// InstallIPReader 接管已校验且非 nil 的 reader，调用方之后不得 Close。
++// 旧 reader 仍可能被匹配使用，须由 maxminddb.Open 的 finalizer 回收。
++func InstallIPReader(reader *maxminddb.Reader) {
++	ipMu.Lock()
++	defer ipMu.Unlock()
++	ipReader.Store(newIPReader(reader))
++}
++
++// InstallASNReader 接管已校验且非 nil 的 reader，调用方之后不得 Close。
++// 旧 reader 仍可能被匹配使用，须由 maxminddb.Open 的 finalizer 回收。
++func InstallASNReader(reader *maxminddb.Reader) {
++	asnMu.Lock()
++	defer asnMu.Unlock()
++	asnReader.Store(&ASNReader{Reader: reader})
+ }
+ 
+ func ReloadIP() {
+-	mihomoOnce.Reset(&ipOnce)
++	ipMu.Lock()
++	defer ipMu.Unlock()
++	ipReader.Store(nil)
+ }
+ 
+ func ReloadASN() {
+-	mihomoOnce.Reset(&asnOnce)
++	asnMu.Lock()
++	defer asnMu.Unlock()
++	asnReader.Store(nil)
+ }
+--- a/component/geodata/init.go
++++ b/component/geodata/init.go
+@@ -2,6 +2,7 @@
+ 
+ import (
+ 	"context"
++	"errors"
+ 	"fmt"
+ 	"io"
+ 	"os"
+@@ -73,7 +74,7 @@
+ 	defer cancel()
+ 	resp, err := mihomoHttp.HttpRequest(ctx, url, http.MethodGet, nil, nil)
+ 	if err != nil {
+-		return
++		return errors.New("geo_download_failed")
+ 	}
+ 	defer resp.Body.Close()
+ 
+@@ -83,6 +84,9 @@
+ 	}
+ 	defer f.Close()
+ 	_, err = io.Copy(f, resp.Body)
++	if err != nil {
++		return errors.New("geo_download_failed")
++	}
+ 
+ 	return err
+ }

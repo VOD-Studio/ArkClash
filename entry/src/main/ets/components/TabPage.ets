@@ -1,13 +1,15 @@
+import { AppearanceState, appAppearance } from './AppearanceState';
 import { LengthMetrics } from '@kit.ArkUI';
 import { uiResourceText } from './ResourceText';
 import {
-  HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, HdsTitleBarContentStyle, hdsMaterial,
+  HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, HdsTitleBarContentStyle,
   ScrollEffectType, TitleBarContentOptions
 } from '@kit.UIDesignKit';
-import { FLOATING_BAR_INSET, HEADER_ACTION, PAGE_GUTTER, SECTION_GAP } from './Theme';
+import {
+  FLOATING_BAR_INSET, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER, SECTION_GAP, hdsGlass,
+  TAB_HEADER_HEIGHT, TAB_TITLE_LINE_HEIGHT, TAB_TITLE_SIZE
+} from './Theme';
 
-// 对齐 Prism 的 pageToolbarHeight；标题和正文起点必须使用同一尺寸。
-const TITLE_BAR_HEIGHT = 72;
 // 单帧滚动超过这个距离（vp）才算换了方向，过滤手指的细微抖动。
 const DIRECTION_THRESHOLD = 2;
 
@@ -30,6 +32,7 @@ interface TabPageHeaderState {
  */
 @ComponentV2
 export struct TabPage {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param title: ResourceStr = '';
   @Param menus: HdsNavigationMenuItemOptions[] = [];
   @Param topInset: number = 0; // 状态栏高度，vp
@@ -41,6 +44,7 @@ export struct TabPage {
   @Param contentOwnsScroll: boolean = false;
   @Param customTitle: boolean = false;
   @BuilderParam titleContent: () => void = emptyContent;
+  @BuilderParam headerAction: () => void = emptyContent;
   @BuilderParam content: () => void = emptyContent;
   // 滚动方向变化时回调：true = 往下看内容（页签栏该收起），false = 往回滚或回到顶部。
   @Event onScrollDirection: (down: boolean) => void = () => {};
@@ -83,31 +87,34 @@ export struct TabPage {
     if ($$.customTitle) {
       this.titleContent()
     } else {
-      Row({ space: 8 }) {
+      Row({ space: HEADER_GAP }) {
         Text($$.title)
-          .fontSize(24)
-          .lineHeight(30)
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(TAB_TITLE_SIZE)
+          .lineHeight(TAB_TITLE_LINE_HEIGHT)
           .fontWeight(600)
           .fontColor($r('sys.color.font_primary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
+        this.headerAction()
         Repeat($$.menus).each((menu: RepeatItem<HdsNavigationMenuItemOptions>): void => {
           Button({ type: ButtonType.Circle }) {
             if (menu.item.content?.icon !== undefined) {
               SymbolGlyph(menu.item.content.icon as Resource)
-                .fontSize(24)
+                .fontSize(HEADER_ICON_SIZE)
                 .fontColor([$r('sys.color.icon_primary')])
             }
           }
           .attributeModifier(HEADER_ACTION)
+          .systemMaterial(this.appStyle.headerMaterial())
           .enabled(menu.item.content?.isEnabled ?? true)
           .accessibilityText(uiResourceText(this.getUIContext(), menu.item.content?.label ?? ''))
           .onClick((): void => { menu.item.content?.action?.(); })
         }).key((menu: HdsNavigationMenuItemOptions): string => this.menuKey(menu))
       }
       .width('100%')
-      .height(TITLE_BAR_HEIGHT)
+      .height(TAB_HEADER_HEIGHT)
       .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
     }
   }
@@ -123,8 +130,8 @@ export struct TabPage {
         .width('100%')
         .height('100%')
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
-        .contentStartOffset(this.topInset + TITLE_BAR_HEIGHT + 12)
-        .contentEndOffset(FLOATING_BAR_INSET)
+        .contentStartOffset(this.topInset + TAB_HEADER_HEIGHT + 12)
+        .contentEndOffset((this.appStyle.floating ? FLOATING_BAR_INSET : 16))
         .cachedCount(2)
         .lanes(this.listLanes, this.listGutter)
         .scrollBar(BarState.Off)
@@ -141,8 +148,8 @@ export struct TabPage {
         .padding({
           left: PAGE_GUTTER,
           right: PAGE_GUTTER,
-          top: this.topInset + TITLE_BAR_HEIGHT + 12,
-          bottom: FLOATING_BAR_INSET
+          top: this.topInset + TAB_HEADER_HEIGHT + 12,
+          bottom: (this.appStyle.floating ? FLOATING_BAR_INSET : 16)
         })
       }
       .width('100%')
@@ -164,10 +171,7 @@ export struct TabPage {
           enableScrollEffect: true,
           scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
         },
-        systemMaterialEffect: {
-          materialType: hdsMaterial.MaterialType.IMMERSIVE,
-          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-        },
+        systemMaterialEffect: hdsGlass(this.appStyle.glass),
         originalStyle: { contentStyle: CONTENT_STYLE },
         scrollEffectStyle: { contentStyle: CONTENT_STYLE }
       },

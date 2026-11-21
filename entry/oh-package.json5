@@ -6,9 +6,13 @@
   "author": "VOD-Studio",
   "license": "GPL-3.0",
   "dependencies": {
+    "@ohos/zxing": "2.1.6",
     "libarkclash.so": "file:./src/main/cpp/types/libarkclash",
+    "libarkstore.so": "file:./src/main/cpp/types/libarkstore",
     "yaml": "2.8.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.25"
+  },
   "dynamicDependencies": {}
 }

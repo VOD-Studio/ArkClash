@@ -1,0 +1,469 @@
+--- a/adapter/outbound/direct.go
++++ b/adapter/outbound/direct.go
+@@ -27,7 +27,7 @@
+ 	}
+ 	opts := d.DialOptions()
+ 	opts = append(opts, dialer.WithResolver(resolver.DirectHostResolver))
+-	c, err := dialer.DialContext(ctx, "tcp", metadata.RemoteAddress(), opts...)
++	c, err := dialer.DialContext(resolver.WithInitiator(ctx, resolver.InitiatorDirect), "tcp", metadata.RemoteAddress(), opts...)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -51,7 +51,7 @@
+ 
+ func (d *Direct) ResolveUDP(ctx context.Context, metadata *C.Metadata) error {
+ 	if (!metadata.Resolved() || resolver.DirectHostResolver != resolver.DefaultResolver) && metadata.Host != "" {
+-		ip, err := resolveIPWithResolver(ctx, metadata.Host, d.prefer, resolver.DirectHostResolver)
++		ip, err := resolveIPWithResolver(resolver.WithInitiator(ctx, resolver.InitiatorDirect), metadata.Host, d.prefer, resolver.DirectHostResolver)
+ 		if err != nil {
+ 			return fmt.Errorf("can't resolve ip: %w", err)
+ 		}
+--- a/adapter/outbound/util.go
++++ b/adapter/outbound/util.go
+@@ -51,7 +51,7 @@
+ 		return nil, err
+ 	}
+ 
+-	ip, err := resolveIPWithResolver(ctx, host, prefer, resolver.ProxyServerHostResolver)
++	ip, err := resolveIPWithResolver(resolver.WithInitiator(ctx, resolver.InitiatorProxy), host, prefer, resolver.ProxyServerHostResolver)
+ 
+ 	if err != nil {
+ 		return nil, err
+--- a/component/dialer/dialer.go
++++ b/component/dialer/dialer.go
+@@ -385,6 +385,7 @@
+ 
+ 	if preferResolver == nil {
+ 		preferResolver = resolver.ProxyServerHostResolver
++		ctx = resolver.WithInitiator(ctx, resolver.InitiatorProxy)
+ 	}
+ 
+ 	var ips []netip.Addr
+--- a/component/resolver/patch.go
++++ b/component/resolver/patch.go
+@@ -0,0 +1,34 @@
++package resolver
++
++import (
++	"context"
++	"sync/atomic"
++)
++
++const (
++	InitiatorApp    = "app"
++	InitiatorRule   = "rule"
++	InitiatorDirect = "direct"
++	InitiatorProxy  = "proxy"
++	InitiatorOther  = "other"
++)
++
++type initiatorKey struct{}
++
++var queryObservationEnabled atomic.Bool
++
++func SetQueryObservationEnabled(enabled bool) {
++	queryObservationEnabled.Store(enabled)
++}
++
++func WithInitiator(ctx context.Context, initiator string) context.Context {
++	if !queryObservationEnabled.Load() {
++		return ctx
++	}
++	return context.WithValue(ctx, initiatorKey{}, initiator)
++}
++
++func InitiatorFrom(ctx context.Context) string {
++	initiator, _ := ctx.Value(initiatorKey{}).(string)
++	return initiator
++}
+--- a/dns/patch.go
++++ b/dns/patch.go
+@@ -0,0 +1,167 @@
++package dns
++
++import (
++	"context"
++	"fmt"
++	"sync"
++	"sync/atomic"
++	"time"
++
++	"github.com/metacubex/mihomo/common/lru"
++	"github.com/metacubex/mihomo/component/resolver"
++	icontext "github.com/metacubex/mihomo/context"
++
++	D "github.com/miekg/dns"
++)
++
++type QueryRecord struct {
++	Question  D.Question
++	Msg       *D.Msg
++	Initiator string
++	Upstream  string
++	Cached    bool
++	Start     time.Time
++	Err       error
++}
++
++type QueryNotify func(record QueryRecord)
++
++type queryObservation struct {
++	notify     QueryNotify
++	answeredBy *lru.LruCache[string, string]
++	mu         sync.Mutex
++}
++
++var queryObserver atomic.Pointer[queryObservation]
++var queryObserverMu sync.Mutex
++
++// 回调同步执行；不得在回调内更换 observer。停用返回后旧回调已退出。
++func SetQueryObserver(notify QueryNotify) {
++	queryObserverMu.Lock()
++	defer queryObserverMu.Unlock()
++	resolver.SetQueryObservationEnabled(false)
++	var next *queryObservation
++	if notify != nil {
++		next = &queryObservation{
++			notify: notify,
++			answeredBy: lru.New[string, string](lru.WithSize[string, string](4096)),
++		}
++	}
++	previous := queryObserver.Swap(next)
++	if previous != nil {
++		previous.mu.Lock()
++		previous.mu.Unlock()
++	}
++	if next != nil {
++		resolver.SetQueryObservationEnabled(true)
++	}
++}
++
++func queryInitiator(ctx context.Context) string {
++	switch initiator := resolver.InitiatorFrom(ctx); initiator {
++	case resolver.InitiatorApp, resolver.InitiatorRule, resolver.InitiatorDirect, resolver.InitiatorProxy, resolver.InitiatorOther:
++		return initiator
++	}
++	if _, ok := ctx.(*icontext.DNSContext); ok {
++		return resolver.InitiatorApp
++	}
++	return resolver.InitiatorOther
++}
++
++func answeredByKey(r *Resolver, q D.Question) string {
++	return fmt.Sprintf("%p %s", r, q.String())
++}
++
++func (r *Resolver) traceCacheHit(ctx context.Context, q D.Question, msg *D.Msg) {
++	observer := queryObserver.Load()
++	if observer == nil {
++		return
++	}
++	start := time.Now()
++	observer.mu.Lock()
++	defer observer.mu.Unlock()
++	if queryObserver.Load() != observer {
++		return
++	}
++	upstream, _ := observer.answeredBy.Get(answeredByKey(r, q))
++	observer.notify(QueryRecord{
++		Question: q,
++		Msg: msg,
++		Initiator: queryInitiator(ctx),
++		Upstream: upstream,
++		Cached: true,
++		Start: start,
++	})
++}
++
++type exchangeTrace struct {
++	observer  *queryObservation
++	resolver  *Resolver
++	question  D.Question
++	initiator string
++	start     time.Time
++
++	mu        sync.Mutex
++	upstreams map[*D.Msg]string
++}
++
++type exchangeTraceKey struct{}
++
++func (r *Resolver) traceExchange(ctx context.Context, q D.Question, initiator string, observer *queryObservation) (context.Context, *exchangeTrace) {
++	if observer == nil || queryObserver.Load() != observer {
++		return ctx, nil
++	}
++	trace := &exchangeTrace{
++		observer: observer,
++		resolver: r,
++		question: q,
++		initiator: initiator,
++		start: time.Now(),
++		upstreams: make(map[*D.Msg]string),
++	}
++	return context.WithValue(ctx, exchangeTraceKey{}, trace), trace
++}
++
++func traceAnswer(ctx context.Context, msg *D.Msg, upstream string) {
++	observer := queryObserver.Load()
++	if observer == nil || msg == nil {
++		return
++	}
++	trace, _ := ctx.Value(exchangeTraceKey{}).(*exchangeTrace)
++	if trace == nil || trace.observer != observer {
++		return
++	}
++	trace.mu.Lock()
++	if queryObserver.Load() == observer {
++		trace.upstreams[msg] = upstream
++	}
++	trace.mu.Unlock()
++}
++
++func (t *exchangeTrace) finish(msg *D.Msg, err error) {
++	if t == nil || queryObserver.Load() != t.observer {
++		return
++	}
++	observer := t.observer
++	observer.mu.Lock()
++	defer observer.mu.Unlock()
++	if queryObserver.Load() != observer {
++		return
++	}
++	record := QueryRecord{
++		Question: t.question,
++		Msg: msg,
++		Initiator: t.initiator,
++		Start: t.start,
++		Err: err,
++	}
++	if err == nil {
++		t.mu.Lock()
++		record.Upstream = t.upstreams[msg]
++		t.mu.Unlock()
++		if record.Upstream != "" {
++			observer.answeredBy.Set(answeredByKey(t.resolver, t.question), record.Upstream)
++		}
++	}
++	observer.notify(record)
++}
+--- a/dns/patch_clear.go
++++ b/dns/patch_clear.go
+@@ -0,0 +1,87 @@
++package dns
++
++import (
++	"reflect"
++	"time"
++
++	"github.com/metacubex/mihomo/component/resolver"
++)
++
++// ClearAll 清理网络 DNS 缓存和连接，不清理 FakeIP 映射；并发查询仍可重新填充缓存。
++func ClearAll() {
++	var pending []*Resolver
++	for _, r := range []resolver.Resolver{resolver.DefaultResolver, resolver.SystemResolver} {
++		if rs, ok := r.(Resolvers); ok {
++			pending = append(pending, rs.Resolver, rs.ProxyResolver, rs.DirectResolver)
++		}
++	}
++	visited := make(map[*Resolver]struct{})
++	reset := make(map[dnsClient]struct{})
++	for len(pending) > 0 {
++		r := pending[len(pending)-1]
++		pending = pending[:len(pending)-1]
++		if r == nil {
++			continue
++		}
++		if _, done := visited[r]; done {
++			continue
++		}
++		visited[r] = struct{}{}
++		if r.cache != nil {
++			r.cache.Clear()
++		}
++		r.resetClients(reset)
++		pending = append(pending, r.defaultResolver)
++	}
++	if observer := queryObserver.Load(); observer != nil {
++		observer.answeredBy.Clear()
++	}
++}
++
++// 新增策略类型时必须补齐遍历，否则仅供策略使用的连接不会被清理。
++func (r *Resolver) resetClients(reset map[dnsClient]struct{}) {
++	for _, c := range r.main {
++		resetClientOnce(c, reset)
++	}
++	for _, c := range r.fallback {
++		resetClientOnce(c, reset)
++	}
++	for _, p := range r.policy {
++		switch p := p.(type) {
++		case domainTriePolicy:
++			p.Foreach(func(_ string, clients []dnsClient) bool {
++				for _, c := range clients {
++					resetClientOnce(c, reset)
++				}
++				return true
++			})
++		case domainMatcherPolicy:
++			for _, c := range p.dnsClients {
++				resetClientOnce(c, reset)
++			}
++		}
++	}
++}
++
++// 策略和主解析器可以共享包装后的底层传输，重复重置会关闭并发查询刚建立的连接。
++func resetClientOnce(c dnsClient, reset map[dnsClient]struct{}) {
++	for {
++		u, ok := c.(interface{ Unwrap() dnsClient })
++		if !ok {
++			break
++		}
++		c = u.Unwrap()
++	}
++	if reflect.TypeOf(c).Comparable() {
++		if _, done := reset[c]; done {
++			return
++		}
++		reset[c] = struct{}{}
++	}
++	if sc, ok := c.(*systemClient); ok {
++		sc.mu.Lock()
++		sc.lastFlush = time.Time{}
++		sc.mu.Unlock()
++	}
++	c.ResetConnection()
++}
+--- a/dns/resolver.go
++++ b/dns/resolver.go
+@@ -173,6 +173,7 @@
+ 	msg, expireTime, hit := getMsgFromCache(r.cache, q)
+ 	if hit {
+ 		log.Debugln("[DNS] cache hit %s --> %s, expire at %s", domain, msgToLogString(msg), expireTime.Format("2006-01-02 15:04:05"))
++		r.traceCacheHit(ctx, q, msg)
+ 		now := time.Now()
+ 		if expireTime.Before(now) {
+ 			setMsgTTL(msg, uint32(1)) // Continue fetch
+@@ -192,6 +193,11 @@
+ 
+ 	retryNum := 0
+ 	retryMax := 3
++	observer := queryObserver.Load()
++	initiator := ""
++	if observer != nil {
++		initiator = queryInitiator(ctx)
++	}
+ 	fn := func() (result *D.Msg, err error) {
+ 		queryContext := context.Background()
+ 		if resolver.RequestContext(ctx) != nil {
+@@ -199,6 +205,7 @@
+ 		}
+ 		ctx, cancel := context.WithTimeout(queryContext, resolver.DefaultDNSTimeout)
+ 		defer cancel()
++		ctx, trace := r.traceExchange(ctx, q, initiator, observer)
+ 		cache := false
+ 
+ 		defer func() {
+@@ -213,6 +220,7 @@
+ 				putMsgToCache(r.cache, q, result)
+ 			}
+ 		}()
++		defer func() { trace.finish(result, err) }()
+ 
+ 		isIPReq := isIPRequest(q)
+ 		if isIPReq {
+--- a/dns/util.go
++++ b/dns/util.go
+@@ -421,6 +421,7 @@
+ 	for _, client := range clients {
+ 		if _, isRCodeClient := client.(rcodeClient); isRCodeClient {
+ 			msg, err = client.ExchangeContext(ctx, m)
++			traceAnswer(ctx, msg, client.Address())
+ 			return msg, false, err
+ 		}
+ 		client := client // shadow define client to ensure the value captured by the closure will not be changed in the next loop
+@@ -435,6 +436,7 @@
+ 				return nil, errors.New("server failure: " + D.RcodeToString[m.Rcode])
+ 			}
+ 			log.Debugln("[DNS] %s --> %s from %s", domain, msgToLogString(m), client.Address())
++			traceAnswer(ctx, m, client.Address())
+ 			return m, nil
+ 		})
+ 	}
+--- a/tunnel/statistic/manager.go
++++ b/tunnel/statistic/manager.go
+@@ -38,6 +38,7 @@
+ }
+ 
+ func (m *Manager) Join(c Tracker) {
++	notifyTrackerOpen(c)
+ 	m.connections.Store(c.ID(), c)
+ }
+ 
+--- a/tunnel/statistic/observation.go
++++ b/tunnel/statistic/observation.go
+@@ -0,0 +1,27 @@
++package statistic
++
++import "sync/atomic"
++
++// 观察者只在工具页可见时安装；不介入逐字节读写路径。
++type TrackerObserver struct {
++	Open  func(Tracker)
++	Close func(Tracker)
++}
++
++var trackerObserver atomic.Pointer[TrackerObserver]
++
++func SetTrackerObserver(observer *TrackerObserver) {
++	trackerObserver.Store(observer)
++}
++
++func notifyTrackerOpen(tracker Tracker) {
++	if observer := trackerObserver.Load(); observer != nil && observer.Open != nil {
++		observer.Open(tracker)
++	}
++}
++
++func notifyTrackerClose(tracker Tracker) {
++	if observer := trackerObserver.Load(); observer != nil && observer.Close != nil {
++		observer.Close(tracker)
++	}
++}
+--- a/tunnel/statistic/tracker.go
++++ b/tunnel/statistic/tracker.go
+@@ -109,7 +109,9 @@
+ 
+ func (tt *tcpTracker) Close() error {
+ 	tt.manager.Leave(tt)
+-	return tt.Conn.Close()
++	err := tt.Conn.Close()
++	notifyTrackerClose(tt)
++	return err
+ }
+ 
+ func (tt *tcpTracker) Upstream() any {
+@@ -201,7 +203,9 @@
+ 
+ func (ut *udpTracker) Close() error {
+ 	ut.manager.Leave(ut)
+-	return ut.PacketConn.Close()
++	err := ut.PacketConn.Close()
++	notifyTrackerClose(ut)
++	return err
+ }
+ 
+ func (ut *udpTracker) Upstream() any {
+--- a/tunnel/tunnel.go
++++ b/tunnel/tunnel.go
+@@ -340,7 +340,7 @@
+ 	helper := C.RuleMatchHelper{
+ 		ResolveIP: func() {
+ 			if !resolved && metadata.Host != "" && !metadata.Resolved() {
+-				ctx, cancel := context.WithTimeout(ctx, resolver.DefaultDNSTimeout)
++				ctx, cancel := context.WithTimeout(resolver.WithInitiator(ctx, resolver.InitiatorRule), resolver.DefaultDNSTimeout)
+ 				defer cancel()
+ 				ip, err := resolver.ResolveIP(ctx, metadata.Host)
+ 				if err != nil {

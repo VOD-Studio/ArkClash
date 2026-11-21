@@ -9,15 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
 	"github.com/metacubex/mihomo/adapter"
+	"github.com/metacubex/mihomo/adapter/inbound"
 	"github.com/metacubex/mihomo/adapter/outboundgroup"
 	"github.com/metacubex/mihomo/component/profile"
 	"github.com/metacubex/mihomo/component/profile/cachefile"
@@ -28,11 +26,22 @@ import (
 	"github.com/metacubex/mihomo/tunnel"
 )
 
-var mu sync.Mutex
-var running bool
-var current startOptions
 var tunListener *int
-var runningID atomic.Pointer[string]
+var hostTunStartError error
+var hostTunStopError error
+
+func startTun(fd int, network tunNetworkOptions) error {
+	if hostTunStartError != nil {
+		return hostTunStartError
+	}
+	tunListener = &fd
+	return nil
+}
+
+func stopTun() error {
+	tunListener = nil
+	return hostTunStopError
+}
 
 var runtimeEvents = make(chan string, 256)
 
@@ -46,15 +55,12 @@ func emit(event any) {
 	default:
 	}
 }
-func writeError(w http.ResponseWriter, r *http.Request, status int, err error) {
-	render.Status(r, status)
-	render.JSON(w, r, struct {
-		Message string `json:"message"`
-	}{Message: err.Error()})
-}
-
 func fixture(t *testing.T) *config.Config {
 	t.Helper()
+	inbound.EnableArkClashListenerOwnership()
+	if err := tunnel.ArkClashSuspendForwarding(); err != nil {
+		t.Fatal(err)
+	}
 	home := t.TempDir()
 	if err := os.Mkdir(filepath.Join(home, "profiles"), 0700); err != nil {
 		t.Fatal(err)
@@ -85,24 +91,45 @@ rules: ['MATCH,DIRECT']
 	tunnel.SetMode(tunnel.ModeMapping["direct"])
 	inner.New(tunnel.Tunnel)
 	tunnel.OnRunning()
-	current = startOptions{HomeDir: home, Profile: "fixture"}
+	current = startOptions{HomeDir: home, Profile: "fixture", Geo: defaultGeoSettings()}
 	running = true
 	runningID.Store(&current.Profile)
 	fd := 1
 	tunListener = &fd
-	beginRuntime()
+	waitDiagnostics := beginRuntime()
+	if err := updateVpnState("started", "running", true); err != nil {
+		mu.Unlock()
+		t.Fatal(err)
+	}
 	watchRuntimeRoutes(cfg)
 	resetProxyIdentities()
 	publishRuntime()
+	tunnel.ArkClashResumeForwarding()
 	mu.Unlock()
+	waitDiagnostics()
 	t.Cleanup(func() {
+		if err := tunnel.ArkClashSuspendForwarding(); err != nil {
+			t.Error(err)
+		}
 		mu.Lock()
-		defer mu.Unlock()
+		waitDiagnostics := stopDiagnosticsLocked()
+		defer func() {
+			mu.Unlock()
+			waitDiagnostics()
+		}()
 		stopRuntimeRoutes()
 		cancelDelayTests()
 		running = false
 		runningID.Store(nil)
 		tunListener = nil
+		runtimeVpnCreated = false
+		runtimeIntent = "stopped"
+		runtimeForward = "stopped"
+		runtimeStartedAt = 0
+		hostTunStartError = nil
+		hostTunStopError = nil
+		desiredInbound = inboundSettings{}
+		cleanupFailure = nil
 		runtimeSnapshot.Store(nil)
 		tunnel.OnSuspend()
 		tunnel.UpdateProxies(nil, nil)

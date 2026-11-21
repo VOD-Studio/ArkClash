@@ -1,0 +1,74 @@
+{
+  "defaultSettings": {
+    "revision": "default",
+    "controllerSecret": "",
+    "userAgent": "",
+    "hosts": null,
+    "delayTimeout": 8000,
+    "logLevel": "error",
+    "captureLogs": false
+  },
+  "settingsRequest": {
+    "bootId": "fixture-boot",
+    "expectedRevision": "default",
+    "settings": {
+      "revision": "9007199254740993",
+      "controllerSecret": "",
+      "userAgent": "契约测试 🧪",
+      "hosts": null,
+      "delayTimeout": 8000,
+      "logLevel": "error",
+      "captureLogs": false,
+      "closeConnections": false
+    }
+  },
+  "invalidSettingsRequest": {
+    "bootId": "fixture-boot",
+    "expectedRevision": "default",
+    "settings": {
+      "revision": "9007199254740993",
+      "controllerSecret": "",
+      "userAgent": "契约测试 🧪",
+      "hosts": null,
+      "delayTimeout": "8000",
+      "logLevel": "error",
+      "captureLogs": false,
+      "closeConnections": false
+    }
+  },
+  "settingsError": { "message": "general_settings_invalid" },
+  "backupManifest": {
+    "product": "ArkClash",
+    "formatVersion": 1,
+    "schemaVersion": 1,
+    "revision": "9007199254740993",
+    "files": [
+      { "path": "fixture.yaml", "bytes": 12, "sha256": "8875894e84075c7eab82661951551932cdfe1de11171eeb0b22a0ec83f65d25e" }
+    ]
+  },
+  "configuration": {
+    "yaml": "proxies: []\nproxy-groups:\n  - name: 基础组\n    type: select\n    proxies: [DIRECT, REJECT]\nrules: ['MATCH,基础组']\n",
+    "baseGroup": "基础组",
+    "script": "const main = config => { config['proxy-groups'].push({name: '脚本出口', type: 'select', proxies: ['DIRECT']}); config.rules.unshift('DOMAIN,script.test,REJECT'); return config; }",
+    "addedRules": {
+      "revision": "fixture-rules",
+      "rules": [
+        { "id": "global", "kind": "DOMAIN", "payload": "global.test", "target": "REJECT", "noResolve": false, "source": false }
+      ],
+      "profiles": [
+        {
+          "profile": "fixture",
+          "revision": "fixture-local",
+          "rules": [
+            { "id": "local", "kind": "DOMAIN", "payload": "local.test", "target": "脚本出口", "customExit": true, "noResolve": false, "source": false }
+          ],
+          "disabled": [],
+          "matchTarget": ""
+        }
+      ]
+    },
+    "standard": ["local.test,基础组", "global.test,REJECT", ",基础组"],
+    "scripted": ["local.test,脚本出口", "global.test,REJECT", "script.test,REJECT", ",基础组"],
+    "custom": [",基础组"]
+  }
+}

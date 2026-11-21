@@ -1,10 +1,12 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { ListRow } from '../../components/ListRow';
 import { TabPage } from '../../components/TabPage';
-import { CARD_RADIUS } from '../../components/Theme';
+import { SettingsSection } from './SettingsSection';
 import { ToolRoute } from './ToolRoutes';
 
 @ComponentV2
 export struct ToolsPage {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require scroller: Scroller;
   @Event onScrollDirection: (down: boolean) => void = () => {};
   @Param topInset: number = 0;
@@ -12,14 +14,21 @@ export struct ToolsPage {
 
   @Builder
   Content() {
-    this.Group([
+    SettingsSection({ rows: (): void => this.Rows([
       new Entry(ToolRoute.Connections, $r('sys.symbol.list_bullet'), $r('app.string.tools_connections')),
-      new Entry(ToolRoute.Logs, $r('sys.symbol.doc_plaintext'), $r('app.string.tools_logs'))
-    ])
-    this.Group([
-      new Entry(ToolRoute.Settings, $r('sys.symbol.gearshape'), $r('app.string.tools_settings')),
+      new Entry(ToolRoute.Dns, $r('sys.symbol.connection'), $r('app.string.tools_dns')),
+      new Entry(ToolRoute.Resources, $r('sys.symbol.square_stack_3d'), $r('app.string.tools_resources')),
+      new Entry(ToolRoute.Logs, $r('sys.symbol.doc_text'), $r('app.string.tools_logs'))
+    ]) })
+    SettingsSection({ heading: $r('app.string.tools_settings'), rows: (): void => this.Rows([
+      new Entry(ToolRoute.General, $r('sys.symbol.slider_horizontal_2'), $r('app.string.tools_general')),
+      new Entry(ToolRoute.Theme, $r('sys.symbol.slider_horizontal_2'), $r('app.string.tools_theme')),
+      new Entry(ToolRoute.AdvancedConfig, $r('sys.symbol.wrench_and_screwdriver'), $r('app.string.tools_advanced_config'))
+    ]) })
+    SettingsSection({ heading: $r('app.string.tools_other'), rows: (): void => this.Rows([
+      new Entry(ToolRoute.Backup, $r('sys.symbol.doc_text'), $r('app.string.backup_title')),
       new Entry(ToolRoute.About, $r('sys.symbol.info_circle'), $r('app.string.tools_about'))
-    ])
+    ]) })
   }
 
   build() {
@@ -33,21 +42,15 @@ export struct ToolsPage {
   }
 
   @Builder
-  Group(entries: Entry[]) {
-    Column() {
-      ForEach(entries, (entry: Entry, index: number) => {
-        if (index > 0) {
-          Divider()
-            .color($r('app.color.divider'))
-            .margin({ left: 50, right: 16 })
-        }
-        ListRow({ icon: entry.icon, title: entry.title, onTap: () => this.onOpen(entry.route) })
-      }, (entry: Entry) => entry.route)
-    }
-    .width('100%')
-    .borderRadius(CARD_RADIUS)
-    .clip(true)
-    .backgroundColor($r('app.color.card_background'))
+  Rows(entries: Entry[]) {
+    ForEach(entries, (entry: Entry, index: number) => {
+      if (index > 0) {
+        Divider()
+          .color(this.appStyle.palette.divider)
+          .margin({ left: 50, right: 16 })
+      }
+      ListRow({ icon: entry.icon, title: entry.title, onTap: () => this.onOpen(entry.route) })
+    }, (entry: Entry) => entry.route)
   }
 }
 

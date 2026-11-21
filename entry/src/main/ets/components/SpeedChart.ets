@@ -1,9 +1,11 @@
+import { AppearanceState, appAppearance } from './AppearanceState';
 // 低于这个速率时纵轴不再缩小，避免几百字节的抖动被放大成满幅波动。
 const MIN_SCALE = 16 * 1024;
 
 /** 上传、下载两条速率折线，共用一个纵轴，最新的样本在最右边。 */
 @ComponentV2
 export struct SpeedChart {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param up: number[] = [];
   @Param down: number[] = [];
   @Param capacity: number = 60; // 横轴的样本数
@@ -14,7 +16,7 @@ export struct SpeedChart {
     Stack() {
       // 基线
       Divider()
-        .color($r('app.color.divider'))
+        .color(this.appStyle.palette.divider)
         .position({ x: 0, y: this.chartHeight - 1 })
       Polyline({ width: this.chartWidth, height: this.chartHeight })
         .points(this.points(this.up))
@@ -26,7 +28,7 @@ export struct SpeedChart {
       Polyline({ width: this.chartWidth, height: this.chartHeight })
         .points(this.points(this.down))
         .fillOpacity(0)
-        .stroke($r('app.color.download'))
+        .stroke(this.appStyle.palette.brand)
         .strokeWidth(2)
         .strokeLineJoin(LineJoinStyle.Round)
         .strokeLineCap(LineCapStyle.Round)

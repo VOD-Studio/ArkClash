@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { TrafficSample } from '../../client/Traffic';
 import { dashboardTraffic, dashboardTrafficValue, DashboardTrafficValue } from './DashboardFormat';
 import { dashboardTrafficGraph } from './TrafficChart';
@@ -5,6 +6,7 @@ import { AppGlyph } from '../../components/AppGlyph';
 
 @ComponentV2
 export struct DashboardSpeedTile {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param upload: boolean = false;
   @Param rate: number = 0;
   @Param total: number = 0;
@@ -33,12 +35,12 @@ export struct DashboardSpeedTile {
     Stack({ alignContent: Alignment.TopStart }) {
       Stack({ alignContent: Alignment.TopStart }) {
         Path({ width: this.tileWidth + 4, height: Math.max(0, this.tileHeight - 34) }).commands(this.areaPath)
-          .fill(this.upload ? $r('app.color.dash_series_secondary') : $r('app.color.brand'))
+          .fill(this.upload ? this.appStyle.palette.dashSeriesSecondary : this.appStyle.palette.brand)
           .fillOpacity(0.14)
           .strokeWidth(0)
         Path({ width: this.tileWidth + 4, height: Math.max(0, this.tileHeight - 34) }).commands(this.linePath)
           .fillOpacity(0)
-          .stroke(this.upload ? $r('app.color.dash_series_secondary') : $r('app.color.brand'))
+          .stroke(this.upload ? this.appStyle.palette.dashSeriesSecondary : this.appStyle.palette.brand)
           .strokeWidth(1.5)
           .strokeLineCap(LineCapStyle.Round)
           .strokeLineJoin(LineJoinStyle.Round)
@@ -51,8 +53,9 @@ export struct DashboardSpeedTile {
       Column() {
         Row({ space: 4 }) {
           AppGlyph({ name: this.upload ? 'arrowUp' : 'arrowDown', iconSize: 16,
-            iconColor: this.upload ? $r('sys.color.font_secondary') : $r('app.color.brand') })
+            iconColor: this.upload ? $r('sys.color.font_secondary') : this.appStyle.palette.brand })
           Text(this.upload ? $r('app.string.traffic_upload') : $r('app.string.traffic_download'))
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(13)
             .lineHeight(18)
             .fontWeight(600)
@@ -62,10 +65,12 @@ export struct DashboardSpeedTile {
         }
         Text() {
           Span(this.stale ? '—' : this.rateValue.amount)
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(28)
             .fontWeight(FontWeight.Bold)
             .letterSpacing(-0.56)
           Span(` ${this.rateValue.unit}/s`)
+            .fontFamily(this.appStyle.fontFamily)
             .fontSize(13)
             .fontWeight(600)
             .fontColor($r('sys.color.font_secondary'))
@@ -76,6 +81,7 @@ export struct DashboardSpeedTile {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Clip })
         Text($r('app.string.traffic_total', dashboardTraffic(this.total)))
+          .fontFamily(this.appStyle.fontFamily)
           .fontSize(12)
           .lineHeight(16)
           .fontColor($r('sys.color.font_secondary'))
@@ -90,7 +96,7 @@ export struct DashboardSpeedTile {
     .width('100%')
     .constraintSize({ minHeight: this.tileWidth / 1.45 })
     .borderRadius(22)
-    .backgroundColor($r('app.color.tile_background'))
+    .backgroundColor(this.appStyle.palette.tileBackground)
     .clip(true)
     .onAreaChange((_previous: Area, current: Area): void => {
       this.tileWidth = Number(current.width);

@@ -7,6 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/env.sh
 source "$ROOT/scripts/env.sh"
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go$(cat "$ROOT/.go-version")}"
 cd "$ROOT"
 
 checks=("$@")
@@ -14,6 +15,12 @@ if [[ ${#checks[@]} -eq 0 || "${checks[0]}" == "all" ]]; then
   checks=(go shell arch arkts actions commits)
 fi
 failed=0
+
+prepare_quickjs() {
+  local quickjs_dir
+  quickjs_dir="$(bash "$ROOT/scripts/prepare-quickjs.sh")" || return 1
+  export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$quickjs_dir\""
+}
 
 lint_go() {
   echo "== gofmt"
@@ -25,6 +32,7 @@ lint_go() {
   fi
 
   echo "== go vet"
+  prepare_quickjs || { failed=1; return; }
   # 内核用 cgo 引用 OHOS NDK 的头文件，vet 也要用 NDK 的编译器。
   local clang="$OHOS_SDK/native/llvm/bin/aarch64-unknown-linux-ohos-clang"
   if [[ -x "$clang" ]]; then
@@ -114,13 +122,23 @@ lint_commits() {
 GOVULNCHECK_VERSION="v1.9.0"
 lint_vuln() {
   echo "== govulncheck"
-  # 只报告代码真正调用到的漏洞；和 go vet 一样要用 NDK 的编译器处理 cgo。
+  prepare_quickjs || { failed=1; return; }
+  # 只报告代码真正调用到的漏洞；和 go vet 一样要用 NDK 的编译器与打过补丁的 mihomo。
   local clang="$OHOS_SDK/native/llvm/bin/aarch64-unknown-linux-ohos-clang"
   if [[ -x "$clang" ]]; then
     # govulncheck 本身按本机平台安装；分析时才切到目标平台，否则装出来的是 arm64 程序跑不了。
     GOBIN="$ROOT/.toolchain/bin" go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
-    (cd core && CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" \
-      "$ROOT/.toolchain/bin/govulncheck" -tags with_gvisor ./...) || failed=1
+    (
+      vuln_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-vuln.XXXXXX")" || exit 1
+      trap 'rm -rf "$vuln_deps"' EXIT
+      bash "$ROOT/scripts/prepare-mihomo.sh" "$vuln_deps/mihomo" || exit 1
+      cp -R core "$vuln_deps/core"
+      chmod -R u+w "$vuln_deps/core"
+      cd "$vuln_deps/core"
+      go mod edit "-replace=github.com/metacubex/mihomo=$vuln_deps/mihomo"
+      CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" \
+        "$ROOT/.toolchain/bin/govulncheck" -tags with_gvisor ./...
+    ) || failed=1
   else
     echo "跳过：找不到 OHOS NDK（${clang}）"
   fi

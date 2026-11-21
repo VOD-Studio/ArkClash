@@ -1,3 +1,4 @@
+import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { curves, UIUtils } from '@kit.ArkUI';
 import { EmptyState } from '../../components/EmptyState';
 import { FLOATING_BAR_INSET, PAGE_GUTTER } from '../../components/Theme';
@@ -5,7 +6,10 @@ import { ProxyBrowser } from './Proxies';
 import { ProxyGroupHeader } from './ProxyGroupHeader';
 import { proxyCardHeight, proxyTextScale } from './ProxyMetrics';
 import { ProxyNodeLine } from './ProxyNodeLine';
-import { ProxyGroupView, ProxyNodeRow } from './ProxyView';
+import { ProxyGroupView, ProxyLocateTarget, ProxyNodeRow } from './ProxyView';
+
+// 对齐 FlClash 的 Curves.easeOutCubic 控制点，避免在点击或滚动回调里重复创建曲线。
+const PROXY_LOCATE_CURVE = curves.cubicBezierCurve(0.215, 0.61, 0.355, 1);
 
 // 逐帧更新布局高度；普通 height 动画只插值绘制尺寸，不能驱动懒加载列表逐帧排版。
 @AnimatableExtend(ListItem)
@@ -24,21 +28,24 @@ interface ProxyBodyBinding {
 
 @ComponentV2
 export struct ProxyGroupList {
+  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require browser: ProxyBrowser;
   @Param @Require scroller: Scroller;
   @Param active: boolean = false;
   @Param pickerMode: boolean = false;
   @Param contentInset: number = 0;
   @Param motionEnabled: boolean = false;
-  @Event onLocate: (group: string) => void = () => {};
   @Event onListScroll: (offset: number, source: ScrollSource) => void = () => {};
   @Event onScrollerReady: () => void = () => {};
   @Event onScrollerRelease: () => void = () => {};
+  @Event onSaveToLibrary: (group: string, node: string) => void = () => {};
   @Local movingGroup: ProxyGroupView | undefined = undefined;
   @Local viewportHeight: number = 0;
   private textScale: number = 1;
   private listY: number = 0;
   private listBound: boolean = false;
+  private lastScrollOffset: number = 0;
+  private locateTargetOffset: number | undefined = undefined;
   private groupTops: Map<string, number> = new Map<string, number>();
 
   aboutToAppear(): void {
@@ -46,6 +53,7 @@ export struct ProxyGroupList {
   }
 
   aboutToDisappear(): void {
+    this.stopLocateScroll();
     this.listBound = false;
     this.finishReveal(false);
     this.groupTops.clear();
@@ -55,11 +63,13 @@ export struct ProxyGroupList {
   @Monitor('active', 'motionEnabled', 'browser.query', 'browser.appearance.style', 'contentInset')
   settleReveal(): void {
     // Monitor可能由外层applySync触发；这里只清视觉状态，交给外层提交。
+    this.stopLocateScroll();
     this.finishReveal(false);
   }
 
   @Monitor('browser.groups')
   retireGroups(): void {
+    this.stopLocateScroll();
     if (this.movingGroup !== undefined && !this.browser.groups.includes(this.movingGroup)) {
       this.finishReveal(false);
     }
@@ -119,6 +129,7 @@ export struct ProxyGroupList {
     if (!this.canUse(group)) {
       return;
     }
+    this.stopLocateScroll();
     if (this.movingGroup !== undefined && this.movingGroup !== group) {
       this.finishReveal(true);
     }
@@ -195,10 +206,60 @@ export struct ProxyGroupList {
     }
   }
 
+  private stopLocateScroll(): void {
+    const locating = this.locateTargetOffset !== undefined;
+    this.locateTargetOffset = undefined;
+    if (locating && this.listBound) {
+      this.scroller.scrollTo({
+        xOffset: 0,
+        yOffset: Math.max(0, this.lastScrollOffset),
+        animation: false,
+        canOverScroll: false
+      });
+    }
+  }
+
   private locate(group: ProxyGroupView): void {
-    if (this.canUse(group)) {
-      this.finishReveal(true);
-      this.onLocate(group.name);
+    if (!this.canUse(group)) {
+      return;
+    }
+    this.stopLocateScroll();
+    this.finishReveal(true);
+    const target = UIUtils.applySync<ProxyLocateTarget | undefined>(
+      (): ProxyLocateTarget | undefined => this.browser.locate(group.name));
+    if (target === undefined || !this.canUse(group) || this.browser.groups[target.groupIndex] !== group) {
+      return;
+    }
+    const currentOffset = this.scroller.currentOffset().yOffset;
+    let groupY: number | undefined = undefined;
+    try {
+      const rect = this.scroller.getItemRect(target.groupIndex);
+      if (rect.height > 0) {
+        groupY = rect.y;
+      }
+    } catch (_error) {}
+    if (groupY === undefined) {
+      const top = this.groupTops.get(group.key);
+      if (top !== undefined) {
+        groupY = top - this.listY;
+      }
+    }
+    if (groupY === undefined) {
+      return;
+    }
+    // groupY 和期望可见位置（吸顶标题下方）各含同一份 headerExtent()，计算时抵消。
+    const targetOffset = Math.max(0, currentOffset + groupY - this.contentInset +
+      target.rowIndex * this.rowExtent(group));
+    this.lastScrollOffset = currentOffset;
+    this.locateTargetOffset = this.motionEnabled ? targetOffset : undefined;
+    this.scroller.scrollTo({
+      xOffset: 0,
+      yOffset: targetOffset,
+      canOverScroll: false,
+      animation: this.motionEnabled ? { duration: 300, curve: PROXY_LOCATE_CURVE, canOverScroll: false } : false
+    });
+    if (!this.motionEnabled) {
+      this.lastScrollOffset = this.scroller.currentOffset().yOffset;
     }
   }
 
@@ -211,7 +272,7 @@ export struct ProxyGroupList {
           .width('100%')
           .height(this.viewportHeight + 24)
           .position({ x: 0, y: -this.viewportHeight })
-          .backgroundColor($r('app.color.page_background'))
+          .backgroundColor(this.appStyle.palette.pageBackground)
           .hitTestBehavior(HitTestMode.None)
       }
       ProxyGroupHeader({
@@ -236,7 +297,8 @@ export struct ProxyGroupList {
         row: $$.row, cardType: $$.group.cardType, active: this.active && $$.group.expanded,
         motionEnabled: this.motionEnabled, nestedSurface: true, groupType: $$.group.type,
         onChoose: (node: string) => this.browser.choose($$.group.name, node),
-        onTest: (node: string) => this.browser.test($$.group.name, node)
+        onTest: (node: string) => this.browser.test($$.group.name, node),
+        onSaveToLibrary: (node: string) => this.onSaveToLibrary($$.group.name, node)
       })
     }
     .width('100%')
@@ -267,7 +329,7 @@ export struct ProxyGroupList {
             .proxyPanelHeight(group.reveal.extent)
             .animation(this.foldAnimation(group))
             .align(Alignment.TopStart)
-            .backgroundColor($r('app.color.card_background'))
+            .backgroundColor(this.appStyle.palette.cardBackground)
             .borderRadius({ bottomLeft: 24, bottomRight: 24 })
             .clip(true)
             .transition(TransitionEffect.IDENTITY)
@@ -276,7 +338,7 @@ export struct ProxyGroupList {
               EmptyState({ title: $r('app.string.proxy_group_empty'),
                 hint: group.dynamic ? $r('app.string.proxy_dynamic_offline') : $r('app.string.proxy_group_empty_hint') })
             }
-            .backgroundColor($r('app.color.card_background'))
+            .backgroundColor(this.appStyle.palette.cardBackground)
             .borderRadius({ bottomLeft: 24, bottomRight: 24 })
             .transition(TransitionEffect.IDENTITY)
           } else {
@@ -285,13 +347,13 @@ export struct ProxyGroupList {
                 this.nodeLine({ group: group, row: row })
               }
               .padding({ bottom: row.last ? 2 : 0 })
-              .backgroundColor($r('app.color.card_background'))
+              .backgroundColor(this.appStyle.palette.cardBackground)
               .borderRadius({ bottomLeft: row.last ? 24 : 0, bottomRight: row.last ? 24 : 0 })
               .transition(TransitionEffect.IDENTITY)
             }, (row: ProxyNodeRow): string => row.key)
           }
         }
-        .backgroundColor($r('app.color.card_background'))
+        .backgroundColor(this.appStyle.palette.cardBackground)
         .borderRadius(24)
         .clip(true)
         .transition(TransitionEffect.IDENTITY)
@@ -304,13 +366,27 @@ export struct ProxyGroupList {
     .safeAreaPadding({ top: this.contentInset })
     .contentStartOffset(0)
     .clipContent(ContentClipMode.BOUNDARY)
-    .contentEndOffset(FLOATING_BAR_INSET)
+    .contentEndOffset((this.appStyle.floating ? FLOATING_BAR_INSET : 16))
     .cachedCount(2)
     .sticky(StickyStyle.Header)
     .scrollBar(BarState.Auto)
     .edgeEffect(EdgeEffect.Spring)
-    .onAppear((): void => { this.listBound = true; this.onScrollerReady(); })
-    .onDisAppear((): void => { this.listBound = false; this.onScrollerRelease(); })
+    .onAppear((): void => {
+      this.listBound = true;
+      this.onScrollerReady();
+      this.lastScrollOffset = this.scroller.currentOffset().yOffset;
+    })
+    .onDisAppear((): void => {
+      this.listBound = false;
+      this.locateTargetOffset = undefined;
+      this.onScrollerRelease();
+    })
+    .onTouch((event: TouchEvent): void => {
+      if (event.type === TouchType.Down) {
+        // 触摸按下时立即停掉定位滚动，避免高速滚动期间屏蔽子按钮点击或与拖动冲突。
+        this.stopLocateScroll();
+      }
+    })
     .onAreaChange((_before: Area, after: Area): void => { this.listY = Number(after.globalPosition.y); })
     .onSizeChange((_before: SizeOptions, after: SizeOptions): void => {
       this.viewportHeight = Number(after.height);
@@ -323,6 +399,19 @@ export struct ProxyGroupList {
           this.finishReveal(true);
         }
         this.onListScroll(offset, source);
+      }
+    })
+    .onDidScroll((_offset: number, _state: ScrollState): void => {
+      if (!this.listBound) {
+        return;
+      }
+      const offset = this.scroller.currentOffset().yOffset;
+      this.lastScrollOffset = offset;
+      // 小数 vp 舍入误差内视为到达目标；滚动到列表底部时由 isAtEnd 兜底结束定位状态。
+      if (this.locateTargetOffset !== undefined &&
+        (Math.abs(offset - this.locateTargetOffset) <= 0.5 ||
+          (this.scroller.isAtEnd() && this.locateTargetOffset >= offset))) {
+        this.locateTargetOffset = undefined;
       }
     })
   }

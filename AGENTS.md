@@ -18,6 +18,10 @@
 
 UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo controller 和 `filesDir` 文件通信。新增目录、跨进程改动、调整依赖方向前读 `docs/architecture.md`；做出新的架构取舍时在 `docs/adr/` 写一份决策记录。ArkClash 接管的配置项（TUN、controller、进程查找、DNS 开关、节点选择存储，以及用户在界面上选过的出站模式和局域网代理）统一在 `core/lib.go` 的 `applyOverrides` 里强制，订阅里写什么都会被覆盖，热切换后也保持。节点选择用 `profiles/<id>.selected.json`，关闭 mihomo 的全局 `profile.store-selected`，恢复每配置选择后才启用转发。
 
+## 提交
+
+每完成一个功能点，单独创建一次 Git 提交。
+
 ## 构建与真机验证
 
 所有构建、检查、装机都通过根目录的 `Makefile`，`make help` 列出全部目标，CI 也只调用这些目标。脚本在 `scripts/`，工具路径由 `scripts/env.sh` 统一定位（本地用 DevEco Studio，CI 用 Command Line Tools）。
@@ -45,10 +49,6 @@ UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo
 
 - 签名材料只留在本机。DevEco 自动签名会把证书路径和加密后的密码写进 `build-profile.json5` 的 `signingConfigs`，这部分改动一直不暂存；提交时按文件路径精确暂存。
 - 订阅链接、controller secret、节点信息只放在应用沙箱里，不进日志、提交、issue 或 PR。
-
-## 分支与提交
-
-开分支、提交、改历史、开 PR 或 issue 前读 `docs/agents/git.md`。要点：新任务从 `main` 拉分支；中文 Conventional Commits；一个 commit 一个逻辑变更；只在本地提交，等用户要求再推送。
 
 开发计划和进度记在 GitHub Issues。README 面向访客，只写功能、安装和使用，这几样变了才更新它。
 

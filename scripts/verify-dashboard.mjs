@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
@@ -24,6 +25,31 @@ const handles = new Map();
 let timerId = 0;
 let legacyPreferences = {};
 let failRename = false;
+let updatePreference = true;
+let updateDistribution = 'none';
+let galleryUpdates = 0;
+let saveTarget = '';
+const transfers = new Map();
+const packageBytes = Buffer.from('synthetic HAP');
+const appGallery = {
+  UpdateAvailableCode: { LATER_VERSION_EXIST: 1 }, ShowUpdateResultCode: { SHOW_DIALOG_SUCCESS: 0 },
+  checkAppUpdate: async () => ({ updateAvailable: 1 }),
+  showUpdateDialog: async () => { galleryUpdates++; return 0; }
+};
+const transfer = { agent: {
+  Action: { DOWNLOAD: 1 }, Mode: { FOREGROUND: 1 },
+  create: async (_context, options) => {
+    const events = new Map();
+    const task = { tid: String(transfers.size + 1), options,
+      on: (event, callback) => events.set(event, callback),
+      start: async () => {},
+      emit: (event, value) => events.get(event)?.(value)
+    };
+    transfers.set(task.tid, task);
+    return task;
+  },
+  remove: async (id) => { transfers.delete(id); }
+} };
 class FixtureDate extends Date { static now() { return clock.now; } }
 class FixtureSocket {
   constructor(route, receive) { this.route = route; this.receive = receive; this.active = false; sockets.push(this); }
@@ -32,12 +58,19 @@ class FixtureSocket {
   emit(payload) { this.receive(JSON.stringify(payload)); }
 }
 const io = {
-  OpenMode: { CREATE: 1, WRITE_ONLY: 2, TRUNC: 4 },
+  OpenMode: { CREATE: 1, WRITE_ONLY: 2, TRUNC: 4, READ_ONLY: 8, READ_WRITE: 16 },
   access: async (file) => { try { await fs.access(file); return true; } catch (error) {
     if (error.code === 'ENOENT') { return false; } throw error;
   } },
   readText: (file) => fs.readFile(file, 'utf8'),
-  open: async (file) => { const handle = await fs.open(file, 'w'); handles.set(handle.fd, handle); return handle; },
+  open: async (file, mode) => {
+    const handle = await fs.open(file, mode === io.OpenMode.READ_ONLY ? 'r' : 'w');
+    handles.set(handle.fd, handle);
+    handle.lock = async () => {};
+    return handle;
+  },
+  stat: (file) => fs.stat(file),
+  copyFile: async (source, target) => { await handles.get(target).writeFile(await handles.get(source).readFile()); },
   write: (fd, text) => handles.get(fd).write(text),
   close: async (handle) => { handles.delete(handle.fd); await handle.close(); },
   rename: async (from, to) => { if (failRename) { throw new Error('injected rename failure'); } await fs.rename(from, to); },
@@ -83,10 +116,22 @@ function load(file) {
     compilerOptions: { target: ts.ScriptTarget.ES2021, module: ts.ModuleKind.CommonJS }, fileName: absolute + '.ts'
   }).outputText;
   const scopedRequire = (name) => {
-    if (name === '@kit.AbilityKit' || name === '@kit.BasicServicesKit') { return {}; }
-    if (name === '@kit.CoreFileKit') { return { fileIo: io }; }
+    if (name === '@kit.AbilityKit') { return { bundleManager: {
+      BundleFlag: { GET_BUNDLE_INFO_WITH_APPLICATION: 1 },
+      getBundleInfoForSelf: async () => ({ versionName: '0.5.1', appInfo: { appDistributionType: updateDistribution } })
+    } }; }
+    if (name === '@kit.AppGalleryKit') { return { updateManager: appGallery }; }
+    if (name === '@kit.BasicServicesKit') { return { request: transfer }; }
+    if (name === '@kit.CoreFileKit') { return { fileIo: io,
+      hash: { hash: async (file) => createHash('sha256').update(await fs.readFile(file)).digest('hex') },
+      picker: { DocumentSaveOptions: class {}, DocumentViewPicker: class {
+        async save() { return saveTarget === '' ? [] : [saveTarget]; }
+      } }
+    }; }
     if (name === '@kit.ArkData') { return { preferences: {
-      getPreferences: async () => ({ getAll: async () => structuredClone(legacyPreferences) })
+      getPreferences: async (_context, options) => options.name === 'app-update' ? {
+        get: async () => updatePreference, put: async (_key, value) => { updatePreference = value; }, flush: async () => {}
+      } : { getAll: async () => structuredClone(legacyPreferences) }
     } }; }
     if (name === '@kit.NetworkKit') { return { http }; }
     if (name === '@kit.ArkTS') { return {
@@ -110,6 +155,14 @@ function load(file) {
 }
 const plain = (subject) => JSON.parse(JSON.stringify(subject));
 const flush = () => new Promise((resolve) => setImmediate(resolve));
+async function activeUpdateTransfer() {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const task = transfers.values().next().value;
+    if (task) { return task; }
+    await flush();
+  }
+  assert.fail('预期文件下载已开始');
+}
 function respond(request, payload, code = 200) {
   assert.ok(request && !request.settled, '预期存在一个待返回的请求');
   request.settled = true;
@@ -148,20 +201,90 @@ function assertCoreRequest(request, target, method, timeout = 5000) {
 async function makeContext(name) { const filesDir = path.join(sandbox, name); await fs.mkdir(filesDir); return { filesDir }; }
 
 try {
+  const { isNewerRelease, AppUpdateState } = load(path.join(ets, 'client/AppUpdate.ets'));
+  assert.equal(isNewerRelease('0.9.9', 'v0.10.0'), true);
+  assert.equal(isNewerRelease('0.10.0', 'v0.9.9'), false);
+  assert.equal(isNewerRelease('0.5.1', 'v0.5.1'), false);
+  assert.throws(() => isNewerRelease('0.5.1', 'latest'), /app_update_version/);
+  const updateContext = { cacheDir: sandbox };
+  const updates = new AppUpdateState();
+  await updates.setForeground(updateContext, true);
+  assert.equal(timers.size, 1);
+  await updates.setForeground(updateContext, false);
+  assert.equal(timers.size, 0);
+  await updates.setForeground(updateContext, true);
+  await updates.setAutomatic(updateContext, false);
+  assert.equal(timers.size, 0);
+  assert.equal(updatePreference, false);
+  await updates.setAutomatic(updateContext, true);
+  timers.values().next().value();
+  await flush();
+  const packageName = 'ArkClash-0.6.0-unsigned.hap';
+  const digest = createHash('sha256').update(packageBytes).digest('hex');
+  respond(requests.at(-1), { tag_name: 'v0.6.0', assets: [
+    { name: packageName, digest: `sha256:${digest}`, size: packageBytes.length },
+    { name: 'ArkClash-0.6.0-debug-signed.hap', digest: 'invalid', size: 1 },
+    { name: '../other.hap', digest: `sha256:${digest}`, size: 1 }
+  ] });
+  await flush();
+  assert.equal(updates.release.available, 'v0.6.0');
+  assert.equal(updates.release.assets.length, 1);
+  const asset = updates.release.assets[0];
+  assert.equal(asset.url, `https://github.com/VOD-Studio/ArkClash/releases/download/v0.6.0/${packageName}`);
+  let download = updates.download(updateContext, asset.name);
+  await activeUpdateTransfer();
+  await updates.cancel();
+  await download;
+  assert.equal(updates.phase, 'idle');
+  assert.equal(transfers.size, 0);
+  download = updates.download(updateContext, asset.name);
+  let updateTask = await activeUpdateTransfer();
+  await fs.writeFile(updateTask.options.saveas, Buffer.alloc(packageBytes.length));
+  updateTask.emit('completed');
+  await assert.rejects(download, /app_update_checksum/);
+  assert.equal(await io.access(updateTask.options.saveas), false);
+  download = updates.download(updateContext, asset.name);
+  updateTask = await activeUpdateTransfer();
+  await fs.writeFile(updateTask.options.saveas, packageBytes);
+  updateTask.emit('completed');
+  await download;
+  assert.equal(updates.phase, 'ready');
+  assert.equal(await updates.save(updateContext), false);
+  assert.equal(updates.phase, 'ready');
+  saveTarget = path.join(sandbox, packageName);
+  assert.equal(await updates.save(updateContext), true);
+  assert.deepEqual(await fs.readFile(saveTarget), packageBytes);
+  assert.equal(await io.access(updateTask.options.saveas), false);
+  updateDistribution = 'app_gallery';
+  await updates.check(updateContext);
+  assert.equal(updates.release.galleryUpdate, true);
+  await updates.install(updateContext);
+  assert.equal(galleryUpdates, 1);
+  updateDistribution = 'none';
+  requests.length = 0;
+  timers.clear();
   const runControls = load(path.join(homeSource, 'HomeRunControls.ets'));
-  assert.equal(runControls.homeShouldStopRuntime('started', 'preparing', false, false, 'running'), true);
-  assert.equal(runControls.homeShouldStopRuntime('stopped', 'failed', true, false, 'running'), true);
-  assert.equal(runControls.homeShouldStopRuntime('stopped', 'failed', false, true, 'running'), true);
-  assert.equal(runControls.homeShouldStopRuntime('stopped', 'failed', false, false, 'stopped'), false);
-  assert.equal(runControls.homeShouldStopRuntime('stopped', 'stopped', false, false, 'stopped'), false);
-  assert.equal(runControls.homeRunActionLabel('stopped', 'failed', false, true, 'running'), 'app.string.dash_stop_retry');
-  assert.equal(runControls.homeShouldStopRuntime('stopped', 'failed', false, false, 'unknown'), true);
-  assert.equal(runControls.homeShouldStopRuntime('stopped', 'stopped', false, false, 'unknown'), true);
-  assert.equal(runControls.homeRuntimeAppearsStarted('stopped', 'failed', false, false), false);
-  assert.equal(runControls.homeRuntimeAppearsStarted('stopped', 'stopped', false, false), false);
-  assert.equal(runControls.homeRuntimeAppearsStarted('started', 'preparing', false, false), true);
-  assert.equal(runControls.homeRuntimeAppearsStarted('stopped', 'failed', false, true), true);
-  assert.equal(runControls.homeRunActionLabel('stopped', 'failed', false, false, 'unknown'),
+  assert.equal(runControls.homeShouldStopRuntime('started', 'preparing', false, false, false, 'running'), true);
+  for (const resources of [[true, false, false], [false, true, false], [false, false, true]]) {
+    for (const forward of ['failed', 'stopped']) {
+      assert.equal(runControls.homeHasPendingCleanup(forward, ...resources), true);
+      assert.equal(runControls.homeShouldStopRuntime('stopped', forward, ...resources, 'running'), true);
+      assert.equal(runControls.homeRunActionLabel('stopped', forward, ...resources, 'running'),
+        'app.string.dash_stop_retry');
+    }
+  }
+  for (const host of ['running', 'stopped']) {
+    assert.equal(runControls.homeShouldStopRuntime('stopped', 'stopped', false, false, false, host), false);
+    assert.equal(runControls.homeRuntimeAppearsStarted('stopped', 'stopped', false, false, false), false);
+    assert.equal(runControls.homeRunActionLabel('stopped', 'stopped', false, false, false, host),
+      'app.string.action_connect');
+  }
+  assert.equal(runControls.homeRuntimeAppearsStarted('started', 'preparing', false, false, false), true);
+  assert.equal(runControls.homeHasPendingCleanup('running', true, true, true), false);
+  assert.equal(runControls.homeRunActionLabel('started', 'running', true, true, true, 'running'),
+    'app.string.action_disconnect');
+  assert.equal(runControls.homeShouldStopRuntime('stopped', 'failed', false, false, false, 'unknown'), true);
+  assert.equal(runControls.homeRunActionLabel('stopped', 'stopped', false, false, false, 'unknown'),
     'app.string.dash_runtime_stop_confirm');
   const layout = load(path.join(homeSource, 'DashboardLayout.ets'));
   const services = load(path.join(homeSource, 'Services.ets'));

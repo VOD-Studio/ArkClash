@@ -1,6 +1,178 @@
 {
   "string": [
     {
+      "name": "tools_resources",
+      "value": "资源"
+    },
+    {
+      "name": "geo_not_downloaded",
+      "value": "未下载"
+    },
+    {
+      "name": "geo_loading",
+      "value": "正在读取资源"
+    },
+    {
+      "name": "geo_queued",
+      "value": "排队中"
+    },
+    {
+      "name": "geo_updating",
+      "value": "更新中"
+    },
+    {
+      "name": "geo_row_actions",
+      "value": "点按编辑链接，长按打开资源操作。"
+    },
+    {
+      "name": "geo_connect_to_update",
+      "value": "连接后可更新"
+    },
+    {
+      "name": "geo_edit_url",
+      "value": "%s 链接"
+    },
+    {
+      "name": "geo_url",
+      "value": "下载链接"
+    },
+    {
+      "name": "geo_url_hint",
+      "value": "仅支持 HTTP 或 HTTPS 链接，不含用户名和密码，最长 2048 字符。保存不会下载资源。"
+    },
+    {
+      "name": "geo_interval",
+      "value": "更新间隔"
+    },
+    {
+      "name": "geo_interval_hours",
+      "value": "间隔（小时）"
+    },
+    {
+      "name": "geo_interval_hint",
+      "value": "请输入 1–8760 的整数小时。自动更新仅在已连接时运行。"
+    },
+    {
+      "name": "geo_restore_default",
+      "value": "恢复默认链接"
+    },
+    {
+      "name": "geo_unsaved_title",
+      "value": "尚未保存修改"
+    },
+    {
+      "name": "geo_unsaved_message",
+      "value": "继续编辑，还是放弃本次修改？"
+    },
+    {
+      "name": "geo_discard",
+      "value": "放弃修改"
+    },
+    {
+      "name": "geo_keep_editing",
+      "value": "继续编辑"
+    },
+    {
+      "name": "geo_saved",
+      "value": "设置已保存"
+    },
+    {
+      "name": "geo_saved_pending",
+      "value": "已保存，待应用到内核"
+    },
+    {
+      "name": "geo_updated",
+      "value": "%s 已更新"
+    },
+    {
+      "name": "geo_unchanged",
+      "value": "%s 已是最新"
+    },
+    {
+      "name": "geo_batch_result",
+      "value": "资源更新：%1$d 项完成，%2$d 项未成功"
+    },
+    {
+      "name": "geo_failures",
+      "value": "未成功的更新"
+    },
+    {
+      "name": "geo_link_copied",
+      "value": "链接已复制"
+    },
+    {
+      "name": "geo_copy_failed",
+      "value": "复制链接失败"
+    },
+    {
+      "name": "geo_section_title",
+      "value": "Geo 资源"
+    },
+    {
+      "name": "geo_auto_update",
+      "value": "自动更新"
+    },
+    {
+      "name": "geo_interval_value",
+      "value": "%d 小时"
+    },
+    {
+      "name": "geo_reset_settings",
+      "value": "恢复默认设置"
+    },
+    {
+      "name": "geo_reset_message",
+      "value": "恢复四项默认链接并开启自动更新，间隔设为 24 小时？已下载的数据库将保留。"
+    },
+    {
+      "name": "geo_invalid_settings",
+      "value": "资源设置无效，请主动恢复默认设置以修复。"
+    },
+    {
+      "name": "geo_invalid_url",
+      "value": "请输入有效的 HTTP 或 HTTPS 链接，须有主机名、不含用户名密码且不超过 2048 字符。"
+    },
+    {
+      "name": "geo_invalid_interval",
+      "value": "请输入 1–8760 的整数小时。"
+    },
+    {
+      "name": "geo_settings_conflict",
+      "value": "设置已变化，请重新确认"
+    },
+    {
+      "name": "geo_invalid_data",
+      "value": "资源数据无效"
+    },
+    {
+      "name": "geo_metadata_invalid",
+      "value": "资源元数据损坏，请手动更新此项以修复。"
+    },
+    {
+      "name": "geo_timeout",
+      "value": "资源下载超时"
+    },
+    {
+      "name": "geo_download_failed",
+      "value": "资源下载失败"
+    },
+    {
+      "name": "geo_canceled",
+      "value": "资源更新已取消"
+    },
+    {
+      "name": "geo_stale_boot",
+      "value": "内核连接已变化，请重新连接后重试。"
+    },
+    {
+      "name": "geo_http_error",
+      "value": "下载服务器返回 HTTP %s"
+    },
+    {
+      "name": "geo_io",
+      "value": "资源文件读取或保存失败"
+    },
+    {
       "name": "tab_home",
       "value": "仪表盘"
     },
@@ -117,24 +289,184 @@
       "value": "连接"
     },
     {
-      "name": "tools_logs",
-      "value": "日志"
-    },
-    {
-      "name": "tools_settings",
-      "value": "设置"
-    },
-    {
       "name": "tools_about",
       "value": "关于"
     },
     {
-      "name": "coming_soon",
-      "value": "开发中"
+      "name": "tools_theme",
+      "value": "主题"
     },
     {
-      "name": "coming_soon_hint",
-      "value": "这个页面会在之后的版本里提供。"
+      "name": "theme_mode",
+      "value": "显示模式"
+    },
+    {
+      "name": "theme_system",
+      "value": "跟随系统"
+    },
+    {
+      "name": "theme_light",
+      "value": "浅色"
+    },
+    {
+      "name": "theme_dark",
+      "value": "深色"
+    },
+    {
+      "name": "theme_pure_black_mode",
+      "value": "深色背景"
+    },
+    {
+      "name": "theme_standard",
+      "value": "标准"
+    },
+    {
+      "name": "theme_pure_black",
+      "value": "纯黑"
+    },
+    {
+      "name": "theme_color",
+      "value": "主题色"
+    },
+    {
+      "name": "theme_color_style",
+      "value": "配色风格"
+    },
+    {
+      "name": "theme_vivid",
+      "value": "鲜艳"
+    },
+    {
+      "name": "theme_tinted",
+      "value": "染色"
+    },
+    {
+      "name": "theme_soft",
+      "value": "柔和"
+    },
+    {
+      "name": "theme_monochrome",
+      "value": "单色"
+    },
+    {
+      "name": "theme_add_color",
+      "value": "添加颜色"
+    },
+    {
+      "name": "theme_custom_color",
+      "value": "自定义颜色"
+    },
+    {
+      "name": "theme_hex",
+      "value": "十六进制颜色"
+    },
+    {
+      "name": "theme_hue",
+      "value": "色相"
+    },
+    {
+      "name": "theme_saturation",
+      "value": "饱和度"
+    },
+    {
+      "name": "theme_value",
+      "value": "明度"
+    },
+    {
+      "name": "theme_edit",
+      "value": "编辑"
+    },
+    {
+      "name": "theme_delete",
+      "value": "删除"
+    },
+    {
+      "name": "theme_delete_color",
+      "value": "删除此颜色？"
+    },
+    {
+      "name": "theme_reset",
+      "value": "重置"
+    },
+    {
+      "name": "theme_reset_colors",
+      "value": "恢复默认主题色？"
+    },
+    {
+      "name": "theme_confirm",
+      "value": "保存"
+    },
+    {
+      "name": "theme_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "theme_navigation",
+      "value": "导航栏"
+    },
+    {
+      "name": "theme_floating",
+      "value": "悬浮"
+    },
+    {
+      "name": "theme_docked",
+      "value": "固定"
+    },
+    {
+      "name": "theme_tab_motion",
+      "value": "页签动效"
+    },
+    {
+      "name": "theme_slide",
+      "value": "滑动"
+    },
+    {
+      "name": "theme_fade",
+      "value": "淡入"
+    },
+    {
+      "name": "theme_glass",
+      "value": "沉浸光感"
+    },
+    {
+      "name": "theme_none",
+      "value": "关闭"
+    },
+    {
+      "name": "theme_ultra",
+      "value": "通透"
+    },
+    {
+      "name": "theme_font",
+      "value": "字体"
+    },
+    {
+      "name": "theme_font_retry",
+      "value": "字体加载失败，重试"
+    },
+    {
+      "name": "theme_default",
+      "value": "默认"
+    },
+    {
+      "name": "theme_text_scale",
+      "value": "文字大小"
+    },
+    {
+      "name": "theme_custom",
+      "value": "自定义"
+    },
+    {
+      "name": "theme_text_sample",
+      "value": "这是一段字体与字号预览。"
+    },
+    {
+      "name": "theme_save_failed",
+      "value": "无法保存主题设置"
+    },
+    {
+      "name": "coming_soon",
+      "value": "开发中"
     },
     {
       "name": "about_version",
@@ -914,7 +1246,7 @@
     },
     {
       "name": "profile_batch_hint",
-      "value": "每行一个订阅链接，可批量导入"
+      "value": "每行一个链接，多条节点链接合成一份配置"
     },
     {
       "name": "profile_batch_result",
@@ -1266,7 +1598,11 @@
     },
     {
       "name": "proxy_test_offline",
-      "value": "连接后可测试节点延迟。"
+      "value": "内核尚未就绪，启动后可测试节点延迟。"
+    },
+    {
+      "name": "proxy_start_core",
+      "value": "启动内核"
     },
     {
       "name": "proxy_test_queued",
@@ -1331,6 +1667,54 @@
     {
       "name": "profile_import_link",
       "value": "从链接导入"
+    },
+    {
+      "name": "profile_link_field",
+      "value": "链接"
+    },
+    {
+      "name": "profile_err_import_link",
+      "value": "请输入有效的订阅地址或节点分享链接。"
+    },
+    {
+      "name": "profile_qr_scan",
+      "value": "扫码导入"
+    },
+    {
+      "name": "profile_qr_photo",
+      "value": "从相册识码"
+    },
+    {
+      "name": "profile_qr_camera_error",
+      "value": "无法使用相机扫码，可以从相册选择二维码图片。"
+    },
+    {
+      "name": "profile_qr_photo_error",
+      "value": "无法从选中的图片读取二维码。"
+    },
+    {
+      "name": "profile_qr_share",
+      "value": "订阅二维码"
+    },
+    {
+      "name": "profile_qr_share_error",
+      "value": "无法生成二维码，可以直接复制链接。"
+    },
+    {
+      "name": "profile_age_key",
+      "value": "age 私钥"
+    },
+    {
+      "name": "profile_age_required",
+      "value": "此订阅已加密，请填写 age 私钥后重试。"
+    },
+    {
+      "name": "profile_age_decrypt",
+      "value": "无法解密订阅，请检查 age 私钥和订阅来源。"
+    },
+    {
+      "name": "profile_age_core_unavailable",
+      "value": "需要启动内核才能解密此订阅。"
     },
     {
       "name": "profile_import_file",
@@ -1591,6 +1975,2778 @@
     {
       "name": "dash_probe_checked_at_failed",
       "value": "失败 · 上次成功"
+    },
+    {
+      "name": "tools_dns",
+      "value": "DNS 查询"
+    },
+    {
+      "name": "diagnostics_live",
+      "value": "运行中"
+    },
+    {
+      "name": "diagnostics_recent",
+      "value": "最近请求"
+    },
+    {
+      "name": "diagnostics_search",
+      "value": "搜索记录"
+    },
+    {
+      "name": "diagnostics_search_hint",
+      "value": "搜索"
+    },
+    {
+      "name": "diagnostics_filters",
+      "value": "筛选"
+    },
+    {
+      "name": "diagnostics_grouping",
+      "value": "分组"
+    },
+    {
+      "name": "diagnostics_group_none",
+      "value": "不分组"
+    },
+    {
+      "name": "diagnostics_group_host",
+      "value": "主机"
+    },
+    {
+      "name": "diagnostics_group_rule",
+      "value": "规则"
+    },
+    {
+      "name": "diagnostics_group_exit",
+      "value": "出口"
+    },
+    {
+      "name": "diagnostics_unknown",
+      "value": "未知"
+    },
+    {
+      "name": "diagnostics_disconnected",
+      "value": "诊断不可用"
+    },
+    {
+      "name": "diagnostics_connect_hint",
+      "value": "内核就绪后即可查看记录。"
+    },
+    {
+      "name": "diagnostics_connecting",
+      "value": "正在连接诊断流"
+    },
+    {
+      "name": "diagnostics_no_records",
+      "value": "尚无记录"
+    },
+    {
+      "name": "diagnostics_collect_hint",
+      "value": "应用在后台运行时也会记录活动。"
+    },
+    {
+      "name": "diagnostics_no_matches",
+      "value": "没有匹配记录"
+    },
+    {
+      "name": "diagnostics_adjust_filters",
+      "value": "请调整搜索或筛选条件。"
+    },
+    {
+      "name": "diagnostics_invalid_request",
+      "value": "诊断请求无效"
+    },
+    {
+      "name": "diagnostics_stale_runtime",
+      "value": "运行配置已变化"
+    },
+    {
+      "name": "diagnostics_not_ready",
+      "value": "诊断尚未就绪"
+    },
+    {
+      "name": "diagnostics_operation_failed",
+      "value": "诊断操作失败"
+    },
+    {
+      "name": "diagnostics_invalid_data",
+      "value": "诊断数据无效"
+    },
+    {
+      "name": "diagnostics_stream_failed",
+      "value": "诊断流连接失败"
+    },
+    {
+      "name": "diagnostics_preferences_failed",
+      "value": "显示偏好读取或保存失败"
+    },
+    {
+      "name": "diagnostics_retry",
+      "value": "重试"
+    },
+    {
+      "name": "diagnostics_retry_preferences",
+      "value": "重试偏好操作"
+    },
+    {
+      "name": "diagnostics_close_one",
+      "value": "关闭连接"
+    },
+    {
+      "name": "diagnostics_close_all",
+      "value": "关闭全部"
+    },
+    {
+      "name": "diagnostics_close_all_hint",
+      "value": "关闭所有运行中的连接，包括被筛选隐藏的连接？"
+    },
+    {
+      "name": "diagnostics_clear_cache",
+      "value": "清 DNS 缓存"
+    },
+    {
+      "name": "diagnostics_copy_host",
+      "value": "复制主机"
+    },
+    {
+      "name": "diagnostics_copy_endpoint",
+      "value": "复制目标端点"
+    },
+    {
+      "name": "diagnostics_copy_value",
+      "value": "复制内容"
+    },
+    {
+      "name": "diagnostics_copied",
+      "value": "已复制"
+    },
+    {
+      "name": "diagnostics_copy_failed",
+      "value": "复制失败"
+    },
+    {
+      "name": "diagnostics_closed",
+      "value": "关闭请求已完成"
+    },
+    {
+      "name": "diagnostics_cache_cleared",
+      "value": "DNS 缓存已清理"
+    },
+    {
+      "name": "diagnostics_latest",
+      "value": "回到最新"
+    },
+    {
+      "name": "diagnostics_paused",
+      "value": "已暂停跟随"
+    },
+    {
+      "name": "diagnostics_gap",
+      "value": "采集间断 %d 次 · 合并 %d · 淘汰 %d"
+    },
+    {
+      "name": "diagnostics_details",
+      "value": "详情"
+    },
+    {
+      "name": "diagnostics_connection_details",
+      "value": "连接详情"
+    },
+    {
+      "name": "diagnostics_request_details",
+      "value": "请求详情"
+    },
+    {
+      "name": "diagnostics_basic_info",
+      "value": "基础信息"
+    },
+    {
+      "name": "diagnostics_address",
+      "value": "地址"
+    },
+    {
+      "name": "diagnostics_creation_time",
+      "value": "创建时间"
+    },
+    {
+      "name": "diagnostics_network_type",
+      "value": "网络类型"
+    },
+    {
+      "name": "diagnostics_time",
+      "value": "时间"
+    },
+    {
+      "name": "diagnostics_target",
+      "value": "目标"
+    },
+    {
+      "name": "diagnostics_protocol",
+      "value": "协议"
+    },
+    {
+      "name": "diagnostics_network",
+      "value": "网络"
+    },
+    {
+      "name": "diagnostics_rule",
+      "value": "规则"
+    },
+    {
+      "name": "diagnostics_rule_payload",
+      "value": "规则内容"
+    },
+    {
+      "name": "diagnostics_exit",
+      "value": "出口"
+    },
+    {
+      "name": "diagnostics_traffic",
+      "value": "累计流量"
+    },
+    {
+      "name": "diagnostics_download",
+      "value": "下载"
+    },
+    {
+      "name": "diagnostics_upload",
+      "value": "上传"
+    },
+    {
+      "name": "diagnostics_download_speed",
+      "value": "下载速率"
+    },
+    {
+      "name": "diagnostics_upload_speed",
+      "value": "上传速率"
+    },
+    {
+      "name": "diagnostics_duration",
+      "value": "持续时间"
+    },
+    {
+      "name": "diagnostics_domain",
+      "value": "域名"
+    },
+    {
+      "name": "diagnostics_type",
+      "value": "类型"
+    },
+    {
+      "name": "diagnostics_initiator",
+      "value": "发起类别"
+    },
+    {
+      "name": "diagnostics_result",
+      "value": "结果"
+    },
+    {
+      "name": "diagnostics_elapsed",
+      "value": "耗时"
+    },
+    {
+      "name": "diagnostics_upstream",
+      "value": "上游"
+    },
+    {
+      "name": "diagnostics_host",
+      "value": "主机"
+    },
+    {
+      "name": "diagnostics_source",
+      "value": "来源"
+    },
+    {
+      "name": "diagnostics_destination",
+      "value": "目的地址"
+    },
+    {
+      "name": "diagnostics_source_geo",
+      "value": "来源地区"
+    },
+    {
+      "name": "diagnostics_destination_geo",
+      "value": "目标地区"
+    },
+    {
+      "name": "diagnostics_source_asn",
+      "value": "来源 ASN"
+    },
+    {
+      "name": "diagnostics_destination_asn",
+      "value": "目标 ASN"
+    },
+    {
+      "name": "diagnostics_dns_mode",
+      "value": "DNS 模式"
+    },
+    {
+      "name": "diagnostics_remote_destination",
+      "value": "远端目标"
+    },
+    {
+      "name": "diagnostics_special_proxy",
+      "value": "特殊代理"
+    },
+    {
+      "name": "diagnostics_special_rules",
+      "value": "特殊规则"
+    },
+    {
+      "name": "diagnostics_sniff_host",
+      "value": "嗅探主机"
+    },
+    {
+      "name": "diagnostics_chains",
+      "value": "代理链"
+    },
+    {
+      "name": "diagnostics_provider_chains",
+      "value": "提供者链"
+    },
+    {
+      "name": "diagnostics_answers",
+      "value": "答案"
+    },
+    {
+      "name": "diagnostics_error",
+      "value": "错误"
+    },
+    {
+      "name": "diagnostics_rcode",
+      "value": "响应码"
+    },
+    {
+      "name": "diagnostics_cache",
+      "value": "缓存"
+    },
+    {
+      "name": "diagnostics_cached",
+      "value": "缓存命中"
+    },
+    {
+      "name": "diagnostics_network_query",
+      "value": "网络查询"
+    },
+    {
+      "name": "diagnostics_initiator_app",
+      "value": "应用查询"
+    },
+    {
+      "name": "diagnostics_initiator_rule",
+      "value": "规则解析"
+    },
+    {
+      "name": "diagnostics_initiator_direct",
+      "value": "DIRECT 解析"
+    },
+    {
+      "name": "diagnostics_initiator_proxy",
+      "value": "代理服务器解析"
+    },
+    {
+      "name": "diagnostics_initiator_other",
+      "value": "其他"
+    },
+    {
+      "name": "diagnostics_resize_column",
+      "value": "调整列宽"
+    },
+    {
+      "name": "diagnostics_reset_columns",
+      "value": "恢复默认列宽"
+    },
+    {
+      "name": "diagnostics_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "diagnostics_close",
+      "value": "关闭"
+    },
+    {
+      "name": "diagnostics_more",
+      "value": "更多操作"
+    },
+    {
+      "name": "tools_settings",
+      "value": "设置"
+    },
+    {
+      "name": "tools_other",
+      "value": "其他"
+    },
+    {
+      "name": "tools_advanced_config",
+      "value": "进阶配置"
+    },
+    {
+      "name": "network_title",
+      "value": "网络"
+    },
+    {
+      "name": "network_vpn",
+      "value": "VPN"
+    },
+    {
+      "name": "network_ipv6",
+      "value": "IPv6"
+    },
+    {
+      "name": "network_options",
+      "value": "选项"
+    },
+    {
+      "name": "network_system_proxy",
+      "value": "系统代理"
+    },
+    {
+      "name": "network_bypass_domains",
+      "value": "系统代理排除域名"
+    },
+    {
+      "name": "network_dns_hijacking",
+      "value": "DNS 劫持"
+    },
+    {
+      "name": "network_stack",
+      "value": "栈模式"
+    },
+    {
+      "name": "network_congestion",
+      "value": "TCP 拥塞控制"
+    },
+    {
+      "name": "network_bypass_private",
+      "value": "绕过私有路由地址"
+    },
+    {
+      "name": "network_routes",
+      "value": "路由地址"
+    },
+    {
+      "name": "network_exclusions",
+      "value": "排除路由地址"
+    },
+    {
+      "name": "network_platform_limit",
+      "value": "HarmonyOS 的 VPN 接口不提供系统代理、排除域名和应用自行绕过功能。"
+    },
+    {
+      "name": "network_applies_on_connect",
+      "value": "设置将在下次连接时生效。"
+    },
+    {
+      "name": "network_saved",
+      "value": "已保存网络设置"
+    },
+    {
+      "name": "network_reconnect",
+      "value": "已保存网络设置，重新连接后生效。"
+    },
+    {
+      "name": "network_load_retry",
+      "value": "重试读取网络设置"
+    },
+    {
+      "name": "network_save_failed",
+      "value": "无法保存网络设置"
+    },
+    {
+      "name": "network_mtu_range",
+      "value": "MTU 应在 %d 至 %d 之间"
+    },
+    {
+      "name": "network_route_hint",
+      "value": "每行输入一个 CIDR 网段。"
+    },
+    {
+      "name": "network_invalid_cidr",
+      "value": "请输入有效的 IPv4 或 IPv6 CIDR 网段。"
+    },
+    {
+      "name": "network_route_limit",
+      "value": "最多输入 %d 个 CIDR 网段。"
+    },
+    {
+      "name": "network_route_expansion",
+      "value": "排除后生成的路由过多，请合并网段。"
+    },
+    {
+      "name": "dns_override_listen",
+      "value": "监听"
+    },
+    {
+      "name": "dns_override_mode",
+      "value": "DNS 模式"
+    },
+    {
+      "name": "dns_override_fake_ip_filter",
+      "value": "Fake-IP 过滤"
+    },
+    {
+      "name": "dns_override_fake_ip_mode",
+      "value": "Fake-IP 过滤模式"
+    },
+    {
+      "name": "dns_override_empty",
+      "value": "暂无覆写项"
+    },
+    {
+      "name": "dns_override_description",
+      "value": "添加的项会覆写所有订阅和本地配置的 DNS，未添加的项沿用配置自身的设置。"
+    },
+    {
+      "name": "dns_override_add",
+      "value": "添加覆写项"
+    },
+    {
+      "name": "dns_override_remove",
+      "value": "移除覆写项"
+    },
+    {
+      "name": "dns_override_count",
+      "value": "%d 项"
+    },
+    {
+      "name": "dns_override_empty_value",
+      "value": "空"
+    },
+    {
+      "name": "dns_override_list_hint",
+      "value": "每行输入一项。"
+    },
+    {
+      "name": "dns_override_saved",
+      "value": "已保存 DNS 覆写"
+    },
+    {
+      "name": "dns_override_invalid",
+      "value": "请检查填写格式以及与当前配置的兼容性。"
+    },
+    {
+      "name": "dns_override_conflict",
+      "value": "DNS 设置已变更，请确认后重试。"
+    },
+    {
+      "name": "dns_override_listen_failed",
+      "value": "DNS 监听地址不可用或端口已被占用。"
+    },
+    {
+      "name": "dns_override_unavailable",
+      "value": "内核状态正在变化，请稍后重试。"
+    },
+    {
+      "name": "dns_override_save_failed",
+      "value": "保存 DNS 覆写失败。"
+    },
+    {
+      "name": "dns_override_load_failed",
+      "value": "无法读取 DNS 覆写。"
+    },
+    {
+      "name": "dns_override_retry",
+      "value": "重试"
+    },
+    {
+      "name": "added_rules_title",
+      "value": "附加规则"
+    },
+    {
+      "name": "added_rules_basic",
+      "value": "基本信息"
+    },
+    {
+      "name": "added_rules_params",
+      "value": "附加参数"
+    },
+    {
+      "name": "added_rules_type",
+      "value": "规则类型"
+    },
+    {
+      "name": "added_rules_content",
+      "value": "内容"
+    },
+    {
+      "name": "added_rules_content_hint",
+      "value": "输入规则内容"
+    },
+    {
+      "name": "added_rules_target",
+      "value": "分流策略"
+    },
+    {
+      "name": "added_rules_no_resolve",
+      "value": "不解析域名"
+    },
+    {
+      "name": "added_rules_source_ip",
+      "value": "匹配源 IP"
+    },
+    {
+      "name": "added_rules_add",
+      "value": "添加规则"
+    },
+    {
+      "name": "added_rules_edit",
+      "value": "编辑规则"
+    },
+    {
+      "name": "added_rules_presets",
+      "value": "快捷操作"
+    },
+    {
+      "name": "added_rules_confirm",
+      "value": "确认"
+    },
+    {
+      "name": "added_rules_quic",
+      "value": "屏蔽 QUIC"
+    },
+    {
+      "name": "added_rules_stun",
+      "value": "屏蔽 STUN"
+    },
+    {
+      "name": "added_rules_dot",
+      "value": "屏蔽 DNS over TLS"
+    },
+    {
+      "name": "added_rules_loopback",
+      "value": "防止代理回环"
+    },
+    {
+      "name": "added_rules_lan",
+      "value": "局域网直连"
+    },
+    {
+      "name": "added_rules_system",
+      "value": "Apple 与 Microsoft 直连"
+    },
+    {
+      "name": "added_rules_tracker",
+      "value": "BT Tracker 直连"
+    },
+    {
+      "name": "added_rules_select",
+      "value": "选择规则"
+    },
+    {
+      "name": "added_rules_select_all",
+      "value": "全选可见规则"
+    },
+    {
+      "name": "added_rules_delete_count",
+      "value": "删除选中的 %d 条规则？"
+    },
+    {
+      "name": "added_rules_search_hint",
+      "value": "搜索类型、内容或策略"
+    },
+    {
+      "name": "added_rules_empty",
+      "value": "暂无规则"
+    },
+    {
+      "name": "added_rules_load_failed",
+      "value": "无法读取附加规则。"
+    },
+    {
+      "name": "added_rules_invalid",
+      "value": "请检查规则内容，以及它与当前配置的兼容性。"
+    },
+    {
+      "name": "added_rules_conflict",
+      "value": "规则列表已变更，请确认后重试。"
+    },
+    {
+      "name": "added_rules_unavailable",
+      "value": "内核状态正在变化，请稍后重试。"
+    },
+    {
+      "name": "added_rules_save_failed",
+      "value": "保存附加规则失败。"
+    },
+    {
+      "name": "added_rules_saved",
+      "value": "已保存附加规则"
+    },
+    {
+      "name": "added_rules_unsaved",
+      "value": "有未保存的修改。"
+    },
+    {
+      "name": "added_rules_resume",
+      "value": "继续编辑"
+    },
+    {
+      "name": "added_rules_discard",
+      "value": "放弃修改"
+    },
+    {
+      "name": "dns_override_use_hosts",
+      "value": "使用 Hosts"
+    },
+    {
+      "name": "dns_override_system_hosts",
+      "value": "使用系统 Hosts"
+    },
+    {
+      "name": "dns_override_ipv6_timeout",
+      "value": "IPv6 超时（毫秒）"
+    },
+    {
+      "name": "dns_override_respect_rules",
+      "value": "遵循分流规则"
+    },
+    {
+      "name": "dns_override_cache_algorithm",
+      "value": "缓存算法"
+    },
+    {
+      "name": "dns_override_cache_size",
+      "value": "缓存条目上限"
+    },
+    {
+      "name": "dns_override_fake_range",
+      "value": "Fake-IP IPv4 地址池"
+    },
+    {
+      "name": "dns_override_fake_range6",
+      "value": "Fake-IP IPv6 地址池"
+    },
+    {
+      "name": "dns_override_fallback_lazy",
+      "value": "按需查询 Fallback"
+    },
+    {
+      "name": "dns_override_direct_policy",
+      "value": "直连 DNS 遵循上游策略"
+    },
+    {
+      "name": "dns_override_fallback_filter",
+      "value": "Fallback 筛选"
+    },
+    {
+      "name": "dns_override_domain",
+      "value": "域名"
+    },
+    {
+      "name": "dns_override_policy_hint",
+      "value": "每行填写「域名匹配项 = 上游服务器」。同一匹配项可以填写多行。"
+    },
+    {
+      "name": "dns_override_proxy_servers_required",
+      "value": "请先配置 Proxy Server Nameserver，再启用此覆写。"
+    },
+    {
+      "name": "network_excluded_apps",
+      "value": "绕过 VPN 的应用"
+    },
+    {
+      "name": "network_platform_unsupported",
+      "value": "平台不支持"
+    },
+    {
+      "name": "network_invalid_bundle",
+      "value": "请输入有效的鸿蒙应用包名。"
+    },
+    {
+      "name": "network_app_limit",
+      "value": "最多可填写 %d 个应用。"
+    },
+    {
+      "name": "network_excluded_apps_hint",
+      "value": "每行填写一个应用包名，重新连接 VPN 后生效。"
+    },
+    {
+      "name": "action_retry",
+      "value": "重试"
+    },
+    {
+      "name": "profile_extension",
+      "value": "覆写"
+    },
+    {
+      "name": "script_title",
+      "value": "脚本"
+    },
+    {
+      "name": "script_new",
+      "value": "从零开始"
+    },
+    {
+      "name": "script_import_url",
+      "value": "从 URL 导入"
+    },
+    {
+      "name": "script_url",
+      "value": "链接"
+    },
+    {
+      "name": "script_sync",
+      "value": "同步"
+    },
+    {
+      "name": "script_synced",
+      "value": "脚本已同步"
+    },
+    {
+      "name": "script_local",
+      "value": "本地"
+    },
+    {
+      "name": "script_remote",
+      "value": "远程"
+    },
+    {
+      "name": "script_no_items",
+      "value": "暂无脚本"
+    },
+    {
+      "name": "script_unnamed",
+      "value": "未命名"
+    },
+    {
+      "name": "script_name_hint",
+      "value": "请输入脚本名称"
+    },
+    {
+      "name": "script_delete_title",
+      "value": "删除脚本？"
+    },
+    {
+      "name": "script_delete_bound",
+      "value": "以下配置引用此脚本：%s。删除后请在覆写中重新选择脚本或解除绑定。"
+    },
+    {
+      "name": "script_deleted",
+      "value": "脚本已删除"
+    },
+    {
+      "name": "script_saved",
+      "value": "脚本已保存"
+    },
+    {
+      "name": "script_applied",
+      "value": "已应用"
+    },
+    {
+      "name": "script_saved_apply_error",
+      "value": "已保存，应用失败：%s"
+    },
+    {
+      "name": "script_pending_core",
+      "value": "已保存，将在加载配置时应用"
+    },
+    {
+      "name": "script_remote_edit_hint",
+      "value": "同步时，远程内容会覆盖本地编辑。"
+    },
+    {
+      "name": "standard_rules_title",
+      "value": "配置附加规则"
+    },
+    {
+      "name": "standard_match_target",
+      "value": "MATCH 目标"
+    },
+    {
+      "name": "standard_follow_profile",
+      "value": "跟随配置"
+    },
+    {
+      "name": "standard_global_rules",
+      "value": "此配置使用的全局规则"
+    },
+    {
+      "name": "standard_target_load_failed",
+      "value": "读取配置目标失败，点击重试"
+    },
+    {
+      "name": "standard_basic_target",
+      "value": "基础策略"
+    },
+    {
+      "name": "standard_group_target",
+      "value": "代理组 · %s"
+    },
+    {
+      "name": "standard_node_target",
+      "value": "节点 · %s"
+    },
+    {
+      "name": "standard_match_target_missing",
+      "value": "请选择 MATCH 目标。当前配置缺少可用的 MATCH 规则，或所选策略已不可用。"
+    },
+    {
+      "name": "script_extend_script",
+      "value": "扩展脚本"
+    },
+    {
+      "name": "script_go_to_manage",
+      "value": "前往配置脚本"
+    },
+    {
+      "name": "script_go_to_rules",
+      "value": "前往配置附加规则"
+    },
+    {
+      "name": "script_apply_now",
+      "value": "立即应用"
+    },
+    {
+      "name": "script_clear_missing",
+      "value": "点击解除绑定"
+    },
+    {
+      "name": "script_undo",
+      "value": "撤销"
+    },
+    {
+      "name": "script_redo",
+      "value": "重做"
+    },
+    {
+      "name": "script_complete",
+      "value": "显示补全"
+    },
+    {
+      "name": "script_copy_selection",
+      "value": "复制选中内容"
+    },
+    {
+      "name": "script_editor_wrap",
+      "value": "自动换行"
+    },
+    {
+      "name": "script_editor_font",
+      "value": "编辑器字号"
+    },
+    {
+      "name": "script_font_standard",
+      "value": "标准字号"
+    },
+    {
+      "name": "script_font_large",
+      "value": "大号"
+    },
+    {
+      "name": "script_font_extra_large",
+      "value": "特大号"
+    },
+    {
+      "name": "script_editor_failed",
+      "value": "JavaScript 编辑器加载失败"
+    },
+    {
+      "name": "script_err_store",
+      "value": "脚本数据读取失败"
+    },
+    {
+      "name": "script_err_missing",
+      "value": "所选脚本已不存在"
+    },
+    {
+      "name": "script_err_empty",
+      "value": "远程脚本内容为空"
+    },
+    {
+      "name": "script_err_encoding",
+      "value": "脚本必须使用 UTF-8 编码"
+    },
+    {
+      "name": "script_err_size",
+      "value": "脚本或配置超出大小限制"
+    },
+    {
+      "name": "script_err_config",
+      "value": "脚本处理后的配置无效"
+    },
+    {
+      "name": "script_err_syntax",
+      "value": "JavaScript 语法错误"
+    },
+    {
+      "name": "script_err_execution",
+      "value": "JavaScript 执行失败"
+    },
+    {
+      "name": "script_err_entry",
+      "value": "脚本必须定义 main(config) 函数"
+    },
+    {
+      "name": "script_err_pending",
+      "value": "main() 返回的 Promise 未完成"
+    },
+    {
+      "name": "script_err_return",
+      "value": "main() 必须返回可序列化的配置对象"
+    },
+    {
+      "name": "script_err_timeout",
+      "value": "脚本执行超过 10 秒"
+    },
+    {
+      "name": "script_err_memory",
+      "value": "脚本超出内存限制"
+    },
+    {
+      "name": "script_err_stack",
+      "value": "脚本超出调用栈限制"
+    },
+    {
+      "name": "script_err_position",
+      "value": "%1$s（第 %2$s 行，第 %3$s 列）"
+    },
+    {
+      "name": "script_sync_error",
+      "value": "同步 %s 失败"
+    },
+    {
+      "name": "script_import_file",
+      "value": "从文件导入"
+    },
+    {
+      "name": "rule_set_title",
+      "value": "规则集"
+    },
+    {
+      "name": "rule_set_new",
+      "value": "从空白新建"
+    },
+    {
+      "name": "rule_set_auto",
+      "value": "自动识别"
+    },
+    {
+      "name": "rule_set_invalid",
+      "value": "请检查规则集名称、URL 和选项。"
+    },
+    {
+      "name": "rule_set_bad_content",
+      "value": "文件为空、过大，或含有不符合所选格式或规则类型的内容。"
+    },
+    {
+      "name": "rule_set_download_error",
+      "value": "无法下载规则集。"
+    },
+    {
+      "name": "rule_set_in_use",
+      "value": "请先在附加规则中取消引用此规则集。"
+    },
+    {
+      "name": "rule_set_failed",
+      "value": "无法完成规则集操作。"
+    },
+    {
+      "name": "rule_set_empty",
+      "value": "暂无规则集"
+    },
+    {
+      "name": "rule_set_batch_failed",
+      "value": "第 %s 项导入失败，失败链接仍保留在表单中。"
+    },
+    {
+      "name": "rule_set_saved",
+      "value": "规则集已保存"
+    },
+    {
+      "name": "rule_set_synced",
+      "value": "规则集已同步"
+    },
+    {
+      "name": "rule_set_sync",
+      "value": "同步"
+    },
+    {
+      "name": "rule_set_local",
+      "value": "本地"
+    },
+    {
+      "name": "rule_set_remote",
+      "value": "远程"
+    },
+    {
+      "name": "rule_set_name",
+      "value": "名称"
+    },
+    {
+      "name": "rule_set_urls",
+      "value": "每行一个 URL"
+    },
+    {
+      "name": "rule_set_behavior",
+      "value": "规则类型"
+    },
+    {
+      "name": "rule_set_format",
+      "value": "格式"
+    },
+    {
+      "name": "rule_set_content_hint",
+      "value": "每行一条规则，或输入 YAML payload"
+    },
+    {
+      "name": "rule_set_preview_partial",
+      "value": "预览显示文件开头的 256 KiB。"
+    },
+    {
+      "name": "rule_set_delete",
+      "value": "删除「%s」？"
+    },
+    {
+      "name": "rule_set_choose",
+      "value": "请选择规则集"
+    },
+    {
+      "name": "local_proxy_field_name",
+      "value": "名称"
+    },
+    {
+      "name": "local_proxy_field_server",
+      "value": "服务器"
+    },
+    {
+      "name": "local_proxy_field_port",
+      "value": "端口"
+    },
+    {
+      "name": "local_proxy_field_udp",
+      "value": "UDP"
+    },
+    {
+      "name": "local_proxy_field_openVpnCa",
+      "value": "CA 证书"
+    },
+    {
+      "name": "local_proxy_field_zeroTierNetwork",
+      "value": "网络 ID"
+    },
+    {
+      "name": "local_proxy_field_networkName",
+      "value": "网络名称"
+    },
+    {
+      "name": "local_proxy_field_networkSecret",
+      "value": "网络密钥"
+    },
+    {
+      "name": "local_proxy_field_peers",
+      "value": "对等节点"
+    },
+    {
+      "name": "local_proxy_field_virtualIpv4",
+      "value": "虚拟 IPv4"
+    },
+    {
+      "name": "local_proxy_field_hostname",
+      "value": "主机名"
+    },
+    {
+      "name": "local_proxy_field_exitNodes",
+      "value": "出口节点"
+    },
+    {
+      "name": "local_proxy_field_username",
+      "value": "用户名"
+    },
+    {
+      "name": "local_proxy_field_password",
+      "value": "密码"
+    },
+    {
+      "name": "local_proxy_field_psk",
+      "value": "预共享密钥"
+    },
+    {
+      "name": "local_proxy_field_key",
+      "value": "密钥"
+    },
+    {
+      "name": "local_proxy_field_privateKey",
+      "value": "私钥"
+    },
+    {
+      "name": "local_proxy_field_publicKey",
+      "value": "公钥"
+    },
+    {
+      "name": "local_proxy_field_privateKeyPassphrase",
+      "value": "私钥密码"
+    },
+    {
+      "name": "local_proxy_field_preSharedKey",
+      "value": "预共享密钥"
+    },
+    {
+      "name": "local_proxy_field_authStr",
+      "value": "密码"
+    },
+    {
+      "name": "local_proxy_field_cipher",
+      "value": "加密方式"
+    },
+    {
+      "name": "local_proxy_field_protocol",
+      "value": "协议"
+    },
+    {
+      "name": "local_proxy_field_obfs",
+      "value": "混淆"
+    },
+    {
+      "name": "local_proxy_field_transport",
+      "value": "传输协议"
+    },
+    {
+      "name": "local_proxy_field_up",
+      "value": "上行带宽"
+    },
+    {
+      "name": "local_proxy_field_down",
+      "value": "下行带宽"
+    },
+    {
+      "name": "local_proxy_field_network",
+      "value": "网络"
+    },
+    {
+      "name": "local_proxy_field_wsHeaders",
+      "value": "WebSocket 请求头"
+    },
+    {
+      "name": "local_proxy_field_httpHeaders",
+      "value": "HTTP 请求头"
+    },
+    {
+      "name": "local_proxy_field_headers",
+      "value": "请求头"
+    },
+    {
+      "name": "local_proxy_field_skipCertVerify",
+      "value": "跳过证书验证"
+    },
+    {
+      "name": "local_proxy_field_clientFingerprint",
+      "value": "客户端指纹"
+    },
+    {
+      "name": "local_proxy_field_plugin",
+      "value": "插件"
+    },
+    {
+      "name": "local_proxy_field_pluginMode",
+      "value": "插件模式"
+    },
+    {
+      "name": "local_proxy_field_pluginHost",
+      "value": "插件主机"
+    },
+    {
+      "name": "local_proxy_field_pluginPath",
+      "value": "插件路径"
+    },
+    {
+      "name": "local_proxy_field_pluginUsername",
+      "value": "插件用户名"
+    },
+    {
+      "name": "local_proxy_field_pluginPassword",
+      "value": "插件密码"
+    },
+    {
+      "name": "local_proxy_field_pluginVersion",
+      "value": "协议版本"
+    },
+    {
+      "name": "local_proxy_field_pluginKey",
+      "value": "密钥"
+    },
+    {
+      "name": "local_proxy_field_pluginCrypt",
+      "value": "插件加密方式"
+    },
+    {
+      "name": "local_proxy_field_pluginSkipCertVerify",
+      "value": "跳过证书验证"
+    },
+    {
+      "name": "local_proxy_field_protocolParam",
+      "value": "协议参数"
+    },
+    {
+      "name": "local_proxy_field_obfsParam",
+      "value": "混淆参数"
+    },
+    {
+      "name": "local_proxy_field_obfsPassword",
+      "value": "混淆密码"
+    },
+    {
+      "name": "local_proxy_field_obfsSecret",
+      "value": "混淆密码"
+    },
+    {
+      "name": "local_proxy_field_obfsMode",
+      "value": "混淆模式"
+    },
+    {
+      "name": "local_proxy_field_obfsHost",
+      "value": "混淆主机"
+    },
+    {
+      "name": "local_proxy_field_version",
+      "value": "协议版本"
+    },
+    {
+      "name": "local_proxy_field_ports",
+      "value": "端口跳跃"
+    },
+    {
+      "name": "local_proxy_field_hopInterval",
+      "value": "跳跃间隔"
+    },
+    {
+      "name": "local_proxy_field_congestionController",
+      "value": "拥塞控制"
+    },
+    {
+      "name": "local_proxy_field_udpRelayMode",
+      "value": "UDP 中继模式"
+    },
+    {
+      "name": "local_proxy_field_allowedIps",
+      "value": "允许的 IP"
+    },
+    {
+      "name": "local_proxy_field_remoteDnsResolve",
+      "value": "远程 DNS 解析"
+    },
+    {
+      "name": "local_proxy_field_interfaceName",
+      "value": "网卡名称"
+    },
+    {
+      "name": "local_proxy_field_routingMark",
+      "value": "路由标记"
+    },
+    {
+      "name": "local_proxy_field_ipVersion",
+      "value": "IP 版本"
+    },
+    {
+      "name": "local_proxy_resources",
+      "value": "自定义资源"
+    },
+    {
+      "name": "local_proxy_title",
+      "value": "代理"
+    },
+    {
+      "name": "local_proxy_add",
+      "value": "添加代理"
+    },
+    {
+      "name": "local_proxy_edit",
+      "value": "编辑代理"
+    },
+    {
+      "name": "local_proxy_empty",
+      "value": "暂无代理"
+    },
+    {
+      "name": "local_proxy_search",
+      "value": "搜索名称、类型或服务器"
+    },
+    {
+      "name": "local_proxy_quick_edit",
+      "value": "快速编辑"
+    },
+    {
+      "name": "local_proxy_basic",
+      "value": "基本信息"
+    },
+    {
+      "name": "local_proxy_auth",
+      "value": "身份验证"
+    },
+    {
+      "name": "local_proxy_network",
+      "value": "网络"
+    },
+    {
+      "name": "local_proxy_transport",
+      "value": "传输"
+    },
+    {
+      "name": "local_proxy_connection",
+      "value": "连接"
+    },
+    {
+      "name": "local_proxy_other",
+      "value": "其他"
+    },
+    {
+      "name": "local_proxy_options",
+      "value": "选项"
+    },
+    {
+      "name": "local_proxy_add_option",
+      "value": "添加配置项"
+    },
+    {
+      "name": "local_proxy_remove_option",
+      "value": "移除配置项"
+    },
+    {
+      "name": "local_proxy_optional_field",
+      "value": "选填"
+    },
+    {
+      "name": "local_proxy_required_field",
+      "value": "必填"
+    },
+    {
+      "name": "local_proxy_item_count",
+      "value": "%d 项"
+    },
+    {
+      "name": "local_proxy_list_hint",
+      "value": "每行一项"
+    },
+    {
+      "name": "local_proxy_map_hint",
+      "value": "每行一组键和值，用冒号分隔"
+    },
+    {
+      "name": "local_proxy_saved",
+      "value": "代理库已保存"
+    },
+    {
+      "name": "local_proxy_saved_pending",
+      "value": "已保存，待内核校验"
+    },
+    {
+      "name": "local_proxy_deleted",
+      "value": "代理已删除"
+    },
+    {
+      "name": "local_proxy_links_remove",
+      "value": "将移除代理：%s"
+    },
+    {
+      "name": "local_proxy_links_add",
+      "value": "将添加代理：%s"
+    },
+    {
+      "name": "local_proxy_line",
+      "value": "第 %d 行：%s"
+    },
+    {
+      "name": "local_proxy_name_format",
+      "value": "名称最多 255 个字符，不能包含逗号或换行。"
+    },
+    {
+      "name": "local_proxy_name_reserved",
+      "value": "该名称为内核保留名称。"
+    },
+    {
+      "name": "local_proxy_name_taken",
+      "value": "已有代理使用此名称。"
+    },
+    {
+      "name": "local_proxy_port",
+      "value": "请输入 1 到 65535 之间的端口。"
+    },
+    {
+      "name": "local_proxy_type",
+      "value": "代理类型"
+    },
+    {
+      "name": "local_proxy_unsupported",
+      "value": "不支持该代理类型。"
+    },
+    {
+      "name": "local_proxy_server_length",
+      "value": "服务器地址最多 512 个字符。"
+    },
+    {
+      "name": "local_proxy_required",
+      "value": "请填写必填字段。"
+    },
+    {
+      "name": "local_proxy_rejected",
+      "value": "Mihomo 拒绝了该代理定义，请检查协议参数。"
+    },
+    {
+      "name": "local_proxy_input",
+      "value": "代理库或分享链接文本超出大小限制。"
+    },
+    {
+      "name": "local_proxy_conflict",
+      "value": "代理库已变化，请重新打开编辑器后重试。"
+    },
+    {
+      "name": "local_proxy_core_unavailable",
+      "value": "内核不可用，待校验。"
+    },
+    {
+      "name": "local_proxy_store",
+      "value": "无法读取或保存代理库。"
+    },
+    {
+      "name": "local_proxy_link",
+      "value": "分享链接无效。"
+    },
+    {
+      "name": "local_proxy_single_link",
+      "value": "请输入仅包含一个代理的分享链接。"
+    },
+    {
+      "name": "local_proxy_map",
+      "value": "请逐行输入键和值，用冒号分隔，键不能重复。"
+    },
+    {
+      "name": "proxy_filters_title",
+      "value": "筛选"
+    },
+    {
+      "name": "proxy_filter_label",
+      "value": "标签"
+    },
+    {
+      "name": "proxy_filter_regex",
+      "value": "正则表达式"
+    },
+    {
+      "name": "proxy_filter_label_invalid",
+      "value": "请输入筛选标签。"
+    },
+    {
+      "name": "proxy_filter_duplicate",
+      "value": "已存在相同标签的筛选。"
+    },
+    {
+      "name": "proxy_filter_expression_invalid",
+      "value": "请输入正则表达式。"
+    },
+    {
+      "name": "proxy_filter_regex_error",
+      "value": "第 %d 段正则表达式无效。"
+    },
+    {
+      "name": "proxy_filter_error",
+      "value": "无法读取或保存筛选。"
+    },
+    {
+      "name": "proxy_filter_saved",
+      "value": "筛选已保存"
+    },
+    {
+      "name": "proxy_filter_empty",
+      "value": "暂无筛选"
+    },
+    {
+      "name": "proxy_filter_search",
+      "value": "搜索标签和正则表达式"
+    },
+    {
+      "name": "proxy_filter_delete",
+      "value": "删除 %d 条筛选？"
+    },
+    {
+      "name": "proxy_filter_insert",
+      "value": "插入筛选"
+    },
+    {
+      "name": "proxy_filter_include",
+      "value": "包含匹配项（filter）"
+    },
+    {
+      "name": "proxy_filter_exclude",
+      "value": "排除匹配项（exclude-filter）"
+    },
+    {
+      "name": "proxy_filter_target",
+      "value": "应用到"
+    },
+    {
+      "name": "proxy_filter_group_choice",
+      "value": "代理组 · %s"
+    },
+    {
+      "name": "proxy_filter_provider_choice",
+      "value": "代理集合 · %s"
+    },
+    {
+      "name": "proxy_filter_field",
+      "value": "匹配方式"
+    },
+    {
+      "name": "proxy_filter_choose_target",
+      "value": "选择代理组或代理集合"
+    },
+    {
+      "name": "proxy_filter_choose_preset",
+      "value": "选择筛选"
+    },
+    {
+      "name": "proxy_filter_no_targets",
+      "value": "这份配置中没有可编辑的代理组或代理集合。"
+    },
+    {
+      "name": "proxy_filter_bad_yaml",
+      "value": "请先修正 YAML 内容，再插入筛选。"
+    },
+    {
+      "name": "proxy_filter_bad_target",
+      "value": "无法插入所选字段，请在 YAML 编辑器里检查该字段。"
+    },
+    {
+      "name": "proxy_filter_already_present",
+      "value": "该字段已包含所选筛选。"
+    },
+    {
+      "name": "icon_sets_title",
+      "value": "图标集"
+    },
+    {
+      "name": "icon_sets_empty",
+      "value": "暂无图标"
+    },
+    {
+      "name": "icon_set_embedded",
+      "value": "内嵌图片"
+    },
+    {
+      "name": "icon_set_input",
+      "value": "请检查名称或 HTTP/HTTPS 地址。"
+    },
+    {
+      "name": "icon_set_invalid",
+      "value": "此 JSON 未包含可用的图标集。"
+    },
+    {
+      "name": "icon_set_size",
+      "value": "图标集或图标库超过大小上限。"
+    },
+    {
+      "name": "icon_set_download_error",
+      "value": "无法下载图标集。"
+    },
+    {
+      "name": "icon_set_conflict",
+      "value": "图标库已更新，请重新打开该项目后重试。"
+    },
+    {
+      "name": "icon_set_error",
+      "value": "无法读取或保存图标集。"
+    },
+    {
+      "name": "icon_set_saved",
+      "value": "图标集已保存"
+    },
+    {
+      "name": "icon_set_synced",
+      "value": "图标集已同步"
+    },
+    {
+      "name": "icon_set_delete",
+      "value": "删除「%s」？"
+    },
+    {
+      "name": "icon_set_name_optional",
+      "value": "名称（选填）"
+    },
+    {
+      "name": "icon_set_search",
+      "value": "搜索图标"
+    },
+    {
+      "name": "icon_set_recommended",
+      "value": "推荐"
+    },
+    {
+      "name": "icon_set_target",
+      "value": "无法修改该代理组的图标字段。"
+    },
+    {
+      "name": "icon_set_icon_url",
+      "value": "图标 URL"
+    },
+    {
+      "name": "icon_set_choose_group",
+      "value": "选择代理组"
+    },
+    {
+      "name": "icon_set_remove_icon",
+      "value": "移除图标"
+    },
+    {
+      "name": "icon_set_choose_icon",
+      "value": "选择图标"
+    },
+    {
+      "name": "icon_set_no_groups",
+      "value": "暂无可编辑的代理组"
+    },
+    {
+      "name": "tools_general",
+      "value": "常规"
+    },
+    {
+      "name": "tools_logs",
+      "value": "日志"
+    },
+    {
+      "name": "general_inbound_section",
+      "value": "入站"
+    },
+    {
+      "name": "general_core_section",
+      "value": "请求与内核"
+    },
+    {
+      "name": "general_ports",
+      "value": "代理端口"
+    },
+    {
+      "name": "general_ports_hint",
+      "value": "端口范围为 1024–49151。Mixed 必填，其他端口填 0 可关闭。"
+    },
+    {
+      "name": "general_auth",
+      "value": "入站认证"
+    },
+    {
+      "name": "general_controller",
+      "value": "外部控制器"
+    },
+    {
+      "name": "general_controller_pending",
+      "value": "端口不可用"
+    },
+    {
+      "name": "general_controller_secret",
+      "value": "控制器密钥"
+    },
+    {
+      "name": "general_new_secret",
+      "value": "生成新密钥"
+    },
+    {
+      "name": "general_ua",
+      "value": "订阅 User-Agent"
+    },
+    {
+      "name": "general_ua_hint",
+      "value": "留空使用默认 User-Agent。"
+    },
+    {
+      "name": "general_hosts",
+      "value": "全局 Hosts"
+    },
+    {
+      "name": "general_hosts_hint",
+      "value": "每行填写域名和一个或多个地址，或一个别名，用空格分隔。"
+    },
+    {
+      "name": "general_delay_timeout",
+      "value": "测速超时"
+    },
+    {
+      "name": "general_close_connections",
+      "value": "切换节点后关闭连接"
+    },
+    {
+      "name": "general_capture_logs",
+      "value": "捕获日志"
+    },
+    {
+      "name": "general_log_level",
+      "value": "内核日志等级"
+    },
+    {
+      "name": "general_log_debug",
+      "value": "调试"
+    },
+    {
+      "name": "general_log_info",
+      "value": "信息"
+    },
+    {
+      "name": "general_log_warning",
+      "value": "警告"
+    },
+    {
+      "name": "general_log_error",
+      "value": "错误"
+    },
+    {
+      "name": "general_log_silent",
+      "value": "静默"
+    },
+    {
+      "name": "general_inherit",
+      "value": "跟随配置"
+    },
+    {
+      "name": "general_default",
+      "value": "默认"
+    },
+    {
+      "name": "general_on",
+      "value": "已开启"
+    },
+    {
+      "name": "general_off",
+      "value": "已关闭"
+    },
+    {
+      "name": "general_port_busy",
+      "value": "代理端口无法打开，请检查后重试。"
+    },
+    {
+      "name": "general_controller_busy",
+      "value": "无法打开外部控制器端口 9090。"
+    },
+    {
+      "name": "general_invalid",
+      "value": "请检查设置内容和端口范围。"
+    },
+    {
+      "name": "general_conflict",
+      "value": "设置已变化，请重新打开表单后重试。"
+    },
+    {
+      "name": "general_save_failed",
+      "value": "无法应用设置。"
+    },
+    {
+      "name": "general_saved",
+      "value": "设置已保存"
+    },
+    {
+      "name": "logs_filter",
+      "value": "等级"
+    },
+    {
+      "name": "logs_all_levels",
+      "value": "全部等级"
+    },
+    {
+      "name": "logs_search",
+      "value": "搜索日志"
+    },
+    {
+      "name": "logs_export",
+      "value": "导出日志"
+    },
+    {
+      "name": "logs_exported",
+      "value": "日志已导出"
+    },
+    {
+      "name": "logs_export_failed",
+      "value": "无法导出日志。"
+    },
+    {
+      "name": "logs_pause",
+      "value": "暂停"
+    },
+    {
+      "name": "logs_resume",
+      "value": "继续"
+    },
+    {
+      "name": "logs_capture_off",
+      "value": "日志捕获已关闭。"
+    },
+    {
+      "name": "logs_silent",
+      "value": "内核日志等级为静默。"
+    },
+    {
+      "name": "logs_disconnected",
+      "value": "日志流已断开。"
+    },
+    {
+      "name": "logs_connecting",
+      "value": "正在连接日志流…"
+    },
+    {
+      "name": "logs_empty",
+      "value": "暂无捕获的日志。"
+    },
+    {
+      "name": "logs_no_matches",
+      "value": "没有匹配的日志。"
+    },
+    {
+      "name": "logs_gap",
+      "value": "日志采集出现断档。"
+    },
+    {
+      "name": "logs_evicted",
+      "value": "已淘汰 %d 条较早日志。"
+    },
+    {
+      "name": "general_unavailable",
+      "value": "尚未确认代理状态，请在内核就绪后重试。"
+    },
+    {
+      "name": "general_storage_failed",
+      "value": "无法写入常规设置。"
+    },
+    {
+      "name": "script_none",
+      "value": "不使用脚本"
+    },
+    {
+      "name": "added_rules_exit_new",
+      "value": "新建命名出口"
+    },
+    {
+      "name": "added_rules_exit_option",
+      "value": "出口：%s"
+    },
+    {
+      "name": "added_rules_exit_name",
+      "value": "出口名称"
+    },
+    {
+      "name": "added_rules_exit_hint",
+      "value": "例如「媒体」"
+    },
+    {
+      "name": "added_rules_exit_invalid",
+      "value": "请输入不含逗号且未被内置策略占用的名称。"
+    },
+    {
+      "name": "added_rules_exits",
+      "value": "命名出口"
+    },
+    {
+      "name": "added_rules_exit_auto",
+      "value": "自动"
+    },
+    {
+      "name": "added_rules_exit_auto_hint",
+      "value": "依次尝试同名出站、MATCH 出站和直连。"
+    },
+    {
+      "name": "added_rules_exit_missing",
+      "value": "已保存的出站「%s」不可用。"
+    },
+    {
+      "name": "live_status_title",
+      "value": "运行状态"
+    },
+    {
+      "name": "live_status_count",
+      "value": "运行状态，%d 项"
+    },
+    {
+      "name": "live_status_core_ready",
+      "value": "已就绪"
+    },
+    {
+      "name": "live_status_core_starting",
+      "value": "正在启动…"
+    },
+    {
+      "name": "live_status_core_stopped",
+      "value": "已停止"
+    },
+    {
+      "name": "live_status_core_unknown",
+      "value": "状态不可用"
+    },
+    {
+      "name": "live_status_start_core",
+      "value": "启动内核"
+    },
+    {
+      "name": "live_status_app_update",
+      "value": "应用更新"
+    },
+    {
+      "name": "live_status_check",
+      "value": "检查更新"
+    },
+    {
+      "name": "live_status_checking",
+      "value": "正在检查…"
+    },
+    {
+      "name": "live_status_update_current",
+      "value": "%s 已是最新版本"
+    },
+    {
+      "name": "live_status_update_available",
+      "value": "可更新至 %s"
+    },
+    {
+      "name": "live_status_update_failed",
+      "value": "检查失败，点击重试"
+    },
+    {
+      "name": "general_auto_check_update",
+      "value": "自动检查应用更新"
+    },
+    {
+      "name": "live_status_verifying",
+      "value": "正在校验 SHA-256…"
+    },
+    {
+      "name": "live_status_download_ready",
+      "value": "校验通过，可保存"
+    },
+    {
+      "name": "live_status_saving_package",
+      "value": "正在保存安装包…"
+    },
+    {
+      "name": "live_status_gallery_available",
+      "value": "应用市场有新版本"
+    },
+    {
+      "name": "live_status_install_update",
+      "value": "通过应用市场更新"
+    },
+    {
+      "name": "live_status_install_failed",
+      "value": "无法打开应用市场更新"
+    },
+    {
+      "name": "live_status_download_unsigned",
+      "value": "下载未签名 HAP"
+    },
+    {
+      "name": "live_status_download_debug",
+      "value": "下载维护者调试签名 HAP"
+    },
+    {
+      "name": "live_status_save_package",
+      "value": "保存 HAP"
+    },
+    {
+      "name": "live_status_package_saved",
+      "value": "安装包已保存"
+    },
+    {
+      "name": "live_status_download_failed",
+      "value": "下载更新失败"
+    },
+    {
+      "name": "live_status_checksum_failed",
+      "value": "安装包校验失败"
+    },
+    {
+      "name": "live_status_save_failed",
+      "value": "保存安装包失败"
+    },
+    {
+      "name": "live_status_view_release",
+      "value": "查看发布版本"
+    },
+    {
+      "name": "live_status_release_failed",
+      "value": "无法打开发布页面。"
+    },
+    {
+      "name": "live_status_resources_active",
+      "value": "%d 项正在更新"
+    },
+    {
+      "name": "live_status_resources_failed",
+      "value": "%d 项更新失败"
+    },
+    {
+      "name": "live_status_resources_unavailable",
+      "value": "状态不可用"
+    },
+    {
+      "name": "live_status_bytes_total",
+      "value": "%s / %s"
+    },
+    {
+      "name": "live_status_bytes_received",
+      "value": "已下载 %s"
+    },
+    {
+      "name": "live_status_resource_failed",
+      "value": "更新失败"
+    },
+    {
+      "name": "backup_title",
+      "value": "备份与恢复"
+    },
+    {
+      "name": "backup_local",
+      "value": "本地"
+    },
+    {
+      "name": "backup_remote",
+      "value": "WebDAV"
+    },
+    {
+      "name": "backup_remote_hint",
+      "value": "绑定 WebDAV 后可手动上传和恢复备份。"
+    },
+    {
+      "name": "backup_bind",
+      "value": "绑定 WebDAV"
+    },
+    {
+      "name": "backup_address",
+      "value": "服务器地址"
+    },
+    {
+      "name": "backup_username",
+      "value": "账号"
+    },
+    {
+      "name": "backup_password",
+      "value": "密码"
+    },
+    {
+      "name": "backup_filename",
+      "value": "远程文件名"
+    },
+    {
+      "name": "backup_save",
+      "value": "保存"
+    },
+    {
+      "name": "backup_unbind",
+      "value": "解除绑定"
+    },
+    {
+      "name": "backup_confirm_unbind",
+      "value": "清除本机 WebDAV 绑定。远程备份文件会保留。"
+    },
+    {
+      "name": "backup_checking",
+      "value": "正在检查连接…"
+    },
+    {
+      "name": "backup_connected",
+      "value": "连接成功"
+    },
+    {
+      "name": "backup_export",
+      "value": "备份"
+    },
+    {
+      "name": "backup_restore",
+      "value": "恢复"
+    },
+    {
+      "name": "backup_policy",
+      "value": "恢复策略"
+    },
+    {
+      "name": "backup_merge",
+      "value": "合并"
+    },
+    {
+      "name": "backup_replace",
+      "value": "覆盖"
+    },
+    {
+      "name": "backup_selected",
+      "value": "已选中"
+    },
+    {
+      "name": "backup_profiles",
+      "value": "仅配置及资源"
+    },
+    {
+      "name": "backup_all",
+      "value": "全部数据"
+    },
+    {
+      "name": "backup_restore_hint",
+      "value": "仅恢复配置及资源时，会一并恢复脚本、规则和节点，并保留本机应用设置。"
+    },
+    {
+      "name": "backup_sensitive",
+      "value": "备份为未加密的 ZIP，包含订阅、节点和所选范围内的凭据。"
+    },
+    {
+      "name": "backup_confirm_overwrite",
+      "value": "此备份中没有的 %d 项本机配置或资源将被删除。"
+    },
+    {
+      "name": "backup_exported",
+      "value": "备份完成"
+    },
+    {
+      "name": "backup_restored",
+      "value": "恢复完成"
+    },
+    {
+      "name": "backup_restore_pending",
+      "value": "数据已恢复，运行配置尚未应用。"
+    },
+    {
+      "name": "backup_retry_apply",
+      "value": "重试应用已恢复配置"
+    },
+    {
+      "name": "backup_empty",
+      "value": "这份备份中没有可恢复的数据。"
+    },
+    {
+      "name": "backup_phase_snapshot",
+      "value": "正在准备快照…"
+    },
+    {
+      "name": "backup_phase_pack",
+      "value": "正在打包…"
+    },
+    {
+      "name": "backup_phase_write",
+      "value": "正在写入备份…"
+    },
+    {
+      "name": "backup_phase_read",
+      "value": "正在读取备份…"
+    },
+    {
+      "name": "backup_phase_unpack",
+      "value": "正在解压…"
+    },
+    {
+      "name": "backup_phase_validate",
+      "value": "正在校验恢复内容…"
+    },
+    {
+      "name": "backup_phase_commit",
+      "value": "正在保存恢复内容…"
+    },
+    {
+      "name": "backup_phase_apply",
+      "value": "正在应用已恢复配置…"
+    },
+    {
+      "name": "backup_error_invalid",
+      "value": "备份不完整或数据校验失败。"
+    },
+    {
+      "name": "backup_error_version",
+      "value": "此备份格式版本不受支持。"
+    },
+    {
+      "name": "backup_error_limit",
+      "value": "备份超过容量限制。"
+    },
+    {
+      "name": "backup_error_conflict",
+      "value": "本机数据已变化，请重试。"
+    },
+    {
+      "name": "backup_error_dav_settings",
+      "value": "请检查 WebDAV 地址、账号、密码及文件名。"
+    },
+    {
+      "name": "backup_error_dav_network",
+      "value": "无法连接 WebDAV，请检查网络和服务器证书。"
+    },
+    {
+      "name": "backup_error_dav_response",
+      "value": "WebDAV 返回了不完整或无效的响应。"
+    },
+    {
+      "name": "backup_error_http",
+      "value": "WebDAV 请求失败（HTTP %d）。"
+    },
+    {
+      "name": "backup_error_io",
+      "value": "无法读取或写入备份。"
+    },
+    {
+      "name": "custom_create",
+      "value": "新建自定义配置"
+    },
+    {
+      "name": "custom_profile",
+      "value": "自定义配置"
+    },
+    {
+      "name": "custom_unnamed",
+      "value": "填写配置名称"
+    },
+    {
+      "name": "custom_groups",
+      "value": "代理组"
+    },
+    {
+      "name": "custom_group",
+      "value": "编辑代理组"
+    },
+    {
+      "name": "custom_rules",
+      "value": "规则"
+    },
+    {
+      "name": "custom_rule",
+      "value": "编辑规则"
+    },
+    {
+      "name": "custom_nodes",
+      "value": "节点与拨号链"
+    },
+    {
+      "name": "custom_issues",
+      "value": "配置问题"
+    },
+    {
+      "name": "custom_proxy_providers",
+      "value": "代理集合"
+    },
+    {
+      "name": "custom_rule_providers",
+      "value": "规则集"
+    },
+    {
+      "name": "custom_sniffer",
+      "value": "嗅探"
+    },
+    {
+      "name": "custom_import",
+      "value": "导入配置结构"
+    },
+    {
+      "name": "custom_source",
+      "value": "配置 YAML"
+    },
+    {
+      "name": "custom_from_link",
+      "value": "从链接导入"
+    },
+    {
+      "name": "custom_add_group",
+      "value": "添加代理组"
+    },
+    {
+      "name": "custom_add_rule",
+      "value": "添加规则"
+    },
+    {
+      "name": "custom_from_library",
+      "value": "从节点库添加"
+    },
+    {
+      "name": "custom_filter_preset",
+      "value": "筛选预设"
+    },
+    {
+      "name": "custom_choose_target",
+      "value": "选择目标"
+    },
+    {
+      "name": "custom_choose_member",
+      "value": "添加成员"
+    },
+    {
+      "name": "custom_choose_provider",
+      "value": "添加代理集合"
+    },
+    {
+      "name": "custom_dialer",
+      "value": "选择拨号目标"
+    },
+    {
+      "name": "custom_no_dialer",
+      "value": "无拨号目标"
+    },
+    {
+      "name": "custom_dialer_hint",
+      "value": "点按节点可设置拨号目标。"
+    },
+    {
+      "name": "custom_members",
+      "value": "代理成员（每行一个）"
+    },
+    {
+      "name": "custom_group_providers",
+      "value": "代理集合（每行一个）"
+    },
+    {
+      "name": "custom_group_options",
+      "value": "组选项（YAML）"
+    },
+    {
+      "name": "custom_type",
+      "value": "类型"
+    },
+    {
+      "name": "custom_rule_payload",
+      "value": "匹配条件"
+    },
+    {
+      "name": "custom_rule_target",
+      "value": "目标"
+    },
+    {
+      "name": "custom_rule_options",
+      "value": "规则参数"
+    },
+    {
+      "name": "custom_sub_rules",
+      "value": "子规则"
+    },
+    {
+      "name": "custom_search",
+      "value": "搜索"
+    },
+    {
+      "name": "custom_empty",
+      "value": "暂无条目"
+    },
+    {
+      "name": "custom_no_choices",
+      "value": "没有可选条目"
+    },
+    {
+      "name": "custom_retry",
+      "value": "重试"
+    },
+    {
+      "name": "custom_move_up",
+      "value": "上移"
+    },
+    {
+      "name": "custom_move_down",
+      "value": "下移"
+    },
+    {
+      "name": "custom_continue",
+      "value": "继续"
+    },
+    {
+      "name": "custom_import_replace",
+      "value": "用导入的 YAML 替换当前配置内容？"
+    },
+    {
+      "name": "custom_remove_target",
+      "value": "删除此条目？已有引用需要检查。"
+    },
+    {
+      "name": "custom_invalid_shape",
+      "value": "YAML 段的结构不正确。"
+    },
+    {
+      "name": "custom_saved",
+      "value": "已保存自定义配置"
+    },
+    {
+      "name": "custom_saved_warning",
+      "value": "配置已保存，仍有未解决的引用"
+    },
+    {
+      "name": "custom_warning",
+      "value": "警告"
+    },
+    {
+      "name": "custom_error",
+      "value": "错误"
+    },
+    {
+      "name": "custom_issue_name",
+      "value": "节点或代理组名称无效：%s"
+    },
+    {
+      "name": "custom_issue_duplicate",
+      "value": "节点或代理组重名：%s"
+    },
+    {
+      "name": "custom_issue_type",
+      "value": "%1$s 的类型不支持或未填写：%2$s"
+    },
+    {
+      "name": "custom_issue_empty_group",
+      "value": "%s 没有成员来源"
+    },
+    {
+      "name": "custom_issue_target",
+      "value": "%1$s 引用了不存在的目标 %2$s"
+    },
+    {
+      "name": "custom_issue_provider",
+      "value": "%1$s 引用了不存在的代理集合 %2$s"
+    },
+    {
+      "name": "custom_issue_fallback",
+      "value": "%1$s 的兜底代理无效：%2$s"
+    },
+    {
+      "name": "custom_issue_cycle",
+      "value": "代理或拨号链存在循环：%s"
+    },
+    {
+      "name": "custom_issue_rule",
+      "value": "规则格式有误：%s"
+    },
+    {
+      "name": "custom_issue_rule_provider",
+      "value": "规则 %1$s 引用了不存在的规则集 %2$s"
+    },
+    {
+      "name": "custom_issue_sub_rule",
+      "value": "规则 %1$s 引用了不存在的子规则 %2$s"
+    },
+    {
+      "name": "custom_discard_title",
+      "value": "放弃更改？"
+    },
+    {
+      "name": "err_invalid_yaml_position",
+      "value": "YAML 语法错误（第 %1$s 行，第 %2$s 列）"
+    },
+    {
+      "name": "yaml_copy_all",
+      "value": "复制全部"
+    },
+    {
+      "name": "yaml_editor_failed",
+      "value": "YAML 编辑器加载失败"
+    },
+    {
+      "name": "profile_runtime_preview",
+      "value": "运行时配置"
+    },
+    {
+      "name": "profile_preview_loading",
+      "value": "正在构建运行时配置…"
+    },
+    {
+      "name": "profile_preview_host_unavailable",
+      "value": "代理宿主未就绪，请先启动核心再生成运行时配置。"
+    },
+    {
+      "name": "profile_preview_start_core",
+      "value": "启动核心并重试"
+    },
+    {
+      "name": "profile_preview_version_applied",
+      "value": "运行版本 #%1$s · 配置 %2$s"
+    },
+    {
+      "name": "profile_preview_version_applied_only",
+      "value": "运行版本 #%s"
+    },
+    {
+      "name": "profile_preview_version_saved",
+      "value": "已保存版本 %s"
+    },
+    {
+      "name": "profile_preview_version_unsaved",
+      "value": "已保存配置版本"
+    },
+    {
+      "name": "profile_preview_not_applied",
+      "value": "当前预览内容尚未应用到运行中的内核。"
+    },
+    {
+      "name": "profile_preview_err_custom_tun",
+      "value": "不支持自定义 TUN 监听器"
+    },
+    {
+      "name": "profile_preview_err_too_large",
+      "value": "运行时配置超出预览大小限制"
+    },
+    {
+      "name": "profile_preview_err_rule_set",
+      "value": "引用的规则集缺失或无效"
+    },
+    {
+      "name": "profile_preview_err_build",
+      "value": "运行时配置构建失败"
+    },
+    {
+      "name": "provider_section_title",
+      "value": "运行中 Provider"
+    },
+    {
+      "name": "provider_proxy_section",
+      "value": "代理集合（Proxy Providers）"
+    },
+    {
+      "name": "provider_rule_section",
+      "value": "规则集合（Rule Providers）"
+    },
+    {
+      "name": "provider_vehicle_http",
+      "value": "HTTP"
+    },
+    {
+      "name": "provider_vehicle_file",
+      "value": "本地文件"
+    },
+    {
+      "name": "provider_vehicle_inline",
+      "value": "内联"
+    },
+    {
+      "name": "provider_proxy_count",
+      "value": "%d 个节点"
+    },
+    {
+      "name": "provider_rule_count",
+      "value": "%d 条规则"
+    },
+    {
+      "name": "provider_never_updated",
+      "value": "尚未更新"
+    },
+    {
+      "name": "provider_updating",
+      "value": "正在更新 Provider"
+    },
+    {
+      "name": "provider_loading",
+      "value": "正在读取运行中 Provider"
+    },
+    {
+      "name": "provider_not_ready_title",
+      "value": "内核尚未就绪"
+    },
+    {
+      "name": "provider_not_ready_hint",
+      "value": "启动内核或连接后，可在此查看并管理当前运行配置的 Provider。"
+    },
+    {
+      "name": "provider_empty_title",
+      "value": "当前配置没有 Provider"
+    },
+    {
+      "name": "provider_empty_hint",
+      "value": "运行配置中定义的代理集合与规则集合将显示在这里。"
+    },
+    {
+      "name": "provider_connect_to_refresh",
+      "value": "连接代理后可刷新远程 HTTP Provider，当前可执行本地文件替换。"
+    },
+    {
+      "name": "provider_replace_file",
+      "value": "从本地文件替换"
+    },
+    {
+      "name": "provider_updated",
+      "value": "已更新 %s"
+    },
+    {
+      "name": "provider_unchanged",
+      "value": "%s 已是最新"
+    },
+    {
+      "name": "provider_replaced",
+      "value": "已替换 %s"
+    },
+    {
+      "name": "provider_err_unavailable",
+      "value": "运行中的内核不可用"
+    },
+    {
+      "name": "provider_err_stale_config",
+      "value": "操作期间运行配置已切换"
+    },
+    {
+      "name": "provider_err_not_found",
+      "value": "当前配置中已不存在该 Provider"
+    },
+    {
+      "name": "provider_err_not_updatable",
+      "value": "该 Provider 不支持远程刷新"
+    },
+    {
+      "name": "provider_err_not_replaceable",
+      "value": "内联 Provider 不支持本地文件替换"
+    },
+    {
+      "name": "provider_err_busy",
+      "value": "该 Provider 正在更新中"
+    },
+    {
+      "name": "provider_err_invalid_content",
+      "value": "文件内容或格式与该 Provider 不匹配"
+    },
+    {
+      "name": "provider_err_timeout",
+      "value": "Provider 更新超时"
+    },
+    {
+      "name": "provider_err_io",
+      "value": "无法读取或写入 Provider 文件"
+    },
+    {
+      "name": "provider_err_update_failed",
+      "value": "Provider 更新失败，已保留原有效资源"
+    },
+    {
+      "name": "proxy_save_to_library",
+      "value": "保存到本地节点库"
+    },
+    {
+      "name": "proxy_saved_to_library",
+      "value": "已保存到本地节点库：%s"
+    },
+    {
+      "name": "proxy_saved_overwritten",
+      "value": "已覆盖本地节点：%s"
+    },
+    {
+      "name": "proxy_save_conflict_title",
+      "value": "本地节点库已存在同名节点"
+    },
+    {
+      "name": "proxy_save_conflict_message",
+      "value": "“%s”已存在于本地节点库，请选择处理方式。"
+    },
+    {
+      "name": "proxy_save_conflict_overwrite",
+      "value": "覆盖同名节点"
+    },
+    {
+      "name": "proxy_save_conflict_rename",
+      "value": "重命名为“%s”并保存"
+    },
+    {
+      "name": "proxy_save_err_stale",
+      "value": "当前运行配置已变化，请刷新后重试"
+    },
+    {
+      "name": "proxy_save_err_not_found",
+      "value": "运行配置中已不存在该节点"
+    },
+    {
+      "name": "proxy_save_err_not_exportable",
+      "value": "该条目不支持保存到本地节点库"
+    },
+    {
+      "name": "proxy_save_err_name_taken",
+      "value": "本地节点库中已存在同名节点"
+    },
+    {
+      "name": "proxy_save_err_conflict",
+      "value": "本地节点库已发生并发变更，请重试"
+    },
+    {
+      "name": "proxy_save_err_store",
+      "value": "读写本地节点库失败"
+    },
+    {
+      "name": "proxy_save_err_invalid",
+      "value": "节点参数未通过本地节点库校验"
+    },
+    {
+      "name": "proxy_save_err_failed",
+      "value": "保存到本地节点库失败"
     }
   ]
 }

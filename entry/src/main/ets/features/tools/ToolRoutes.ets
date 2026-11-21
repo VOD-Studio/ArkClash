@@ -1,7 +1,25 @@
 /** 工具页能打开的二级页面，值同时是 NavPathStack 里的路由名。 */
 export enum ToolRoute {
-  Connections = 'connections',
+  Theme = 'theme',
+  General = 'general',
   Logs = 'logs',
-  Settings = 'settings',
+  AdvancedConfig = 'advancedConfig',
+  Network = 'network',
+  DnsOverrides = 'dnsOverrides',
+  AddedRules = 'addedRules',
+  Scripts = 'scripts',
+  LocalProxies = 'localProxies',
+  RuleSets = 'ruleSets',
+  ProxyFilters = 'proxyFilters',
+  IconSets = 'iconSets',
+  IconSetPreview = 'iconSetPreview',
+  ScriptEditor = 'scriptEditor',
+  ProfileExtension = 'profileExtension',
+  ProfileRuntimePreview = 'profileRuntimePreview',
+  ProfileRules = 'profileRules',
+  Connections = 'connections',
+  Dns = 'dns',
+  Resources = 'resources',
+  Backup = 'backup',
   About = 'about'
 }

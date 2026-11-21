@@ -7,7 +7,7 @@
 | workflow | 什么时候跑 | 做什么 |
 |---|---|---|
 | `ci.yml` | PR、合并到 `main`、机器人手动触发 | 分层检查，最后由「CI 通过」汇总，见下一节 |
-| `core.yml` | 被其他 workflow 调用 | 用公开的 OpenHarmony NDK 编 `libclash.so`、跑 `go vet`，上传为 artifact |
+| `core.yml` | 被其他 workflow 调用 | 用公开的 OpenHarmony NDK 编译转发内核和独立备份库、跑 `go vet`，上传为 artifact |
 | `hap.yml` | 被其他 workflow 调用 | 打 HAP（有签名材料时同一次构建产出签名包）、codelinter、检查内容和体积 |
 | `release-please.yml` | 合并到 `main` | 维护发版 PR（版本号、CHANGELOG）并触发它的 CI；合并发版 PR 后打 tag、建 Release，调用 `release.yml` |
 | `release.yml` | 被 `release-please.yml` 调用，或手动补传 | 干净构建一次，生成校验和与来源证明，上传到 Release |
@@ -69,7 +69,7 @@
 
 ## 体积上限
 
-`scripts/ci/check-hap.py` 给 HAP 和 `libclash.so` 设了上限，超出时 HAP 任务失败。内核体积直接影响加载耗时，所以增长要有意识地决定：确实需要时，在 PR 里说明原因，再调高脚本里的 `BUDGET`。
+`scripts/ci/check-hap.py` 分别限制 HAP、`libclash.so` 和独立备份库的体积，超出时 HAP 任务失败。内核体积直接影响加载耗时，所以增长要有意识地决定：确实需要时，在 PR 里说明原因，再调高脚本里的 `BUDGET`。
 
 ## 变量与密钥
 

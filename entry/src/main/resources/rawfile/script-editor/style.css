@@ -1,0 +1,13 @@
+:root { color-scheme: light; --surface: #fff; --ink: #21232a; --accent: #006bd6; --font: 14px; }
+:root.dark { color-scheme: dark; --surface: #191b20; --ink: #e8e9ef; }
+html, body, #editor { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--surface); }
+.cm-editor { height: 100%; color: var(--ink); font-size: var(--font); }
+.cm-editor .cm-scroller { font-family: monospace; line-height: 1.55; }
+.cm-editor .cm-gutters { background: var(--surface); color: color-mix(in srgb, var(--ink) 62%, transparent); }
+.cm-editor .cm-content { padding-block: 10px; }
+.cm-editor .cm-panels { border-color: color-mix(in srgb, var(--ink) 18%, transparent); background: var(--surface); color: var(--ink); }
+.cm-editor .cm-search { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 32px 8px 8px; }
+.cm-editor .cm-search br { flex-basis: 100%; content: ''; }
+.cm-editor .cm-button, .cm-editor .cm-textfield { color: var(--ink); background: var(--surface); border-radius: 6px; padding: 5px 8px; margin: 0; }
+.cm-editor .cm-search .cm-textfield { min-width: 112px; width: min(40vw, 220px); }
+.cm-editor .cm-tooltip { background: var(--surface); color: var(--ink); }

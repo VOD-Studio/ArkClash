@@ -51,15 +51,43 @@ func init() {
 		r.Route("/arkclash", func(r chi.Router) {
 			r.Get("/status", getStatus)
 			r.Get("/proxies", getProxySnapshot)
+			r.Post("/proxies/definition", postProxyDefinition)
+			r.Get("/providers", getRuntimeProviders)
+			r.Get("/providers/events", getRuntimeProviderEvents)
+			r.Post("/providers/update", postRuntimeProviderUpdate)
+			r.Post("/providers/replace", postRuntimeProviderReplace)
 			r.Get("/selections", getSelections)
-			r.Post("/selection", postSelection)
+			r.Post("/selection", portableMutation(postSelection))
 			r.Get("/delay", getDelay)
 			r.Post("/probe", postProbe)
+			r.Post("/backup/dav", postBackupDAV)
+			r.Post("/backup/apply", withPortableMutation(postBackupApply, true))
 			r.Patch("/configs", patchRuntimeOptions)
 			r.Post("/reload", postReload)
 			r.Post("/prefetch", postPrefetch)
 			r.Get("/events", getEvents)
+			r.Get("/geo", getGeo)
+			r.Post("/geo/settings", postGeoSettings)
+			r.Post("/dns/settings", portableMutation(postDNSOverrides))
+			r.Post("/general/settings", portableMutation(postGeneralSettings))
+			r.Post("/rules/settings", portableMutation(postAddedRules))
+			r.Post("/rule-sets", postRuleSet)
+			r.Post("/scripts/apply", postProfileScript)
+			r.Get("/scripts/outbounds", getScriptOutbounds)
+			r.Get("/profiles/preview", getProfilePreview)
+			r.Post("/local-proxies/{operation}", postLocalProxies)
+			r.Post("/proxy-filters/validate", postProxyFilterValidation)
+			r.Post("/geo/update", postGeoUpdate)
+			r.Get("/geo/events", getGeoEvents)
+			r.Get("/diagnostics/capture", getDiagnosticCapture)
+			r.Get("/diagnostics/connections", getDiagnosticConnections)
+			r.Get("/diagnostics/dns", getDiagnosticDns)
+			r.Get("/diagnostics/logs", getDiagnosticLogs)
+			r.Post("/diagnostics/connections/close", postDiagnosticConnectionsClose)
+			r.Post("/diagnostics/dns/clear-cache", postDiagnosticDnsClearCache)
 			r.Post("/profiles/{name}", forwardCommand)
+			r.Post("/vpn/connect", forwardCommand)
+			r.Post("/vpn/disconnect", forwardCommand)
 		})
 	})
 }
@@ -101,9 +129,9 @@ func patchRuntimeOptions(w http.ResponseWriter, r *http.Request) {
 }
 
 type reloadBody struct {
-	Profile         string `json:"profile"`
-	Path            string `json:"path"`
-	ExpectedProfile string `json:"expectedProfile,omitempty"`
+	Profile         string  `json:"profile"`
+	Path            string  `json:"path"`
+	ExpectedProfile *string `json:"expectedProfile,omitempty"`
 }
 
 func postReload(w http.ResponseWriter, r *http.Request) {
@@ -170,8 +198,7 @@ var (
 	pending        = map[int64]chan commandReply{}
 )
 
-// forwardCommand 把 POST /arkclash/profiles/{name} 原样交给 VPN 进程的 ArkTS，等它用
-// ArkClashReply 回复。请求方中途断开时不再等，但 ArkTS 照样把命令做完（ADR-0009）。
+// HTTP 超时或断开只停止等待，不取消已交给扩展的操作。
 func forwardCommand(w http.ResponseWriter, r *http.Request) {
 	handler := commandHandler.Load()
 	if handler == nil {
@@ -195,7 +222,11 @@ func forwardCommand(w http.ResponseWriter, r *http.Request) {
 		pendingMu.Unlock()
 	}()
 
-	cName := C.CString(chi.URLParam(r, "name"))
+	name := "profiles/" + chi.URLParam(r, "name")
+	if strings.HasPrefix(r.URL.Path, "/arkclash/vpn/") {
+		name = strings.TrimPrefix(r.URL.Path, "/arkclash/")
+	}
+	cName := C.CString(name)
 	cBody := C.CString(string(body))
 	C.arkclashCallCommandHandler(*handler, C.longlong(id), cName, cBody)
 	C.free(unsafe.Pointer(cName))
@@ -365,10 +396,12 @@ func writeTextFrame(w io.Writer, p []byte) error {
 // ---- 经内核下载 ----
 
 type fetchRequest struct {
-	URL       string            `json:"url"`
-	Header    map[string]string `json:"header"`
-	Path      string            `json:"path"`      // 响应体写到这里，必须在配置目录下
-	TimeoutMs int               `json:"timeoutMs"` // 整个请求的上限
+	URL          string            `json:"url"`
+	Header       map[string]string `json:"header"`
+	Path         string            `json:"path"`      // 响应体写到这里，必须在配置目录下
+	TimeoutMs    int               `json:"timeoutMs"` // 整个请求的上限
+	MaxBytes     int64             `json:"maxBytes"`
+	AgeSecretKey *string           `json:"ageSecretKey"` // 未设置时按原始文件下载。
 }
 
 type fetchResult struct {
@@ -426,22 +459,33 @@ func fetch(req fetchRequest) fetchResult {
 	if resp.StatusCode != http.StatusOK {
 		return result
 	}
-	if err := writeBody(req.Path, resp.Body); err != nil {
+	limit := int64(fetchLimit)
+	if req.MaxBytes > 0 && req.MaxBytes < limit {
+		limit = req.MaxBytes
+	}
+	var body io.Reader = resp.Body
+	if req.AgeSecretKey != nil {
+		body, err = subscriptionBody(body, *req.AgeSecretKey, limit)
+		if err != nil {
+			return fetchResult{Error: err.Error()}
+		}
+	}
+	if err := writeBody(req.Path, body, limit); err != nil {
 		return fetchResult{Error: err.Error()}
 	}
 	return result
 }
 
-func writeBody(path string, body io.Reader) error {
+func writeBody(path string, body io.Reader, limit int64) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	n, err := io.Copy(f, io.LimitReader(body, fetchLimit+1))
+	n, err := io.Copy(f, io.LimitReader(body, limit+1))
 	if closeErr := f.Close(); err == nil {
 		err = closeErr
 	}
-	if err == nil && n > fetchLimit {
+	if err == nil && n > limit {
 		err = errors.New("response too large")
 	}
 	if err != nil {
