@@ -54,14 +54,14 @@
 +}
 --- a/adapter/adapter.go
 +++ b/adapter/adapter.go
-@@ -34,6 +34,7 @@
- type Proxy struct {
- 	C.ProxyAdapter
+@@ -36,6 +36,7 @@
  	alive   atomic.Bool
  	history *queue.Queue[C.DelayHistory]
  	extra   xsync.Map[string, *internalProxyState]
 +	rawDefinition map[string]any
  }
+ 
+ // Adapter implements C.Proxy
 --- a/adapter/parser.go
 +++ b/adapter/parser.go
 @@ -246,7 +246,9 @@
@@ -93,22 +93,22 @@
  	hash         utils.HashType
  	parser       Parser[V]
  	interval     time.Duration
-@@ -48,6 +50,14 @@
- 	return f.vehicle.Type()
- }
+@@ -47,6 +49,14 @@
  
+ func (f *Fetcher[V]) VehicleType() P.VehicleType {
+ 	return f.vehicle.Type()
++}
++
 +func (f *Fetcher[V]) ArkClashUpdatedAt() time.Time {
 +	nano := f.updatedNano.Load()
 +	if nano <= 0 {
 +		return time.Time{}
 +	}
 +	return time.Unix(0, nano)
-+}
-+
- func (f *Fetcher[V]) UpdatedAt() time.Time {
- 	return f.updatedAt
  }
-@@ -59,6 +69,7 @@
+ 
+ func (f *Fetcher[V]) UpdatedAt() time.Time {
+@@ -60,6 +70,7 @@
  		modTime := stat.ModTime()
  		contents, _, err := f.loadBuf(buf, utils.MakeHash(buf), false)
  		f.updatedAt = modTime // reset updatedAt to file's modTime
@@ -116,7 +116,7 @@
  
  		if err == nil {
  			err = f.startPullLoop(time.Since(modTime) > f.interval)
-@@ -81,6 +92,7 @@
+@@ -82,6 +93,7 @@
  			}
  			contents, _, err := f.loadBuf(buf, utils.MakeHash(buf), true)
  			f.updatedAt = modTime // reset updatedAt to file's modTime
@@ -124,7 +124,7 @@
  
  			if err == nil {
  				log.Infoln("[Provider] %s extract successful from bundle file", f.Name())
-@@ -137,6 +149,7 @@
+@@ -139,6 +151,7 @@
  			_ = os.Chtimes(f.vehicle.Path(), now, now)
  		}
  		f.updatedAt = now
@@ -132,7 +132,7 @@
  		f.backoff.Reset() // no error, reset backoff
  		return lo.Empty[V](), true, nil
  	}
-@@ -158,6 +171,7 @@
+@@ -160,6 +173,7 @@
  		}
  	}
  	f.updatedAt = now
@@ -214,13 +214,14 @@
  	"time"
  
  	"github.com/metacubex/mihomo/common/pool"
-@@ -62,6 +63,21 @@
+@@ -61,9 +62,24 @@
+ 
  type baseProvider struct {
  	behavior P.RuleBehavior
 -	strategy ruleStrategy
 +	strategy atomic.Pointer[ruleStrategy]
-+}
-+
+ }
+ 
 +func (bp *baseProvider) loadStrategy() ruleStrategy {
 +	if ptr := bp.strategy.Load(); ptr != nil {
 +		return *ptr
@@ -234,10 +235,14 @@
 +		return
 +	}
 +	bp.strategy.Store(&s)
++}
++
+ func (bp *baseProvider) Type() P.ProviderType {
+ 	return P.Rule
+ }
+@@ -73,15 +89,19 @@
  }
  
- func (bp *baseProvider) Type() P.ProviderType {
-@@ -75,13 +91,17 @@
  func (bp *baseProvider) Count() int {
 -	return bp.strategy.Count()
 +	if s := bp.loadStrategy(); s != nil {
@@ -277,9 +282,10 @@
  	}
  
 -	rp.strategy = newStrategy(behavior, parse)
-+	strategy := newStrategy(behavior, parse)
- 	if len(payload) > 0 { // using as fallback rules
+-	if len(payload) > 0 { // using as fallback rules
 -		rp.strategy = rulesParseInline(payload, rp.strategy)
++	strategy := newStrategy(behavior, parse)
++	if len(payload) > 0 { // using as fallback rules
 +		strategy = rulesParseInline(payload, strategy)
  	}
 +	rp.setStrategy(strategy)

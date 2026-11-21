@@ -26,7 +26,8 @@ cd "$ROOT"
 if [[ $# -eq 1 && $1 == local ]]; then
   if [[ -f "${OHPM}.bat" ]]; then
     cmd.exe //d //s //c "\"\"$(cygpath -w "${OHPM}.bat")\" install --all\""
-    export HVIGORW="$(cygpath -w "${HVIGORW}.bat")"
+    HVIGORW="$(cygpath -w "${HVIGORW}.bat")"
+    export HVIGORW
   else
     "$OHPM" install --all
   fi
