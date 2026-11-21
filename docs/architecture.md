@@ -100,6 +100,8 @@ sequenceDiagram
 
 Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/update` 和独立 `/arkclash/geo/events` 最新值快照流。离线只读文件信息和编辑设置，页面可见且本次 boot 转发就绪后才订阅、下载；隐藏不取消内核任务。下载串行、可取消，文件与 reader/cache 原子切换，不重建 TUN。归属与 bundle 保护见 [ADR-0015](adr/0015-geo-resource-management.md)。
 
+运行中 Provider 管理使用 `/arkclash/providers`、`/arkclash/providers/events`、`/arkclash/providers/update` 与 `/arkclash/providers/replace`，按 `(kind, name)` 唯一区分同名 `proxy-provider` 与 `rule-provider`，所有操作均带 `bootId` 与 `configRevision` 核对并按单项互斥；本地替换文件由 UI 暂存到 `profile-work/`，校验通过后才原位写入并生效。代理节点入库通过 `POST /arkclash/proxies/definition` 按节点实例 `id`（而非显示名）提取原始定义，再走自定义代理库校验与存储流程。
+
 全局 DNS 由 `applyOverrides` 在解析订阅或本地配置时逐项合并。在线保存使用 `/arkclash/dns/settings`，在原有控制器和 TUN 上应用配置。设置页只读本地设置文件，DNS 记录页仍使用自己的诊断接口。见 [ADR-0021](adr/0021-global-dns-overrides.md)。
 
 常规设置通过 `/arkclash/general/settings` 提交。用户启用的面板单独使用 `127.0.0.1:9090`，密钥与内部通道独立。日志页可见且打开捕获时订阅 `/arkclash/diagnostics/logs`，关联当前内核代次，最近 5000 项留在内存。见 [ADR-0029](adr/0029-general-settings-and-log-capture.md)。

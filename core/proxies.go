@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"strconv"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/metacubex/http"
 	"github.com/metacubex/mihomo/adapter/outboundgroup"
 	C "github.com/metacubex/mihomo/constant"
+	P "github.com/metacubex/mihomo/constant/provider"
 	"github.com/metacubex/mihomo/tunnel"
 )
 
@@ -174,4 +176,104 @@ func getProxySnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	render.JSON(w, r, snapshot)
+}
+
+type proxyDefinitionRequest struct {
+	BootID         string `json:"bootId"`
+	ConfigRevision uint64 `json:"configRevision"`
+	ID             string `json:"id"`
+	Group          string `json:"group"`
+}
+
+type proxyDefinitionResponse struct {
+	BootID         string         `json:"bootId"`
+	ConfigRevision uint64         `json:"configRevision"`
+	ID             string         `json:"id"`
+	Name           string         `json:"name"`
+	Provider       string         `json:"provider,omitempty"`
+	Definition     map[string]any `json:"definition"`
+}
+
+type rawDefinitionProvider interface {
+	ArkClashRawDefinition() map[string]any
+}
+
+func isBuiltinProxyType(kind C.AdapterType) bool {
+	switch kind {
+	case C.Direct, C.Reject, C.RejectDrop, C.Compatible, C.Pass, C.Dns:
+		return true
+	default:
+		return false
+	}
+}
+
+func lookupProxyDefinition(req proxyDefinitionRequest) (proxyDefinitionResponse, int, error) {
+	if req.BootID == "" || req.ConfigRevision == 0 || req.ID == "" {
+		return proxyDefinitionResponse{}, http.StatusBadRequest, errors.New("proxy_invalid_request")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !running {
+		return proxyDefinitionResponse{}, http.StatusConflict, errors.New("core_not_running")
+	}
+	if current.Profile == "" {
+		return proxyDefinitionResponse{}, http.StatusConflict, errors.New("core_profile_unavailable")
+	}
+	if req.BootID != runtimeBootID || req.ConfigRevision != runtimeConfigRevision {
+		return proxyDefinitionResponse{}, http.StatusConflict, errors.New("proxy_stale_config")
+	}
+	proxy, ok := currentProxyMember(req.ID, req.Group)
+	if !ok {
+		return proxyDefinitionResponse{}, http.StatusNotFound, errors.New("proxy_not_found")
+	}
+	if _, isGroup := proxy.Adapter().(outboundgroup.ProxyGroup); isGroup || isBuiltinProxyType(proxy.Type()) {
+		return proxyDefinitionResponse{}, http.StatusBadRequest, errors.New("proxy_not_exportable")
+	}
+	exporter, ok := proxy.(rawDefinitionProvider)
+	if !ok {
+		return proxyDefinitionResponse{}, http.StatusBadRequest, errors.New("proxy_not_exportable")
+	}
+	definition := exporter.ArkClashRawDefinition()
+	if len(definition) == 0 {
+		return proxyDefinitionResponse{}, http.StatusBadRequest, errors.New("proxy_not_exportable")
+	}
+	if name, _ := definition["name"].(string); name == "" {
+		definition["name"] = proxy.Name()
+	}
+	providerName := proxy.ProxyInfo().ProviderName
+	if providerName == "" {
+		for name, item := range tunnel.Providers() {
+			if item.VehicleType() == P.Compatible {
+				continue
+			}
+			for _, candidate := range item.Proxies() {
+				if candidate == proxy && (providerName == "" || name < providerName) {
+					providerName = name
+				}
+			}
+		}
+	}
+	return proxyDefinitionResponse{
+		BootID:         runtimeBootID,
+		ConfigRevision: runtimeConfigRevision,
+		ID:             req.ID,
+		Name:           proxy.Name(),
+		Provider:       providerName,
+		Definition:     definition,
+	}, http.StatusOK, nil
+}
+
+func postProxyDefinition(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
+	var body proxyDefinitionRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, r, http.StatusBadRequest, errors.New("proxy_invalid_request"))
+		return
+	}
+	result, status, err := lookupProxyDefinition(body)
+	if err != nil {
+		writeError(w, r, status, err)
+		return
+	}
+	render.JSON(w, r, result)
 }

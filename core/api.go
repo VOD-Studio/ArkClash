@@ -51,6 +51,11 @@ func init() {
 		r.Route("/arkclash", func(r chi.Router) {
 			r.Get("/status", getStatus)
 			r.Get("/proxies", getProxySnapshot)
+			r.Post("/proxies/definition", postProxyDefinition)
+			r.Get("/providers", getRuntimeProviders)
+			r.Get("/providers/events", getRuntimeProviderEvents)
+			r.Post("/providers/update", postRuntimeProviderUpdate)
+			r.Post("/providers/replace", postRuntimeProviderReplace)
 			r.Get("/selections", getSelections)
 			r.Post("/selection", portableMutation(postSelection))
 			r.Get("/delay", getDelay)
