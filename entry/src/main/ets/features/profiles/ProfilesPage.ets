@@ -29,6 +29,7 @@ export struct ProfilesPage {
   @Param @Require store: ProfileStore;
   @Param @Require scroller: Scroller;
   @Event onExtension: (profile: string) => void = (_profile: string): void => {};
+  @Event onRuntimePreview: (profile: string, name: string) => void = (_profile: string, _name: string): void => {};
   @Event onScrollDirection: (down: boolean) => void = (): void => {};
   @Param topInset: number = 0;
   @Param pickerMode: boolean = false;
@@ -358,6 +359,8 @@ export struct ProfilesPage {
               onUpdate: (): void => { this.update(item); },
               extensionAvailable: !this.pickerMode && item.type !== 'custom',
               onExtension: (): void => this.onExtension(item.id),
+              runtimePreviewAvailable: !this.pickerMode,
+              onRuntimePreview: (): void => this.onRuntimePreview(item.id, item.name),
               onDetails: (): void => { this.detailItem = item; this.detailShown = true; } })
           }
         }, (item: ProfileItem): string => item.id)
@@ -425,7 +428,14 @@ export struct ProfilesPage {
   @Builder
   DetailSheet() {
     if (this.detailItem !== undefined) {
-      ProfileDetails({ store: this.store, item: this.detailItem, onEdit: (): void => {
+      ProfileDetails({ store: this.store, item: this.detailItem,
+        runtimePreviewAvailable: !this.pickerMode,
+        onRuntimePreview: (): void => {
+          const item = this.detailItem;
+          this.detailShown = false;
+          if (item !== undefined) { this.onRuntimePreview(item.id, item.name); }
+        },
+        onEdit: (): void => {
         const item = this.detailItem;
         this.detailShown = false;
         if (item !== undefined) { this.openEdit(item); }

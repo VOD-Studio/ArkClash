@@ -11,7 +11,9 @@ export struct ProfileDetails {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require store: ProfileStore;
   @Param @Require item: ProfileItem;
+  @Param runtimePreviewAvailable: boolean = false;
   @Event onEdit: () => void = (): void => {};
+  @Event onRuntimePreview: () => void = (): void => {};
   @Local details: ProfileSummary | undefined = undefined;
   @Local sourceShown: boolean = false;
   @Local sourceText: string = '';
@@ -137,6 +139,16 @@ export struct ProfileDetails {
           .width('100%').height(56).padding({ left: 16, right: 16 })
           .enabled(!this.loadingSource)
           .onClick((): void => { this.openSource(); })
+          if (this.runtimePreviewAvailable) {
+            Row().height(0.5).width('100%').backgroundColor(this.appStyle.palette.divider).margin({ left: 16, right: 14 })
+            Row({ space: 16 }) {
+              Text($r('app.string.profile_runtime_preview')).fontFamily(this.appStyle.fontFamily).fontSize(17).lineHeight(22)
+                .fontColor($r('sys.color.font_primary')).layoutWeight(1)
+              SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(16).fontColor([$r('sys.color.font_secondary')])
+            }
+            .width('100%').height(56).padding({ left: 16, right: 16 })
+            .onClick((): void => this.onRuntimePreview())
+          }
           Row().height(0.5).width('100%').backgroundColor(this.appStyle.palette.divider).margin({ left: 16, right: 14 })
           Row({ space: 16 }) {
             Text($r('app.string.action_edit')).fontFamily(this.appStyle.fontFamily).fontSize(17).lineHeight(22)

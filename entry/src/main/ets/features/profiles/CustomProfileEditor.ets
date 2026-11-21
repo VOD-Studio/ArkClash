@@ -19,6 +19,7 @@ import { describeError } from './ProfileErrors';
 import { ProfileStore } from './Profiles';
 import { ProfileSheetHeader } from './ProfileSheetHeader';
 import { uiResourceText } from '../../components/ResourceText';
+import { YamlCodeEditor, YamlCodeEditorController } from './YamlCodeEditor';
 
 type CustomPanel = 'overview' | 'groups' | 'group' | 'rules' | 'rule' | 'nodes' | 'text' | 'import' | 'issues';
 type CustomPicker = 'members' | 'providers' | 'node' | 'dialer' | 'ruleTarget' | 'ruleProvider' | 'filter';
@@ -145,6 +146,7 @@ export struct CustomProfileEditor {
   private library: LocalProxy[] = [];
   private active: boolean = false;
   private initialSource: string = CUSTOM_EMPTY_YAML;
+  private yamlController: YamlCodeEditorController = new YamlCodeEditorController();
   private rows: ListSource<CustomEditorRow> = new ListSource<CustomEditorRow>();
 
   aboutToAppear(): void {
@@ -165,6 +167,7 @@ export struct CustomProfileEditor {
       catch (error) {
         if (!this.active) { return; }
         this.sourceText = source;
+        this.yamlController.setFallback(source);
         this.yamlKey = '';
         this.editTitle = $r('app.string.custom_source');
         this.panel = 'text';
@@ -276,6 +279,7 @@ export struct CustomProfileEditor {
       const text = key === '' ? source : await readCustomSection(source, key);
       if (!this.active) { return; }
       this.sourceText = text;
+      this.yamlController.setFallback(text);
       this.yamlKey = key;
       this.editTitle = label;
       this.yamlReturn = returns;
@@ -290,12 +294,15 @@ export struct CustomProfileEditor {
   }
 
   private async saveSource(): Promise<void> {
+    let text = this.sourceText;
+    try { text = await this.yamlController.readText(); } catch (_error) {}
+    this.sourceText = text;
     if (this.yamlKey !== '') {
-      await this.mutate({ kind: 'section', field: this.yamlKey, text: this.sourceText }, this.yamlReturn);
+      await this.mutate({ kind: 'section', field: this.yamlKey, text: text }, this.yamlReturn);
       return;
     }
     this.draft.busy = true;
-    try { await this.useSource(this.sourceText, this.yamlReturn); }
+    try { await this.useSource(text, this.yamlReturn); }
     catch (error) { this.toast(customFailure(error as Object)); }
     finally { this.draft.busy = false; }
   }
@@ -722,10 +729,14 @@ export struct CustomProfileEditor {
         } else if (this.panel === 'rule') {
           this.RuleForm()
         } else if (this.panel === 'text') {
-          TextArea({ text: this.sourceText, placeholder: 'YAML' }).fontFamily('monospace')
-            .enabled(!this.draft.busy).layoutWeight(1).width('100%')
-            .margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8, bottom: 16 })
-            .onChange((text: string): void => { this.sourceText = text; this.draft.editing = true; })
+          YamlCodeEditor({
+            initialText: this.sourceText,
+            readOnly: false,
+            editorEnabled: !this.draft.busy,
+            foreground: true,
+            controller: this.yamlController,
+            onDirtyChange: (dirty: boolean): void => { if (dirty) { this.draft.editing = true; } }
+          })
         } else if (this.panel === 'import') {
           this.ImportForm()
         } else {

@@ -4523,6 +4523,70 @@
     {
       "name": "custom_discard_title",
       "value": "Discard changes?"
+    },
+    {
+      "name": "err_invalid_yaml_position",
+      "value": "Invalid YAML (line %1$s, col %2$s)"
+    },
+    {
+      "name": "yaml_copy_all",
+      "value": "Copy all"
+    },
+    {
+      "name": "yaml_editor_failed",
+      "value": "Could not load the YAML editor"
+    },
+    {
+      "name": "profile_runtime_preview",
+      "value": "Runtime config"
+    },
+    {
+      "name": "profile_preview_loading",
+      "value": "Building runtime configuration…"
+    },
+    {
+      "name": "profile_preview_host_unavailable",
+      "value": "Proxy host is not ready. Start the core to build the runtime configuration."
+    },
+    {
+      "name": "profile_preview_start_core",
+      "value": "Start core & retry"
+    },
+    {
+      "name": "profile_preview_version_applied",
+      "value": "Running config #%1$s · Saved %2$s"
+    },
+    {
+      "name": "profile_preview_version_applied_only",
+      "value": "Running config #%s"
+    },
+    {
+      "name": "profile_preview_version_saved",
+      "value": "Saved version %s"
+    },
+    {
+      "name": "profile_preview_version_unsaved",
+      "value": "Saved profile version"
+    },
+    {
+      "name": "profile_preview_not_applied",
+      "value": "This preview is not currently applied to the running core."
+    },
+    {
+      "name": "profile_preview_err_custom_tun",
+      "value": "Custom TUN listeners are not supported"
+    },
+    {
+      "name": "profile_preview_err_too_large",
+      "value": "Runtime configuration exceeds the preview size limit"
+    },
+    {
+      "name": "profile_preview_err_rule_set",
+      "value": "A referenced rule set is missing or invalid"
+    },
+    {
+      "name": "profile_preview_err_build",
+      "value": "Could not build the runtime configuration"
     }
   ]
 }

@@ -29,6 +29,7 @@ import { ConnectionsPage } from '../features/tools/ConnectionsPage';
 import { DnsPage } from '../features/tools/DnsPage';
 import { DnsOverridesPage } from '../features/tools/DnsOverridesPage';
 import { ProfileExtensionPage } from '../features/profiles/ProfileExtensionPage';
+import { ProfileRuntimePreviewPage } from '../features/profiles/ProfileRuntimePreviewPage';
 import { ScriptEditorPage } from '../features/profiles/ScriptEditorPage';
 import { LocalProxiesPage } from '../features/profiles/LocalProxiesPage';
 import { ScriptsPage } from '../features/profiles/ScriptsPage';
@@ -59,6 +60,11 @@ interface IconSetRouteArgument {
 }
 
 interface ScriptRouteArgument { id: string; }
+
+interface ProfilePreviewRouteArgument {
+  id: string;
+  name: string;
+}
 
 @Entry
 @ComponentV2
@@ -254,6 +260,11 @@ struct Index {
     this.stack.pushPath({ name: ToolRoute.ProfileExtension, param: argumentsForPage });
   }
 
+  private openProfileRuntimePreview(profile: string, name: string): void {
+    const argumentsForPage: ProfilePreviewRouteArgument = { id: profile, name: name };
+    this.stack.pushPath({ name: ToolRoute.ProfileRuntimePreview, param: argumentsForPage });
+  }
+
   private openScriptEditor(id: string): void {
     const argumentsForPage: ScriptRouteArgument = { id: id };
     this.stack.pushPath({ name: ToolRoute.ScriptEditor, param: argumentsForPage });
@@ -299,6 +310,9 @@ struct Index {
       ProfileExtensionPage({ profileId: (param as ScriptRouteArgument).id, currentProfile: this.profiles.current,
         foreground: this.foreground, onScripts: (): void => { this.stack.pushPath({ name: ToolRoute.Scripts }); },
         onStandardRules: (): void => { this.stack.pushPath({ name: ToolRoute.ProfileRules, param: param }); } })
+    } else if (name === ToolRoute.ProfileRuntimePreview) {
+      ProfileRuntimePreviewPage({ profileId: (param as ProfilePreviewRouteArgument).id,
+        profileName: (param as ProfilePreviewRouteArgument).name, foreground: this.foreground })
     } else if (name === ToolRoute.ProfileRules) {
       AddedRulesPage({ profileId: (param as ScriptRouteArgument).id,
         foreground: this.foreground, reduceMotion: this.reduceMotion,
@@ -343,7 +357,8 @@ struct Index {
               onSwitchProfile: (): void => { this.profilePicker = true; },
               onOpenProfiles: () => this.tabs.changeIndex(Tab.Profiles),
               onOpenProxies: () => { this.proxyPicker = true; },
-              onOpenResources: (): void => { this.stack.pushPath({ name: ToolRoute.Resources }); }
+              onOpenResources: (): void => { this.stack.pushPath({ name: ToolRoute.Resources }); },
+              onRuntimePreview: (profile: string, name: string): void => this.openProfileRuntimePreview(profile, name)
             })
           }
           .tabBar(tabBar($r('sys.symbol.house'), $r('sys.symbol.house_fill'), $r('app.string.tab_home'),
@@ -376,6 +391,7 @@ struct Index {
               topInset: this.topInset(),
               visible: this.foreground && this.tab === Tab.Profiles,
               onExtension: (profile: string): void => this.openProfileExtension(profile),
+              onRuntimePreview: (profile: string, name: string): void => this.openProfileRuntimePreview(profile, name),
             })
           }
           .tabBar(tabBar($r('sys.symbol.doc_text'), $r('sys.symbol.doc_text_fill'), $r('app.string.tab_profiles'),

@@ -25,6 +25,8 @@ export struct ProfileCard {
   @Event onUpdate: () => void = (): void => {};
   @Param extensionAvailable: boolean = false;
   @Event onExtension: () => void = (): void => {};
+  @Param runtimePreviewAvailable: boolean = false;
+  @Event onRuntimePreview: () => void = (): void => {};
   @Event onDetails: () => void = (): void => {};
   private editIcon: SymbolGlyphModifier = new SymbolGlyphModifier($r('sys.symbol.pencil_line'));
   private updateIcon: SymbolGlyphModifier = new SymbolGlyphModifier($r('sys.symbol.arrow_clockwise'));
@@ -83,6 +85,9 @@ export struct ProfileCard {
     Menu() {
       if (this.extensionAvailable) {
         MenuItem({ content: $r('app.string.profile_extension') }).onClick((): void => this.onExtension())
+      }
+      if (this.runtimePreviewAvailable) {
+        MenuItem({ content: $r('app.string.profile_runtime_preview') }).onClick((): void => this.onRuntimePreview())
       }
       MenuItem({ content: $r('app.string.profile_details_title') }).onClick((): void => this.onDetails())
       if (this.item.isSubscription) {

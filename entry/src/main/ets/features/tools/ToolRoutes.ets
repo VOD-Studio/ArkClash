@@ -15,6 +15,7 @@ export enum ToolRoute {
   IconSetPreview = 'iconSetPreview',
   ScriptEditor = 'scriptEditor',
   ProfileExtension = 'profileExtension',
+  ProfileRuntimePreview = 'profileRuntimePreview',
   ProfileRules = 'profileRules',
   Connections = 'connections',
   Dns = 'dns',

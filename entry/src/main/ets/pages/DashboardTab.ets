@@ -20,6 +20,7 @@ export struct DashboardTab {
   @Event onOpenProfiles: () => void = () => {};
   @Event onOpenProxies: () => void = () => {};
   @Event onOpenResources: () => void = () => {};
+  @Event onRuntimePreview: (profile: string, name: string) => void = (_profile: string, _name: string): void => {};
   @Local conn: Connection = connection;
   @Local detailShown: boolean = false;
   @Local detailItem: ProfileItem | undefined = undefined;
@@ -43,7 +44,13 @@ export struct DashboardTab {
   @Builder
   Details() {
     if (this.detailItem !== undefined) {
-      ProfileDetailsSheet({ store: this.store, item: this.detailItem, visible: this.visible && this.detailShown })
+      ProfileDetailsSheet({ store: this.store, item: this.detailItem, visible: this.visible && this.detailShown,
+        runtimePreviewAvailable: true,
+        onRuntimePreview: (): void => {
+          const item = this.detailItem;
+          this.detailShown = false;
+          if (item !== undefined) { this.onRuntimePreview(item.id, item.name); }
+        } })
     }
   }
 

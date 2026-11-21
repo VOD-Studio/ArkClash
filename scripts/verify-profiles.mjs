@@ -58,6 +58,7 @@ const fileIo = {
 };
 
 const kits = {
+  '@kit.AbilityKit': {},
   '@kit.BasicServicesKit': {},
   '@kit.CoreFileKit': { fileIo },
   '@kit.NetworkKit': { http: {} },
@@ -1516,7 +1517,15 @@ test('编辑保存失败在后台不提前消费，返回前台只提示一次�
   const resources = (key) => key;
   const { describeError } = load(path.join(featureDir, 'ProfileErrors.ets'), undefined, { $r: resources });
   const { errorString } = load(path.join(etsDir, 'shared/profiles/Errors.ets'));
-  const Editor = componentControl('ProfileEditor', { describeError, errorString, $r: resources, appAppearance: testAppearance });
+  class MockYamlController {
+    text = '';
+    setFallback(value) { this.text = value; }
+    async readText() { return this.text; }
+    async replaceText(value) { this.text = value; return true; }
+    async reloadText(value) { this.text = value; return true; }
+  }
+  const Editor = componentControl('ProfileEditor', { describeError, errorString, $r: resources,
+    appAppearance: testAppearance, YamlCodeEditorController: MockYamlController });
   await sandbox(async (dir) => {
     const fixture = await actualProfileConsumer(dir);
     const editor = new Editor();
@@ -1919,4 +1928,49 @@ test('a custom profile with unresolved references can be saved without selecting
       assert.equal(fixture.requests.some((request) => request.path === '/arkclash/reload'), false);
     } finally { await fixture.close(); }
   });
+});
+
+test('YAML 语法错误仅保留脱敏行列位置，且未知字段与注释可通过校验', () => {
+  const analyze = load(path.join(etsDir, 'shared/profiles/Analyze.ets'));
+  const errors = load(path.join(etsDir, 'shared/profiles/Errors.ets'));
+
+  const validWithUnknownAndComments = [
+    '# 保留用户顶部注释',
+    'x-custom-extra: keep-value',
+    'proxies:',
+    '  - name: HK # 行尾注释',
+    '    type: direct',
+    'rules:',
+    '  - MATCH,DIRECT',
+  ].join('\n');
+  const ok = analyze.analyzeText(validWithUnknownAndComments);
+  assert.equal(ok.error, '');
+
+  const broken = 'proxies:\n  - name: secret-node-pass-123\n  broken: [1, 2\n';
+  const bad = analyze.analyzeText(broken);
+  assert.match(bad.error, /^invalid_yaml:[1-9][0-9]*:[1-9][0-9]*$/);
+  assert.equal(bad.error.includes('secret-node-pass-123'), false);
+  assert.equal(errors.errorString(new Error(bad.error)), bad.error);
+  assert.equal(errors.errorString(new Error('invalid_yaml:secret-leak')), 'invalid_yaml');
+  assert.equal(errors.errorString(new Error('preview_core_unavailable')), 'preview_core_unavailable');
+  assert.equal(errors.errorString(new Error('preview_custom_tun')), 'preview_custom_tun');
+});
+
+test('运行时预览请求守卫在切换配置或退出后丢弃迟到响应', () => {
+  const preview = load(path.join(etsDir, 'client/ProfilePreview.ets'));
+  const guard = new preview.ProfilePreviewGuard();
+  const firstToken = guard.begin('p1');
+  assert.equal(guard.accepts(firstToken, 'p1'), true);
+  assert.equal(guard.accepts(firstToken, 'p2'), false);
+
+  const secondToken = guard.begin('p2');
+  assert.equal(guard.accepts(firstToken, 'p1'), false);
+  assert.equal(guard.accepts(secondToken, 'p2'), true);
+
+  guard.cancel();
+  assert.equal(guard.accepts(secondToken, 'p2'), false);
+
+  assert.equal(preview.isPreviewHostUnavailable(new Error('preview_core_unavailable')), true);
+  assert.equal(preview.isPreviewHostUnavailable(new Error('core is not running')), true);
+  assert.equal(preview.isPreviewHostUnavailable(new Error('script_execution:3:5')), false);
 });

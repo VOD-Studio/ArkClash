@@ -10,6 +10,7 @@ import { ProfileIconPicker } from './ProfileIconPicker';
 import { ProfileEdit, ProfileStore } from './Profiles';
 import { ProfileAgeKeyField } from './ProfileAgeKeyField';
 import { ProfileSheetHeader } from './ProfileSheetHeader';
+import { YamlCodeEditor, YamlCodeEditorController } from './YamlCodeEditor';
 
 export function confirmProfileEditorDismiss(context: UIContext, draft: ProfileDraft | undefined,
   dismiss: () => void): void {
@@ -47,8 +48,11 @@ export struct ProfileEditor {
   @Local private sourcePanel: 'text' | 'filter' | 'icon' = 'text';
   @Local sourceText: string = '';
   @Local sourceOriginal: string = '';
+  @Local private sourceDirty: boolean = false;
+  @Local private sourceError: ResourceStr = '';
   @Local loadingSource: boolean = false;
   @Local validating: boolean = false;
+  private yamlController: YamlCodeEditorController = new YamlCodeEditorController();
   private cancelAutoUpdateChoice: (() => void) | undefined = undefined;
   private appeared: boolean = false;
   private pendingFailure: string | undefined = undefined;
@@ -93,6 +97,9 @@ export struct ProfileEditor {
       if (!this.appeared) { return; }
       this.sourceText = text;
       this.sourceOriginal = this.sourceText;
+      this.sourceDirty = false;
+      this.sourceError = '';
+      this.yamlController.setFallback(text);
       this.sourcePanel = 'text';
       this.sourceShown = true;
     } catch (e) { this.reportFailure(errorString(e as Object)); }
@@ -109,6 +116,9 @@ export struct ProfileEditor {
         if (!this.appeared) { return; }
         this.sourceOriginal = original;
         this.sourceText = text;
+        this.sourceDirty = text !== original;
+        this.sourceError = '';
+        this.yamlController.setFallback(text);
         this.sourcePanel = 'text';
         this.sourceShown = true;
       }
@@ -116,19 +126,48 @@ export struct ProfileEditor {
     finally { this.loadingSource = false; }
   }
 
+  private async openSourceTool(panel: 'filter' | 'icon'): Promise<void> {
+    if (this.validating) { return; }
+    try {
+      this.sourceText = await this.yamlController.readText();
+    } catch (_error) {
+      // 读取失败时沿用已有文本，避免阻断选择面板。
+    }
+    if (this.appeared) { this.sourcePanel = panel; }
+  }
+
+  private applyToolUpdate(updated: string): void {
+    this.sourceText = updated;
+    this.sourceDirty = updated !== this.sourceOriginal;
+    this.sourceError = '';
+    this.sourcePanel = 'text';
+    this.yamlController.replaceText(updated).catch((): void => {});
+  }
+
   private async saveSource(): Promise<boolean> {
     if (this.validating) { return false; }
     this.validating = true;
+    this.sourceError = '';
     try {
-      const failure = await this.store.validateSource(this.sourceText);
-      if (failure !== undefined) { this.reportFailure(failure); return false; }
+      const text = await this.yamlController.readText();
       if (!this.appeared) { return false; }
-      if (this.sourceText !== this.sourceOriginal) { this.draft.content = this.sourceText; }
-      this.sourceOriginal = this.sourceText;
+      this.sourceText = text;
+      const failure = await this.store.validateSource(text);
+      if (failure !== undefined) {
+        this.sourceError = describeError(failure);
+        this.reportFailure(failure);
+        return false;
+      }
+      if (!this.appeared) { return false; }
+      if (text !== this.sourceOriginal) { this.draft.content = text; }
+      this.sourceOriginal = text;
+      this.sourceDirty = false;
       this.sourceShown = false;
       return true;
     } catch (e) {
-      this.reportFailure(errorString(e as Object));
+      const code = errorString(e as Object);
+      this.sourceError = describeError(code);
+      this.reportFailure(code);
       return false;
     } finally {
       this.validating = false;
@@ -141,7 +180,7 @@ export struct ProfileEditor {
       return;
     }
     if (this.validating) { return; }
-    if (this.sourceText === this.sourceOriginal) { dismiss(); return; }
+    if (!this.sourceDirty && this.sourceText === this.sourceOriginal) { dismiss(); return; }
     let choice: 'save' | 'discard' | undefined = undefined;
     this.getUIContext().showActionSheet({
       title: $r('app.string.profile_unsaved_title'), message: $r('app.string.profile_unsaved_message'),
@@ -225,50 +264,58 @@ export struct ProfileEditor {
     }
     .attributeModifier(HEADER_ACTION).systemMaterial(this.appStyle.headerMaterial())
     .accessibilityText($r('app.string.proxy_filter_insert')).enabled(!this.validating)
-    .onClick((): void => { this.sourcePanel = 'filter'; })
+    .onClick((): void => { this.openSourceTool('filter'); })
     Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL }) {
       SymbolGlyph($r('sys.symbol.picture')).fontSize(HEADER_ICON_SIZE).fontColor([$r('sys.color.font_primary')])
     }
     .attributeModifier(HEADER_ACTION).systemMaterial(this.appStyle.headerMaterial())
     .accessibilityText($r('app.string.icon_set_choose_icon')).enabled(!this.validating)
-    .onClick((): void => { this.sourcePanel = 'icon'; })
+    .onClick((): void => { this.openSourceTool('icon'); })
   }
 
   @Builder
   SourceEditor() {
-    Column({ space: 12 }) {
+    Column() {
       if (this.sourcePanel === 'filter') {
         ProfileFilterPicker({ sourceText: this.sourceText,
-          onApply: (updated: string): void => {
-            this.sourceText = updated;
-            this.sourcePanel = 'text';
-          },
+          onApply: (updated: string): void => this.applyToolUpdate(updated),
           onClose: (): void => { this.sourcePanel = 'text'; } })
       } else if (this.sourcePanel === 'icon') {
         ProfileIconPicker({ sourceText: this.sourceText,
-          onApply: (updated: string): void => {
-            this.sourceText = updated;
-            this.sourcePanel = 'text';
-          },
+          onApply: (updated: string): void => this.applyToolUpdate(updated),
           onClose: (): void => { this.sourcePanel = 'text'; } })
-      } else {
+      }
+      Column() {
         ProfileSheetHeader({ titleText: this.draft.name, saving: this.validating,
           actions: (): void => this.SourceActions(),
           onSave: (): void => { this.saveSource(); },
           onClose: (): void => this.closeSource((): void => { this.sourceShown = false; }) })
-        TextArea({ text: this.sourceText })
-          .fontFamily('monospace')
-          .fontSize(14)
-          .fontColor($r('sys.color.font_primary'))
-          .backgroundColor(Color.Transparent)
-          .borderRadius(0)
-          .layoutWeight(1)
-          .width('100%')
-          .enabled(!this.validating)
-          .onChange((text: string): void => { this.sourceText = text; })
+        if (this.sourceError !== '') {
+          Text(this.sourceError)
+            .fontFamily(this.appStyle.fontFamily)
+            .fontSize(13)
+            .lineHeight(18)
+            .fontColor($r('app.color.status_error'))
+            .width('100%')
+            .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 4, bottom: 4 })
+        }
+        YamlCodeEditor({
+          initialText: this.sourceText,
+          readOnly: false,
+          editorEnabled: !this.validating,
+          foreground: this.visible && this.sourceShown,
+          controller: this.yamlController,
+          onDirtyChange: (dirty: boolean): void => {
+            this.sourceDirty = dirty || this.sourceText !== this.sourceOriginal;
+            if (dirty && this.sourceError !== '') { this.sourceError = ''; }
+          }
+        })
       }
+      .width('100%')
+      .layoutWeight(1)
+      .visibility(this.sourcePanel === 'text' ? Visibility.Visible : Visibility.None)
     }
-    .padding({ bottom: 24 })
+    .padding({ bottom: 16 })
     .height('100%')
   }
 

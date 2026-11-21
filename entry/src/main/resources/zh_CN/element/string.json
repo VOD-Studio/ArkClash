@@ -4503,6 +4503,70 @@
     {
       "name": "custom_discard_title",
       "value": "放弃更改？"
+    },
+    {
+      "name": "err_invalid_yaml_position",
+      "value": "YAML 语法错误（第 %1$s 行，第 %2$s 列）"
+    },
+    {
+      "name": "yaml_copy_all",
+      "value": "复制全部"
+    },
+    {
+      "name": "yaml_editor_failed",
+      "value": "YAML 编辑器加载失败"
+    },
+    {
+      "name": "profile_runtime_preview",
+      "value": "运行时配置"
+    },
+    {
+      "name": "profile_preview_loading",
+      "value": "正在构建运行时配置…"
+    },
+    {
+      "name": "profile_preview_host_unavailable",
+      "value": "代理宿主未就绪，请先启动核心再生成运行时配置。"
+    },
+    {
+      "name": "profile_preview_start_core",
+      "value": "启动核心并重试"
+    },
+    {
+      "name": "profile_preview_version_applied",
+      "value": "运行版本 #%1$s · 配置 %2$s"
+    },
+    {
+      "name": "profile_preview_version_applied_only",
+      "value": "运行版本 #%s"
+    },
+    {
+      "name": "profile_preview_version_saved",
+      "value": "已保存版本 %s"
+    },
+    {
+      "name": "profile_preview_version_unsaved",
+      "value": "已保存配置版本"
+    },
+    {
+      "name": "profile_preview_not_applied",
+      "value": "当前预览内容尚未应用到运行中的内核。"
+    },
+    {
+      "name": "profile_preview_err_custom_tun",
+      "value": "不支持自定义 TUN 监听器"
+    },
+    {
+      "name": "profile_preview_err_too_large",
+      "value": "运行时配置超出预览大小限制"
+    },
+    {
+      "name": "profile_preview_err_rule_set",
+      "value": "引用的规则集缺失或无效"
+    },
+    {
+      "name": "profile_preview_err_build",
+      "value": "运行时配置构建失败"
     }
   ]
 }

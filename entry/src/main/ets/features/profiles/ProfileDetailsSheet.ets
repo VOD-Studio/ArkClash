@@ -12,6 +12,8 @@ export struct ProfileDetailsSheet {
   @Param @Require store: ProfileStore;
   @Param @Require item: ProfileItem;
   @Param @Require visible: boolean;
+  @Param runtimePreviewAvailable: boolean = false;
+  @Event onRuntimePreview: () => void = (): void => {};
   @Local editing: boolean = false;
   @Local draft: ProfileDraft | undefined = undefined;
   @Local customDraft: CustomProfileDraft | undefined = undefined;
@@ -34,7 +36,10 @@ export struct ProfileDetailsSheet {
 
   build() {
     Column() {
-      ProfileDetails({ store: this.store, item: this.item, onEdit: (): void => {
+      ProfileDetails({ store: this.store, item: this.item,
+        runtimePreviewAvailable: this.runtimePreviewAvailable,
+        onRuntimePreview: (): void => this.onRuntimePreview(),
+        onEdit: (): void => {
         if (this.item.type === 'custom') { this.customDraft = new CustomProfileDraft(this.item); }
         else { this.draft = new ProfileDraft(this.item); }
         this.editing = true;

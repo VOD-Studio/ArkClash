@@ -50,13 +50,35 @@ function isRecord(value: Object | undefined | null): boolean {
   return value !== undefined && value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+interface YamlErrorLocation {
+  line?: number;
+  col?: number;
+}
+
+interface YamlErrorShape {
+  linePos?: YamlErrorLocation[];
+}
+
+function yamlErrorCode(error: Object): string {
+  const positions = (error as YamlErrorShape).linePos;
+  if (Array.isArray(positions) && positions.length > 0) {
+    const line = positions[0].line;
+    const col = positions[0].col;
+    if (typeof line === 'number' && typeof col === 'number' &&
+      Number.isInteger(line) && line > 0 && Number.isInteger(col) && col > 0) {
+      return `invalid_yaml:${line}:${col}`;
+    }
+  }
+  return 'invalid_yaml';
+}
+
 /** 内容检查（顶层要有 proxies 或 proxy-providers），通过时一并给出摘要。 */
 export function analyzeText(text: string): AnalyzeResult {
   let doc: Object | undefined | null;
   try {
     doc = parse(text) as Object | undefined | null;
   } catch (e) {
-    return { error: 'invalid_yaml', summary: '' };
+    return { error: yamlErrorCode(e as Object), summary: '' };
   }
   if (!isRecord(doc)) {
     return { error: 'not_clash', summary: '' };
