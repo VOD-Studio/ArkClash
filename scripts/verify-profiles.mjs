@@ -1974,3 +1974,17 @@ test('运行时预览请求守卫在切换配置或退出后丢弃迟到响应',
   assert.equal(preview.isPreviewHostUnavailable(new Error('core is not running')), true);
   assert.equal(preview.isPreviewHostUnavailable(new Error('script_execution:3:5')), false);
 });
+
+test('generalUserAgent 遵循备份恢复后的便携设置路径', async () => {
+  await sandbox(async (dir) => {
+    const general = load(path.join(etsDir, 'shared/GeneralSettings.ets'));
+    await fsp.writeFile(path.join(dir, 'general-settings.json'), JSON.stringify({ userAgent: 'Root-UA' }), 'utf8');
+    assert.equal(await general.generalUserAgent(dir), 'Root-UA');
+
+    await store.ensureProfilesDir(dir);
+    await fsp.writeFile(path.join(store.profilesDir(dir), '.backup-store'), 'restored', 'utf8');
+    await fsp.writeFile(path.join(store.profilesDir(dir), 'general-settings.json'),
+      JSON.stringify({ userAgent: 'Portable-UA' }), 'utf8');
+    assert.equal(await general.generalUserAgent(dir), 'Portable-UA');
+  });
+});

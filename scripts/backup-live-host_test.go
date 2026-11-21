@@ -25,9 +25,10 @@ func TestBackupApplyKeepsAttachedTunAndUsesRestoredRevision(t *testing.T) {
 	before, originalTun := runtimeSnapshot.Load(), tunListener
 	dir := filepath.Join(opts.HomeDir, "profiles")
 	for name, body := range map[string]string{
-		backup.StoreMarker: "restored",
-		"list.json":        `{"version":1,"current":"first","revision":"restored"}`,
-		"first.yaml":       "mode: rule\nlog-level: silent\nrules: ['MATCH,REJECT']\n",
+		backup.StoreMarker:      "restored",
+		"list.json":             `{"version":1,"current":"first","revision":"restored"}`,
+		"first.yaml":            "mode: rule\nlog-level: silent\nrules: ['MATCH,REJECT']\n",
+		"general-settings.json": `{"revision":"restored-general","controllerSecret":"restored-panel-secret","delayTimeout":8000,"logLevel":"error"}`,
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0600); err != nil {
 			t.Fatal(err)
@@ -43,7 +44,8 @@ func TestBackupApplyKeepsAttachedTunAndUsesRestoredRevision(t *testing.T) {
 	}
 	after := runtimeSnapshot.Load()
 	if after.BootID != before.BootID || after.ConfigRevision != before.ConfigRevision+1 || tunListener != originalTun ||
-		tunnel.Rules()[0].Adapter() != "REJECT" || current.StoreGeneration != "restored" {
+		tunnel.Rules()[0].Adapter() != "REJECT" || current.StoreGeneration != "restored" ||
+		activePanel == nil || activePanel.secret != "restored-panel-secret" {
 		t.Fatalf("应用恢复配置后，内核或 TUN 未保留预期状态 %+v", after)
 	}
 }

@@ -250,6 +250,7 @@ func updateGeneralSettings(request profileSettingsRequest[generalSettings]) erro
 	next := old
 	next.General = s
 	rebuild := !reflect.DeepEqual(old.General.Hosts, s.Hosts) ||
+		old.General.UserAgent != s.UserAgent ||
 		s.Ports == nil && old.General.Ports != nil ||
 		s.Authentication == nil && old.General.Authentication != nil
 	previousInbound := desiredInbound

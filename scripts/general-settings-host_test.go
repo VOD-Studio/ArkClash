@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/metacubex/mihomo/component/resolver"
+	mihomoHttp "github.com/metacubex/mihomo/component/http"
 	"github.com/metacubex/mihomo/log"
 )
 
@@ -107,6 +108,14 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	host, ok := resolver.DefaultHosts.Search("general.test", false)
 	if !ok || host.IPs[0].String() != "192.0.2.21" {
 		t.Fatal("Hosts setting did not reach resolver")
+	}
+	next.Revision = "ua-updated"
+	next.UserAgent = "ArkClash-Test-v2"
+	if err := saveGeneralTestSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	if mihomoHttp.UA() != "ArkClash-Test-v2" {
+		t.Fatalf("expected live UA ArkClash-Test-v2, got %q", mihomoHttp.UA())
 	}
 	stored, err := readGeneralSettings(opts.HomeDir)
 	if err != nil || stored.Revision != next.Revision || stored.DelayTimeout != 1000 || stored.UserAgent != next.UserAgent {

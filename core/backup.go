@@ -11,6 +11,7 @@ import (
 	"github.com/VOD-Studio/ArkClash/core/internal/backup"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
+	"github.com/metacubex/mihomo/log"
 	"golang.org/x/sys/unix"
 )
 
@@ -189,6 +190,9 @@ func applyBackup(req backupApplyRequest) error {
 	}
 	retired, err = applyReloadLocked(next, cfg, inbound)
 	if err == nil {
+		if panelErr := setPanelControllerLocked(next.General.ControllerSecret); panelErr != nil {
+			log.Warnln("[ArkClash] external controller port unavailable")
+		}
 		if manager := activeGeo.Load(); manager != nil {
 			err = manager.applySettingsLocked(next.Geo)
 		}
