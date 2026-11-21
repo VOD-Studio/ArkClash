@@ -33,6 +33,10 @@ export struct ProxiesPage {
   @Local link: Connection = connection;
   @Local boundScroller: Scroller = new Scroller();
   @Local reduceMotion: boolean = true;
+  @Local saveConflictShown: boolean = false;
+  @Local saveConflict: SaveProxyConflict | undefined = undefined;
+  private saveConflictChoice: '' | 'overwrite' | 'rename' = '';
+  private saveConflictGeneration: number = 0;
   private reductionListener: (enabled: boolean) => void = (enabled: boolean): void => {
     this.reduceMotion = enabled;
   };
@@ -124,33 +128,84 @@ export struct ProxiesPage {
   }
 
   private presentSaveConflict(conflict: SaveProxyConflict, generation: number): void {
-    if (!this.visible || this.saveConflictOpen) {
+    if (!this.visible || this.saveConflictOpen || this.saveConflictShown) {
       return;
     }
-    let choice: '' | 'overwrite' | 'rename' = '';
     this.saveConflictOpen = true;
-    this.getUIContext().showActionSheet({
-      title: $r('app.string.proxy_save_conflict_title'),
-      message: $r('app.string.proxy_save_conflict_message', conflict.existingName),
-      alignment: DialogAlignment.Bottom,
-      systemMaterial: this.appStyle.sheetMaterial(),
-      autoCancel: true,
-      sheets: [
-        { title: $r('app.string.proxy_save_conflict_overwrite'), action: (): void => { choice = 'overwrite'; } },
-        {
-          title: $r('app.string.proxy_save_conflict_rename', conflict.suggestedName),
-          action: (): void => { choice = 'rename'; }
-        }
-      ],
-      confirm: { value: $r('app.string.action_cancel'), action: (): void => {} },
-      onDidDisappear: (): void => {
-        this.saveConflictOpen = false;
-        if (!this.visible || generation !== this.saveGeneration || choice === '') {
-          return;
-        }
-        this.finishSaveConflict(conflict, choice, generation);
+    this.saveConflict = conflict;
+    this.saveConflictChoice = '';
+    this.saveConflictGeneration = generation;
+    this.saveConflictShown = true;
+  }
+
+  private handleSaveConflictDisappear(): void {
+    this.saveConflictOpen = false;
+    const conflict = this.saveConflict;
+    const choice = this.saveConflictChoice;
+    const generation = this.saveConflictGeneration;
+    this.saveConflict = undefined;
+    this.saveConflictChoice = '';
+    if (!this.visible || conflict === undefined || choice === '' || generation !== this.saveGeneration) {
+      return;
+    }
+    this.finishSaveConflict(conflict, choice, generation);
+  }
+
+  @Builder
+  private SaveConflictOption(label: ResourceStr, icon: Resource, mode: 'overwrite' | 'rename') {
+    Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.NORMAL, stateEffect: true }) {
+      Row({ space: 12 }) {
+        SymbolGlyph(icon).fontSize(22).fontColor([$r('sys.color.font_primary')])
+        Text(label)
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(17)
+          .lineHeight(24)
+          .fontColor($r('sys.color.font_primary'))
+          .layoutWeight(1)
+          .textAlign(TextAlign.Start)
       }
-    });
+      .width('100%')
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 56 })
+    .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+    .backgroundColor(this.appStyle.palette.cardBackground)
+    .borderRadius(20)
+    .onClick((): void => {
+      this.saveConflictChoice = mode;
+      this.saveConflictShown = false;
+    })
+  }
+
+  @Builder
+  private SaveConflictSheet() {
+    Column({ space: 10 }) {
+      if (this.saveConflict !== undefined) {
+        Text($r('app.string.proxy_save_conflict_message', this.saveConflict.existingName))
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(14)
+          .lineHeight(20)
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+          .padding({ left: 4, right: 4, bottom: 4 })
+        this.SaveConflictOption($r('app.string.proxy_save_conflict_overwrite'),
+          $r('sys.symbol.arrow_clockwise'), 'overwrite')
+        this.SaveConflictOption($r('app.string.proxy_save_conflict_rename', this.saveConflict.suggestedName),
+          $r('sys.symbol.plus_circle'), 'rename')
+      }
+      Button($r('app.string.action_cancel'))
+        .fontFamily(this.appStyle.fontFamily)
+        .width('100%')
+        .constraintSize({ minHeight: 48 })
+        .margin({ top: 4 })
+        .buttonStyle(ButtonStyleMode.NORMAL)
+        .onClick((): void => {
+          this.saveConflictChoice = '';
+          this.saveConflictShown = false;
+        })
+    }
+    .width('100%')
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 4, bottom: 24 })
   }
 
   private async finishSaveConflict(conflict: SaveProxyConflict, mode: 'overwrite' | 'rename',
@@ -425,5 +480,11 @@ export struct ProxiesPage {
     .width('100%')
     .height('100%')
     .backgroundColor(this.appStyle.palette.pageBackground)
+    .bindSheet($$this.saveConflictShown, this.SaveConflictSheet, {
+      title: { title: $r('app.string.proxy_save_conflict_title') },
+      height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
+      systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+      onDisappear: (): void => { this.handleSaveConflictDisappear(); }
+    })
   }
 }

@@ -36,6 +36,12 @@ export struct ResourcesPage {
   @Local failures: GeoResourceStatus[] = [];
   @Local automaticDraft: boolean | undefined = undefined;
   @Local submitting: boolean = false;
+  @Local providerMenuShown: boolean = false;
+  @Local providerMenuTarget: RuntimeProviderRowModel | undefined = undefined;
+  @Local geoMenuShown: boolean = false;
+  @Local geoMenuTarget: GeoResourceStatus | undefined = undefined;
+  private providerMenuChoice: '' | 'refresh' | 'replace' = '';
+  private geoMenuChoice: '' | 'sync' | 'edit' | 'copy' = '';
   private active: boolean = false;
   private generation: number = 0;
   private consumedNotice: number = 0;
@@ -64,6 +70,12 @@ export struct ResourcesPage {
     } else {
       this.failuresShown = false;
       this.failures = [];
+      this.providerMenuShown = false;
+      this.providerMenuTarget = undefined;
+      this.providerMenuChoice = '';
+      this.geoMenuShown = false;
+      this.geoMenuTarget = undefined;
+      this.geoMenuChoice = '';
       this.store.clearNotice();
       this.providers.clearNotice();
       this.automaticDraft = undefined;
@@ -261,32 +273,23 @@ export struct ResourcesPage {
   }
 
   private rowActions(item: GeoResourceStatus): void {
-    if (!this.active || this.actionOpen || !this.store.loaded || this.store.saving) { return; }
-    const generation = this.generation;
-    let choice = '';
-    const sheets: SheetInfo[] = [];
-    if (this.store.canSync && item.phase === 'idle') {
-      sheets.push({ title: $r('app.string.action_update'), action: (): void => { choice = 'sync'; } });
-    }
-    if (this.store.settingsError === '') {
-      sheets.push({ title: $r('app.string.action_edit'), action: (): void => { choice = 'edit'; } });
-      sheets.push({ title: $r('app.string.action_copy_link'), action: (): void => { choice = 'copy'; } });
-    }
-    this.actionOpen = true;
-    this.getUIContext().showActionSheet({
-      title: item.id.toUpperCase(), sheets: sheets,
-      message: this.store.canSync ? $r('app.string.geo_row_actions') : $r('app.string.geo_connect_to_update'),
-      alignment: DialogAlignment.Bottom, systemMaterial: this.appStyle.sheetMaterial(), autoCancel: true,
-      confirm: { value: $r('app.string.action_cancel'), action: (): void => {} },
-      onDidDisappear: (): void => {
-        this.actionOpen = false;
-        if (!this.isCurrent(generation)) { return; }
-        if (choice === 'sync') { this.syncResources([item.id]); }
-        else if (choice === 'edit') { this.openUrl(item.id); }
-        else if (choice === 'copy') { this.copySource(item.id); }
-        this.presentFailures();
-      }
-    });
+    if (!this.active || this.actionOpen || this.geoMenuShown || this.providerMenuShown ||
+      !this.store.loaded || this.store.saving) { return; }
+    this.geoMenuTarget = item;
+    this.geoMenuChoice = '';
+    this.geoMenuShown = true;
+  }
+
+  private finishGeoMenu(): void {
+    const target = this.geoMenuTarget;
+    const choice = this.geoMenuChoice;
+    this.geoMenuTarget = undefined;
+    this.geoMenuChoice = '';
+    if (!this.active || target === undefined) { return; }
+    if (choice === 'sync') { this.syncResources([target.id]); }
+    else if (choice === 'edit') { this.openUrl(target.id); }
+    else if (choice === 'copy') { this.copySource(target.id); }
+    this.presentFailures();
   }
 
 
@@ -437,36 +440,176 @@ export struct ResourcesPage {
   }
 
   private providerActions(item: RuntimeProviderRowModel): void {
-    if (!this.active || this.actionOpen || this.providers.isBusy(item.kind, item.name)) { return; }
-    const generation = this.generation;
-    let choice = '';
-    const sheets: SheetInfo[] = [];
-    if (item.updatable && this.providers.canRefreshRemote) {
-      sheets.push({ title: $r('app.string.action_update'), action: (): void => { choice = 'refresh'; } });
+    if (!this.active || this.actionOpen || this.providerMenuShown || this.geoMenuShown ||
+      this.providers.isBusy(item.kind, item.name)) { return; }
+    const canRefresh = item.updatable && this.providers.canRefreshRemote;
+    const canReplace = item.replaceable && this.providers.canReplaceLocal;
+    if (!canRefresh && !canReplace) { return; }
+    this.providerMenuTarget = item;
+    this.providerMenuChoice = '';
+    this.providerMenuShown = true;
+  }
+
+  private finishProviderMenu(): void {
+    const target = this.providerMenuTarget;
+    const choice = this.providerMenuChoice;
+    this.providerMenuTarget = undefined;
+    this.providerMenuChoice = '';
+    if (!this.active || target === undefined) { return; }
+    if (choice === 'refresh') {
+      this.providers.refreshProvider(target.kind, target.name);
+    } else if (choice === 'replace') {
+      this.pickAndReplaceProvider(target);
     }
-    if (item.replaceable && this.providers.canReplaceLocal) {
-      sheets.push({ title: $r('app.string.provider_replace_file'), action: (): void => { choice = 'replace'; } });
+  }
+
+  @Builder
+  private ActionMenuButton(label: Resource, icon: Resource, onSelect: () => void) {
+    Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.NORMAL, stateEffect: true }) {
+      Row({ space: 12 }) {
+        SymbolGlyph(icon).fontSize(22).fontColor([$r('sys.color.font_primary')])
+        Text(label)
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(17)
+          .lineHeight(24)
+          .fontColor($r('sys.color.font_primary'))
+          .layoutWeight(1)
+          .textAlign(TextAlign.Start)
+      }
+      .width('100%')
     }
-    if (sheets.length === 0) { return; }
-    this.actionOpen = true;
-    this.getUIContext().showActionSheet({
-      title: item.name,
-      message: item.kind === 'proxy' ? $r('app.string.provider_proxy_section') : $r('app.string.provider_rule_section'),
-      sheets: sheets,
-      alignment: DialogAlignment.Bottom,
-      systemMaterial: this.appStyle.sheetMaterial(),
-      autoCancel: true,
-      confirm: { value: $r('app.string.action_cancel'), action: (): void => {} },
-      onDidDisappear: (): void => {
-        this.actionOpen = false;
-        if (!this.isCurrent(generation)) { return; }
-        if (choice === 'refresh') {
-          this.providers.refreshProvider(item.kind, item.name);
-        } else if (choice === 'replace') {
-          this.pickAndReplaceProvider(item);
+    .width('100%')
+    .constraintSize({ minHeight: 56 })
+    .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+    .backgroundColor(this.appStyle.palette.cardBackground)
+    .borderRadius(20)
+    .onClick((): void => { onSelect(); })
+  }
+
+  @Builder
+  private ProviderActionSheet() {
+    Column({ space: 10 }) {
+      if (this.providerMenuTarget !== undefined) {
+        Text(this.providerMenuTarget.kind === 'proxy' ?
+          $r('app.string.provider_proxy_section') : $r('app.string.provider_rule_section'))
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(13)
+          .lineHeight(18)
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+          .padding({ left: 4, right: 4, bottom: 4 })
+        if (this.providerMenuTarget.updatable && this.providers.canRefreshRemote) {
+          this.ActionMenuButton($r('app.string.action_update'), $r('sys.symbol.arrow_clockwise'), (): void => {
+            this.providerMenuChoice = 'refresh';
+            this.providerMenuShown = false;
+          })
+        }
+        if (this.providerMenuTarget.replaceable && this.providers.canReplaceLocal) {
+          this.ActionMenuButton($r('app.string.provider_replace_file'), $r('sys.symbol.doc_text'), (): void => {
+            this.providerMenuChoice = 'replace';
+            this.providerMenuShown = false;
+          })
         }
       }
-    });
+      Button($r('app.string.action_cancel'))
+        .fontFamily(this.appStyle.fontFamily)
+        .width('100%')
+        .constraintSize({ minHeight: 48 })
+        .margin({ top: 4 })
+        .buttonStyle(ButtonStyleMode.NORMAL)
+        .onClick((): void => {
+          this.providerMenuChoice = '';
+          this.providerMenuShown = false;
+        })
+    }
+    .width('100%')
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 4, bottom: 24 })
+  }
+
+  @Builder
+  private GeoActionSheet() {
+    Column({ space: 10 }) {
+      if (this.geoMenuTarget !== undefined) {
+        Text(this.store.canSync ? $r('app.string.geo_row_actions') : $r('app.string.geo_connect_to_update'))
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(13)
+          .lineHeight(18)
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+          .padding({ left: 4, right: 4, bottom: 4 })
+        if (this.store.canSync && this.geoMenuTarget.phase === 'idle') {
+          this.ActionMenuButton($r('app.string.action_update'), $r('sys.symbol.arrow_clockwise'), (): void => {
+            this.geoMenuChoice = 'sync';
+            this.geoMenuShown = false;
+          })
+        }
+        if (this.store.settingsError === '') {
+          this.ActionMenuButton($r('app.string.action_edit'), $r('sys.symbol.pencil_line'), (): void => {
+            this.geoMenuChoice = 'edit';
+            this.geoMenuShown = false;
+          })
+          this.ActionMenuButton($r('app.string.action_copy_link'), $r('sys.symbol.rectangle_on_rectangle'), (): void => {
+            this.geoMenuChoice = 'copy';
+            this.geoMenuShown = false;
+          })
+        }
+      }
+      Button($r('app.string.action_cancel'))
+        .fontFamily(this.appStyle.fontFamily)
+        .width('100%')
+        .constraintSize({ minHeight: 48 })
+        .margin({ top: 4 })
+        .buttonStyle(ButtonStyleMode.NORMAL)
+        .onClick((): void => {
+          this.geoMenuChoice = '';
+          this.geoMenuShown = false;
+        })
+    }
+    .width('100%')
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 4, bottom: 24 })
+  }
+
+  @Builder
+  private ResourceSkeletonCard(rows: number) {
+    Column() {
+      ForEach(Array.from<number, number>({ length: rows }, (_v: number, idx: number): number => idx),
+        (index: number) => {
+          if (index > 0) {
+            Divider().color(this.appStyle.palette.divider).margin({ left: 16, right: 16 })
+          }
+          Row({ space: 12 }) {
+            Column({ space: 8 }) {
+              Row()
+                .width('42%')
+                .height(18)
+                .borderRadius(5)
+                .backgroundColor(this.appStyle.palette.track)
+                .opacity(0.55)
+              Row()
+                .width('64%')
+                .height(14)
+                .borderRadius(4)
+                .backgroundColor(this.appStyle.palette.track)
+                .opacity(0.55)
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Row()
+              .width(48)
+              .height(22)
+              .borderRadius(8)
+              .backgroundColor(this.appStyle.palette.track)
+              .opacity(0.55)
+          }
+          .width('100%')
+          .constraintSize({ minHeight: 68 })
+          .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+        }, (index: number): string => `skeleton-${index}`)
+    }
+    .width('100%')
+    .borderRadius(22)
+    .clip(true)
+    .backgroundColor(this.appStyle.palette.cardBackground)
   }
 
   @Builder
@@ -517,15 +660,7 @@ export struct ResourcesPage {
       Text($r('app.string.provider_section_title')).fontFamily(this.appStyle.fontFamily).fontSize(14)
         .fontWeight(FontWeight.Medium).fontColor($r('sys.color.font_secondary')).width('100%')
         .padding({ left: 16, right: 16 })
-      Row({ space: 10 }) {
-        LoadingProgress().width(20).height(20).color($r('sys.color.font_secondary'))
-        Text($r('app.string.provider_loading')).fontFamily(this.appStyle.fontFamily).fontSize(14)
-          .fontColor($r('sys.color.font_secondary'))
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 14, bottom: 14 })
-      .borderRadius(22)
-      .backgroundColor(this.appStyle.palette.cardBackground)
+      this.ResourceSkeletonCard(2)
     } else if (this.providers.error !== '') {
       Text($r('app.string.provider_section_title')).fontFamily(this.appStyle.fontFamily).fontSize(14)
         .fontWeight(FontWeight.Medium).fontColor($r('sys.color.font_secondary')).width('100%')
@@ -599,7 +734,7 @@ export struct ResourcesPage {
         Scroll() {
           Column({ space: 16 }) {
             if (!this.store.loaded) {
-              LoadingProgress().width(28).height(28).accessibilityText($r('app.string.geo_loading'))
+              this.ResourceSkeletonCard(4)
             } else {
               Column() {
                 Row({ space: 16 }) {
@@ -694,6 +829,18 @@ export struct ResourcesPage {
         Column().bindSheet($$this.failuresShown, this.FailureSheet, {
           height: SheetSize.MEDIUM, systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
           onDisappear: (): void => { this.failures = []; }
+        })
+        Column().bindSheet($$this.providerMenuShown, this.ProviderActionSheet, {
+          title: { title: this.providerMenuTarget?.name ?? '' },
+          height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
+          systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+          onDisappear: (): void => { this.finishProviderMenu(); }
+        })
+        Column().bindSheet($$this.geoMenuShown, this.GeoActionSheet, {
+          title: { title: this.geoMenuTarget?.id.toUpperCase() ?? '' },
+          height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
+          systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+          onDisappear: (): void => { this.finishGeoMenu(); }
         })
       }
       .width('100%')

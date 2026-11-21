@@ -37,11 +37,10 @@ export struct DashboardGroups {
 
   @Monitor('visible', 'profileId', 'routeRevision', 'conn.routeRevision', 'conn.state', 'conn.coreReady', 'conn.mode')
   sync(): void {
-    const target = `${this.profileId}:${this.routeRevision}:${this.conn.routeRevision}:${this.conn.mode}`;
-    if (target !== this.target || !this.conn.coreReady) {
+    if (this.profileId !== this.target || !this.conn.coreReady) {
       this.summary = undefined;
       this.failed = false;
-      this.target = target;
+      this.target = this.profileId;
     }
     this.generation++;
     this.loading = false;
@@ -52,7 +51,10 @@ export struct DashboardGroups {
 
   private async refresh(): Promise<void> {
     const generation = ++this.generation;
-    this.loading = true;
+    const cold = this.summary === undefined && this.summaryGroups.length === 0;
+    if (cold) {
+      this.loading = true;
+    }
     this.failed = false;
     try {
       const summary = await getMainGroup(this.context.filesDir);
@@ -74,21 +76,19 @@ export struct DashboardGroups {
     if (this.conn.mode === 'direct') {
       return [];
     }
-    if (this.conn.coreReady) {
-      return this.summary?.groups ?? [];
+    if (this.conn.coreReady && this.summary !== undefined) {
+      return this.summary.groups;
     }
     return this.summaryGroups;
   }
 
   private iconSource(name: string): string {
-    const icons = this.conn.coreReady ? this.summary?.groupIcons : this.summaryGroupIcons;
+    const icons = (this.conn.coreReady && this.summary !== undefined) ?
+      this.summary.groupIcons : this.summaryGroupIcons;
     return icons === undefined ? '' : icons[name] ?? '';
   }
 
   private hint(): ResourceStr {
-    if (this.loading) {
-      return $r('app.string.dash_groups_loading');
-    }
     if (this.failed) {
       return $r('app.string.dash_groups_failed');
     }
@@ -180,6 +180,24 @@ export struct DashboardGroups {
         }
         .width('100%')
         .onAreaChange((_previous: Area, current: Area): void => { this.figureWidth = Number(current.width); })
+      } else if (this.loading) {
+        Row({ space: 8 }) {
+          Row()
+            .width(96)
+            .height(36)
+            .borderRadius(8)
+            .backgroundColor(this.appStyle.palette.track)
+            .opacity(0.55)
+          Blank().layoutWeight(1)
+          Row()
+            .width(88)
+            .height(36)
+            .borderRadius(14)
+            .backgroundColor(this.appStyle.palette.track)
+            .opacity(0.55)
+        }
+        .width('100%')
+        .height(44)
       } else {
         Column({ space: 6 }) {
           Stack() {

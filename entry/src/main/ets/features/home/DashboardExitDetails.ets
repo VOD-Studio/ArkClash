@@ -10,6 +10,7 @@ import { exitIpQualityLabel, exitIpTypeLabel } from './DashboardIpQuality';
 interface DashboardExitDetailField {
   label: ResourceStr;
   content: ResourceStr;
+  loading?: boolean;
   retry?: boolean;
 }
 
@@ -86,14 +87,24 @@ export struct DashboardExitDetails {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .constraintSize({ maxWidth: '38%' })
-      Text(field.content)
-        .fontFamily(this.appStyle.fontFamily)
-        .fontSize(14)
-        .lineHeight(20)
-        .fontColor($r('sys.color.font_primary'))
-        .textAlign(TextAlign.End)
-        .wordBreak(WordBreak.BREAK_ALL)
-        .layoutWeight(1)
+      if (field.loading) {
+        Blank().layoutWeight(1)
+        Row()
+          .width(88)
+          .height(18)
+          .borderRadius(5)
+          .backgroundColor(this.appStyle.palette.track)
+          .opacity(0.55)
+      } else {
+        Text(field.content)
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(14)
+          .lineHeight(20)
+          .fontColor($r('sys.color.font_primary'))
+          .textAlign(TextAlign.End)
+          .wordBreak(WordBreak.BREAK_ALL)
+          .layoutWeight(1)
+      }
     }
     .width('100%')
     .alignItems(VerticalAlign.Top)
@@ -116,26 +127,42 @@ export struct DashboardExitDetails {
                 .fontSize(13)
                 .lineHeight(18)
                 .fontColor($r('sys.color.font_secondary'))
-              Text(this.address())
-                .fontFamily(this.appStyle.fontFamily)
-                .fontSize(22)
-                .lineHeight(28)
-                .fontWeight(600)
-                .fontColor($r('sys.color.font_primary'))
-                .width('100%')
-                .wordBreak(WordBreak.BREAK_ALL)
-                .copyOption(this.settings.hideIp ? CopyOptions.None : CopyOptions.LocalDevice)
+              if (this.probe.result === undefined && this.probe.busy && !this.settings.hideIp) {
+                Row()
+                  .width('64%')
+                  .height(24)
+                  .borderRadius(6)
+                  .backgroundColor(this.appStyle.palette.track)
+                  .opacity(0.55)
+                  .margin({ top: 2, bottom: 2 })
+              } else {
+                Text(this.address())
+                  .fontFamily(this.appStyle.fontFamily)
+                  .fontSize(22)
+                  .lineHeight(28)
+                  .fontWeight(600)
+                  .fontColor($r('sys.color.font_primary'))
+                  .width('100%')
+                  .wordBreak(WordBreak.BREAK_ALL)
+                  .copyOption(this.settings.hideIp ? CopyOptions.None : CopyOptions.LocalDevice)
+              }
             }
             .width('100%')
             .alignItems(HorizontalAlign.Start)
-            this.DetailField({ label: $r('app.string.region_label'), content: this.country() })
-            this.DetailField({ label: $r('app.string.dash_ip_organization'), content: this.probe.result?.org || '—' })
-            this.DetailField({ label: $r('app.string.dash_ip_asn'), content: this.probe.result?.asn || '—' })
+            this.DetailField({ label: $r('app.string.region_label'), content: this.country(),
+              loading: this.probe.result === undefined && this.probe.busy })
+            this.DetailField({ label: $r('app.string.dash_ip_organization'), content: this.probe.result?.org || '—',
+              loading: this.probe.result === undefined && this.probe.busy })
+            this.DetailField({ label: $r('app.string.dash_ip_asn'), content: this.probe.result?.asn || '—',
+              loading: this.probe.result === undefined && this.probe.busy })
             this.DetailField({ label: $r('app.string.dash_ip_type'),
-              content: exitIpTypeLabel(this.probe.quality, this.probe.qualityBusy) })
+              content: exitIpTypeLabel(this.probe.quality, false),
+              loading: this.probe.quality === undefined && this.probe.qualityBusy })
             this.DetailField({ label: $r('app.string.dash_ip_quality'),
               content: this.probe.qualityFailed ? $r('app.string.dash_exit_failed') :
-                exitIpQualityLabel(this.probe.quality, this.probe.qualityBusy), retry: this.probe.qualityFailed })
+                exitIpQualityLabel(this.probe.quality, false),
+              loading: this.probe.quality === undefined && this.probe.qualityBusy,
+              retry: this.probe.qualityFailed })
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
