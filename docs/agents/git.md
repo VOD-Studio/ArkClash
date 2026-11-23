@@ -2,8 +2,6 @@
 
 ## 分支
 
-每个新任务都先从 `main` 拉分支，在分支上完成。
-
 格式：`<type>/<scope>-<简述>`，全小写，用 `/` 分段、`-` 连词，简述用英文或拼音。
 
 - type 对齐 Conventional Commits：`feat` / `fix` / `chore` / `docs` / `refactor` / `style` / `test` / `perf` / `build`（构建脚本、Makefile）/ `ci`（GitHub Actions）。

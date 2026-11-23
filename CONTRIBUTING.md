@@ -12,7 +12,7 @@
 ## 提 PR
 
 1. 第一次搭环境按 [docs/agents/fork-setup.md](docs/agents/fork-setup.md) 完成，`make help` 列出全部命令。
-2. 从 `main` 拉分支，分支名和提交信息的格式见 [docs/agents/git.md](docs/agents/git.md)：中文 Conventional Commits，一个提交只做一件事。发版说明由这些提交自动生成，所以每个提交都要写规范。
+2. 分支名和提交信息的格式见 [docs/agents/git.md](docs/agents/git.md)。提交信息使用中文 Conventional Commits，一个提交只做一件事。发版说明由这些提交自动生成，所以每个提交都要写规范。
 3. 动到内核、NAPI 或 VPN 时，必须在真机上验证：`make hap && make run`，连接后打开一个需要代理的网站，确认 `make log` 里这条连接走了代理节点。PR 里写明设备和验证结果。
 4. 提交前跑 `make lint`，并按 PR 模板填写。
 5. 签名配置（`build-profile.json5` 的 `signingConfigs`）只留在本机，不要提交。
