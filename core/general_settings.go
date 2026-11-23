@@ -45,6 +45,7 @@ type generalSettings struct {
 	Authentication   *generalAuthentication `json:"authentication,omitempty"`
 	ControllerSecret string                 `json:"controllerSecret"`
 	UserAgent        string                 `json:"userAgent"`
+	UserAgents       []string               `json:"userAgents,omitempty"`
 	Hosts            map[string][]string    `json:"hosts"`
 	DelayTimeout     int                    `json:"delayTimeout"`
 	CloseConnections *bool                  `json:"closeConnections,omitempty"`
@@ -80,6 +81,16 @@ func validGeneralText(value string, limit int) bool {
 func (s generalSettings) validate() error {
 	if !validGeneralText(s.Revision, 96) || s.Revision == "" || !validGeneralText(s.UserAgent, 512) {
 		return errGeneralInvalid
+	}
+	if len(s.UserAgents) > 64 {
+		return errGeneralInvalid
+	}
+	agents := make(map[string]bool, len(s.UserAgents))
+	for _, agent := range s.UserAgents {
+		if agent == "" || !validGeneralText(agent, 512) || agents[agent] {
+			return errGeneralInvalid
+		}
+		agents[agent] = true
 	}
 	switch s.DelayTimeout {
 	case 500, 1000, 2000, 5000, 8000:

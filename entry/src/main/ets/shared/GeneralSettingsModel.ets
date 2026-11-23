@@ -1,6 +1,7 @@
 export const GENERAL_SETTINGS_FILE = 'general-settings.json';
 export const GENERAL_LEVELS: string[] = ['debug', 'info', 'warning', 'error', 'silent'];
 export const GENERAL_TIMEOUTS: number[] = [500, 1000, 2000, 5000, 8000];
+export const GENERAL_USER_AGENT_LIMIT = 64;
 
 export interface GeneralPorts {
   mixed: number;
@@ -22,6 +23,7 @@ export interface GeneralSettings {
   authentication?: GeneralAuthentication;
   controllerSecret: string;
   userAgent: string;
+  userAgents?: string[];
   hosts: Record<string, string[]> | null;
   delayTimeout: number;
   closeConnections?: boolean;
@@ -58,6 +60,12 @@ export function checkedGeneralSettings(input: GeneralSettings): GeneralSettings 
     input.controllerSecret.includes(' ') || !GENERAL_LEVELS.includes(input.logLevel) ||
     !GENERAL_TIMEOUTS.includes(input.delayTimeout) || typeof input.captureLogs !== 'boolean' ||
     (input.closeConnections !== undefined && typeof input.closeConnections !== 'boolean')) {
+    throw new Error(invalid);
+  }
+  const agents = input.userAgents;
+  if (agents !== undefined && (!Array.isArray(agents) || agents.length > GENERAL_USER_AGENT_LIMIT ||
+    !agents.every((agent: string): boolean => agent !== '' && validGeneralUserAgent(agent)) ||
+    new Set<string>(agents).size !== agents.length)) {
     throw new Error(invalid);
   }
   const port = input.ports;

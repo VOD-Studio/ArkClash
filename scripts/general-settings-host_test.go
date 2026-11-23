@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metacubex/mihomo/component/resolver"
 	mihomoHttp "github.com/metacubex/mihomo/component/http"
+	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/log"
 )
 
@@ -111,6 +111,7 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	}
 	next.Revision = "ua-updated"
 	next.UserAgent = "ArkClash-Test-v2"
+	next.UserAgents = []string{"ArkClash-Test", "ArkClash-Test-v2"}
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +119,8 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 		t.Fatalf("expected live UA ArkClash-Test-v2, got %q", mihomoHttp.UA())
 	}
 	stored, err := readGeneralSettings(opts.HomeDir)
-	if err != nil || stored.Revision != next.Revision || stored.DelayTimeout != 1000 || stored.UserAgent != next.UserAgent {
+	if err != nil || stored.Revision != next.Revision || stored.DelayTimeout != 1000 || stored.UserAgent != next.UserAgent ||
+		strings.Join(stored.UserAgents, ",") != "ArkClash-Test,ArkClash-Test-v2" {
 		t.Fatal("settings were not persisted")
 	}
 }

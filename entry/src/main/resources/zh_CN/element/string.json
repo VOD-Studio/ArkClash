@@ -3741,8 +3741,8 @@
       "value": "订阅 User-Agent"
     },
     {
-      "name": "general_ua_hint",
-      "value": "留空使用默认 User-Agent。"
+      "name": "general_ua_preset_invalid",
+      "value": "请输入有效且未保存过的 User-Agent。"
     },
     {
       "name": "general_hosts",

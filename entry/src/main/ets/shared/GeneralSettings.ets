@@ -4,7 +4,7 @@ import { profileDataPath } from './profiles/Store';
 
 export {
   GENERAL_SETTINGS_FILE, GENERAL_LEVELS, GENERAL_TIMEOUTS, defaultGeneralPorts, defaultGeneralSettings,
-  checkedGeneralSettings
+  checkedGeneralSettings, GENERAL_USER_AGENT_LIMIT, validGeneralUserAgent
 } from './GeneralSettingsModel';
 export type { GeneralPorts, GeneralAuthentication, GeneralSettings } from './GeneralSettingsModel';
 

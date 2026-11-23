@@ -8,7 +8,8 @@ import { DestinationTitle } from '../../components/DestinationTitle';
 import { ListRow } from '../../components/ListRow';
 import { PAGE_GUTTER } from '../../components/Theme';
 import {
-  defaultGeneralPorts, GeneralPorts, GeneralSettings, GENERAL_LEVELS, GENERAL_TIMEOUTS
+  defaultGeneralPorts, GeneralPorts, GeneralSettings, GENERAL_LEVELS, GENERAL_TIMEOUTS,
+  GENERAL_USER_AGENT_LIMIT, validGeneralUserAgent
 } from '../../shared/GeneralSettings';
 import { SettingsSection } from './SettingsSection';
 import { logLevelLabel } from './LogLabels';
@@ -57,6 +58,10 @@ export struct GeneralPage {
   @Local private panelEnabled: boolean = false;
   @Local private editorText: string = '';
   @Local private editorError: ResourceStr = '';
+  @Local private userAgents: string[] = [];
+  @Local private activeAgent: string = '';
+  @Local private agentEditorOpen: boolean = false;
+  @Local private editedAgent: string = '';
   private editorRevision: string = '';
 
   private context(): common.UIAbilityContext { return this.getUIContext().getHostContext() as common.UIAbilityContext; }
@@ -74,7 +79,8 @@ export struct GeneralPage {
     const saved = this.settings.saved;
     return {
       revision: saved.revision, ports: saved.ports, authentication: saved.authentication,
-      controllerSecret: saved.controllerSecret, userAgent: saved.userAgent, hosts: saved.hosts,
+      controllerSecret: saved.controllerSecret, userAgent: saved.userAgent, userAgents: saved.userAgents,
+      hosts: saved.hosts,
       delayTimeout: saved.delayTimeout, closeConnections: saved.closeConnections, logLevel: saved.logLevel,
       captureLogs: saved.captureLogs
     };
@@ -128,7 +134,9 @@ export struct GeneralPage {
         this.editorText = saved.controllerSecret;
         break;
       case 'userAgent':
-        this.editorText = saved.userAgent;
+        this.activeAgent = saved.userAgent;
+        this.userAgents = Array.from(new Set<string>((saved.userAgents ?? []).concat(
+          saved.userAgent === '' ? [] : [saved.userAgent])));
         break;
       case 'hosts':
         const hosts = saved.hosts;
@@ -144,6 +152,7 @@ export struct GeneralPage {
     this.password = '';
     this.username = '';
     this.editorText = '';
+    this.agentEditorOpen = false;
   }
 
   private saveEditor(inheritPorts: boolean = false): void {
@@ -168,7 +177,8 @@ export struct GeneralPage {
           draft.controllerSecret = this.panelEnabled ? this.editorText.trim() : '';
           break;
         case 'userAgent':
-          draft.userAgent = this.editorText.trim();
+          draft.userAgent = this.activeAgent;
+          draft.userAgents = this.userAgents;
           break;
         case 'hosts':
           const hosts = parseHostRows(this.editorText);
@@ -179,6 +189,37 @@ export struct GeneralPage {
     } catch (error) {
       this.editorError = this.errorLabel(error as Error);
     }
+  }
+
+  private editAgent(agent: string): void {
+    this.editedAgent = agent;
+    this.editorText = agent;
+    this.editorError = '';
+    this.agentEditorOpen = true;
+  }
+
+  private closeAgentEditor(): void {
+    this.agentEditorOpen = false;
+    this.editorError = '';
+  }
+
+  private applyAgent(): void {
+    const next = this.editorText.trim();
+    if (next === '' || !validGeneralUserAgent(next) ||
+      (next !== this.editedAgent && this.userAgents.includes(next))) {
+      this.editorError = $r('app.string.general_ua_preset_invalid');
+      return;
+    }
+    this.userAgents = this.editedAgent === '' ? this.userAgents.concat(next) :
+      this.userAgents.map((agent: string): string => agent === this.editedAgent ? next : agent);
+    if (this.editedAgent !== '' && this.activeAgent === this.editedAgent) { this.activeAgent = next; }
+    this.closeAgentEditor();
+  }
+
+  private deleteAgent(): void {
+    this.userAgents = this.userAgents.filter((agent: string): boolean => agent !== this.editedAgent);
+    if (this.activeAgent === this.editedAgent) { this.activeAgent = ''; }
+    this.closeAgentEditor();
   }
 
   private setSwitch(kind: string, isOn: boolean): void {
@@ -346,6 +387,42 @@ export struct GeneralPage {
   }
 
   @Builder
+  UserAgentEditor() {
+    if (this.agentEditorOpen) {
+      TextInput({ text: this.editorText, placeholder: 'ArkClash clash.meta' }).maxLength(512)
+        .accessibilityText($r('app.string.general_ua'))
+        .onChange((text: string): void => { this.editorText = text; })
+      Row({ space: 8 }) {
+        Button($r('app.string.action_cancel')).buttonStyle(ButtonStyleMode.TEXTUAL)
+          .onClick((): void => this.closeAgentEditor())
+        if (this.editedAgent !== '') {
+          Button($r('app.string.action_delete'), { role: ButtonRole.ERROR }).buttonStyle(ButtonStyleMode.TEXTUAL)
+            .onClick((): void => this.deleteAgent())
+        }
+        Button($r('app.string.dash_done')).onClick((): void => this.applyAgent())
+      }.width('100%').justifyContent(FlexAlign.End)
+    } else {
+      ListRow({ title: $r('app.string.general_default'), chevron: false,
+        trailingIcon: this.activeAgent === '' ? $r('sys.symbol.checkmark') : undefined,
+        onTap: (): void => { this.activeAgent = ''; } })
+      ForEach(this.userAgents, (agent: string): void => {
+        Row({ space: 8 }) {
+          Row() {
+            ListRow({ title: agent, chevron: false,
+              trailingIcon: this.activeAgent === agent ? $r('sys.symbol.checkmark') : undefined,
+              onTap: (): void => { this.activeAgent = agent; } })
+          }.layoutWeight(1)
+          Button($r('app.string.action_edit')).buttonStyle(ButtonStyleMode.TEXTUAL)
+            .onClick((): void => this.editAgent(agent))
+        }.width('100%')
+      }, (agent: string): string => agent)
+      Button($r('app.string.action_add')).buttonStyle(ButtonStyleMode.TEXTUAL)
+        .enabled(this.userAgents.length < GENERAL_USER_AGENT_LIMIT)
+        .onClick((): void => this.editAgent(''))
+    }
+  }
+
+  @Builder
   EditorSheet() {
     Scroll() {
       Column({ space: 12 }) {
@@ -358,9 +435,7 @@ export struct GeneralPage {
         } else if (this.editor === 'controller') {
           this.ControllerInputs()
         } else if (this.editor === 'userAgent') {
-          TextInput({ text: this.editorText, placeholder: 'ArkClash clash.meta' }).maxLength(512)
-            .onChange((text: string): void => { this.editorText = text; })
-          Text($r('app.string.general_ua_hint')).fontSize(13).fontColor($r('sys.color.font_secondary'))
+          this.UserAgentEditor()
         } else {
           TextArea({ text: this.editorText, placeholder: 'example.com 192.0.2.1' }).height(160)
             .maxLength(32768).onChange((text: string): void => { this.editorText = text; })
@@ -369,7 +444,7 @@ export struct GeneralPage {
         if (this.editorError !== '') {
           Text(this.editorError).fontSize(13).fontColor($r('app.color.status_error'))
         }
-        if (this.editor !== 'level' && this.editor !== 'timeout') {
+        if (this.editor !== 'level' && this.editor !== 'timeout' && !this.agentEditorOpen) {
           Button($r('app.string.action_save')).id('general-editor-save').width('100%').height(48)
             .enabled(!this.isSaving).onClick((): void => this.saveEditor())
         }

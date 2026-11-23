@@ -3761,8 +3761,8 @@
       "value": "Subscription User-Agent"
     },
     {
-      "name": "general_ua_hint",
-      "value": "Leave empty to use the default User-Agent."
+      "name": "general_ua_preset_invalid",
+      "value": "Enter a valid User-Agent that is not already saved."
     },
     {
       "name": "general_hosts",
