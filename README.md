@@ -7,6 +7,8 @@
 
 基于 mihomo 的原生 HarmonyOS NEXT 代理客户端。
 
+<img src="docs/assets/screenshot-dashboard.webp" width="400" alt="ArkClash 仪表盘，亮色上半部展示状态卡片和启动按钮，暗色下半部展示配置和出站模式">
+
 ## 安装
 
 需要 **HarmonyOS 7（API 26）及以上的 ARM64 设备**。目前通过 GitHub 分发，首次安装通常需要用自己的华为开发者账号准备调试签名。[下载最新版本](https://github.com/VOD-Studio/ArkClash/releases/latest)
@@ -33,16 +35,6 @@
 - 可用附加规则和 JavaScript 覆写配置，管理本地节点库、规则集、筛选预设及代理组图标。
 - 仪表盘显示实时速率、连接统计和出口 IP，支持检查连通性与应用更新。工具页提供实时连接、近期请求、DNS 查询和日志。
 - 内置 Geo 数据，支持自定义下载源和自动更新。可调整 VPN 网络设置、分应用绕过和主题，并通过本地 ZIP 或 WebDAV 备份与恢复。
-
-## 界面截图
-
-ArkClash v0.6.0 运行在 HarmonyOS 7 模拟器上。配置和节点使用演示数据。
-
-<p>
-  <img src="docs/assets/screenshot-dashboard.jpg" width="240" alt="仪表盘上的当前配置、出站模式和网络速度">
-  <img src="docs/assets/screenshot-proxies.jpg" width="240" alt="代理页展开手动选择分组，展示不同地区的演示节点">
-  <img src="docs/assets/screenshot-theme.jpg" width="240" alt="深色模式下的主题设置，展示显示模式、背景选项和主题色">
-</p>
 
 ## 真机验证
 
