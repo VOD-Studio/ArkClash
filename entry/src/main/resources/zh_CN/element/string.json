@@ -4313,6 +4313,70 @@
       "value": "规则集"
     },
     {
+      "name": "custom_network_enabled",
+      "value": "启用"
+    },
+    {
+      "name": "custom_ntp_server",
+      "value": "NTP 服务器"
+    },
+    {
+      "name": "custom_ntp_interval",
+      "value": "同步间隔（秒）"
+    },
+    {
+      "name": "custom_ntp_dialer",
+      "value": "拨号代理"
+    },
+    {
+      "name": "custom_ntp_write_system",
+      "value": "写入系统时间"
+    },
+    {
+      "name": "custom_sniff_destination",
+      "value": "覆盖目标地址"
+    },
+    {
+      "name": "custom_sniff_force_dns",
+      "value": "强制嗅探 DNS 映射流量"
+    },
+    {
+      "name": "custom_sniff_parse_ip",
+      "value": "嗅探纯 IP 流量"
+    },
+    {
+      "name": "custom_sniff_force_domain",
+      "value": "强制嗅探的域名"
+    },
+    {
+      "name": "custom_sniff_skip_domain",
+      "value": "跳过的域名"
+    },
+    {
+      "name": "custom_sniff_skip_source",
+      "value": "跳过的源地址"
+    },
+    {
+      "name": "custom_sniff_skip_destination",
+      "value": "跳过的目标地址"
+    },
+    {
+      "name": "custom_sniff_ports",
+      "value": "端口与范围"
+    },
+    {
+      "name": "custom_network_list_hint",
+      "value": "每行一项"
+    },
+    {
+      "name": "custom_network_yaml",
+      "value": "编辑 YAML"
+    },
+    {
+      "name": "custom_network_invalid",
+      "value": "请检查端口、端口范围和同步间隔。"
+    },
+    {
       "name": "custom_sniffer",
       "value": "嗅探"
     },

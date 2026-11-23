@@ -1,4 +1,5 @@
 import { taskpool } from '@kit.ArkTS';
+import { CustomNetworkSection, CustomNetworkValues, readCustomNetworkOptions } from './CustomNetworkOptions';
 import {
   appendCustomGroupFilter, customProfileSection, CustomProfileMutation, CustomProfileView, editCustomProfile,
   prepareCustomProfile
@@ -12,6 +13,11 @@ function customProfileWork(source: string, mutation: string): CustomProfileView 
 @Concurrent
 function customSectionWork(source: string, field: string): string {
   return customProfileSection(source, field);
+}
+
+@Concurrent
+function customNetworkWork(source: string, section: CustomNetworkSection): CustomNetworkValues {
+  return readCustomNetworkOptions(source, section);
 }
 
 @Concurrent
@@ -31,6 +37,10 @@ export async function inspectCustomProfile(source: string, mutation?: CustomProf
 
 export async function readCustomSection(source: string, field: string): Promise<string> {
   return await taskpool.execute(customSectionWork, source, field) as string;
+}
+
+export async function inspectCustomNetwork(source: string, section: CustomNetworkSection): Promise<CustomNetworkValues> {
+  return await taskpool.execute(customNetworkWork, source, section) as CustomNetworkValues;
 }
 
 export async function serializeCustomProfile(source: string): Promise<string> {

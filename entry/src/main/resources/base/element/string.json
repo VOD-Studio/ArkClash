@@ -4333,6 +4333,70 @@
       "value": "Rule providers"
     },
     {
+      "name": "custom_network_enabled",
+      "value": "Enabled"
+    },
+    {
+      "name": "custom_ntp_server",
+      "value": "NTP server"
+    },
+    {
+      "name": "custom_ntp_interval",
+      "value": "Sync interval (seconds)"
+    },
+    {
+      "name": "custom_ntp_dialer",
+      "value": "Dialer proxy"
+    },
+    {
+      "name": "custom_ntp_write_system",
+      "value": "Set system clock"
+    },
+    {
+      "name": "custom_sniff_destination",
+      "value": "Override destination"
+    },
+    {
+      "name": "custom_sniff_force_dns",
+      "value": "Force DNS mapping"
+    },
+    {
+      "name": "custom_sniff_parse_ip",
+      "value": "Sniff traffic without a domain"
+    },
+    {
+      "name": "custom_sniff_force_domain",
+      "value": "Domains to sniff"
+    },
+    {
+      "name": "custom_sniff_skip_domain",
+      "value": "Domains to skip"
+    },
+    {
+      "name": "custom_sniff_skip_source",
+      "value": "Source addresses to skip"
+    },
+    {
+      "name": "custom_sniff_skip_destination",
+      "value": "Destination addresses to skip"
+    },
+    {
+      "name": "custom_sniff_ports",
+      "value": "Ports and ranges"
+    },
+    {
+      "name": "custom_network_list_hint",
+      "value": "One entry per line"
+    },
+    {
+      "name": "custom_network_yaml",
+      "value": "Edit YAML"
+    },
+    {
+      "name": "custom_network_invalid",
+      "value": "Check the port, port ranges and sync interval."
+    },
+    {
       "name": "custom_sniffer",
       "value": "Sniffer"
     },

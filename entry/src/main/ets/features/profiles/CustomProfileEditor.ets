@@ -2,11 +2,14 @@ import { common } from '@kit.AbilityKit';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { ListSource } from '../../components/ListSource';
 import { PAGE_GUTTER } from '../../components/Theme';
+import { CustomNetworkChanges, CustomNetworkField, CustomNetworkSection, CustomNetworkValues, customNetworkFields } from
+  '../../shared/profiles/CustomNetworkOptions';
 import {
   CUSTOM_BUILTINS, CUSTOM_EMPTY_YAML, CUSTOM_GROUP_TYPES, CUSTOM_RULE_TYPES, CustomGroup, CustomIssue,
   CustomNode, CustomProfileMutation, CustomProfileView, customRuleAllowsComma, customRuleParts
 } from '../../shared/profiles/CustomProfileYaml';
-import { applyCustomGroupFilter, inspectCustomProfile, readCustomSection, serializeCustomProfile } from '../../shared/profiles/CustomProfileWorker';
+import { applyCustomGroupFilter, inspectCustomNetwork, inspectCustomProfile, readCustomSection,
+  serializeCustomProfile } from '../../shared/profiles/CustomProfileWorker';
 import { errorString } from '../../shared/profiles/Errors';
 import { LocalProxy } from '../../shared/profiles/LocalProxies';
 import { proxyText } from '../../shared/profiles/LocalProxySchema';
@@ -14,6 +17,7 @@ import { readLocalProxies } from '../../shared/profiles/LocalProxyStore';
 import { readProxyFilters } from '../../shared/profiles/ProxyFilters';
 import { ProxyFilterPreset } from '../../shared/profiles/ProxyFilterModel';
 import { CustomChoice, CustomProfileChoice } from './CustomProfileChoice';
+import { CustomNetworkForm } from './CustomNetworkForm';
 import { confirmCustomDismiss, CustomProfileDraft } from './CustomProfileDraft';
 import { describeError } from './ProfileErrors';
 import { ProfileStore } from './Profiles';
@@ -21,7 +25,7 @@ import { ProfileSheetHeader } from './ProfileSheetHeader';
 import { uiResourceText } from '../../components/ResourceText';
 import { YamlCodeEditor, YamlCodeEditorController } from './YamlCodeEditor';
 
-type CustomPanel = 'overview' | 'groups' | 'group' | 'rules' | 'rule' | 'nodes' | 'text' | 'import' | 'issues';
+type CustomPanel = 'overview' | 'groups' | 'group' | 'rules' | 'rule' | 'nodes' | 'network' | 'text' | 'import' | 'issues';
 type CustomPicker = 'members' | 'providers' | 'node' | 'dialer' | 'ruleTarget' | 'ruleProvider' | 'filter';
 
 interface CustomEditorRow {
@@ -37,6 +41,7 @@ const RULE_OPTIONS: SelectOption[] = CUSTOM_RULE_TYPES.map((type: string): Selec
 function customFailure(error: Object): ResourceStr {
   const code = (error as Error).message ?? '';
   if (code === 'custom_shape') { return $r('app.string.custom_invalid_shape'); }
+  if (code === 'custom_network_invalid') { return $r('app.string.custom_network_invalid'); }
   return describeError(errorString(error));
 }
 
@@ -139,6 +144,9 @@ export struct CustomProfileEditor {
   @Local private choiceOpen: boolean = false;
   @Local private choices: CustomChoice[] = [];
   @Local private choiceTitle: ResourceStr = '';
+  @Local private networkSection: CustomNetworkSection = 'ntp';
+  @Local private networkSettings: CustomNetworkValues = {};
+  private originalNetwork: CustomNetworkValues = {};
   private yamlReturn: CustomPanel = 'overview';
   private choiceKind: CustomPicker = 'members';
   private choiceIndex: number = -1;
@@ -268,6 +276,55 @@ export struct CustomProfileEditor {
     if (this.ruleType === 'RULE-SET' || type === 'RULE-SET') { this.rulePayload = ''; }
     this.ruleType = type;
     this.draft.editing = true;
+  }
+
+  private async openNetwork(section: CustomNetworkSection): Promise<void> {
+    const source = this.view?.source;
+    if (source === undefined || this.draft.busy) { return; }
+    this.draft.busy = true;
+    try {
+      const values = await inspectCustomNetwork(source, section);
+      if (!this.active) { return; }
+      this.networkSection = section;
+      this.networkSettings = values;
+      this.originalNetwork = values;
+      this.go('network');
+    } catch (error) {
+      this.toast(customFailure(error as Object));
+      this.draft.busy = false;
+      if (this.active) { await this.showYaml(section, this.networkTitle(section)); }
+    } finally { this.draft.busy = false; }
+  }
+
+  private networkTitle(section: CustomNetworkSection): ResourceStr {
+    return section === 'ntp' ? 'NTP' : $r('app.string.custom_sniffer');
+  }
+
+  private editNetwork(key: string, setting: string | undefined): void {
+    if (this.draft.busy || this.networkSettings[key] === setting) { return; }
+    const next: CustomNetworkValues = {};
+    for (const existing of Object.keys(this.networkSettings)) {
+      if (existing !== key) { next[existing] = this.networkSettings[existing]; }
+    }
+    if (setting !== undefined) { next[key] = setting; }
+    this.networkSettings = next;
+    this.draft.editing = customNetworkFields(this.networkSection).some((field: CustomNetworkField): boolean =>
+      next[field.key] !== this.originalNetwork[field.key]);
+  }
+
+  private saveNetwork(): void {
+    const changes: CustomNetworkChanges = {};
+    for (const field of customNetworkFields(this.networkSection)) {
+      const setting = this.networkSettings[field.key];
+      if (setting !== this.originalNetwork[field.key]) { changes[field.key] = setting ?? null; }
+    }
+    this.mutate({ kind: 'network', field: this.networkSection, networkChanges: changes }, 'overview');
+  }
+
+  private openNetworkYaml(): void {
+    const open = (): void => { this.showYaml(this.networkSection, this.networkTitle(this.networkSection)); };
+    if (this.draft.editing) { this.confirm($r('app.string.profile_unsaved_message'), open); }
+    else { open(); }
   }
 
   private async showYaml(key: string, label: ResourceStr, returns: CustomPanel = 'overview'): Promise<void> {
@@ -489,6 +546,7 @@ export struct CustomProfileEditor {
       case 'rule': return $r('app.string.custom_rule');
       case 'nodes': return $r('app.string.custom_nodes');
       case 'import': return $r('app.string.custom_import');
+      case 'network': return this.networkTitle(this.networkSection);
       case 'text': return this.editTitle;
       default: return $r('app.string.custom_issues');
     }
@@ -500,6 +558,7 @@ export struct CustomProfileEditor {
       case 'overview': return this.view !== undefined && this.draft.dirty();
       case 'group': return this.groupName.trim() !== '';
       case 'rule': return this.ruleExit.trim() !== '' && (this.ruleType === 'MATCH' || this.rulePayload.trim() !== '');
+      case 'network':
       case 'text': return this.draft.editing;
       default: return false;
     }
@@ -518,6 +577,7 @@ export struct CustomProfileEditor {
         this.mutate({ kind: 'rule', index: this.editIndex, text: parts.join(',') }, 'rules');
         break;
       }
+      case 'network': this.saveNetwork(); break;
       case 'text': this.saveSource(); break;
     }
   }
@@ -579,10 +639,8 @@ export struct CustomProfileEditor {
           onOpen: (): void => { this.showYaml('rule-providers', $r('app.string.custom_rule_providers')); } })
         Row({ space: 8 }) {
           this.Action('DNS', (): void => { this.showYaml('dns', 'DNS'); })
-          this.Action('NTP', (): void => { this.showYaml('ntp', 'NTP'); })
-          this.Action($r('app.string.custom_sniffer'), (): void => {
-            this.showYaml('sniffer', $r('app.string.custom_sniffer'));
-          })
+          this.Action('NTP', (): void => { this.openNetwork('ntp'); })
+          this.Action($r('app.string.custom_sniffer'), (): void => { this.openNetwork('sniffer'); })
         }.width('100%')
         Row({ space: 8 }) {
           this.Action($r('app.string.custom_import'), (): void => { this.urlText = ''; this.go('import'); })
@@ -728,6 +786,10 @@ export struct CustomProfileEditor {
           this.GroupForm()
         } else if (this.panel === 'rule') {
           this.RuleForm()
+        } else if (this.panel === 'network') {
+          CustomNetworkForm({ section: this.networkSection, settings: this.networkSettings, busy: this.draft.busy,
+            onEdit: (key: string, setting: string | undefined): void => this.editNetwork(key, setting),
+            onYaml: (): void => this.openNetworkYaml() })
         } else if (this.panel === 'text') {
           YamlCodeEditor({
             initialText: this.sourceText,
