@@ -1085,6 +1085,30 @@
       "value": "The operation did not complete. Retry or check the profile."
     },
     {
+      "name": "dash_vpn_no_profile",
+      "value": "Select a profile before connecting."
+    },
+    {
+      "name": "dash_vpn_authorization_denied",
+      "value": "VPN permission was denied. Tap Connect to request it again."
+    },
+    {
+      "name": "dash_vpn_create_failed",
+      "value": "Couldn’t create the VPN. Tap Connect to retry."
+    },
+    {
+      "name": "dash_vpn_attach_failed",
+      "value": "Couldn’t start VPN forwarding. Tap Connect to retry."
+    },
+    {
+      "name": "dash_vpn_connect_failed",
+      "value": "Couldn’t connect to the VPN. Please retry."
+    },
+    {
+      "name": "dash_vpn_stop_failed",
+      "value": "Couldn’t stop the VPN. Please retry."
+    },
+    {
       "name": "dash_save_conflict",
       "value": "Settings changed. The latest version is loaded and your draft is retained for retry."
     },
@@ -1662,7 +1686,7 @@
     },
     {
       "name": "dash_cleanup_required",
-      "value": "The tunnel or listeners remain active. Retry stopping."
+      "value": "VPN cleanup is unconfirmed. Retry stopping."
     },
     {
       "name": "proxy_node_not_addressable",

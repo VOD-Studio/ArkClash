@@ -464,6 +464,7 @@ struct Index {
   MiniBar() {
     ConnectionBar({
       expanded: this.miniBarExpanded,
+      visible: this.foreground && this.mainVisible,
       onOpen: () => this.tabs.changeIndex(Tab.Proxies)
     })
   }

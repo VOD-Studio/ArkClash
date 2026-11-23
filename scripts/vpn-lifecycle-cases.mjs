@@ -397,19 +397,53 @@ test('重复连接和断开幂等，保留同一个核心、配置与更新调�
   assert.equal(f.snapshot().bootId, identity.bootId);
 });
 
-test('平台create拒绝不会调用attach或销毁已存在的核心', async t => {
+test('平台create拒绝且清理成功后撤销启动意图，可直接重试', async t => {
   const f = fixture(t);
   await f.warm();
   f.fail('create');
-  assert.notEqual((await f.request('connect', 'failed-create').result).status, 200);
+  const reply = await f.request('connect', 'failed-create').result;
+  assert.equal(reply.status, 500);
+  assert.equal(reply.body.message, 'vpn_create_failed');
   assert.equal(f.count('attachTun'), 0);
   assert.equal(f.platformCreated, false);
-  assert.equal(f.snapshot().vpnCreated, false);
-  assert.equal(f.snapshot().tunAttached, false);
-  assert.notEqual(f.snapshot().forward, 'running');
+  assertWarm(f);
+  assert.equal(f.runtime().vpnIntent, 'stopped');
+  assert.equal(f.runtime().vpnOperation, 'failed-create');
   assert.equal(f.count('stop'), 0);
   assert.equal(f.receipt(), undefined);
   await connect(f, 'retry-create');
+});
+
+test('create和destroy失败时保留重试停止，直到平台确认清理', async t => {
+  const f = fixture(t);
+  await f.warm();
+  f.fail('create');
+  f.fail('destroy');
+  const reply = await f.request('connect', 'failed-create-and-cleanup').result;
+  assert.equal(reply.status, 500);
+  assert.equal(reply.body.message, 'vpn_create_failed;vpn_destroy_failed');
+  assert.equal(f.runtime().vpnIntent, 'started');
+  assert.equal(f.snapshot().forward, 'failed');
+  assert.equal(f.snapshot().vpnCreated, false);
+  assert.equal((await f.request('disconnect', 'retry-cleanup').result).status, 200);
+  assertWarm(f);
+  await connect(f, 'retry-create');
+});
+
+test('连接失败回滚不覆盖清理期间写入的新启动意图', async t => {
+  const f = fixture(t);
+  await f.warm();
+  f.fail('create');
+  const cleanup = f.hold('destroy');
+  const failing = f.request('connect', 'old-connect');
+  await cleanup.entered;
+  const retry = f.request('connect', 'new-connect');
+  cleanup.release();
+  assert.equal((await failing.result).status, 409);
+  assert.equal((await retry.result).status, 200);
+  assertConnected(f);
+  assert.equal(f.runtime().vpnIntent, 'started');
+  assert.equal(f.runtime().vpnOperation, 'new-connect');
 });
 
 for (const cleanupFailure of [undefined, 'detachTun', 'destroy']) {
@@ -425,6 +459,7 @@ for (const cleanupFailure of [undefined, 'detachTun', 'destroy']) {
     assert.equal(f.snapshot().tunAttached, false);
     assert.notEqual(f.snapshot().forward, 'running');
     assert.equal(f.snapshot().vpnCreated, cleanupFailure === 'destroy');
+    assert.equal(f.runtime().vpnIntent, cleanupFailure === undefined ? 'stopped' : 'started');
     assert.equal(f.platformCreated, cleanupFailure === 'destroy');
     assert.equal(f.count('stop'), 0);
     assert.equal(f.receipt(), undefined);

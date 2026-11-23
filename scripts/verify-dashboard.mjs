@@ -267,7 +267,7 @@ try {
   assert.equal(runControls.homeShouldStopRuntime('started', 'preparing', false, false, false, 'running'), true);
   for (const resources of [[true, false, false], [false, true, false], [false, false, true]]) {
     for (const forward of ['failed', 'stopped']) {
-      assert.equal(runControls.homeHasPendingCleanup(forward, ...resources), true);
+      assert.equal(runControls.homeHasPendingCleanup(forward, ...resources, 'running'), true);
       assert.equal(runControls.homeShouldStopRuntime('stopped', forward, ...resources, 'running'), true);
       assert.equal(runControls.homeRunActionLabel('stopped', forward, ...resources, 'running'),
         'app.string.dash_stop_retry');
@@ -275,17 +275,34 @@ try {
   }
   for (const host of ['running', 'stopped']) {
     assert.equal(runControls.homeShouldStopRuntime('stopped', 'stopped', false, false, false, host), false);
-    assert.equal(runControls.homeRuntimeAppearsStarted('stopped', 'stopped', false, false, false), false);
+    assert.equal(runControls.homeRuntimeAppearsStarted('stopped', 'stopped', false, false, false, host), false);
     assert.equal(runControls.homeRunActionLabel('stopped', 'stopped', false, false, false, host),
       'app.string.action_connect');
   }
-  assert.equal(runControls.homeRuntimeAppearsStarted('started', 'preparing', false, false, false), true);
-  assert.equal(runControls.homeHasPendingCleanup('running', true, true, true), false);
+  assert.equal(runControls.homeRuntimeAppearsStarted('started', 'preparing', false, false, false, 'running'), true);
+  assert.equal(runControls.homeHasPendingCleanup('running', true, true, true, 'running'), false);
   assert.equal(runControls.homeRunActionLabel('started', 'running', true, true, true, 'running'),
     'app.string.action_disconnect');
   assert.equal(runControls.homeShouldStopRuntime('stopped', 'failed', false, false, false, 'unknown'), true);
   assert.equal(runControls.homeRunActionLabel('stopped', 'stopped', false, false, false, 'unknown'),
     'app.string.dash_runtime_stop_confirm');
+  assert.equal(runControls.homeShouldStopRuntime('started', 'stopped', false, false, false, 'running'), false);
+  assert.equal(runControls.homeRunActionLabel('started', 'stopped', false, false, false, 'running'),
+    'app.string.action_connect');
+  assert.equal(runControls.homeRunActionLabel('stopped', 'failed', false, false, false, 'running'),
+    'app.string.dash_stop_retry');
+  const fallback = 'app.string.dash_vpn_connect_failed';
+  assert.equal(runControls.homeRunFailureMessage('vpn_no_profile', false, fallback), 'app.string.dash_vpn_no_profile');
+  assert.equal(runControls.homeRunFailureMessage('vpn_authorization_denied', false, fallback),
+    'app.string.dash_vpn_authorization_denied');
+  assert.equal(runControls.homeRunFailureMessage('vpn_create_failed', false, fallback),
+    'app.string.dash_vpn_create_failed');
+  assert.equal(runControls.homeRunFailureMessage('vpn_attach_failed', false, fallback),
+    'app.string.dash_vpn_attach_failed');
+  assert.equal(runControls.homeRunFailureMessage('vpn_create_failed;vpn_destroy_failed', false, fallback),
+    'app.string.dash_cleanup_required');
+  assert.equal(runControls.homeRunFailureMessage('conflict', true, fallback), 'app.string.dash_cleanup_required');
+  assert.equal(runControls.homeRunFailureMessage('unexpected error', false, fallback), fallback);
   const layout = load(path.join(homeSource, 'DashboardLayout.ets'));
   const services = load(path.join(homeSource, 'Services.ets'));
   const { DashboardSettings } = load(path.join(homeSource, 'DashboardSettings.ets'));

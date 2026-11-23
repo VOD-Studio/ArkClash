@@ -540,7 +540,7 @@ test('首次进入未知状态不会自行生成启动意图，死宿主恢复�
   assert.equal(connection.intent, 'stopped');
   assert.equal(connection.offlineWritable, false);
   assert.equal(runControls.homeRuntimeAppearsStarted(connection.intent, connection.forward,
-    connection.listenersOpen, connection.tunAttached, connection.vpnCreated), false);
+    connection.listenersOpen, connection.tunAttached, connection.vpnCreated, connection.hostState), false);
   assert.equal(runControls.homeShouldStopRuntime(connection.intent, connection.forward,
     connection.listenersOpen, connection.tunAttached, connection.vpnCreated, connection.hostState), true);
   assert.equal(runControls.homeRunActionLabel(connection.intent, connection.forward,
@@ -942,7 +942,7 @@ test('系统 Promise 拒绝授权后立即结束启动，不等待 controller �
   while (state.started === 0) await Promise.resolve();
   assert.equal((await core.readCoreHostStatus(context)).state, 'unknown');
   deny();
-  await assert.rejects(pending, /授权被拒绝/);
+  await assert.rejects(pending, /vpn_authorization_denied/);
   assert.equal((await core.readCoreHostStatus(context)).state, 'stopped');
   assert.equal(state.stopped, 0);
   assert.equal(state.now, 1000);
@@ -953,7 +953,7 @@ test('自动预热拒绝本会话不重弹，显式动作可重试', async () =>
   connection.restore(context);
   connection.foreground = true;
   state.denyAuthorization = true;
-  await assert.rejects(connection.ensureReady(context, true), /授权被拒绝/);
+  await assert.rejects(connection.ensureReady(context, true), /vpn_authorization_denied/);
   await connection.ensureReady(context, true);
   assert.equal(state.started, 1);
   state.denyAuthorization = false;

@@ -1065,6 +1065,30 @@
       "value": "运行操作未能完成，可重试或前往配置检查"
     },
     {
+      "name": "dash_vpn_no_profile",
+      "value": "请先选择一个配置"
+    },
+    {
+      "name": "dash_vpn_authorization_denied",
+      "value": "VPN 授权未通过，点击连接可重新授权"
+    },
+    {
+      "name": "dash_vpn_create_failed",
+      "value": "创建 VPN 失败，点击连接可重试"
+    },
+    {
+      "name": "dash_vpn_attach_failed",
+      "value": "启动 VPN 转发失败，点击连接可重试"
+    },
+    {
+      "name": "dash_vpn_connect_failed",
+      "value": "连接 VPN 失败，请重试"
+    },
+    {
+      "name": "dash_vpn_stop_failed",
+      "value": "停止 VPN 失败，请重试"
+    },
+    {
       "name": "dash_save_conflict",
       "value": "设置已更新，已读取最新内容；本次草稿仍保留，可重试保存"
     },
@@ -1642,7 +1666,7 @@
     },
     {
       "name": "dash_cleanup_required",
-      "value": "隧道或监听尚未释放，请重试停止"
+      "value": "VPN 清理未确认，请重试停止"
     },
     {
       "name": "proxy_node_not_addressable",

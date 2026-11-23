@@ -5,7 +5,7 @@ import { getMainGroup, GroupSummary } from '../../client/Controller';
 import { traffic, Traffic } from '../../client/Traffic';
 import { formatSpeed } from '../../components/Format';
 import {
-  homeHasPendingCleanup, homeRunActionLabel, homeRuntimeAppearsStarted, homeShouldStopRuntime
+  homeHasPendingCleanup, homeRunActionLabel, homeRunFailureMessage, homeRuntimeAppearsStarted, homeShouldStopRuntime
 } from './HomeRunControls';
 
 const BUTTON_SIZE = 40;
@@ -18,6 +18,7 @@ const BUTTON_SIZE = 40;
 export struct ConnectionBar {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param expanded: boolean = false;
+  @Param visible: boolean = false;
   @Event onOpen: () => void = () => {};
   @Local conn: Connection = connection;
   @Local stats: Traffic = traffic;
@@ -65,7 +66,11 @@ export struct ConnectionBar {
             this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState);
           const operation = shouldStop ? this.conn.disconnect(this.context) : this.conn.connect(this.context);
           operation.catch((error: Error): void => {
-            this.getUIContext().getPromptAction().showToast({ message: this.conn.error || error.message });
+            if (this.visible) {
+              const message = homeRunFailureMessage(error.message, this.cleanupPending(),
+                shouldStop ? $r('app.string.dash_vpn_stop_failed') : $r('app.string.dash_vpn_connect_failed'));
+              this.getUIContext().getPromptAction().showToast({ message: message, duration: 4000 });
+            }
           });
         })
       }
@@ -98,16 +103,21 @@ export struct ConnectionBar {
   }
 
   private connectedLike(): boolean {
-    return homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated) ||
+    return homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
+      this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState) ||
       this.conn.state === ConnectionState.Disconnecting;
+  }
+
+  private cleanupPending(): boolean {
+    return homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached,
+      this.conn.vpnCreated, this.conn.hostState);
   }
 
   private primaryText(): ResourceStr {
     if (this.conn.hostState === 'unknown' && !this.conn.busy) {
       return $r('app.string.dash_runtime_unknown');
     }
-    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated) &&
-      this.conn.state !== ConnectionState.Disconnecting) {
+    if (this.cleanupPending() && this.conn.state !== ConnectionState.Disconnecting) {
       return $r('app.string.dash_cleanup_required');
     }
     if (this.conn.coreReady && this.group !== undefined) {
@@ -129,7 +139,7 @@ export struct ConnectionBar {
     if (this.conn.hostState === 'unknown' && !this.conn.busy) {
       return $r('app.string.dash_runtime_tap_to_confirm');
     }
-    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated)) {
+    if (this.cleanupPending()) {
       return $r('app.string.dash_stop_retry');
     }
     if (!this.conn.connected) {

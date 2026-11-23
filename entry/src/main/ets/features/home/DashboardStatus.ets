@@ -6,7 +6,10 @@ import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
 import { DASHBOARD_CARD } from '../../components/Theme';
 import { dashboardSettings, DashboardSettings } from './DashboardSettings';
 import { DASHBOARD_COOKIE12 } from './DashboardShapePaths';
-import { homeHasPendingCleanup, homeRunActionLabel, homeRuntimeAppearsStarted, homeShouldStopRuntime } from './HomeRunControls';
+import {
+  homeHasPendingCleanup, homeRunActionLabel, homeRunFailureMessage, homeRuntimeAppearsStarted, homeShouldStopRuntime
+} from './HomeRunControls';
+import { uiResourceText } from '../../components/ResourceText';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DashboardCountryBadge } from './DashboardCountryBadge';
 import { DashboardExitDetails } from './DashboardExitDetails';
@@ -83,8 +86,7 @@ export struct DashboardStatus {
     if (this.conn.hostState === 'unknown' && !this.conn.busy) {
       return $r('app.string.dash_runtime_unknown');
     }
-    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated) &&
-      this.conn.state !== ConnectionState.Disconnecting) {
+    if (this.cleanupPending() && this.conn.state !== ConnectionState.Disconnecting) {
       return $r('app.string.dash_cleanup_required');
     }
     if (this.conn.forward === 'paused') {
@@ -117,10 +119,15 @@ export struct DashboardStatus {
       this.conn.vpnCreated, this.conn.hostState);
   }
 
+  private cleanupPending(): boolean {
+    return homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached,
+      this.conn.vpnCreated, this.conn.hostState);
+  }
+
   private appearsStarted(): boolean {
     return this.conn.state !== ConnectionState.Disconnecting &&
       homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached,
-        this.conn.vpnCreated);
+        this.conn.vpnCreated, this.conn.hostState);
   }
 
   private showRuntimeError(message: ResourceStr): void {
@@ -151,15 +158,21 @@ export struct DashboardStatus {
     if (!this.interactive) {
       return;
     }
+    const shouldStop = this.shouldStop();
     try {
-      if (this.shouldStop()) {
+      if (shouldStop) {
         await this.conn.disconnect(this.context);
       } else if (this.profileReady) {
         await this.conn.connect(this.context);
       }
     } catch (e) {
-      this.showRuntimeError(this.conn.error || (e as Error).message || $r('app.string.dash_runtime_error'));
+      this.showRuntimeError(homeRunFailureMessage((e as Error).message, this.cleanupPending(),
+        shouldStop ? $r('app.string.dash_vpn_stop_failed') : $r('app.string.dash_vpn_connect_failed')));
     }
+  }
+
+  private statusError(): Resource {
+    return homeRunFailureMessage(this.conn.error, this.cleanupPending(), $r('app.string.dash_runtime_error'));
   }
 
   @Builder
@@ -223,9 +236,9 @@ export struct DashboardStatus {
               .borderRadius(7)
               .backgroundColor(this.conn.connected ? $r('app.color.success_soft') :
                 this.appStyle.palette.tileBackground)
-              .accessibilityDescription(this.conn.error)
+              .accessibilityDescription(this.conn.error === '' ? '' : uiResourceText(this.getUIContext(), this.statusError()))
               .onClick((): void => {
-                if (this.interactive && this.conn.error !== '') { this.showRuntimeError(this.conn.error); }
+                if (this.interactive && this.conn.error !== '') { this.showRuntimeError(this.statusError()); }
               })
             }
             .width('100%')
