@@ -41,7 +41,10 @@ lint: ## 代码检查（CHECKS=all|go|shell|arch|arkts|actions|commits|vuln，�
 test: ## 宿主回归（默认全部，可用 TESTS=contracts|core|go|local 或选模块），不操作设备
 	scripts/test.sh $(TESTS)
 
+bench: ## 真机启动、VPN 接入与新连接基准（BENCH_ARGS=--help 查看用法）
+	@bash scripts/bench.sh $(BENCH_ARGS)
+
 clean: ## 清理构建产物（保留 .toolchain/ 里的补丁工具链）
 	rm -rf entry/build entry/.cxx .hvigor dist entry/libs
 
-.PHONY: help core core-smoke core-codeql geodata geodata-update hap install run log lint test clean
+.PHONY: help core core-smoke core-codeql geodata geodata-update hap install run log lint test bench clean

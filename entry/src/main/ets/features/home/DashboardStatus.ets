@@ -1,6 +1,7 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { curves } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { connection, Connection, ConnectionState } from '../../client/Connection';
 import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
 import { DASHBOARD_CARD } from '../../components/Theme';
@@ -163,6 +164,7 @@ export struct DashboardStatus {
       if (shouldStop) {
         await this.conn.disconnect(this.context);
       } else if (this.profileReady) {
+        hilog.info(0x0A11, 'ArkClashBench', 'vpn_connect_click');
         await this.conn.connect(this.context);
       }
     } catch (e) {

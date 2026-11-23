@@ -1,5 +1,6 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { curves } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { uiResourceText } from '../../components/ResourceText';
 import { DashboardLoadingRotation } from './DashboardLoadingRotation';
 
@@ -139,9 +140,20 @@ export struct DashboardRunButton {
   @Param visible: boolean = false;
   @Param label: ResourceStr = '';
   @Event onToggle: () => void = () => {};
+  private inViewport: boolean = false;
+  private interactiveReported: boolean = false;
+
+  @Monitor('interactive', 'visible')
+  reportInteractive(): void {
+    if (this.visible && this.interactive && this.inViewport && !this.interactiveReported) {
+      this.interactiveReported = true;
+      hilog.info(0x0A11, 'ArkClashBench', 'dashboard_interactive');
+    }
+  }
 
   build() {
     Button({ type: ButtonType.Normal })
+      .id('arkclash_vpn_toggle')
       .fontFamily(this.appStyle.fontFamily)
       .contentModifier(new RunButtonContent(this.running, this.busy, this.visible, this.motionEnabled))
       .width(88)
@@ -166,6 +178,10 @@ export struct DashboardRunButton {
       })
       .animation({ duration: this.motionEnabled && this.visible ? 180 : 0, curve: Curve.EaseOut })
       .enabled(this.interactive)
+      .onVisibleAreaChange([0.0], (isVisible: boolean, ratio: number): void => {
+        this.inViewport = isVisible && ratio > 0;
+        this.reportInteractive();
+      })
       .accessibilityText(uiResourceText(this.getUIContext(), this.label))
       .onClick((): void => { this.onToggle(); })
   }

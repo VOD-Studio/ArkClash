@@ -110,6 +110,7 @@ function loadConsumer(relative, bindings, modules = new Map()) {
     $r: key => key,
     setTimeout(callback, milliseconds) { state.now += milliseconds; queueMicrotask(callback); },
     require(name) {
+      if (name === '@kit.PerformanceAnalysisKit') { return { hilog: { info() {} } }; }
       if (name in bindings) { return bindings[name]; }
       assert.ok(name.startsWith('.'), `unexpected consumer module ${name}`);
       return loadConsumer(new URL(`${name}.ets`, file), bindings, modules);

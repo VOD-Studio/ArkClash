@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { connection as networkConnection } from '@kit.NetworkKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { OutboundMode, RuntimeStatus, setAllowLan, setMode } from './Controller';
 import { ControllerSocket } from './ControllerSocket';
 import { CoreHostState, connectVpn, disconnectVpn, readCoreHostStatus, startCore, stopCore, updateRuntimeOptions } from './CoreClient';
@@ -230,6 +231,9 @@ export class Connection {
         (): boolean => generation === this.generation);
       if (generation !== this.generation) {
         return;
+      }
+      if (status.tunAttached && status.vpnCreated && status.forward === 'running') {
+        hilog.info(0x0A11, 'ArkClashBench', 'vpn_tun_confirmed');
       }
       this.applyStatus(status);
       this.connectDuration = Math.max(0, Date.now() - begin);
