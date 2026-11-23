@@ -5,74 +5,46 @@
 [![CI](https://github.com/VOD-Studio/ArkClash/actions/workflows/ci.yml/badge.svg)](https://github.com/VOD-Studio/ArkClash/actions/workflows/ci.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 
-原生 HarmonyOS NEXT 代理客户端。界面用 ArkTS/ArkUI 编写，内核是 [mihomo](https://github.com/MetaCubeX/mihomo)，手机端交互以 [FlClash v0.9.3](https://github.com/chen08209/FlClash/tree/be84736605527034689c95bf27828ff27d912c5e) 为对齐基准。
+基于 mihomo 的原生 HarmonyOS NEXT 代理客户端。
 
-> **早期版本**：已接入仪表盘、代理、多配置、Geo 资源及连接/DNS 诊断。新增功能尚待统一真机验收。
-
-## 为什么做
-
-目标是比同类客户端打开更快、更省电、更稳定、连接更快。
-
-- 内核运行在系统 VPN 扩展进程，界面经 controller 和沙箱文件控制。扩展被销毁后不承诺继续代理。
-- 界面进程不加载内核，打开应用时不用等内核启动。
-- 内置 Geo 数据，核心预热不用现场去 GitHub 下载。
-- 默认使用 fake-ip DNS，关闭手机上用不到的进程查找。
-
-衡量标准是在同一台手机上和同类客户端对比四项：冷启动到可操作的耗时、开着代理待机 8 小时的耗电、新连接的建立延迟、内核连续 24 小时不重启。测量方法和数据会随版本公布。
-
-## 当前状态
-
-- 仪表盘：独立控制 VPN 连接与断开、出站模式、实时速率与连接统计、出口 IP 和服务连通性检查。顶部「运行状态」查看内核和 Geo 下载进度，手动检查应用更新，下载、校验及保存 GitHub Release 的 HAP。启动后自动检查一次，可在「工具 → 常规」关闭。
-- 代理：分组与节点浏览、按配置保存选择、未连接测速、搜索排序及列表/标签视图；内核未就绪时可显式启动。
-- 配置：订阅、节点分享链接与本地文件导入、切换、更新、重命名、复制、删除、内容编辑和 JavaScript 覆写。自定义配置支持编辑代理组、成员、拨号链和完整规则。
-- 资源：查看 MMDB、ASN、GEOIP、GEOSITE 的本地信息，编辑/恢复/复制来源地址，连接后单项或全部更新，按小时间隔自动更新。
-- 工具：连接页合并「运行中」与「最近请求」，支持搜索、筛选、分组、宽屏表格和关闭连接；DNS 页查看被动查询、缓存命中与上游结果，并可清理 DNS 缓存。不必打开工具页才开始记录，应用退到后台且进程仍存活时也会记录；近期历史只留在内存。
-- 常规：设置入站端口和认证、外部控制器、订阅 User-Agent、全局 Hosts、测速超时和切节点后的连接清理。开启日志捕获后，可在「工具 → 日志」筛选、暂停浏览和导出近期记录。
-- 主题：在「工具 → 主题」实时预览深浅色、纯黑、系统和自定义配色；设置导航栏、页签动效、沉浸光感、字体与字号。
-- 基础 VPN 连接曾在 Pura 70 Ultra（API 26）验证；本轮无 TUN 预热、手机驻留、新增资源/诊断页面及性能指标尚未完成真机验收。
-
-开发计划和进度见 [Issues](https://github.com/VOD-Studio/ArkClash/issues)。
+<img src="docs/assets/screenshot-dashboard.webp" width="400" alt="ArkClash 仪表盘由左下至右上的斜线分隔，上方亮色，下方暗色，状态卡片和启动按钮可见">
 
 ## 安装
 
-需要 HarmonyOS 7（API 26）及以上的 ARM64 设备。
-
-HarmonyOS 只能安装签过名的应用，目前还没有面向普通用户的安装渠道。安装包分为两种，发布附件见 [Releases](https://github.com/VOD-Studio/ArkClash/releases)：
+需要 **HarmonyOS 7（API 26）及以上的 ARM64 设备**。目前通过 GitHub 分发，首次安装通常需要用自己的华为开发者账号准备调试签名。[下载最新版本](https://github.com/VOD-Studio/ArkClash/releases/latest)
 
 | 文件 | 适用于 |
 |---|---|
-| `ArkClash-<版本>-unsigned.hap` | 有华为开发者账号的用户：用自己的调试证书签名后安装，方法见下面的「从源码构建」 |
-| `ArkClash-<版本>-debug-signed.hap` | 维护者的设备：用维护者的调试证书签名，只能装在证书里登记过的设备上 |
+| `ArkClash-<版本>-unsigned.hap` | 使用自己的调试签名材料签名后安装 |
+| `ArkClash-<版本>-debug-signed.hap` | 仅限维护者调试 Profile 中登记的设备 |
 
-下载后可以用同一个 Release 里的 `SHA256SUMS` 校验文件。
+下载后可用同一版本的 `SHA256SUMS` 校验文件。[发布包签名与安装](docs/usage.md#安装发布包)
 
-## 使用
+## 首次连接
 
-1. 打开应用会在首帧之后尝试预热内核，首次会提前出现系统 VPN 授权框；允许授权不会自动接管系统流量。拒绝后本次应用会话不自动重复请求，可在代理页点「启动内核」重试。
-2. 在「配置」添加订阅、节点分享链接或本地 Clash / mihomo YAML。可以扫码导入订阅和节点，也可以从相册选择二维码图片。批量导入时，多条节点分享链接会合成一份配置。也可在「添加 → 新建自定义配置」从空白组装，或用「导入配置结构」打开已有 YAML。选好配置后回到仪表盘点「连接」，才开启系统流量接管。
-3. 内核就绪后可在「代理」选择节点，或对单节点、分组及 picker 发起真实测速，不要求先连接 VPN。普通断开保留内核、节点选择和测速结果。
-4. 在「配置」更新订阅。只要核心在线就尝试热切换，即使 VPN 未连接；失败时保留原运行配置并显示错误。
-5. 在「工具 → 资源」管理 Geo。离线可查看文件和保存设置，连接后才可下载。自动更新默认开启，间隔 24 小时。已保存的开关和周期随升级保留。保存 URL 不会立即下载，资源来源编辑页的「恢复默认」只修改草稿。离开资源页后内核中的更新继续执行。
-6. 在「工具 → 连接 / DNS 查询」查看诊断记录。记录仅驻留内存，只在对应页面可见时采集，隐藏或断线期间不补回；「最近请求」不是完整历史。清 DNS 缓存不删除记录，也不清除 FakeIP 映射。
-7. 在「工具 → 进阶配置 → 脚本」新建或导入 JavaScript，再从「配置 → 更多 → 覆写」选中脚本。`main(config)` 接收完整配置，返回的配置会继续应用附加规则。
-8. 在「工具 → 进阶配置 → 自定义资源 → 代理」维护本地节点库，支持协议表单和批量编辑分享链接。
-9. 在「工具 → 进阶配置 → 自定义资源 → 规则集」新建规则集，或从文件和 URL 导入 YAML、Text、MRS。保存后在「附加规则」选择 `RULE-SET`、规则集和出站策略。远程规则集可以手动同步。
-10. 在「工具 → 进阶配置 → 自定义资源 → 筛选」管理正则预设。编辑配置内容时点「插入筛选」，选中代理组或代理集合，再选包含或排除匹配项，最后保存配置。
-11. 在「工具 → 进阶配置 → DNS」逐项覆写上游策略、Fallback 筛选、Fake-IP 和缓存等设置。移除覆写项即可恢复配置值。在「网络 → 绕过 VPN 的应用」填写应用包名，重连后这些应用走系统网络。
-12. 在「工具 → 进阶配置 → 自定义资源 → 图标集」从文件或 URL 导入图标集 JSON。编辑配置文件时点「选择图标」，可给代理组选择图标、输入图标 URL 或移除图标。
-13. 在「配置 → 更多 → 覆写 → 配置附加规则」管理单份配置的规则、选择 MATCH 目标和停用指定全局规则。添加规则时可选用或新建命名出口，在配置的「命名出口」里为它指定节点或代理组。当前配置可在覆写页立即应用，退出该页时也会应用已保存的更改。
-14. 在「工具 → 备份与恢复」导出本地 ZIP，或绑定 WebDAV 后手动上传与恢复。恢复前可选「仅配置及资源」或「全部数据」，并选择合并或覆盖。ZIP 未加密，请按敏感文件保存。
+1. 打开 ArkClash，在系统弹窗中允许 VPN 授权。如果之前拒绝过，可在「代理」点「启动内核」重试。
+2. 在「配置」导入订阅、节点分享链接或本地 Clash / mihomo YAML，然后选中该配置。
+3. 回到仪表盘点「连接」。连接成功后，ArkClash 开始接管系统流量。
 
-网页可以用 `clash://install-config?url=<经过 URL 编码的订阅地址>` 打开导入表单。`clashmeta` 和 `flclash` 协议也受支持，确认保存后开始下载。
+[查看进阶使用指南](docs/usage.md#配置与订阅)
 
-在订阅卡片的「更多 → 订阅二维码」展示可扫码分享的订阅地址。
+## 功能
 
-导入 age 加密订阅时，在单条链接表单填写 age 私钥。之后手动或自动更新会使用已保存的私钥，也可从配置编辑页更换私钥。
+- 未连接 VPN 时也可选择节点和测速。每份配置单独记住所选节点。
+- 支持扫码、从相册导入二维码、更新 age 加密订阅，也可编辑 YAML 或组装自定义配置。
+- 可用附加规则和 JavaScript 覆写配置，管理本地节点库、规则集、筛选预设及代理组图标。
+- 仪表盘显示实时速率、连接统计和出口 IP，支持检查连通性与应用更新。工具页提供实时连接、近期请求、DNS 查询和日志。
+- 内置 Geo 数据，支持自定义下载源和自动更新。可调整 VPN 网络设置、分应用绕过和主题，并通过本地 ZIP 或 WebDAV 备份与恢复。
 
+## 真机验证
+
+基础 VPN 连接和代理转发已在 Pura 70 Ultra（API 26）上验证。冷启动到可操作、开代理待机 8 小时的耗电、新连接延迟和 24 小时内核稳定性暂无公开的同机对照结果。[转发验证记录](docs/adr/0013-runtime-host-process-evidence.md#验证) · [性能测量方法](docs/adr/0017-core-ready-without-vpn.md)
 
 ## 从源码构建
 
-需要 DevEco Studio 或 Command Line Tools（带 HarmonyOS SDK API 26）、Go（版本见 `.go-version`）和 Python 3。使用 Command Line Tools 时设置 `HARMONYOS_TOOLS_HOME`；纯命令行编译内核还需设置 `OHOS_SDK` 指向其 OpenHarmony SDK 目录。
+需要 DevEco Studio 或 Command Line Tools（带 HarmonyOS SDK API 26）、Go（版本见 `.go-version`）和 Python 3。使用 Command Line Tools 时设置 `HARMONYOS_TOOLS_HOME`。单独指定内核编译使用的 OpenHarmony SDK 时，设置 `OHOS_SDK`。
+
+要装到手机上，先在 DevEco Studio 打开项目，通过 File → Project Structure → Signing Configs 配置自动签名，再执行以下命令。首次搭建环境可参照[配置指南](docs/agents/fork-setup.md)。
 
 ```sh
 make geodata   # 下载 Geo 数据，打包进 HAP
@@ -81,24 +53,13 @@ make hap       # 打包 HAP 到 dist/
 make run       # 安装到连着的手机并启动
 ```
 
-安装到手机前需要签名：用 DevEco Studio 打开项目，在 File → Project Structure → Signing Configs 里用华为账号自动签名。`make help` 列出全部命令。第一次搭环境时，按 [docs/agents/fork-setup.md](docs/agents/fork-setup.md) 逐步完成。
-
-默认构建 ARM64。开发用 x86_64 模拟器可显式选择 ABI：
-
-```sh
-make core ABI=x86_64
-make core-smoke ABI=x86_64  # 已连接的模拟器；仅验证原生加载和多线程 C API
-make hap ABI=x86_64
-# 配置签名后：
-make run ABI=x86_64
-```
-
-x86_64 包为 `dist/ArkClash-<版本>-debug-x86_64-unsigned.hap`，不会覆盖 ARM64 包。不同 ABI 的 HAP 不要并发构建。模拟器原生加载已验证，签名后的应用/VPN 验收仍待完成；模拟器结果不能替代 ARM 真机性能和稳定性验证。
+默认构建 ARM64。针对 x86_64 模拟器，给 `make core`、`make hap` 和 `make run` 加上 `ABI=x86_64`。不同架构需依次打包。`make help` 列出全部命令。[模拟器验证记录](docs/adr/0014-x86-emulator-toolchain.md#验证与边界)
 
 ## 文档
 
 | 文档 | 内容 |
 |---|---|
+| [更新日志](CHANGELOG.md) | 各版本的功能与修复 |
 | [架构](docs/architecture.md) | 进程划分、连接流程、目录分层 |
 | [决策记录](docs/adr/) | 关键技术取舍和理由 |
 | [CI/CD](docs/ci.md) | 流水线、密钥配置、发版流程 |
@@ -111,7 +72,7 @@ x86_64 包为 `dist/ArkClash-<版本>-debug-x86_64-unsigned.hap`，不会覆盖 
 ## 致谢
 
 - [mihomo](https://github.com/MetaCubeX/mihomo)：代理内核
-- [FlClash](https://github.com/chen08209/FlClash)：交互设计参考
+- [FlClash v0.9.3](https://github.com/chen08209/FlClash/tree/be84736605527034689c95bf27828ff27d912c5e)：交互设计参考
 - [sing-tun](https://github.com/SagerNet/sing-tun) 和 [gVisor](https://github.com/google/gvisor)：TUN 协议栈
 - [meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat)：内置的 Geo 数据
 
