@@ -7,7 +7,7 @@
 
 基于 mihomo 的原生 HarmonyOS NEXT 代理客户端。
 
-<img src="docs/assets/screenshot-dashboard.webp" width="400" alt="ArkClash 仪表盘，亮色上半部展示状态卡片和启动按钮，暗色下半部展示配置和出站模式">
+<img src="docs/assets/screenshot-dashboard.webp" width="400" alt="ArkClash 仪表盘由左下至右上的斜线分隔，上方亮色，下方暗色，状态卡片和启动按钮可见">
 
 ## 安装
 
