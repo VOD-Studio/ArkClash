@@ -66,6 +66,41 @@ func observationClearQuestion(domain string) *D.Msg {
 	return new(D.Msg).SetQuestion(D.Fqdn(domain), D.TypeA)
 }
 
+func TestArkClashSystemDNSRefreshesOnNetworkChanges(t *testing.T) {
+	oldRead, oldGeneration := arkClashSystemDNS, arkClashSystemDNSGeneration
+	t.Cleanup(func() { SetArkClashSystemDNS(oldRead, oldGeneration) })
+	var generation uint64
+	var reads int
+	servers := []string{"192.0.2.1", "2001:db8::53"}
+	var unavailable error
+	SetArkClashSystemDNS(func() ([]string, error) {
+		reads++
+		return servers, unavailable
+	}, func() uint64 { return generation })
+	client := newSystemClient()
+	if address := client.Address(); address != "system(udp://192.0.2.1:53,udp://[2001:db8::53]:53)" {
+		t.Fatalf("initial addresses: %s", address)
+	}
+	servers = []string{"192.0.2.2"}
+	_ = client.Address()
+	if reads != 1 {
+		t.Fatalf("same network read %d times", reads)
+	}
+	generation++
+	if address := client.Address(); address != "system(udp://192.0.2.2:53)" || reads != 2 {
+		t.Fatalf("network change yielded %s after %d reads", address, reads)
+	}
+	generation++
+	servers, unavailable = nil, fmt.Errorf("test network unavailable")
+	if clients, err := client.getDnsClients(); len(clients) != 0 || err != unavailable {
+		t.Fatalf("lost network returned retired servers: %v %v", clients, err)
+	}
+	_, _ = client.getDnsClients()
+	if reads != 3 {
+		t.Fatalf("failed reads were not bounded: %d", reads)
+	}
+}
+
 func observationClearFixture(t *testing.T) {
 	t.Helper()
 	oldDefault, oldSystem := resolver.DefaultResolver, resolver.SystemResolver
