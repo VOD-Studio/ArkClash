@@ -46,6 +46,7 @@ type generalSettings struct {
 	ControllerSecret string                 `json:"controllerSecret"`
 	UserAgent        string                 `json:"userAgent"`
 	UserAgents       []string               `json:"userAgents,omitempty"`
+	AppendSystemDNS  bool                   `json:"appendSystemDns,omitempty"`
 	Hosts            map[string][]string    `json:"hosts"`
 	DelayTimeout     int                    `json:"delayTimeout"`
 	CloseConnections *bool                  `json:"closeConnections,omitempty"`
@@ -262,6 +263,7 @@ func updateGeneralSettings(request profileSettingsRequest[generalSettings]) erro
 	next.General = s
 	rebuild := !reflect.DeepEqual(old.General.Hosts, s.Hosts) ||
 		old.General.UserAgent != s.UserAgent ||
+		old.General.AppendSystemDNS != s.AppendSystemDNS ||
 		s.Ports == nil && old.General.Ports != nil ||
 		s.Authentication == nil && old.General.Authentication != nil
 	previousInbound := desiredInbound

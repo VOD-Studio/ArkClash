@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -109,6 +110,18 @@ func (e dnsOverrideEntries) apply(raw *config.RawDNS) {
 	replaceDNSPolicy(&raw.ProxyServerNameserverPolicy, e.ProxyPolicy)
 	replaceDNSField(&raw.DirectNameServer, e.DirectServers)
 	replaceDNSField(&raw.DirectNameServerFollowPolicy, e.DirectFollowPolicy)
+}
+
+func appendSystemDNS(raw *config.RawDNS) {
+	for _, server := range raw.NameServer {
+		if server == "system" || server == "dhcp://system" {
+			return
+		}
+		if parsed, err := url.Parse(server); err == nil && parsed.Scheme == "system" {
+			return
+		}
+	}
+	raw.NameServer = append(raw.NameServer, "system://")
 }
 
 var (

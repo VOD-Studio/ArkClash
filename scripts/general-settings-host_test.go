@@ -123,6 +123,15 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 		strings.Join(stored.UserAgents, ",") != "ArkClash-Test,ArkClash-Test-v2" {
 		t.Fatal("settings were not persisted")
 	}
+	next.Revision = "system-dns-enabled"
+	next.AppendSystemDNS = true
+	if err := saveGeneralTestSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	stored, err = readGeneralSettings(opts.HomeDir)
+	if err != nil || !stored.AppendSystemDNS || tunListener != tun {
+		t.Fatalf("could not persist system DNS without replacing the TUN: %v", err)
+	}
 }
 
 func TestGeneralPanelControllerIsolationAndRotation(t *testing.T) {

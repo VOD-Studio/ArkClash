@@ -3761,6 +3761,10 @@
       "value": "Subscription User-Agent"
     },
     {
+      "name": "general_append_system_dns",
+      "value": "Append system DNS"
+    },
+    {
       "name": "general_ua_preset_invalid",
       "value": "Enter a valid User-Agent that is not already saved."
     },

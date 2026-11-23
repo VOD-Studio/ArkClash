@@ -3741,6 +3741,10 @@
       "value": "订阅 User-Agent"
     },
     {
+      "name": "general_append_system_dns",
+      "value": "追加系统 DNS"
+    },
+    {
       "name": "general_ua_preset_invalid",
       "value": "请输入有效且未保存过的 User-Agent。"
     },

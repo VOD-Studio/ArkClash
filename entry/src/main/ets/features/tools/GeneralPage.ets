@@ -15,6 +15,7 @@ import { SettingsSection } from './SettingsSection';
 import { logLevelLabel } from './LogLabels';
 
 type GeneralEditor = 'ports' | 'authentication' | 'controller' | 'userAgent' | 'hosts' | 'level' | 'timeout';
+type GeneralToggle = 'capture' | 'closeConnections' | 'appendSystemDns';
 
 const PORT_LABELS: string[] = ['Mixed', 'HTTP', 'SOCKS', 'Redir', 'TProxy'];
 
@@ -80,7 +81,7 @@ export struct GeneralPage {
     return {
       revision: saved.revision, ports: saved.ports, authentication: saved.authentication,
       controllerSecret: saved.controllerSecret, userAgent: saved.userAgent, userAgents: saved.userAgents,
-      hosts: saved.hosts,
+      appendSystemDns: saved.appendSystemDns, hosts: saved.hosts,
       delayTimeout: saved.delayTimeout, closeConnections: saved.closeConnections, logLevel: saved.logLevel,
       captureLogs: saved.captureLogs
     };
@@ -222,10 +223,13 @@ export struct GeneralPage {
     this.closeAgentEditor();
   }
 
-  private setSwitch(kind: string, isOn: boolean): void {
+  private setSwitch(kind: GeneralToggle, isOn: boolean): void {
     const draft = this.draft();
-    if (kind === 'capture') { draft.captureLogs = isOn; }
-    else { draft.closeConnections = isOn; }
+    switch (kind) {
+      case 'capture': draft.captureLogs = isOn; break;
+      case 'closeConnections': draft.closeConnections = isOn; break;
+      case 'appendSystemDns': draft.appendSystemDns = isOn; break;
+    }
     this.save(draft);
   }
 
@@ -302,6 +306,10 @@ export struct GeneralPage {
     this.Rule()
     ListRow({ title: $r('app.string.general_hosts'),
       value: this.hostCount(), onTap: (): void => this.openEditor('hosts') })
+    this.Rule()
+    GeneralSwitchRow({ label: $r('app.string.general_append_system_dns'),
+      checked: this.settings.saved.appendSystemDns ?? false, interactive: !this.isSaving,
+      onToggle: (isOn: boolean): void => this.setSwitch('appendSystemDns', isOn) })
     this.Rule()
     GeneralSwitchRow({ label: $r('app.string.general_auto_check_update'),
       checked: this.updates.automatic, interactive: this.updates.preferenceReady && !this.updates.preferenceSaving,

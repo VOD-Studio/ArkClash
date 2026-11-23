@@ -24,6 +24,7 @@ export interface GeneralSettings {
   controllerSecret: string;
   userAgent: string;
   userAgents?: string[];
+  appendSystemDns?: boolean;
   hosts: Record<string, string[]> | null;
   delayTimeout: number;
   closeConnections?: boolean;
@@ -59,6 +60,7 @@ export function checkedGeneralSettings(input: GeneralSettings): GeneralSettings 
     !validGeneralUserAgent(input.userAgent) || !validText(input.controllerSecret, 512) ||
     input.controllerSecret.includes(' ') || !GENERAL_LEVELS.includes(input.logLevel) ||
     !GENERAL_TIMEOUTS.includes(input.delayTimeout) || typeof input.captureLogs !== 'boolean' ||
+    (input.appendSystemDns !== undefined && typeof input.appendSystemDns !== 'boolean') ||
     (input.closeConnections !== undefined && typeof input.closeConnections !== 'boolean')) {
     throw new Error(invalid);
   }

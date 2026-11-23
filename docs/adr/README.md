@@ -38,3 +38,4 @@
 | [0031](0031-portable-backup.md) | 原子恢复配置库与 WebDAV 备份 | 已采纳 |
 | [0032](0032-structured-custom-profile.md) | 自定义配置的结构化编辑 | 已采纳 |
 | [0033](0033-age-subscriptions.md) | 订阅下载中的 age 解密 | 已采纳 |
+| [0034](0034-harmonyos-system-dns.md) | 从鸿蒙默认网络读取系统 DNS | 已采纳，待真机验证 |
