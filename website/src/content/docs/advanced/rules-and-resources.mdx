@@ -4,6 +4,8 @@ description: 管理全局与配置级附加规则、命名出口、本地代理�
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+import { Image } from 'astro:assets';
+import advancedConfig from '../../../assets/screenshot-advanced-config.webp';
 
 ## 附加规则与命名出口
 
@@ -22,6 +24,14 @@ import { Aside } from '@astrojs/starlight/components';
 ## 自定义资源库
 
 打开「工具 → 进阶配置」，在「自定义资源」分组中选择相应入口。
+
+<Image
+  src={advancedConfig}
+  alt="进阶配置页下方的自定义资源分组显示代理、规则集、筛选和图标集"
+  class="doc-screenshot"
+  width={360}
+  densities={[1, 2]}
+/>
 
 ### 1. 自定义代理库（「代理」）
 

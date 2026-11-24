@@ -4,6 +4,8 @@ description: 预览和调整主题，通过本地 ZIP 或 WebDAV 备份与恢复
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+import { Image } from 'astro:assets';
+import themePage from '../../../assets/screenshot-theme.webp';
 
 ## 主题与外观
 
@@ -12,6 +14,14 @@ import { Aside } from '@astrojs/starlight/components';
 - **显示模式**：可跟随系统或固定使用浅色、深色。深色背景可选「标准」或「纯黑」。
 - **主题色**：可跟随系统强调色、自选颜色，并使用「鲜艳」「染色」「柔和」或「单色」配色。
 - **材质与排版**：可调节沉浸光感、导航栏、页签动效、字体和字号。系统开启「减弱动态」后，应用会停用非必要动效。
+
+<Image
+  src={themePage}
+  alt="主题页选中深色模式，显示实时预览、标准和纯黑背景以及主题色选项"
+  class="doc-screenshot"
+  width={360}
+  densities={[1, 2]}
+/>
 
 ## 备份与恢复
 

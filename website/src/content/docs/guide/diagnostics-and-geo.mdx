@@ -4,8 +4,18 @@ description: 使用实时连接、近期请求、DNS 查询、日志捕获与内
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+import { Image } from 'astro:assets';
+import toolsPage from '../../../assets/screenshot-tools.webp';
 
 「工具」页提供连接、DNS 查询、日志和资源入口。
+
+<Image
+  src={toolsPage}
+  alt="底部选中工具页，第一组入口是连接、DNS 查询、资源和日志"
+  class="doc-screenshot"
+  width={360}
+  densities={[1, 2]}
+/>
 
 ## 连接与近期请求
 

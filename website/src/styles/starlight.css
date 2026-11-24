@@ -64,6 +64,14 @@
   --sl-color-accent-low: rgba(92, 163, 255, 0.14);
 }
 
+.sl-markdown-content .doc-screenshot {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 1rem;
+}
+
 /* 顶部导航毛玻璃材质与品牌 Logo 圆角 */
 header.header {
   backdrop-filter: saturate(180%) blur(18px);

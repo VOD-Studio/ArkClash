@@ -99,26 +99,28 @@ function rewriteLinks(markdown, rewriter) {
 }
 
 function syncAssets() {
+  const docsAssets = path.join(REPO_DIR, 'docs/assets');
   copyIfExists(
-    path.join(REPO_DIR, 'docs/assets/icon.png'),
+    path.join(docsAssets, 'icon.png'),
     path.join(SITE_DIR, 'public/favicon.png'),
   );
   copyIfExists(
-    path.join(REPO_DIR, 'docs/assets/icon.png'),
+    path.join(docsAssets, 'icon.png'),
     path.join(SITE_DIR, 'public/assets/icon.png'),
   );
   copyIfExists(
-    path.join(REPO_DIR, 'docs/assets/icon.png'),
+    path.join(docsAssets, 'icon.png'),
     path.join(SITE_DIR, 'src/assets/icon.png'),
   );
   copyIfExists(
-    path.join(REPO_DIR, 'docs/assets/screenshot-dashboard.webp'),
+    path.join(docsAssets, 'screenshot-dashboard.webp'),
     path.join(SITE_DIR, 'public/assets/screenshot-dashboard.webp'),
   );
-  copyIfExists(
-    path.join(REPO_DIR, 'docs/assets/screenshot-dashboard.webp'),
-    path.join(SITE_DIR, 'src/assets/screenshot-dashboard.webp'),
-  );
+  for (const file of fs.readdirSync(docsAssets)) {
+    if (file.startsWith('screenshot-') && file.endsWith('.webp')) {
+      copyIfExists(path.join(docsAssets, file), path.join(SITE_DIR, 'src/assets', file));
+    }
+  }
 
   // 同步仓库内置的服务品牌 SVG，供官网「13 项主流服务协议探测」展示使用
   const mediaDir = path.join(REPO_DIR, 'entry/src/main/resources/base/media');

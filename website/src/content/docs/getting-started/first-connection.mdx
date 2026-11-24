@@ -4,6 +4,8 @@ description: 授权系统 VPN、导入订阅或配置，并完成首次代理连
 ---
 
 import { Steps, Aside } from '@astrojs/starlight/components';
+import { Image } from 'astro:assets';
+import profileAdd from '../../../assets/screenshot-profile-add.webp';
 
 <Steps>
 
@@ -18,6 +20,14 @@ import { Steps, Aside } from '@astrojs/starlight/components';
 2. **导入订阅或配置**
 
    切换到「配置」页，点右上角的「＋」。选择「从链接导入」可粘贴订阅地址或节点分享链接。选择「文件」可导入本地 Clash / mihomo YAML，也可以扫码、从相册识码或新建自定义配置。
+
+   <Image
+     src={profileAdd}
+     alt="配置页的添加菜单，依次显示文件、从链接导入、扫码导入、从相册识码和新建自定义配置"
+     class="doc-screenshot"
+     width={360}
+     densities={[1, 2]}
+   />
 
    导入完成后，点击该配置卡片将其设为**当前配置**。
 

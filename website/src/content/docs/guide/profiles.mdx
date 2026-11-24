@@ -4,6 +4,8 @@ description: 管理远程订阅、扫码与 URL Scheme 导入、age 加密订阅
 ---
 
 import { Aside } from '@astrojs/starlight/components';
+import { Image } from 'astro:assets';
+import customProfile from '../../../assets/screenshot-custom-profile.webp';
 
 订阅从远程链接获取配置，可设更新间隔，且可能带有服务商提供的用量信息。从本地文件或节点分享链接导入的内容会保存为本地配置。在「配置」页管理这些配置。
 
@@ -41,6 +43,14 @@ clash://install-config?url=<经过 URL 编码的订阅地址>
 
 - **结构化自定义配置**：在「添加 → 新建自定义配置」从空白组装，或通过「导入配置结构」解析已有 YAML。支持可视化编辑代理组、成员、拨号链（dialer-proxy）与规则，并可直接选用自定义代理库、筛选预设和图标集。
 - **YAML 编辑与预览**：通过配置卡片的「更多」编辑 YAML，或打开「运行时配置」只读查看应用覆写后的 YAML。生成预览需要内核就绪，页面会标明当前预览是否已应用。
+
+<Image
+  src={customProfile}
+  alt="自定义配置编辑器显示代理组、规则、节点与拨号链，并提供导入配置结构与配置 YAML 两个入口"
+  class="doc-screenshot"
+  width={360}
+  densities={[1, 2]}
+/>
 
 ## 更新与热切换
 
