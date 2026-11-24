@@ -116,7 +116,7 @@ Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/
 
 图标集经文件或 URL 导入。VPN 转发就绪时通过 `/arkclash/profiles/icon-set-download` 按当前规则下载清单。代理组的图标地址写入配置草稿的 `icon` 字段，由现有的代理页和仪表盘显示。见 [ADR-0027](adr/0027-icon-set-library.md)。
 
-`/arkclash/diagnostics/capture` 是随 UI 接收端存活的应用级采集通道，不传记录。连接与 DNS 工具只在页面可见、应用在前台且核心就绪时分别订阅 `/arkclash/diagnostics/connections`、`/arkclash/diagnostics/dns`；重新打开读取同代次完整有界历史，包括此前离页和后台期间的记录。连接首帧 live 基线不算 recent；FindProcessOff 不变，DNS initiator 不是应用身份。连接 ring 2000、DNS ring 3000，页面会话队列 256；溢出以 reset 补齐，dropped（会话内中间事件合并）与 evicted（历史淘汰）分开计数。详见 [ADR-0019](adr/0019-app-diagnostics-capture.md)。
+`/arkclash/diagnostics/capture` 是随 UI 接收端存活的应用级采集通道，不传记录；仪表盘「连接统计」卡片可见时订阅轻量的 `/arkclash/diagnostics/stats`，仅推送活跃连接、最近请求和 DNS 查询三项计数（至多 1Hz、无变化不发帧，不触发连接流量采样）。连接与 DNS 工具只在页面可见、应用在前台且核心就绪时分别订阅 `/arkclash/diagnostics/connections`、`/arkclash/diagnostics/dns`；重新打开读取同代次完整有界历史，包括此前离页和后台期间的记录。连接首帧 live 基线不算 recent；FindProcessOff 不变，DNS initiator 不是应用身份。连接 ring 2000、DNS ring 3000，页面会话队列 256；溢出以 reset 补齐，dropped（会话内中间事件合并）与 evicted（历史淘汰）分开计数。详见 [ADR-0019](adr/0019-app-diagnostics-capture.md)。
 
 关闭连接使用 `POST /arkclash/diagnostics/connections/close`，清理全部网络 DNS 缓存/传输使用 `POST /arkclash/diagnostics/dns/clear-cache`（不清 FakeIP 或诊断历史）。动作和页面流均以 bootId/configRevision 保护，旧代次动作在核心事务内拒绝；成功热切换退休旧数据会话与历史，不关闭绑定 bootId 的采集通道。普通 VPN 断开保留同代次历史。秒级增量及有界 reset 不经过允许丢事件的通用事件通道。
 
@@ -163,7 +163,7 @@ ZIP 快照与恢复机制、旧版目录兼容及 WebDAV 路由见 [ADR-0031](ad
 | `core/geo.go`、`geo_download.go`、`geo_events.go` | Geo 串行更新、可取消调度、候选校验/安全提交与最新快照推送 |
 | `core/diagnostics.go` | 采集通道及页面订阅生命周期、代次校验、会话背压与诊断动作事务 |
 | `core/diagnostics_connections.go`、`diagnostics_dns.go` | 连接与 DNS 观察、不可变 DTO、有界历史和可见时的流量采样 |
-| `core/diagnostics_stream.go` | 诊断 WebSocket、控制帧、整帧写锁、deadline 与会话清理 |
+| `core/diagnostics_stream.go`、`diagnostics_stats.go` | 诊断 WebSocket、控制帧、整帧写锁、deadline、仪表盘轻量统计推送与会话清理 |
 | `core/prefetch.go` | 在后台预先下载配置里的 rule-provider，第一次热切换不用等 |
 | `core/tun.go` | 独立持有平台 TUN 的 Go listener；副本 fd 获取与回滚见 mihomo 补丁 |
 | `core/socket.go` | 通过 Network Kit 原生 API 保护 Go 出站 socket，绑定失败则拒绝拨号 |

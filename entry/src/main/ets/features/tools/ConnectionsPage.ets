@@ -31,6 +31,7 @@ interface ConnectionFilterSection {
 export struct ConnectionsPage {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
+  @Param initialFeed: RequestFeed | undefined = undefined;
   @Local store: ConnectionRecordsStore = connectionRecords;
   @Local conn: Connection = connection;
   @Local shown: boolean = false;
@@ -45,6 +46,7 @@ export struct ConnectionsPage {
   @Local ruleOptions: string[] = [];
   @Local reduceMotion: boolean = true;
   private active: boolean = false;
+  private initialFeedApplied: boolean = false;
   private generation: number = 0;
   private consumedNotice: number = 0;
   private actionOpen: boolean = false;
@@ -108,7 +110,12 @@ export struct ConnectionsPage {
   }
 
   private async restore(generation: number): Promise<void> {
-    try { await this.store.load(this.getUIContext().getHostContext() as common.UIAbilityContext); }
+    const initial = !this.initialFeedApplied ? this.initialFeed : undefined;
+    if (initial !== undefined) { this.initialFeedApplied = true; }
+    try {
+      await this.store.load(this.getUIContext().getHostContext() as common.UIAbilityContext,
+        initial, this.initialFeedApplied);
+    }
     catch (_error) {
       if (this.isCurrent(generation)) { this.toast($r('app.string.diagnostics_preferences_failed')); }
     }

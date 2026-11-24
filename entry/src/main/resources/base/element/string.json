@@ -1830,7 +1830,7 @@
     },
     {
       "name": "dash_card_description_connections",
-      "value": "Current connections and routing statistics"
+      "value": "Active connections, recent requests, and DNS query counts"
     },
     {
       "name": "dash_card_description_memory",
@@ -4907,6 +4907,18 @@
     {
       "name": "proxy_save_err_failed",
       "value": "Could not save node to local proxy library"
+    },
+    {
+      "name": "dash_conn_live",
+      "value": "Active"
+    },
+    {
+      "name": "dash_conn_recent",
+      "value": "Requests"
+    },
+    {
+      "name": "dash_conn_dns",
+      "value": "DNS"
     }
   ]
 }

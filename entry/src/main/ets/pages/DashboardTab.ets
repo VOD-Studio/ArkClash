@@ -1,5 +1,6 @@
 import { AppearanceState, appAppearance } from '../components/AppearanceState';
 import { connection, Connection } from '../client/Connection';
+import { DiagnosticFeedTarget } from '../client/Diagnostics';
 import { HomePage } from '../features/home/HomePage';
 import { ProfileDetailsSheet } from '../features/profiles/ProfileDetailsSheet';
 import { ProfileImportSheet } from '../features/profiles/ProfileImportSheet';
@@ -20,6 +21,7 @@ export struct DashboardTab {
   @Event onOpenProfiles: () => void = () => {};
   @Event onOpenProxies: () => void = () => {};
   @Event onOpenResources: () => void = () => {};
+  @Event onOpenDiagnostic: (target: DiagnosticFeedTarget) => void = (_target: DiagnosticFeedTarget): void => {};
   @Event onRuntimePreview: (profile: string, name: string) => void = (_profile: string, _name: string): void => {};
   @Local conn: Connection = connection;
   @Local detailShown: boolean = false;
@@ -98,7 +100,8 @@ export struct DashboardTab {
             if (active !== undefined) { this.store.update(active.id); }
           },
           onOpenProxies: (): void => this.onOpenProxies(),
-          onOpenResources: (): void => this.onOpenResources()
+          onOpenResources: (): void => this.onOpenResources(),
+          onOpenDiagnostic: (target: DiagnosticFeedTarget): void => this.onOpenDiagnostic(target)
         })
       }
       .width('100%')

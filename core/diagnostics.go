@@ -73,10 +73,13 @@ type diagnosticCollector struct {
 	evicted      uint64
 	connections  map[string]*diagnosticConnectionEntry
 	liveCount    int
+	liveAtomic   atomic.Int64
 	recent       []*diagnosticConnectionEntry
 	recentHead   int
+	recentAtomic atomic.Int64
 	dnsRecords   []DiagnosticDnsRecord
 	dnsHead      int
+	dnsAtomic    atomic.Int64
 	logs         []diagnosticLogRecord
 	logHead      int
 	logDropped   atomic.Uint64
@@ -412,7 +415,7 @@ func (s *diagnosticSession) close() {
 	s.cancelLocked()
 	delete(c.sessions, s)
 	last := len(c.sessions) == 0
-	retire := last && (c.feed == "logs" || diagnosticCapture == nil)
+	retire := last && (c.feed == "logs" || (diagnosticCapture == nil && !hasDiagnosticStats()))
 	if retire {
 		c.retireLocked()
 	} else if last && c.feed == "connections" {
@@ -454,8 +457,11 @@ func (c *diagnosticCollector) retireLocked() {
 	}
 	c.connections = nil
 	c.liveCount = 0
+	c.liveAtomic.Store(0)
 	c.recent = nil
+	c.recentAtomic.Store(0)
 	c.dnsRecords = nil
+	c.dnsAtomic.Store(0)
 	c.logs = nil
 }
 
@@ -482,7 +488,7 @@ func retireDiagnosticCollectorLocked(c *diagnosticCollector, onlyUnused bool) []
 		return nil
 	}
 	c.mu.Lock()
-	if onlyUnused && len(c.sessions) != 0 {
+	if onlyUnused && (len(c.sessions) != 0 || (c.feed != "logs" && hasDiagnosticStats())) {
 		c.mu.Unlock()
 		return nil
 	}
@@ -518,12 +524,14 @@ func waitDiagnosticWorkers(workers []<-chan struct{}) {
 }
 
 func reloadDiagnosticsLocked() func() {
-	workers := retireDiagnosticCollectorsLocked(false)
+	workers := retireDiagnosticStatsLocked()
+	workers = append(workers, retireDiagnosticCollectorsLocked(false)...)
 	return func() { waitDiagnosticWorkers(workers) }
 }
 
 func stopDiagnosticsLocked() func() {
-	workers := retireDiagnosticCollectorsLocked(false)
+	workers := retireDiagnosticStatsLocked()
+	workers = append(workers, retireDiagnosticCollectorsLocked(false)...)
 	if lease := diagnosticCapture; lease != nil {
 		diagnosticCapture = nil
 		_ = lease.conn.Close()

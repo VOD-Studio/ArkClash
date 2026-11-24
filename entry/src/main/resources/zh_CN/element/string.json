@@ -1810,7 +1810,7 @@
     },
     {
       "name": "dash_card_description_connections",
-      "value": "当前连接与分流统计"
+      "value": "活跃连接、最近请求与 DNS 查询统计"
     },
     {
       "name": "dash_card_description_memory",
@@ -4887,6 +4887,18 @@
     {
       "name": "proxy_save_err_failed",
       "value": "保存到本地节点库失败"
+    },
+    {
+      "name": "dash_conn_live",
+      "value": "活跃连接"
+    },
+    {
+      "name": "dash_conn_recent",
+      "value": "最近请求"
+    },
+    {
+      "name": "dash_conn_dns",
+      "value": "DNS 查询"
     }
   ]
 }

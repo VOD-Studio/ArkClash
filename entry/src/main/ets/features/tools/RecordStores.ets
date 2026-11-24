@@ -324,11 +324,18 @@ export class ConnectionRecordsStore {
   get sort(): RecordSort { return this.feed === 'live' ? this.liveSort : this.recentSort; }
   get anchorKey(): string { return this.history.anchor; }
 
-  async load(context: common.UIAbilityContext): Promise<void> {
+  async load(context: common.UIAbilityContext, initialFeed?: RequestFeed,
+    preserveFeed: boolean = false): Promise<void> {
     this.context = context;
     this.session.filesDir = context.filesDir;
+    if (initialFeed !== undefined) {
+      this.feed = initialFeed;
+      this.expanded.clear();
+      ++this.feedVersion;
+      this.refresh();
+    }
     this.syncStream();
-    await this.readPreferences();
+    await this.readPreferences(initialFeed === undefined && !preserveFeed);
   }
 
   setListAnimation(animate?: (apply: () => void) => void): void { this.animateList = animate; }
@@ -633,7 +640,7 @@ export class ConnectionRecordsStore {
     this.notice = notice; this.noticeError = error; ++this.noticeSerial;
   }
 
-  private async readPreferences(): Promise<void> {
+  private async readPreferences(applyFeed: boolean = true): Promise<void> {
     const context = this.context;
     if (context === undefined) { return; }
     const load = ++this.preferenceLoad;
@@ -645,7 +652,10 @@ export class ConnectionRecordsStore {
       const snapshot: RecordPreferenceSnapshot = await loadRecordPreferences(context);
       if (load !== this.preferenceLoad) { return; }
       this.preferenceReadFailed = false;
-      if (feedVersion === this.feedVersion) { this.feed = snapshot.feed; this.savedFeed = snapshot.feed; }
+      if (feedVersion === this.feedVersion) {
+        this.savedFeed = snapshot.feed;
+        if (applyFeed) { this.feed = snapshot.feed; }
+      }
       if (groupingVersion === this.groupingVersion) { this.grouping = snapshot.grouping; this.savedGrouping = snapshot.grouping; }
       if (requestVersion === this.requestsWidthVersion) {
         this.requestWidths = snapshot.requests; this.savedRequestWidths = snapshot.requests;
