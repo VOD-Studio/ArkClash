@@ -5,7 +5,7 @@ description: 下载 ArkClash 发布包、校验 SHA256SUMS、使用华为调试�
 
 import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
-从 GitHub Releases 下载的已签名 HAP 可以通过电脑上的 `hdc` 安装。下载未签名 HAP 时，先用匹配的调试 Profile 签名。[下载 ArkClash](https://github.com/VOD-Studio/ArkClash/releases/latest)
+从 GitHub Releases 下载 HAP 后，使用电脑上的 `hdc` 安装。未签名的 HAP 需先签名。[下载 ArkClash](https://github.com/VOD-Studio/ArkClash/releases/latest)
 
 安装需要 **HarmonyOS 7（API 26）及以上的 ARM64 设备**。在电脑上安装带 HarmonyOS SDK API 26 的 DevEco Studio 或 Command Line Tools。
 
@@ -93,4 +93,4 @@ java -jar "/path/to/hap-sign-tool.jar" sign-app \
 
 ## 应用内检查更新
 
-ArkClash 每次启动后会在前台自动检查一次 GitHub 新版本。你也可以在仪表盘顶部点「运行状态」，手动检查、下载、校验并保存新版本 HAP。自动检查可在「工具 → 常规」关闭。
+GitHub 分发版在应用首次进入前台后自动检查一次更新。也可在仪表盘顶部点「运行状态」，手动检查、下载并保存校验通过的 HAP。安装仍按上面的签名和 HDC 步骤进行。可在「工具 → 常规」关闭「自动检查应用更新」。

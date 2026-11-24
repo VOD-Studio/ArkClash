@@ -5,16 +5,16 @@ description: 使用内置 QuickJS 引擎编写 main(config) 脚本，在 VPN 进
 
 import { Steps, Aside } from '@astrojs/starlight/components';
 
-ArkClash 内置轻量级的 **QuickJS** 引擎，用于在配置加载前以 JavaScript 编程方式覆写 mihomo 配置对象。脚本只在 VPN 扩展进程内安全执行，并在应用前经过完整配置校验。
+订阅与普通本地配置可绑定 JavaScript 脚本。加载配置时，VPN 进程用 QuickJS 执行脚本，再校验输出的 mihomo 配置。
 
 ## 使用步骤
 
 <Steps>
 
 1. 打开「工具 → 进阶配置 → 脚本」，点击新建或从本地文件导入 `.js` 脚本。
-2. 编写导出 `main(config)` 函数的覆写逻辑并保存。
+2. 定义 `main(config)` 函数并保存。
 3. 前往「配置」页，在目标配置卡片点击「更多 → 覆写」，选中刚刚创建的脚本。
-4. 点击立即应用（或退出覆写页自动应用），内核将热切换并生效；若脚本报错或产出的配置不合法，将自动保留原运行配置并提示错误。
+4. 如果这份配置正在运行，点「立即应用」，或退出覆写页以应用已保存的修改。其他配置会在加载时使用该脚本。脚本报错或结果校验失败时，会提示错误并保留原运行配置。
 
 </Steps>
 
@@ -26,14 +26,14 @@ ArkClash 内置轻量级的 **QuickJS** 引擎，用于在配置加载前以 Jav
 
 ## 实用范例
 
-### 示例一：在顶部前置自定义分流规则
+### 在原有规则之前添加分流规则
+
+示例中的域名使用 `example.com`。写自己的规则时，出口可使用 `DIRECT`，或填写配置中已有的节点或代理组名称。
 
 ```js
 function main(config) {
   const extraRules = [
-    'DOMAIN-SUFFIX,claude.ai,PROXY',
-    'DOMAIN-SUFFIX,openai.com,PROXY',
-    'DOMAIN-SUFFIX,harmonyos.com,DIRECT',
+    'DOMAIN-SUFFIX,example.com,DIRECT',
   ];
 
   config.rules = [...extraRules, ...(config.rules || [])];
@@ -41,7 +41,7 @@ function main(config) {
 }
 ```
 
-### 示例二：为指定代理组开启延迟优选
+### 调整 URLTest 代理组的检测间隔
 
 ```js
 function main(config) {
