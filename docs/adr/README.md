@@ -18,7 +18,7 @@
 | [0010](0010-hot-switch-reload-in-vpn.md) | 热切换由 VPN 进程重载配置 | 已采纳，目标与节点恢复由 0012 补充 |
 | [0012](0012-profile-state-and-runtime-separation.md) | 配置持久状态与实际运行状态分离 | 已采纳，待统一真机验收 |
 | [0013](0013-runtime-host-process-evidence.md) | 用系统进程事实恢复异常终止的运行宿主 | 已采纳，宿主回归与 API 26 真机启停、转发通过 |
-| [0014](0014-x86-emulator-toolchain.md) | 为 x86_64 模拟器单独适配 Go 工具链 | 原生加载与双 ABI 构建通过，待签名后应用/VPN 验收 |
+| [0014](0014-x86-emulator-toolchain.md) | 为 x86_64 模拟器单独适配 Go 工具链 | 原生加载、双 ABI 构建与签名应用启动通过，VPN 转发待验收 |
 | [0015](0015-geo-resource-management.md) | Geo 设置、任务与数据库按进程明确所有权 | 已采纳，设备和性能门禁独立验收 |
 | [0016](0016-visible-diagnostics.md) | 连接与 DNS 记录只在对应工具页可见时采集 | 已被 0019 取代 |
 | [0017](0017-core-ready-without-vpn.md) | 一个核心预热，系统 VPN 转发独立启停 | 已采纳，宿主与 Linux fd 回归通过，手机驻留和性能待验收 |

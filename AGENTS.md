@@ -11,12 +11,12 @@
 项目存在的理由是比同类客户端快、省电、稳。四个指标在同一台真机上和同类客户端对比：冷启动到可操作 < 500ms、开着代理待机 8 小时的耗电、新连接建立延迟、24 小时内核不重启。改动会影响这些指标时，交付里附上测量方法和数字。
 
 - UI 进程只做界面：不加载 `libclash.so`，先用缓存状态渲染，内核状态异步获取。
-- 数据靠推送：流量、连接、日志走内核的 WebSocket，页面不可见就退订。轮询只用于有上限的一次性就绪检测。
+- 数据靠推送：流量、连接和日志的数据流走内核 WebSocket，页面不可见就退订。连接与 DNS 的应用级采集通道可继续保留有界历史。轮询只用于有上限的一次性就绪检测。
 - ArkTS 主线程只做轻活：文件、网络、内核调用都走异步（Promise / NAPI async work）。
 
 ## 架构
 
-UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo controller 和 `filesDir` 文件通信。新增目录、跨进程改动、调整依赖方向前读 `docs/architecture.md`；做出新的架构取舍时在 `docs/adr/` 写一份决策记录。ArkClash 接管的配置项（TUN、controller、进程查找、DNS 开关、节点选择存储，以及用户在界面上选过的出站模式和局域网代理）统一在 `core/lib.go` 的 `applyOverrides` 里强制，订阅里写什么都会被覆盖，热切换后也保持。节点选择用 `profiles/<id>.selected.json`，关闭 mihomo 的全局 `profile.store-selected`，恢复每配置选择后才启用转发。
+UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo controller 和 `filesDir` 文件通信。新增目录、跨进程改动、调整依赖方向前读 `docs/architecture.md`。做出新的架构取舍时在 `docs/adr/` 写一份决策记录。ArkClash 接管的配置项（TUN、controller、进程查找、DNS 开关、节点选择存储，以及用户在界面上选过的出站模式和局域网代理）统一由 `core/lifecycle.go` 的 `applyOverrides` 强制，热切换后也保持。节点选择用 `profiles/<id>.selected.json`，关闭 mihomo 的全局 `profile.store-selected`，恢复每配置选择后才启用转发。
 
 ## 提交
 
@@ -24,7 +24,7 @@ UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo
 
 ## 构建与真机验证
 
-所有构建、检查、装机都通过根目录的 `Makefile`，`make help` 列出全部目标，CI 也只调用这些目标。脚本在 `scripts/`，工具路径由 `scripts/env.sh` 统一定位（本地用 DevEco Studio，CI 用 Command Line Tools）。
+所有本机构建、检查、装机都通过根目录的 `Makefile`，`make help` 列出全部目标。脚本在 `scripts/`，工具路径由 `scripts/env.sh` 统一定位。本机可用 DevEco Studio 或 Command Line Tools，CI 打包使用 Command Line Tools。
 
 - 内核只用 `make core` 构建：它准备打过补丁的 Go 工具链和依赖（`.toolchain/`），交叉编译，并检查产物里没有 initial-exec TLS 重定位。Go 版本固定在 `.go-version`。
 - 首次构建先 `make geodata`，把 Geo 数据内置进 HAP。

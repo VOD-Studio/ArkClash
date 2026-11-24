@@ -7,14 +7,14 @@ sidebar:
 
 import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
-ArkClash 的全部构建、代码检查、宿主回归与装机流程均统一收敛在根目录的 `Makefile` 中，本机开发与 GitHub Actions CI 调用的是同一套目标。
+在仓库根目录使用 `Makefile` 构建、检查、运行宿主回归和安装应用。
 
 ## 环境准备
 
 | 依赖 | 说明 |
 |---|---|
 | **DevEco Studio** 或 **Command Line Tools** | 需包含 **HarmonyOS SDK API 26** |
-| **Go** | 版本固定在仓库根目录的 `.go-version`（当前由 `GOTOOLCHAIN` 或本机版本匹配） |
+| **Go** | 版本固定在仓库根目录的 `.go-version` |
 | **Python 3** | 用于架构分层规则检查与 CI 辅助脚本 |
 | **Bun**（可选） | 仅构建或预览本项目官网与文档站点（`website/`）时需要 |
 
@@ -22,7 +22,7 @@ ArkClash 的全部构建、代码检查、宿主回归与装机流程均统一�
 
 工具链路径由 `scripts/env.sh` 统一解析：
 
-- 使用 Command Line Tools 时，设置 `HARMONYOS_TOOLS_HOME`（Linux 下若未指定且 `~/.local/opt/harmonyos-clt-*/command-line-tools` 唯一存在则自动识别）。
+- 使用 Command Line Tools 时，可设置 `HARMONYOS_TOOLS_HOME`。未指定 Studio 或 CLT 路径时，脚本也会读取 `DEVECO_CLI_CLT_PATH`，或在 Linux 上自动选用 `~/.local/opt/harmonyos-clt-*/command-line-tools` 下唯一的安装。
 - 使用 DevEco Studio 时，可通过 `DEVECO_HOME` 指定安装路径（macOS 默认 `/Applications/DevEco-Studio.app/Contents`）。
 - 若需单独指定编译 Go 内核使用的 OpenHarmony SDK，设置 `OHOS_SDK`。
 
@@ -44,7 +44,7 @@ ArkClash 的全部构建、代码检查、宿主回归与装机流程均统一�
 
    ```sh
    make geodata   # 按 geodata.lock 下载并校验 Geo 数据，内置进 HAP
-   make core      # 准备补丁版 Go 工具链，交叉编译 libclash.so 并检查零静态 TLS 重定位
+   make core      # 交叉编译 libclash.so 并检查 initial-exec TLS 重定位
    make hap       # 使用 hvigor 打包 HAP 到 dist/
    make run       # 安装到已连接的手机并启动
    ```
@@ -57,7 +57,7 @@ ArkClash 的全部构建、代码检查、宿主回归与装机流程均统一�
 
 ## 构建 x86_64 模拟器包
 
-默认构建目标为 `ABI=arm64-v8a`。如需在 x86_64 模拟器上调试，为相关命令附加 `ABI=x86_64`（两种架构的 `dist/` 产物共存，但共享 Hvigor 中间目录，请依次打包不要并发）：
+默认构建目标为 `ABI=arm64-v8a`。在 x86_64 模拟器上调试时，为相关命令附加 `ABI=x86_64`。两种架构的安装包可以共存于 `dist/`，打包时共用 Hvigor 中间目录，请依次执行。
 
 <Tabs>
   <TabItem label="完整构建与运行">
@@ -93,4 +93,5 @@ ArkClash 的全部构建、代码检查、宿主回归与装机流程均统一�
 | `make test` | 运行不依赖真机的宿主业务回归与 Go 测试 |
 | `make bench` | 执行真机冷启动、VPN 接入与新连接延迟基准测试 |
 | `make site-dev` / `make site-build` | 本地预览或构建项目官网与文档站点（`website/`） |
+| `make site-check` | 检查文档站点的类型和内容契约 |
 | `make clean` | 清理构建产物（保留 `.toolchain/` 内的补丁工具链） |

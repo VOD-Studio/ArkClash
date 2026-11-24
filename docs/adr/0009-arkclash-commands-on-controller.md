@@ -3,6 +3,8 @@
 - 状态：已采纳（2026-11-07）
 - 扩展：[0003 UI 通过 external-controller 和文件通道与内核通信](0003-ui-core-via-external-controller.md)
 
+本记录保留最初采用控制器的决定。订阅命令的进程归属、存储锁和调度交接以后续的宿主就绪契约为准。[ADR-0012](0012-profile-state-and-runtime-separation.md) · [ADR-0017](0017-core-ready-without-vpn.md)
+
 ## 背景
 
 0003 留下一个缺口：ArkClash 自己的命令（按 `applyOverrides` 重载配置、带宽测试等）没法通过 mihomo 的 API 下发。配置管理（#35）又定了连接期间订阅的下载和写盘由 VPN 进程负责，界面要能把手动更新、添加订阅交给它，并拿到结果。

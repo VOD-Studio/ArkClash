@@ -1,6 +1,6 @@
 # CI/CD
 
-所有任务都在 GitHub 官方的 Ubuntu 机器上运行，只调用 `Makefile` 的目标，本机 `make lint` 和 CI 跑的是同一套检查。设计取舍见 [ADR-0006](adr/0006-layered-ci.md)。
+任务使用 GitHub 托管的 Ubuntu runner。应用构建与静态检查通过 `Makefile` 运行，官网流水线使用 `website/package.json` 中与本地 Makefile 对应的 Bun 脚本。设计取舍见 [ADR-0006](adr/0006-layered-ci.md)。
 
 ## 流水线
 
@@ -14,7 +14,7 @@
 | `scheduled.yml` | 每周一 10:00（北京时间），可手动 | 更新 Geo 数据、扫描依赖漏洞、不用缓存完整构建；失败时开 issue |
 | `codeql.yml` | 内核相关的 PR、`main`、每周 | CodeQL 扫描 Go 代码，结果在 Security → Code scanning |
 | `pr-title.yml` | PR 打开、改标题、推送 | PR 标题是否符合提交信息格式（squash 合并时它就是 main 上的提交信息）。不计入「CI 通过」 |
-| `website.yml` | 官网/文档相关 PR、合并到 `main`、手动触发 | 用 Bun 同步文档、执行 `astro check` 并构建静态站点；合并到 `main` 后自动部署到 GitHub Pages |
+| `website.yml` | 官网/文档相关 PR、合并到 `main`、手动触发 | 用 Bun 同步文档、执行 `astro check` 并构建静态站点。推送到 `main` 或手动触发时部署到 GitHub Pages |
 
 ### ci.yml 的分层
 
@@ -27,9 +27,9 @@
 | 任务 | 内容 | 跳过条件 |
 |---|---|---|
 | 变更范围 | `scripts/ci/changes.py` 判断要不要构建、依赖有没有变 | — |
-| 快速检查 | 提交信息（每个提交）、shellcheck、actionlint、zizmor、分层规则。不需要工具链，约半分钟 | — |
-| 内核 | `make core`、`go vet` | 只改文档 |
-| HAP | codelinter、`make hap`、HAP 内容与体积检查，签名包随 artifact 上传 | 只改文档；外部 fork 的 PR（拿不到私有工具链的 token，合并后 `main` 上补跑） |
+| 快速检查 | shellcheck、actionlint、zizmor、分层规则。PR 另检查每个提交的信息格式 | — |
+| 内核 | `make core`、`go vet` | 文档 PR 或发版 PR 的合并提交 |
+| HAP | codelinter、`make hap`、HAP 内容与体积检查，签名包随 artifact 上传 | 内核任务跳过、未配置工具链仓库，或 PR 来自外部 fork |
 | 依赖漏洞 | govulncheck，只报告代码真正调用到的漏洞 | 不是改了 Go 依赖的 PR |
 | CI 通过 | 汇总以上（依赖漏洞除外）：有失败或取消就失败，跳过不算失败 | — |
 
@@ -122,10 +122,11 @@ scripts/ci/export-signing-bundle.sh | gh secret set HARMONYOS_SIGNING_BUNDLE
 
 ## 拿到最新的测试包
 
-`main` 上每次合并都会产出调试签名包（配置了签名时），保留 14 天：
+`main` 的常规 CI 在配置了工具链和调试签名时产出调试签名包，保留 14 天。选择一条 HAP 任务成功的 CI 运行，并用其运行编号下载：
 
 ```sh
-gh run download -R VOD-Studio/ArkClash -n hap-debug $(gh run list -R VOD-Studio/ArkClash -w CI -b main -s success -L 1 --json databaseId --jq '.[0].databaseId')
+gh run list -R VOD-Studio/ArkClash -w CI -b main -s success
+gh run download <运行编号> -R VOD-Studio/ArkClash -n hap-debug
 ```
 
 ## 升级工具链
@@ -144,8 +145,8 @@ gh run download -R VOD-Studio/ArkClash -n hap-debug $(gh run list -R VOD-Studio/
 2. release-please 自动开（或更新）发版 PR，里面是新版本号、`AppScope/app.json5` 的 `versionName` 和 CHANGELOG，并触发它的 CI。`feat` 升次版本号，`fix` 和 `perf` 升修订号；`docs`、`ci`、`build`、`chore` 不触发发版。
 3. 审核后合并发版 PR。随后 `release.yml` 从 tag 干净构建一次 release 模式的 HAP，上传到 Release：
    - `ArkClash-<版本>-unsigned.hap`：给其他人用自己的华为账号签名后安装。
-   - `ArkClash-<版本>-debug-signed.hap`：同一次构建、用维护者的调试证书签名，维护者设备直接安装。
-   - `SHA256SUMS`，以及两个安装包的来源证明。发版说明末尾会自动补上校验方法。
+   - `ArkClash-<版本>-debug-signed.hap`：配置维护者的调试签名时生成，仅适用于调试 Profile 已登记的设备。
+   - `SHA256SUMS`，以及已生成安装包的来源证明。发版说明末尾会附上校验命令。
 4. 某次上传失败时，在 Actions 里手动运行 Release 补传：「Use workflow from」选这个 tag 本身，再填同一个 tag。这样 workflow、脚本和代码都来自同一个提交；选错了会直接报错。勾选 dry-run 时可以在任意分支上运行，只构建不上传，用来测试发版流程。
 
 `versionCode` 在构建时由 `versionName` 算出（见 `hvigorfile.ts`），不用手动改。
