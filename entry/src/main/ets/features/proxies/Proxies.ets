@@ -1,6 +1,6 @@
 import { connection } from '../../client/Connection';
 import { ProfileEvent, ProfileEvents } from '../../client/ProfileCommands';
-import { ProxySnapshot, readOfflineProxies, readOnlineProxies } from '../../client/Proxies';
+import { ProxySnapshot, PROXY_TEST_URL, readOfflineProxies, readOnlineProxies } from '../../client/Proxies';
 import { KeyedListSource } from '../../components/KeyedListSource';
 import {
   proxyColumnCount, proxyGroupNames,
@@ -67,9 +67,14 @@ export class ProxyBrowser {
     return this.appearance.error;
   }
 
+  private defaultTestUrl(): string {
+    return this.input?.defaultTestUrl ?? PROXY_TEST_URL;
+  }
+
   configure(input: ProxyBrowserInput): void {
     const previous = this.input;
     const changedProfile = previous?.profile !== input.profile;
+    const changedTestUrl = (previous?.defaultTestUrl ?? PROXY_TEST_URL) !== (input.defaultTestUrl ?? PROXY_TEST_URL);
     const changedContext = changedProfile || previous?.online !== input.online ||
       previous?.offlineWritable !== input.offlineWritable ||
       previous?.bootId !== input.bootId || previous?.configRevision !== input.configRevision ||
@@ -87,6 +92,8 @@ export class ProxyBrowser {
       this.refreshSequence++;
       this.tests.cancel(true);
       this.selection.clear();
+    } else if (changedTestUrl) {
+      this.tests.cancel(false);
     }
     if (changedProfile) {
       this.snapshot = undefined;
@@ -116,6 +123,9 @@ export class ProxyBrowser {
     }
     if (refresh) {
       this.refresh();
+    } else if (changedTestUrl && this.snapshot !== undefined) {
+      this.tests.seed(this.snapshot, this.defaultTestUrl());
+      this.rebuild();
     }
   }
 
@@ -192,7 +202,7 @@ export class ProxyBrowser {
       this.snapshot = snapshot;
       this.snapshotEpoch = this.contextEpoch;
       this.view = validProxyView(this.view, names, snapshot.mode);
-      this.tests.seed(snapshot);
+      this.tests.seed(snapshot, this.defaultTestUrl());
       this.loadError = false;
       this.stale = false;
       this.rebuild();
@@ -278,7 +288,7 @@ export class ProxyBrowser {
     this.beginAction();
     if (this.input?.visible === true && this.snapshot?.online === true && connection.coreReady &&
       !connection.coreStarting && !this.loadError && this.snapshotEpoch === this.contextEpoch) {
-      this.tests.start(this.input.context.filesDir, this.snapshot, group, this.query, node);
+      this.tests.start(this.input.context.filesDir, this.snapshot, group, this.query, node, this.defaultTestUrl());
     } else {
       this.notice = this.online ? 'notReady' : 'offline';
     }
@@ -325,7 +335,8 @@ export class ProxyBrowser {
           offlineWritable: connection.offlineWritable, bootId: connection.bootId,
           configRevision: connection.configRevision,
           mode: connection.mode === '' ? 'rule' : connection.mode,
-          picker: this.input.picker, initialGroup: this.input.initialGroup
+          picker: this.input.picker, initialGroup: this.input.initialGroup,
+          defaultTestUrl: this.input.defaultTestUrl
         });
         await this.refresh();
       }
@@ -377,7 +388,8 @@ export class ProxyBrowser {
       columns: proxyColumnCount(this.availableWidth, this.style.layout), latest: this.tests.latest,
       completedForGroup: (name: string): Map<string, number> => this.tests.completedFor(name),
       phases: this.tests.phases, pending: this.selection.pending,
-      testingGroups: this.tests.testingGroups, previous: this.groups, picker: this.input?.picker ?? false
+      testingGroups: this.tests.testingGroups, previous: this.groups, picker: this.input?.picker ?? false,
+      defaultTestUrl: this.defaultTestUrl()
     });
     this.currentGroup = this.groups.some((group: ProxyGroupView): boolean => group.name === this.view.currentGroup) ?
       this.view.currentGroup : this.groups[0]?.name ?? '';

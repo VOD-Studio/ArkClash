@@ -3,10 +3,13 @@ import { GENERAL_SETTINGS_FILE, GeneralSettings, validGeneralUserAgent } from '.
 import { profileDataPath } from './profiles/Store';
 
 export {
-  GENERAL_SETTINGS_FILE, GENERAL_LEVELS, GENERAL_TIMEOUTS, defaultGeneralPorts, defaultGeneralSettings,
-  checkedGeneralSettings, GENERAL_USER_AGENT_LIMIT, validGeneralUserAgent
+  GENERAL_SETTINGS_FILE, GENERAL_LEVELS, GENERAL_TIMEOUTS, GENERAL_GEODATA_LOADERS, DEFAULT_GENERAL_TEST_URL,
+  defaultGeneralPorts, defaultGeneralSettings, checkedGeneralSettings, GENERAL_USER_AGENT_LIMIT,
+  validGeneralUserAgent, validGeneralTestUrl, generalTestUrl, compactGeneralCoreOverrides
 } from './GeneralSettingsModel';
-export type { GeneralPorts, GeneralAuthentication, GeneralSettings } from './GeneralSettingsModel';
+export type {
+  GeneralPorts, GeneralAuthentication, GeneralGeodataLoader, GeneralCoreOverrides, GeneralSettings
+} from './GeneralSettingsModel';
 
 export async function generalUserAgent(filesDir: string): Promise<string | undefined> {
   if (filesDir === '') { return undefined; }

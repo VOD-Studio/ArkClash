@@ -1,7 +1,19 @@
 export const GENERAL_SETTINGS_FILE = 'general-settings.json';
 export const GENERAL_LEVELS: string[] = ['debug', 'info', 'warning', 'error', 'silent'];
 export const GENERAL_TIMEOUTS: number[] = [500, 1000, 2000, 5000, 8000];
+export const GENERAL_GEODATA_LOADERS: string[] = ['standard', 'memconservative'];
+export const DEFAULT_GENERAL_TEST_URL = 'https://www.gstatic.com/generate_204';
 export const GENERAL_USER_AGENT_LIMIT = 64;
+
+export type GeneralGeodataLoader = 'standard' | 'memconservative';
+
+export interface GeneralCoreOverrides {
+  testUrl?: string;
+  unifiedDelay?: boolean;
+  tcpConcurrent?: boolean;
+  ipv6?: boolean;
+  geodataLoader?: GeneralGeodataLoader;
+}
 
 export interface GeneralPorts {
   mixed: number;
@@ -30,6 +42,7 @@ export interface GeneralSettings {
   closeConnections?: boolean;
   logLevel: string;
   captureLogs: boolean;
+  coreOverrides?: GeneralCoreOverrides;
 }
 
 export function defaultGeneralPorts(): GeneralPorts {
@@ -50,9 +63,59 @@ export function validGeneralUserAgent(input: string): boolean {
   return validText(input, 512);
 }
 
+export function validGeneralTestUrl(input: string): boolean {
+  if (!validText(input, 2048) || input === '' || new RegExp('\\s').test(input)) {
+    return false;
+  }
+  const match = new RegExp('^https?://([^/?#]+)(?:[/?#].*)?$').exec(input);
+  if (match === null) {
+    return false;
+  }
+  const authority = match[1];
+  const atIndex = authority.lastIndexOf('@');
+  const hostPort = atIndex >= 0 ? authority.slice(atIndex + 1) : authority;
+  if (hostPort === '') {
+    return false;
+  }
+  if (hostPort.startsWith('[')) {
+    const end = hostPort.indexOf(']');
+    if (end <= 1) {
+      return false;
+    }
+    const rest = hostPort.slice(end + 1);
+    return rest === '' || new RegExp('^:[0-9]{1,5}$').test(rest);
+  }
+  const colon = hostPort.indexOf(':');
+  if (colon >= 0) {
+    return colon > 0 && new RegExp('^[0-9]{1,5}$').test(hostPort.slice(colon + 1));
+  }
+  return true;
+}
+
+export function generalTestUrl(settings: GeneralSettings): string {
+  const candidate = settings.coreOverrides?.testUrl;
+  return candidate !== undefined && validGeneralTestUrl(candidate) ? candidate : DEFAULT_GENERAL_TEST_URL;
+}
+
+export function compactGeneralCoreOverrides(input: GeneralCoreOverrides | undefined): GeneralCoreOverrides | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const next: GeneralCoreOverrides = {};
+  let hasEntry = false;
+  if (input.testUrl !== undefined) { next.testUrl = input.testUrl; hasEntry = true; }
+  if (input.unifiedDelay !== undefined) { next.unifiedDelay = input.unifiedDelay; hasEntry = true; }
+  if (input.tcpConcurrent !== undefined) { next.tcpConcurrent = input.tcpConcurrent; hasEntry = true; }
+  if (input.ipv6 !== undefined) { next.ipv6 = input.ipv6; hasEntry = true; }
+  if (input.geodataLoader !== undefined) { next.geodataLoader = input.geodataLoader; hasEntry = true; }
+  return hasEntry ? next : undefined;
+}
+
 function validHost(input: string): boolean {
   return input !== '' && validText(input, 512) && !new RegExp('[\\s/:?#@]').test(input);
 }
+
+const CORE_OVERRIDE_KEYS: string[] = ['testUrl', 'unifiedDelay', 'tcpConcurrent', 'ipv6', 'geodataLoader'];
 
 export function checkedGeneralSettings(input: GeneralSettings): GeneralSettings {
   const invalid = 'general_settings_invalid';
@@ -97,6 +160,25 @@ export function checkedGeneralSettings(input: GeneralSettings): GeneralSettings 
           (validText(address, 512) && new RegExp('^[0-9A-Fa-f:.]+$').test(address)))) {
         throw new Error(invalid);
       }
+    }
+  }
+  const overrides = input.coreOverrides;
+  if (overrides !== undefined) {
+    if (overrides === null || typeof overrides !== 'object' || Array.isArray(overrides)) {
+      throw new Error(invalid);
+    }
+    for (const key of Object.keys(overrides)) {
+      if (!CORE_OVERRIDE_KEYS.includes(key)) {
+        throw new Error(invalid);
+      }
+    }
+    if ((overrides.testUrl !== undefined && !validGeneralTestUrl(overrides.testUrl)) ||
+      (overrides.unifiedDelay !== undefined && typeof overrides.unifiedDelay !== 'boolean') ||
+      (overrides.tcpConcurrent !== undefined && typeof overrides.tcpConcurrent !== 'boolean') ||
+      (overrides.ipv6 !== undefined && typeof overrides.ipv6 !== 'boolean') ||
+      (overrides.geodataLoader !== undefined &&
+        (typeof overrides.geodataLoader !== 'string' || !GENERAL_GEODATA_LOADERS.includes(overrides.geodataLoader)))) {
+      throw new Error(invalid);
     }
   }
   return input;

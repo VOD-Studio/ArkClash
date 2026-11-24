@@ -3877,6 +3877,54 @@
       "value": "Settings saved"
     },
     {
+      "name": "general_core_override_add",
+      "value": "Add override entry"
+    },
+    {
+      "name": "general_core_override_remove",
+      "value": "Remove override entry"
+    },
+    {
+      "name": "general_core_override_desc",
+      "value": "Entries added here replace the setting of every profile; anything not added keeps the profile's own setting, or the core default when the profile has none."
+    },
+    {
+      "name": "general_core_test_url",
+      "value": "Test URL"
+    },
+    {
+      "name": "general_core_test_url_hint",
+      "value": "Enter an http:// or https:// URL used for proxy groups that do not specify their own test URL."
+    },
+    {
+      "name": "general_core_unified_delay",
+      "value": "Unified delay"
+    },
+    {
+      "name": "general_core_tcp_concurrent",
+      "value": "TCP concurrent"
+    },
+    {
+      "name": "general_core_ipv6",
+      "value": "IPv6"
+    },
+    {
+      "name": "general_core_ipv6_hint",
+      "value": "Controls core-level IPv6 resolution and connections, independent of the TUN IPv6 toggle."
+    },
+    {
+      "name": "general_core_geodata_loader",
+      "value": "Geodata loader"
+    },
+    {
+      "name": "general_core_geodata_standard",
+      "value": "Standard"
+    },
+    {
+      "name": "general_core_geodata_memconservative",
+      "value": "Low memory (memconservative)"
+    },
+    {
       "name": "logs_filter",
       "value": "Level"
     },

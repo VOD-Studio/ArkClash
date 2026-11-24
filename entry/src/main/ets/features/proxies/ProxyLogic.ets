@@ -48,8 +48,15 @@ export function copyProxyStyle(style: ProxyStyle): ProxyStyle {
   };
 }
 
-export function proxyTestUrl(candidate: string): string {
-  return new RegExp('^https?://[^\\s/]+(?:/[^\\s]*)?$').test(candidate) ? candidate : PROXY_TEST_URL;
+function validProxyTestUrl(candidate: string): boolean {
+  return new RegExp('^https?://[^\\s/]+(?:/[^\\s]*)?$').test(candidate);
+}
+
+export function proxyTestUrl(candidate: string, fallback: string = PROXY_TEST_URL): string {
+  if (validProxyTestUrl(candidate)) {
+    return candidate;
+  }
+  return validProxyTestUrl(fallback) ? fallback : PROXY_TEST_URL;
 }
 
 export function proxyMatches(node: ProxyNodeSnapshot, query: string): boolean {
@@ -59,11 +66,11 @@ export function proxyMatches(node: ProxyNodeSnapshot, query: string): boolean {
 }
 
 export function resolveProxyLeaf(snapshot: ProxySnapshot, name: string, groupUrl: string,
-  groupName: string = ''): ProxyLeaf {
+  groupName: string = '', defaultTestUrl: string = PROXY_TEST_URL): ProxyLeaf {
   const seen: Set<string> = new Set<string>();
   let cursor = name;
   let owner = groupName;
-  let url = proxyTestUrl(groupUrl);
+  let url = proxyTestUrl(groupUrl, defaultTestUrl);
   let retired = false;
   while (cursor !== '') {
     const identity = JSON.stringify([owner, cursor]);
@@ -83,7 +90,7 @@ export function resolveProxyLeaf(snapshot: ProxySnapshot, name: string, groupUrl
       };
     }
     if (node.url !== '') {
-      url = proxyTestUrl(node.url);
+      url = proxyTestUrl(node.url, defaultTestUrl);
     }
     owner = node.name;
     cursor = snapshot.online || snapshot.memberNodes[node.name] !== undefined ? node.nowId : node.now;
@@ -163,13 +170,13 @@ function delayLayer(delay: number): number {
 }
 
 export function proxyMemberDelay(snapshot: ProxySnapshot, group: ProxyNodeSnapshot, name: string,
-  delays: Map<string, number>): number {
-  const leaf = resolveProxyLeaf(snapshot, name, group.url, group.name);
+  delays: Map<string, number>, defaultTestUrl: string = PROXY_TEST_URL): number {
+  const leaf = resolveProxyLeaf(snapshot, name, group.url, group.name, defaultTestUrl);
   return leaf.resolved ? delays.get(proxyDelayKey(snapshot, leaf)) ?? 0 : 0;
 }
 
 export function proxyMembers(snapshot: ProxySnapshot, group: ProxyNodeSnapshot, query: string,
-  style: ProxyStyle, completed: Map<string, number>): ProxyNodeSnapshot[] {
+  style: ProxyStyle, completed: Map<string, number>, defaultTestUrl: string = PROXY_TEST_URL): ProxyNodeSnapshot[] {
   const matches: ProxyNodeSnapshot[] = [];
   for (const name of group.members) {
     const node = proxyMemberNode(snapshot, group.name, name);
@@ -190,7 +197,7 @@ export function proxyMembers(snapshot: ProxySnapshot, group: ProxyNodeSnapshot, 
       if (node.id === selected || node.id === actual || isProxyGroup(node.type) || !canTestProxy(node)) {
         return true;
       }
-      const delay = proxyMemberDelay(snapshot, group, node.id, completed);
+      const delay = proxyMemberDelay(snapshot, group, node.id, completed, defaultTestUrl);
       return delay >= 0;
     });
     if (filtered.length > 0) {
@@ -204,8 +211,8 @@ export function proxyMembers(snapshot: ProxySnapshot, group: ProxyNodeSnapshot, 
     const order: Map<string, number> = new Map<string, number>();
     group.members.forEach((name: string, index: number): void => { order.set(name, index); });
     visible.sort((left: ProxyNodeSnapshot, right: ProxyNodeSnapshot): number => {
-      const leftDelay = proxyMemberDelay(snapshot, group, left.id, completed);
-      const rightDelay = proxyMemberDelay(snapshot, group, right.id, completed);
+      const leftDelay = proxyMemberDelay(snapshot, group, left.id, completed, defaultTestUrl);
+      const rightDelay = proxyMemberDelay(snapshot, group, right.id, completed, defaultTestUrl);
       const layer = delayLayer(leftDelay) - delayLayer(rightDelay);
       if (layer !== 0) {
         return layer;

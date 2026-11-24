@@ -12,6 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/metacubex/mihomo/adapter"
+	"github.com/metacubex/mihomo/component/dialer"
+	"github.com/metacubex/mihomo/component/geodata"
 	mihomoHttp "github.com/metacubex/mihomo/component/http"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/log"
@@ -215,3 +218,97 @@ func TestLogPageCaptureThresholdRedactionAndRetirement(t *testing.T) {
 		t.Fatal("last log subscriber did not retire capture")
 	}
 }
+
+func TestGeneralCoreOverridesApplyRestoreAndValidate(t *testing.T) {
+	opts := lifecycleOptions(t)
+	opts.Profile = "core-overrides"
+	opts.ConfigPath = lifecycleWriteProfile(t, opts, opts.Profile, `mode: rule
+log-level: silent
+unified-delay: false
+tcp-concurrent: false
+ipv6: true
+geodata-loader: standard
+proxies: []
+rules: ['MATCH,DIRECT']
+`)
+	if err := start(opts); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stop() })
+	if err := attachTun(12, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
+		t.Fatal(err)
+	}
+	tun := tunListener
+	if adapter.UnifiedDelay.Load() || dialer.GetTcpConcurrent() || resolver.DisableIPv6 || geodata.LoaderName() != "standard" {
+		t.Fatalf("unexpected profile baseline: unified=%v tcp=%v disableIPv6=%v loader=%q",
+			adapter.UnifiedDelay.Load(), dialer.GetTcpConcurrent(), resolver.DisableIPv6, geodata.LoaderName())
+	}
+
+	// 仅设置全局测速链接时，不应触发配置重建或更换 TUN。
+	beforeRevision := runtimeConfigRevision
+	testURL := "https://cp.cloudflare.com/generate_204"
+	next := current.General
+	next.Revision = "core-test-url"
+	next.CoreOverrides = &generalCoreOverrides{TestURL: &testURL}
+	if err := saveGeneralTestSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	if runtimeConfigRevision != beforeRevision || tunListener != tun {
+		t.Fatalf("testUrl-only update rebuilt runtime: revision=%d->%d tunSame=%v",
+			beforeRevision, runtimeConfigRevision, tunListener == tun)
+	}
+
+	// 逐项开启其余四项内核覆写：unified-delay、tcp-concurrent、ipv6、geodata-loader。
+	yes, no := true, false
+	memc := "memconservative"
+	next.Revision = "core-all-on"
+	next.CoreOverrides = &generalCoreOverrides{
+		TestURL:       &testURL,
+		UnifiedDelay:  &yes,
+		TCPConcurrent: &yes,
+		IPv6:          &no,
+		GeodataLoader: &memc,
+	}
+	if err := saveGeneralTestSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	if tunListener != tun {
+		t.Fatal("core overrides replaced platform TUN")
+	}
+	if !adapter.UnifiedDelay.Load() || !dialer.GetTcpConcurrent() || !resolver.DisableIPv6 || geodata.LoaderName() != "memconservative" {
+		t.Fatalf("core overrides did not apply: unified=%v tcp=%v disableIPv6=%v loader=%q",
+			adapter.UnifiedDelay.Load(), dialer.GetTcpConcurrent(), resolver.DisableIPv6, geodata.LoaderName())
+	}
+
+	// 移除覆写后恢复配置自身的值，同时保留磁盘持久化一致性。
+	next.Revision = "core-cleared"
+	next.CoreOverrides = nil
+	if err := saveGeneralTestSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	if adapter.UnifiedDelay.Load() || dialer.GetTcpConcurrent() || resolver.DisableIPv6 || geodata.LoaderName() != "standard" {
+		t.Fatalf("clearing core overrides did not restore profile values: unified=%v tcp=%v disableIPv6=%v loader=%q",
+			adapter.UnifiedDelay.Load(), dialer.GetTcpConcurrent(), resolver.DisableIPv6, geodata.LoaderName())
+	}
+	stored, err := readGeneralSettings(opts.HomeDir)
+	if err != nil || stored.CoreOverrides != nil {
+		t.Fatalf("unexpected persisted overrides after clear: %+v err=%v", stored.CoreOverrides, err)
+	}
+
+	// 校验拒绝非法测速地址和非法 geodata-loader。
+	for _, bad := range []*generalCoreOverrides{
+		{TestURL: ptrString("")},
+		{TestURL: ptrString("ftp://example.com/204")},
+		{TestURL: ptrString("https://")},
+		{GeodataLoader: ptrString("fast")},
+	} {
+		invalid := current.General
+		invalid.Revision = "core-bad"
+		invalid.CoreOverrides = bad
+		if err := saveGeneralTestSettings(invalid); !errors.Is(err, errGeneralInvalid) {
+			t.Fatalf("expected errGeneralInvalid for %+v, got %v", bad, err)
+		}
+	}
+}
+
+func ptrString(value string) *string { return &value }

@@ -3857,6 +3857,54 @@
       "value": "设置已保存"
     },
     {
+      "name": "general_core_override_add",
+      "value": "添加覆写项"
+    },
+    {
+      "name": "general_core_override_remove",
+      "value": "移除覆写项"
+    },
+    {
+      "name": "general_core_override_desc",
+      "value": "添加的项会覆写所有配置的对应设置，未添加的项沿用配置自身的设置，配置未设置时使用内核默认值。"
+    },
+    {
+      "name": "general_core_test_url",
+      "value": "全局测速链接"
+    },
+    {
+      "name": "general_core_test_url_hint",
+      "value": "请输入以 http:// 或 https:// 开头的测速地址，用于未单独指定测速地址的代理组。"
+    },
+    {
+      "name": "general_core_unified_delay",
+      "value": "统一延迟"
+    },
+    {
+      "name": "general_core_tcp_concurrent",
+      "value": "TCP 并发"
+    },
+    {
+      "name": "general_core_ipv6",
+      "value": "IPv6"
+    },
+    {
+      "name": "general_core_ipv6_hint",
+      "value": "控制内核侧 IPv6 解析与连接，独立于虚拟网卡的 IPv6 开关。"
+    },
+    {
+      "name": "general_core_geodata_loader",
+      "value": "Geo 数据加载模式"
+    },
+    {
+      "name": "general_core_geodata_standard",
+      "value": "标准（standard）"
+    },
+    {
+      "name": "general_core_geodata_memconservative",
+      "value": "省内存（memconservative）"
+    },
+    {
       "name": "logs_filter",
       "value": "等级"
     },

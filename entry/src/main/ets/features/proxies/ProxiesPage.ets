@@ -2,9 +2,11 @@ import { AppearanceState, appAppearance } from '../../components/AppearanceState
 import { accessibility } from '@kit.AccessibilityKit';
 import { common } from '@kit.AbilityKit';
 import { Connection, connection } from '../../client/Connection';
+import { GeneralSettingsState, generalSettingsState } from '../../client/GeneralSettings';
 import { EmptyState } from '../../components/EmptyState';
 import { TabPage } from '../../components/TabPage';
 import { FLOATING_BAR_INSET, PAGE_GUTTER, TAB_HEADER_HEIGHT } from '../../components/Theme';
+import { generalTestUrl } from '../../shared/GeneralSettings';
 import { ProfileSummary } from '../../shared/profiles/Summary';
 import { ProxyBrowser } from './Proxies';
 import { ProxyGroupList } from './ProxyGroupList';
@@ -31,6 +33,7 @@ export struct ProxiesPage {
   @Event onOpenProfiles: () => void = () => {};
   @Local browser: ProxyBrowser = new ProxyBrowser();
   @Local link: Connection = connection;
+  @Local general: GeneralSettingsState = generalSettingsState;
   @Local boundScroller: Scroller = new Scroller();
   @Local reduceMotion: boolean = true;
   @Local saveConflictShown: boolean = false;
@@ -53,6 +56,9 @@ export struct ProxiesPage {
     this.boundScroller = this.scroller;
     this.reduceMotion = accessibility.isAnimationReduceEnabledSync();
     accessibility.onAnimationReduceStateChange(this.reductionListener);
+    if (!this.general.loaded) {
+      this.general.load(this.getUIContext().getHostContext() as common.UIAbilityContext).catch((): void => {});
+    }
     this.configureBrowser();
   }
 
@@ -64,7 +70,7 @@ export struct ProxiesPage {
   }
 
   @Monitor('visible', 'profileId', 'summary', 'profileReady', 'initialGroup', 'online', 'offlineWritable',
-    'link.mode', 'link.bootId', 'link.coreReady', 'link.configRevision')
+    'link.mode', 'link.bootId', 'link.coreReady', 'link.configRevision', 'general.saved')
   configureBrowser(): void {
     if (this.savedProfile !== this.profileId) {
       this.savedProfile = this.profileId;
@@ -76,7 +82,8 @@ export struct ProxiesPage {
       online: this.link.coreReady, offlineWritable: this.offlineWritable,
       bootId: this.link.bootId, mode: this.link.mode === '' ? 'rule' : this.link.mode,
       configRevision: this.link.configRevision,
-      picker: this.pickerMode, initialGroup: this.initialGroup
+      picker: this.pickerMode, initialGroup: this.initialGroup,
+      defaultTestUrl: generalTestUrl(this.general.saved)
     });
   }
 
