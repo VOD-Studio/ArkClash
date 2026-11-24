@@ -14,6 +14,7 @@
 | `scheduled.yml` | 每周一 10:00（北京时间），可手动 | 更新 Geo 数据、扫描依赖漏洞、不用缓存完整构建；失败时开 issue |
 | `codeql.yml` | 内核相关的 PR、`main`、每周 | CodeQL 扫描 Go 代码，结果在 Security → Code scanning |
 | `pr-title.yml` | PR 打开、改标题、推送 | PR 标题是否符合提交信息格式（squash 合并时它就是 main 上的提交信息）。不计入「CI 通过」 |
+| `website.yml` | 官网/文档相关 PR、合并到 `main`、手动触发 | 用 Bun 同步文档、执行 `astro check` 并构建静态站点；合并到 `main` 后自动部署到 GitHub Pages |
 
 ### ci.yml 的分层
 
@@ -34,7 +35,7 @@
 
 - **合并规则只要求「CI 通过」**。以后增减任务只改 `ci.yml` 里它的 `needs`，不用改仓库设置。
 - **依赖漏洞暂不计入**：现有依赖还有已知漏洞（见 issue），修完后把 `vuln` 加进「CI 通过」的 `needs`。
-- **只改文档**指改动全在 `*.md`、`docs/`、`LICENSE`、`.github/ISSUE_TEMPLATE/`、`.github/CODEOWNERS` 里。
+- **只改文档**指改动全在 `*.md`、`docs/`、`website/`、`LICENSE`、`.github/ISSUE_TEMPLATE/`、`.github/CODEOWNERS`、`.github/workflows/website.yml` 里。
 - PR 上新的推送会取消旧的运行；`main` 上每个提交都跑完。合并发版 PR 的那个提交由 `release.yml` 构建，`ci.yml` 不重复构建。
 - 运行摘要（Summary）里有 Go、mihomo 版本，以及 HAP 和内核的体积、和 `main` 上次相比的增减。
 

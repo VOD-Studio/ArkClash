@@ -21,8 +21,9 @@ def is_docs(path: str) -> bool:
     return (
         path.endswith(".md")
         or path.startswith("docs/")
+        or path.startswith("website/")
         or path.startswith(".github/ISSUE_TEMPLATE/")
-        or path in {"LICENSE", ".github/CODEOWNERS"}
+        or path in {"LICENSE", ".github/CODEOWNERS", ".github/workflows/website.yml"}
     )
 
 
