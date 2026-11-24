@@ -1,0 +1,59 @@
+---
+const pillars = [
+  {
+    metric: '< 500 ms',
+    title: '冷启动可操作目标',
+    desc: 'UI 进程不加载 libclash.so，首帧只读本地缓存渲染，内核状态异步同步。',
+  },
+  {
+    metric: '双进程隔离',
+    title: '省电且长期稳定',
+    desc: '内核与 TUN 驻留 VPN 扩展进程；高频数据走 WebSocket 推送，离页自动退订。',
+  },
+  {
+    metric: '无感热切换',
+    title: '换配置不断流',
+    desc: '独立持有平台 TUN，更新订阅或切换配置不重建系统 VPN，每份配置独立记住节点。',
+  },
+  {
+    metric: '原生 API 26',
+    title: '鸿蒙设计语言',
+    desc: '遵循 UI Design Kit 沉浸光感材质与 OKLab 调色板，完整适配深浅色、纯黑与减弱动态。',
+  },
+];
+---
+
+<section class="pb-20 sm:pb-24">
+  <div class="mx-auto max-w-6xl px-5 sm:px-8">
+    <div
+      class="ark-card grid grid-cols-1 divide-y rounded-[28px] sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x"
+      style="--tw-divide-opacity: 1;"
+    >
+      {
+        pillars.map((item, idx) => (
+          <div
+            class:list={[
+              'p-6 sm:p-7',
+              idx >= 2 && 'sm:border-t lg:border-t-0',
+              idx % 2 === 1 && 'sm:border-l lg:border-l',
+            ]}
+            style="border-color: var(--ark-border);"
+          >
+            <div
+              class="tabular-nums text-xl font-bold tracking-[-0.025em]"
+              style="color: var(--ark-ink);"
+            >
+              {item.metric}
+            </div>
+            <div class="mt-1.5 text-sm font-semibold" style="color: var(--ark-ink);">
+              {item.title}
+            </div>
+            <p class="mt-2 text-[0.835rem] leading-relaxed" style="color: var(--ark-ink-muted);">
+              {item.desc}
+            </p>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>

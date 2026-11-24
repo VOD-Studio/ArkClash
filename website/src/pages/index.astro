@@ -1,0 +1,55 @@
+---
+import '../styles/landing.css';
+import { withBase } from '../lib/paths';
+import SiteHeader from '../components/landing/SiteHeader.astro';
+import HeroSection from '../components/landing/HeroSection.astro';
+import BaselineStrip from '../components/landing/BaselineStrip.astro';
+import BentoFeatures from '../components/landing/BentoFeatures.astro';
+import ArchitectureSection from '../components/landing/ArchitectureSection.astro';
+import QuickStartSection from '../components/landing/QuickStartSection.astro';
+import SiteFooter from '../components/landing/SiteFooter.astro';
+
+const pageTitle = 'ArkClash — 原生 HarmonyOS NEXT 代理客户端';
+const pageDesc =
+  '基于 mihomo 的原生 HarmonyOS NEXT 代理客户端。UI 与 VPN 双进程隔离、冷启动轻快直出、支持配置热切换、age 加密订阅与 QuickJS 覆写。';
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={pageDesc} />
+    <meta name="theme-color" content="#007AFF" />
+    <link rel="icon" type="image/png" href={withBase('/favicon.png')} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={pageDesc} />
+    <meta property="og:image" content={new URL(withBase('/assets/icon.png'), Astro.site).toString()} />
+    <script is:inline>
+      // 首帧前应用主题，避免深色模式闪烁；并与 Starlight 文档区共享偏好。
+      (() => {
+        try {
+          const saved = localStorage.getItem('starlight-theme');
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const theme = saved === 'light' || saved === 'dark' ? saved : prefersDark ? 'dark' : 'light';
+          document.documentElement.dataset.theme = theme;
+        } catch {
+          document.documentElement.dataset.theme = 'light';
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <SiteHeader />
+    <main>
+      <HeroSection />
+      <BaselineStrip />
+      <BentoFeatures />
+      <ArchitectureSection />
+      <QuickStartSection />
+    </main>
+    <SiteFooter />
+  </body>
+</html>

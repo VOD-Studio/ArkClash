@@ -1,0 +1,115 @@
+---
+import DefaultFooter from '@astrojs/starlight/components/Footer.astro';
+---
+
+<DefaultFooter><slot /></DefaultFooter>
+
+<script>
+  // 保持 Astro 7 默认 Sätteri Rust Markdown 流水线，零插件开销；
+  // 仅在页面包含 mermaid 代码块时按需动态加载 mermaid，并随 Starlight 深浅色切换重绘。
+  const mermaidBlocks = Array.from(
+    document.querySelectorAll<HTMLElement>('pre[data-language="mermaid"]'),
+  );
+
+  if (mermaidBlocks.length > 0) {
+    const targets: Array<{ container: HTMLElement; code: string }> = [];
+
+    for (const pre of mermaidBlocks) {
+      const lines = Array.from(pre.querySelectorAll<HTMLElement>('.ec-line'));
+      const code = (
+        lines.length > 0 ? lines.map((line) => line.textContent ?? '').join('\n') : (pre.textContent ?? '')
+      ).trim();
+      if (!code) continue;
+
+      const host = pre.closest<HTMLElement>('.expressive-code') ?? pre;
+      const container = document.createElement('div');
+      container.className = 'ark-mermaid';
+      container.setAttribute('data-mermaid', 'true');
+      host.replaceWith(container);
+      targets.push({ container, code });
+    }
+
+    const loadAndRender = async () => {
+      const { default: mermaid } = await import('mermaid');
+      const isDark = document.documentElement.dataset.theme === 'dark';
+
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: 'base',
+        fontFamily:
+          "'HarmonyOS Sans SC', 'PingFang SC', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        themeVariables: isDark
+          ? {
+              darkMode: true,
+              background: '#0e121a',
+              primaryColor: '#162033',
+              primaryTextColor: '#e2e8f0',
+              primaryBorderColor: '#4c8bf5',
+              lineColor: '#7b8ca3',
+              secondaryColor: '#171d29',
+              tertiaryColor: '#121722',
+              actorBkg: '#162033',
+              actorBorder: '#5ca3ff',
+              actorTextColor: '#f1f5f9',
+              signalColor: '#94a3b8',
+              signalTextColor: '#e2e8f0',
+              noteBkgColor: '#1b263b',
+              noteTextColor: '#cbd5e1',
+              noteBorderColor: '#3b82f6',
+              clusterBkg: '#111622',
+              clusterBorder: '#2c3648',
+            }
+          : {
+              darkMode: false,
+              background: '#f8f9fb',
+              primaryColor: '#ebf3ff',
+              primaryTextColor: '#0f172a',
+              primaryBorderColor: '#007aff',
+              lineColor: '#64748b',
+              secondaryColor: '#ffffff',
+              tertiaryColor: '#f1f5f9',
+              actorBkg: '#ffffff',
+              actorBorder: '#007aff',
+              actorTextColor: '#0f172a',
+              signalColor: '#475569',
+              signalTextColor: '#0f172a',
+              noteBkgColor: '#eff6ff',
+              noteTextColor: '#1e293b',
+              noteBorderColor: '#93c5fd',
+              clusterBkg: '#ffffff',
+              clusterBorder: '#cbd5e1',
+            },
+      });
+
+      let seq = 0;
+      for (const { container, code } of targets) {
+        try {
+          const id = `ark-mermaid-${Date.now()}-${seq++}`;
+          const { svg } = await mermaid.render(id, code);
+          container.innerHTML = `<div class="ark-mermaid-svg">${svg}</div>`;
+          container.dataset.rendered = 'true';
+        } catch (err) {
+          console.warn('[ark-mermaid] 渲染失败，回退为文本源码：', err);
+          const pre = document.createElement('pre');
+          pre.className = 'ark-mermaid-source';
+          pre.textContent = code;
+          container.replaceChildren(pre);
+          container.dataset.rendered = 'false';
+        }
+      }
+    };
+
+    void loadAndRender();
+
+    const observer = new MutationObserver((mutations) => {
+      if (mutations.some((m) => m.attributeName === 'data-theme')) {
+        void loadAndRender();
+      }
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+  }
+</script>

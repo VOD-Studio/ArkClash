@@ -1,0 +1,185 @@
+---
+import { withBase } from '../../lib/paths';
+import meta from '../../generated/meta.json';
+---
+
+<section class="ark-hero-wash relative pt-16 pb-16 sm:pt-24 sm:pb-24 lg:pt-28 lg:pb-28">
+  <div class="mx-auto max-w-6xl px-5 sm:px-8">
+    <div class="grid items-center gap-14 lg:grid-cols-12 lg:gap-12">
+      <!-- 左侧品牌叙事 -->
+      <div class="text-center lg:col-span-7 lg:text-left">
+        <div
+          class="mb-7 inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium"
+          style="border-color: var(--ark-border-strong); background-color: var(--ark-bg-elevated); color: var(--ark-ink-muted);"
+        >
+          <span
+            class="h-2 w-2 rounded-full"
+            style="background-color: var(--ark-brand);"
+            aria-hidden="true"
+          ></span>
+          <span>HarmonyOS 7 (API 26+)</span>
+          <span style="color: var(--ark-ink-soft);">·</span>
+          <span>mihomo 内核</span>
+          <span style="color: var(--ark-ink-soft);">·</span>
+          <span class="tabular-nums font-semibold" style="color: var(--ark-ink);">
+            v{meta.version}
+          </span>
+        </div>
+
+        <h1
+          class="text-[2.35rem] leading-[1.14] font-bold tracking-[-0.035em] sm:text-5xl lg:text-[3.5rem]"
+          style="color: var(--ark-ink);"
+        >
+          为鸿蒙原生而生的
+          <br />
+          <span style="color: var(--ark-brand);">现代代理客户端</span>
+        </h1>
+
+        <p
+          class="mx-auto mt-6 max-w-xl text-base leading-relaxed sm:text-[1.09rem] lg:mx-0"
+          style="color: var(--ark-ink-muted);"
+        >
+          基于 mihomo 内核与原生 ArkUI 打造。UI 与 VPN 双进程隔离，冷启动轻快直出、切换配置无感不断流，将简洁克制的交互与可编排的进阶掌控融为一体。
+        </p>
+
+        <div class="mt-9 flex flex-wrap items-center justify-center gap-3.5 lg:justify-start">
+          <a
+            href={withBase('/getting-started/installation/')}
+            class="ark-pill-primary inline-flex items-center gap-2 rounded-full px-6 py-3 text-[0.95rem] font-semibold no-underline"
+          >
+            <svg
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v12"></path>
+              <path d="m7 10 5 5 5-5"></path>
+              <path d="M5 21h14"></path>
+            </svg>
+            <span>下载安装 v{meta.version}</span>
+          </a>
+
+          <a
+            href={withBase('/getting-started/introduction/')}
+            class="ark-pill-secondary inline-flex items-center gap-2 rounded-full px-6 py-3 text-[0.95rem] font-semibold no-underline"
+          >
+            <span>阅读文档</span>
+            <svg
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M5 12h14"></path>
+              <path d="m12 5 7 7-7 7"></path>
+            </svg>
+          </a>
+        </div>
+
+        <div
+          class="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs sm:text-[0.8125rem] lg:justify-start"
+          style="color: var(--ark-ink-soft);"
+        >
+          <span class="inline-flex items-center gap-1.5">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 6 9 17l-5-5"></path>
+            </svg>
+            GPL-3.0 开源
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 6 9 17l-5-5"></path>
+            </svg>
+            ARM64 真机与 x86_64 模拟器
+          </span>
+          <a
+            href={meta.releasesUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 font-medium no-underline transition-colors hover:underline"
+            style="color: var(--ark-ink-muted);"
+          >
+            <span>GitHub Releases</span>
+            <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- 右侧真机仪表盘视觉展示 -->
+      <div class="relative flex justify-center lg:col-span-5">
+        <div class="relative">
+          <!-- 极简旗舰手机边框 -->
+          <div
+            class="relative w-[272px] rounded-[44px] bg-[#13161e] p-[10px] sm:w-[300px]"
+            style="box-shadow: var(--ark-shadow-phone);"
+          >
+            <div class="relative overflow-hidden rounded-[35px] bg-[#0e1118]">
+              <img
+                src={withBase('/assets/screenshot-dashboard.webp')}
+                alt="ArkClash 仪表盘界面，斜切展示亮色与暗色双主题下的状态卡片、当前配置与出站模式"
+                width="600"
+                height="1200"
+                loading="eager"
+                decoding="async"
+                class="block h-auto w-full select-none"
+              />
+            </div>
+          </div>
+
+          <!-- 左上角极简浮动说明标签（大屏展示，外置贴边不遮挡手机主画面） -->
+          <div
+            class="ark-card absolute top-16 -left-24 hidden items-center gap-2.5 rounded-2xl px-3.5 py-2.5 xl:flex"
+            style="background-color: var(--ark-bg-elevated);"
+          >
+            <span
+              class="flex h-7 w-7 items-center justify-center rounded-xl"
+              style="background-color: var(--ark-brand-soft); color: var(--ark-brand);"
+            >
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"></path>
+              </svg>
+            </span>
+            <div class="leading-tight">
+              <div class="text-xs font-semibold" style="color: var(--ark-ink);">无 TUN 核心预热</div>
+              <div class="mt-0.5 text-[11px]" style="color: var(--ark-ink-soft);">
+                未连接即可选点测速
+              </div>
+            </div>
+          </div>
+
+          <!-- 右下角极简浮动说明标签 -->
+          <div
+            class="ark-card absolute -right-14 bottom-20 hidden items-center gap-2.5 rounded-2xl px-3.5 py-2.5 xl:flex"
+            style="background-color: var(--ark-bg-elevated);"
+          >
+            <span
+              class="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-400"
+            >
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                <path d="M3 3v5h5"></path>
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path>
+                <path d="M16 16h5v5"></path>
+              </svg>
+            </span>
+            <div class="leading-tight">
+              <div class="text-xs font-semibold" style="color: var(--ark-ink);">配置热切换</div>
+              <div class="mt-0.5 text-[11px]" style="color: var(--ark-ink-soft);">
+                按配置独立记忆节点
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

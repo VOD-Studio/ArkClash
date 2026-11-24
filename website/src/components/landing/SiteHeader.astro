@@ -1,0 +1,206 @@
+---
+import { withBase } from '../../lib/paths';
+import meta from '../../generated/meta.json';
+
+const navLinks = [
+  { label: '核心特性', href: '#features' },
+  { label: '双进程架构', href: '#architecture' },
+  { label: '使用文档', href: withBase('/getting-started/introduction/') },
+  { label: '开发与架构', href: withBase('/developer/architecture/') },
+  { label: '更新日志', href: withBase('/developer/changelog/') },
+];
+---
+
+<header
+  class="ark-glass sticky top-0 z-50 border-b"
+  style="border-color: var(--ark-border);"
+>
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-8">
+    <a
+      href={withBase('/')}
+      class="flex items-center gap-2.5 text-[1.0625rem] font-semibold tracking-[-0.02em] no-underline"
+      style="color: var(--ark-ink);"
+    >
+      <img
+        src={withBase('/assets/icon.png')}
+        alt="ArkClash"
+        width="30"
+        height="30"
+        class="h-[30px] w-[30px] rounded-[8px] shadow-xs"
+      />
+      <span>ArkClash</span>
+    </a>
+
+    <nav aria-label="主导航" class="hidden items-center gap-1 md:flex">
+      {
+        navLinks.map((item) => (
+          <a
+            href={item.href}
+            class="rounded-full px-3.5 py-1.5 text-sm font-medium no-underline transition-colors hover:bg-[var(--ark-bg-subtle)]"
+            style="color: var(--ark-ink-muted);"
+          >
+            {item.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        id="ark-theme-toggle"
+        aria-label="切换浅色或深色主题"
+        title="切换浅色 / 深色主题"
+        class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border transition-colors hover:bg-[var(--ark-bg-subtle)]"
+        style="border-color: var(--ark-border); color: var(--ark-ink-muted);"
+      >
+        <!-- 太阳图标（深色模式下展示） -->
+        <svg
+          class="hidden h-[17px] w-[17px] [html[data-theme=dark]_&]:block"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="4"></circle>
+          <path d="M12 2v2"></path>
+          <path d="M12 20v2"></path>
+          <path d="m4.93 4.93 1.41 1.41"></path>
+          <path d="m17.66 17.66 1.41 1.41"></path>
+          <path d="M2 12h2"></path>
+          <path d="M20 12h2"></path>
+          <path d="m6.34 17.66-1.41 1.41"></path>
+          <path d="m19.07 4.93-1.41 1.41"></path>
+        </svg>
+        <!-- 月亮图标（浅色模式下展示） -->
+        <svg
+          class="block h-[17px] w-[17px] [html[data-theme=dark]_&]:hidden"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+        </svg>
+      </button>
+
+      <a
+        href={meta.repoUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="GitHub 仓库"
+        class="hidden h-9 w-9 items-center justify-center rounded-full border transition-colors hover:bg-[var(--ark-bg-subtle)] sm:flex"
+        style="border-color: var(--ark-border); color: var(--ark-ink-muted);"
+      >
+        <svg class="h-[17px] w-[17px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path
+            d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.05 11.05 0 0 1 5.8 0c2.21-1.49 3.18-1.18 3.18-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.09 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.13 0 1.54-.01 2.78-.01 3.16 0 .31.21.67.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"
+          ></path>
+        </svg>
+      </a>
+
+      <a
+        href={withBase('/getting-started/installation/')}
+        class="ark-pill-primary hidden items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium no-underline sm:inline-flex"
+      >
+        <span>下载</span>
+        <span class="tabular-nums text-xs opacity-85">v{meta.version}</span>
+      </a>
+
+      <button
+        type="button"
+        id="ark-menu-toggle"
+        aria-label="展开导航菜单"
+        aria-expanded="false"
+        aria-controls="ark-mobile-menu"
+        class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border md:hidden"
+        style="border-color: var(--ark-border); color: var(--ark-ink);"
+      >
+        <svg
+          class="h-[18px] w-[18px]"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <path d="M4 7h16"></path>
+          <path d="M4 12h16"></path>
+          <path d="M4 17h16"></path>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 移动端展开菜单 -->
+  <div
+    id="ark-mobile-menu"
+    class="hidden border-t px-5 py-4 md:hidden"
+    style="border-color: var(--ark-border); background-color: var(--ark-bg-elevated);"
+  >
+    <div class="flex flex-col gap-1">
+      {
+        navLinks.map((item) => (
+          <a
+            href={item.href}
+            class="ark-mobile-link rounded-xl px-3.5 py-2.5 text-sm font-medium no-underline"
+            style="color: var(--ark-ink);"
+          >
+            {item.label}
+          </a>
+        ))
+      }
+      <div class="mt-2 flex items-center gap-2 border-t pt-3" style="border-color: var(--ark-border);">
+        <a
+          href={withBase('/getting-started/installation/')}
+          class="ark-pill-primary flex-1 rounded-full py-2 text-center text-sm font-medium no-underline"
+        >
+          下载 v{meta.version}
+        </a>
+        <a
+          href={meta.repoUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="ark-pill-secondary rounded-full px-4 py-2 text-sm font-medium no-underline"
+        >
+          GitHub
+        </a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<script>
+  const themeBtn = document.getElementById('ark-theme-toggle');
+  themeBtn?.addEventListener('click', () => {
+    const root = document.documentElement;
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try {
+      // 与 Starlight 复用同一个 localStorage 键，实现官网与文档区主题无缝同步。
+      localStorage.setItem('starlight-theme', next);
+    } catch {
+      // 隐私模式下忽略存储异常
+    }
+  });
+
+  const menuBtn = document.getElementById('ark-menu-toggle');
+  const mobileMenu = document.getElementById('ark-mobile-menu');
+  menuBtn?.addEventListener('click', () => {
+    const isHidden = mobileMenu?.classList.toggle('hidden');
+    menuBtn.setAttribute('aria-expanded', String(!isHidden));
+  });
+  mobileMenu?.querySelectorAll('.ark-mobile-link').forEach((link) => {
+    link.addEventListener('click', () => {
+      mobileMenu.classList.add('hidden');
+      menuBtn?.setAttribute('aria-expanded', 'false');
+    });
+  });
+</script>

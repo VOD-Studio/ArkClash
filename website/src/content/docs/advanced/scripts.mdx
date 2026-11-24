@@ -1,0 +1,65 @@
+---
+title: JavaScript 覆写脚本
+description: 使用内置 QuickJS 引擎编写 main(config) 脚本，在 VPN 进程内动态修改 mihomo 配置。
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+ArkClash 内置轻量级的 **QuickJS** 引擎，用于在配置加载前以 JavaScript 编程方式覆写 mihomo 配置对象。脚本只在 VPN 扩展进程内安全执行，并在应用前经过完整配置校验。
+
+## 使用步骤
+
+<Steps>
+
+1. 打开「工具 → 进阶配置 → 脚本」，点击新建或从本地文件导入 `.js` 脚本。
+2. 编写导出 `main(config)` 函数的覆写逻辑并保存。
+3. 前往「配置」页，在目标配置卡片点击「更多 → 覆写」，选中刚刚创建的脚本。
+4. 点击立即应用（或退出覆写页自动应用），内核将热切换并生效；若脚本报错或产出的配置不合法，将自动保留原运行配置并提示错误。
+
+</Steps>
+
+## 函数约定
+
+- 入口函数必须命名为 `main(config)`。
+- 参数 `config` 是已解析后的完整配置 JavaScript 对象。
+- 函数必须返回修改后的配置对象；返回后的对象仍会继续经过附加规则、全局 DNS 与平台强制项覆写。
+
+## 实用范例
+
+### 示例一：在顶部前置自定义分流规则
+
+```js
+function main(config) {
+  const extraRules = [
+    'DOMAIN-SUFFIX,claude.ai,PROXY',
+    'DOMAIN-SUFFIX,openai.com,PROXY',
+    'DOMAIN-SUFFIX,harmonyos.com,DIRECT',
+  ];
+
+  config.rules = [...extraRules, ...(config.rules || [])];
+  return config;
+}
+```
+
+### 示例二：为指定代理组开启延迟优选
+
+```js
+function main(config) {
+  if (!Array.isArray(config['proxy-groups'])) {
+    return config;
+  }
+
+  for (const group of config['proxy-groups']) {
+    if (group.type === 'url-test') {
+      group.interval = 300;
+      group.tolerance = 50;
+    }
+  }
+
+  return config;
+}
+```
+
+<Aside type="tip">
+  如果只是增删单条分流规则或修改 DNS 上游，通常不需要写脚本：直接使用 [附加规则与自定义资源](../rules-and-resources/) 和 [网络与全局 DNS](../network-and-dns/) 会更直观且易维护。
+</Aside>

@@ -1,0 +1,96 @@
+---
+title: 从源码构建
+description: 准备 HarmonyOS SDK、Go 工具链与 Python 3，使用 Makefile 构建 ARM64 或 x86_64 模拟器安装包。
+sidebar:
+  order: 1
+---
+
+import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+ArkClash 的全部构建、代码检查、宿主回归与装机流程均统一收敛在根目录的 `Makefile` 中，本机开发与 GitHub Actions CI 调用的是同一套目标。
+
+## 环境准备
+
+| 依赖 | 说明 |
+|---|---|
+| **DevEco Studio** 或 **Command Line Tools** | 需包含 **HarmonyOS SDK API 26** |
+| **Go** | 版本固定在仓库根目录的 `.go-version`（当前由 `GOTOOLCHAIN` 或本机版本匹配） |
+| **Python 3** | 用于架构分层规则检查与 CI 辅助脚本 |
+| **Bun**（可选） | 仅构建或预览本项目官网与文档站点（`website/`）时需要 |
+
+### 环境变量定位规则
+
+工具链路径由 `scripts/env.sh` 统一解析：
+
+- 使用 Command Line Tools 时，设置 `HARMONYOS_TOOLS_HOME`（Linux 下若未指定且 `~/.local/opt/harmonyos-clt-*/command-line-tools` 唯一存在则自动识别）。
+- 使用 DevEco Studio 时，可通过 `DEVECO_HOME` 指定安装路径（macOS 默认 `/Applications/DevEco-Studio.app/Contents`）。
+- 若需单独指定编译 Go 内核使用的 OpenHarmony SDK，设置 `OHOS_SDK`。
+
+首次接手 Fork 或在新机器搭建完整环境（含改包名、配置私有 CI 工具链）请参阅 [Fork 环境准备](../fork-setup/)。
+
+## 构建与真机安装
+
+<Steps>
+
+1. **配置本机自动签名**
+
+   在 DevEco Studio 中打开项目根目录，进入 **File → Project Structure → Signing Configs**，使用华为开发者账号完成自动签名。
+
+   <Aside type="caution">
+     DevEco 自动签名会将本机证书路径与加密密码写入 `build-profile.json5` 的 `signingConfigs`。这部分改动**绝对不要暂存或提交到 Git**。
+   </Aside>
+
+2. **准备 Geo 数据、编译内核并打包安装**
+
+   ```sh
+   make geodata   # 按 geodata.lock 下载并校验 Geo 数据，内置进 HAP
+   make core      # 准备补丁版 Go 工具链，交叉编译 libclash.so 并检查零静态 TLS 重定位
+   make hap       # 使用 hvigor 打包 HAP 到 dist/
+   make run       # 安装到已连接的手机并启动
+   ```
+
+   <Aside type="note">
+     首次执行 `make core` 会在 `.toolchain/` 准备打过补丁的 Go 工具链与 mihomo / gVisor 补丁副本，需要几分钟时间；后续构建会直接复用缓存。
+   </Aside>
+
+</Steps>
+
+## 构建 x86_64 模拟器包
+
+默认构建目标为 `ABI=arm64-v8a`。如需在 x86_64 模拟器上调试，为相关命令附加 `ABI=x86_64`（两种架构的 `dist/` 产物共存，但共享 Hvigor 中间目录，请依次打包不要并发）：
+
+<Tabs>
+  <TabItem label="完整构建与运行">
+    ```sh
+    make core ABI=x86_64
+    make hap ABI=x86_64
+    make run ABI=x86_64
+    ```
+  </TabItem>
+  <TabItem label="仅内核冒烟验证">
+    签名前可先在已连接的 x86_64 模拟器上直接验证 `libclash.so` 动态加载与多线程 C API：
+
+    ```sh
+    make core-smoke ABI=x86_64
+    ```
+
+    详细边界见 [ADR-0014](../adr/0014-x86-emulator-toolchain/)。
+  </TabItem>
+</Tabs>
+
+## Makefile 常用目标速查
+
+运行 `make help` 可查看所有可用目标：
+
+| 命令 | 用途 |
+|---|---|
+| `make geodata` | 下载并校验内置 Geo 数据到 `entry/src/main/resources/rawfile/geo/` |
+| `make core` | 使用补丁版 Go 工具链交叉编译 `libclash.so`（支持 `ABI=arm64-v8a\|x86_64`） |
+| `make hap` | 打包 HAP 到 `dist/`（支持 `MODE=debug\|release` 与 `ABI`） |
+| `make install` / `make run` | 安装当前版本签名包 / 安装并启动 |
+| `make log` | 实时跟踪内核（`ArkClashCore`）与 VPN 进程（`ClashVpnAbility`）日志 |
+| `make lint` | 运行全套静态检查（含 ArkTS 分层规则 `scripts/check-arch.py`、shellcheck、actionlint、zizmor 等） |
+| `make test` | 运行不依赖真机的宿主业务回归与 Go 测试 |
+| `make bench` | 执行真机冷启动、VPN 接入与新连接延迟基准测试 |
+| `make site-dev` / `make site-build` | 本地预览或构建项目官网与文档站点（`website/`） |
+| `make clean` | 清理构建产物（保留 `.toolchain/` 内的补丁工具链） |

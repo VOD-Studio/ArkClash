@@ -44,7 +44,16 @@ test: ## 宿主回归（默认全部，可用 TESTS=contracts|core|go|local 或�
 bench: ## 真机启动、VPN 接入与新连接基准（BENCH_ARGS=--help 查看用法）
 	@bash scripts/bench.sh $(BENCH_ARGS)
 
-clean: ## 清理构建产物（保留 .toolchain/ 里的补丁工具链）
-	rm -rf entry/build entry/.cxx .hvigor dist entry/libs
+site-dev: ## 启动官网与文档站点本地预览（Bun + Astro）
+	bun run --cwd website dev
 
-.PHONY: help core core-smoke core-codeql geodata geodata-update hap install run log lint test bench clean
+site-build: ## 构建官网与文档站点静态产物到 website/dist/
+	bun run --cwd website build
+
+site-check: ## 检查官网与文档站点类型及内容契约
+	bun run --cwd website check
+
+clean: ## 清理构建产物（保留 .toolchain/ 里的补丁工具链）
+	rm -rf entry/build entry/.cxx .hvigor dist entry/libs website/dist website/.astro
+
+.PHONY: help core core-smoke core-codeql geodata geodata-update hap install run log lint test bench site-dev site-build site-check clean

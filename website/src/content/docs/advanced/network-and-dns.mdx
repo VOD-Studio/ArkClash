@@ -1,0 +1,49 @@
+---
+title: 网络、DNS 与常规设置
+description: 配置全局 DNS 逐项覆写、鸿蒙系统 DNS 追加、VPN 协议栈、分应用绕过与常规运行参数。
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## 全局 DNS 逐项覆写
+
+在「工具 → 进阶配置 → DNS」中，你可以按需启用并覆写单个 DNS 参数，而无需整段替换订阅里的 DNS 配置：
+
+- **上游策略**：自定义 `nameserver`、`fallback`、`default-nameserver` 与 `proxy-server-nameserver`。
+- **Fallback 筛选**：控制 `geoip`、`geoip-code`、`ipcidr` 与 `domain` 过滤条件。
+- **Fake-IP 与缓存**：精细调节增强模式、Fake-IP 过滤列表以及 DNS 缓存开关。
+- **逐项恢复**：移除任意一项覆写开关，即立即恢复源配置中的原始值。
+
+在线保存全局 DNS 设置会直接通过控制器在原有 TUN 上热应用，无需断开重连。
+
+### 追加系统 DNS
+
+在「工具 → 常规」开启**「追加系统 DNS」**后：
+
+- 保留配置与全局覆写已有的全部 DNS 上游，同时自动向 `dns.nameserver` 补入一个 `system://` 上游。
+- 内核按需通过 HarmonyOS Network Kit 读取当前默认物理网络的链路 DNS，并在 Wi-Fi 与蜂窝切换时自动刷新，自动过滤 TUN DNS、回环与多播地址（详见 [ADR-0034](../../developer/adr/0034-harmonyos-system-dns/)）。
+
+## VPN 网络设置与分应用绕过
+
+进入「网络」相关设置可调整隧道级参数：
+
+- **TUN 协议栈**：默认采用 **gVisor**，可根据需求切换。
+- **MTU 与地址**：遵循鸿蒙系统约束，MTU 可设范围为 `576 – 1500`。
+- **绕过 VPN 的应用**：填写需要直连的应用包名（例如网银、本地工具或局域网服务），这些应用将完全绕过代理直接走系统物理网络。ArkClash 自身始终自动排除在 VPN 之外，避免流量回环。
+
+<Aside type="caution" title="需要断开重连生效">
+  修改 TUN 协议栈、IPv6、MTU、VpnConfig DNS 地址或分应用绕过名单属于系统 VPN 隧道级变更，无法热切换，保存后需要**断开并重新连接**才会生效。
+</Aside>
+
+## 常规设置
+
+在「工具 → 常规」可以配置全局运行参数：
+
+| 设置项 | 说明 |
+|---|---|
+| 入站端口与认证 | 配置本地混合/HTTP/SOCKS 端口及用户名密码认证 |
+| 外部控制器 | 按需开放用户侧面板控制器（独立使用 `127.0.0.1:9090`，与内部通信通道及密钥完全隔离） |
+| 订阅 User-Agent | 自定义拉取远程订阅时携带的 HTTP User-Agent |
+| 全局 Hosts | 配置跨配置生效的静态域名解析映射 |
+| 测速与切换行为 | 调整延迟测试超时时间、切换节点后是否自动关闭旧连接 |
+| 日志与更新 | 控制内核日志级别，以及是否启动时自动检查 GitHub 新版本 |
