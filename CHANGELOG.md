@@ -90,6 +90,13 @@
 
 * **ui:** 使用系统异步接口采集界面进程内存，避免在 ArkTS 主线程同步读取 smaps。
 
+## [0.6.1](https://github.com/VOD-Studio/ArkClash/compare/v0.6.0...v0.6.1) (2026-11-24)
+
+
+### 新增
+
+* 扩展代理配置和连接诊断 ([#110](https://github.com/VOD-Studio/ArkClash/issues/110)) ([3da3fc2](https://github.com/VOD-Studio/ArkClash/commit/3da3fc2ce1f0ceb4d3fe1846d926ea136754ed83))
+
 ## [0.6.0](https://github.com/VOD-Studio/ArkClash/compare/v0.5.1...v0.6.0) (2026-11-21)
 
 本版本围绕**配置管理、代理工具箱、网络诊断与个性化设置**进行了全面升级，并支持在未开启 VPN 的状态下直接切换节点与测速。
