@@ -45,7 +45,7 @@ bench: ## 真机启动、VPN 接入与新连接基准（BENCH_ARGS=--help 查看
 	@bash scripts/bench.sh $(BENCH_ARGS)
 
 site-dev: ## 启动官网与文档站点本地预览（Bun + Astro）
-	bun run --cwd website dev
+	bun run --cwd website dev --host 127.0.0.1 --port 4321
 
 site-build: ## 构建官网与文档站点静态产物到 website/dist/
 	bun run --cwd website build
