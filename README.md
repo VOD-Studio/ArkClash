@@ -11,11 +11,11 @@
 
 ## 安装
 
-需要 **HarmonyOS 7（API 26）及以上的 ARM64 设备**。目前通过 GitHub 分发，首次安装通常需要用自己的华为开发者账号准备调试签名。[下载最新版本](https://github.com/VOD-Studio/ArkClash/releases/latest)
+需要 **HarmonyOS 7（API 26）及以上的 ARM64 设备**。目前通过 GitHub 分发。有匹配原包名的调试 Profile 时，可以给发布包签名安装。也可以换成自己的包名，用 DevEco Studio 自动签名并从源码构建。[下载最新版本](https://github.com/VOD-Studio/ArkClash/releases/latest) · [从源码构建](#从源码构建)
 
 | 文件 | 适用于 |
 |---|---|
-| `ArkClash-<版本>-unsigned.hap` | 使用自己的调试签名材料签名后安装 |
+| `ArkClash-<版本>-unsigned.hap` | 用匹配包名、证书和设备的调试 Profile 签名后安装 |
 | `ArkClash-<版本>-debug-signed.hap` | 仅限维护者调试 Profile 中登记的设备 |
 
 下载后可用同一版本的 `SHA256SUMS` 校验文件。[发布包签名与安装](docs/usage.md#安装发布包)

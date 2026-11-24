@@ -7,13 +7,15 @@ import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ArkClash 当前通过 [GitHub Releases](https://github.com/VOD-Studio/ArkClash/releases/latest) 分发。由于鸿蒙应用安装需要有效签名，你可以选择 **命令行给发布包签名**，或通过 **DevEco Studio 自动签名并从源码构建**。
 
+安装需要 **HarmonyOS 7（API 26）及以上的 ARM64 设备**。电脑需安装带 HarmonyOS SDK API 26 的 DevEco Studio 或 Command Line Tools，安装时由 SDK 中的 `hdc` 连接设备。[工具链路径设置](../../developer/build-from-source/#环境变量定位规则)
+
 ## 发布包说明
 
-每次正式发版都会提供以下附件：
+发布页提供未签名 HAP 和校验文件，有维护者调试签名的版本还会附上签名包。
 
 | 文件名 | 适用场景 |
 |---|---|
-| `ArkClash-<版本>-unsigned.hap` | 推荐多数用户下载，使用自己的华为调试签名材料签名后安装 |
+| `ArkClash-<版本>-unsigned.hap` | 已有匹配包名的调试 Profile 时，可自行签名后安装 |
 | `ArkClash-<版本>-debug-signed.hap` | 仅限维护者调试 Profile 中已登记的设备直接安装 |
 | `SHA256SUMS` | 用于核对安装包完整性的校验和文件 |
 
@@ -35,12 +37,12 @@ ArkClash 当前通过 [GitHub Releases](https://github.com/VOD-Studio/ArkClash/r
 
 2. **开启手机开发者模式并准备调试签名材料**
 
-   在手机上打开「开发者模式」和「USB 调试」，使用数据线直连电脑。然后用自己的华为开发者账号准备：
+   在设备上打开「开发者模式」和「USB 调试」，使用数据线连接电脑。准备以下调试签名材料：
    - 调试密钥库（`.p12`）
    - 调试证书（`.cer`）
-   - 调试 Profile（`.p7b`）：需匹配包名 `com.vodstudio.arkclash` 及上述调试证书，并已登记当前手机的 UDID。
+   - 调试 Profile（`.p7b`），需匹配包名 `com.vodstudio.arkclash` 及上述调试证书，并包含当前设备的 UDID。
 
-   详细申请步骤参考 [华为调试签名指南](https://developer.huawei.com/consumer/cn/doc/app/agc-help-debug-overview-0000001955332054)。
+   详细申请步骤见华为文档。[申请调试 Profile](https://developer.huawei.com/consumer/cn/doc/App/agc-help-debug-profile-0000002248181278/)
 
 3. **使用命令行工具签名**
 
@@ -66,7 +68,7 @@ ArkClash 当前通过 [GitHub Releases](https://github.com/VOD-Studio/ArkClash/r
    make install MODE=release
    ```
 
-   如果你使用的是维护者 Profile 已登记设备，可将下载的 `ArkClash-<版本>-debug-signed.hap` 保存到上述 `dist/` 路径后直接运行安装命令。
+   如果设备已登记在维护者的调试 Profile 中，可以下载并校验 `ArkClash-<版本>-debug-signed.hap`，将它重命名为 `ArkClash-<版本>-release-signed.hap`，放进同版本源码的 `dist/` 目录，再执行 `make install MODE=release`。
 
 </Steps>
 
@@ -77,7 +79,7 @@ ArkClash 当前通过 [GitHub Releases](https://github.com/VOD-Studio/ArkClash/r
 <Tabs>
   <TabItem label="快速步骤">
     1. 克隆仓库并在 DevEco Studio 中打开项目。
-    2. 如遇包名冲突，可在 `AppScope/app.json5` 中将 `bundleName` 改为自己的包名。
+    2. 如果账号无法为原包名签名，在 `AppScope/app.json5` 中将 `bundleName` 改为自己的包名。
     3. 进入 **File → Project Structure → Signing Configs**，登录华为账号完成自动签名（签名改动只留在本机）。
     4. 在终端依次执行：
        ```sh
@@ -91,4 +93,4 @@ ArkClash 当前通过 [GitHub Releases](https://github.com/VOD-Studio/ArkClash/r
 
 ## 应用内检查更新
 
-安装并运行后，ArkClash 每次首次回到前台会自动检查一次 GitHub 新版本；你也可以在仪表盘顶部点「运行状态」，手动检查、下载、校验并保存新版本 HAP。若不需要自动检查，可在「工具 → 常规」关闭。
+ArkClash 每次启动后会在前台自动检查一次 GitHub 新版本。你也可以在仪表盘顶部点「运行状态」，手动检查、下载、校验并保存新版本 HAP。自动检查可在「工具 → 常规」关闭。
