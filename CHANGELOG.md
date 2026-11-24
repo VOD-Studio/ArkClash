@@ -90,7 +90,7 @@
 
 * **ui:** 使用系统异步接口采集界面进程内存，避免在 ArkTS 主线程同步读取 smaps。
 
-## [0.7.0](https://github.com/VOD-Studio/ArkClash/compare/v0.6.0...v0.7.0) (2026-11-24)
+## [0.6.1](https://github.com/VOD-Studio/ArkClash/compare/v0.6.0...v0.6.1) (2026-11-24)
 
 
 ### 新增
