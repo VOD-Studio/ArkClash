@@ -5,9 +5,11 @@ description: 下载 ArkClash 发布包、校验 SHA256SUMS、使用华为调试�
 
 import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
-ArkClash 当前通过 [GitHub Releases](https://github.com/VOD-Studio/ArkClash/releases/latest) 分发。由于鸿蒙应用安装需要有效签名，你可以选择 **命令行给发布包签名**，或通过 **DevEco Studio 自动签名并从源码构建**。
+从 GitHub Releases 下载的已签名 HAP 可以通过电脑上的 `hdc` 安装。下载未签名 HAP 时，先用匹配的调试 Profile 签名。[下载 ArkClash](https://github.com/VOD-Studio/ArkClash/releases/latest)
 
-安装需要 **HarmonyOS 7（API 26）及以上的 ARM64 设备**。电脑需安装带 HarmonyOS SDK API 26 的 DevEco Studio 或 Command Line Tools，安装时由 SDK 中的 `hdc` 连接设备。[工具链路径设置](../../developer/build-from-source/#环境变量定位规则)
+安装需要 **HarmonyOS 7（API 26）及以上的 ARM64 设备**。在电脑上安装带 HarmonyOS SDK API 26 的 DevEco Studio 或 Command Line Tools。
+
+`hdc` 位于安装目录下的 `sdk/default/openharmony/toolchains/`。macOS 的 DevEco Studio 从应用包的 `Contents/` 目录开始找。可将 `hdc` 所在目录加入 `PATH`，也可以在命令中填写 `hdc` 的完整路径。[华为 HDC 文档](https://developer.huawei.com/consumer/cn/doc/harmonyos-Guides/hdc)
 
 ## 发布包说明
 
@@ -20,61 +22,54 @@ ArkClash 当前通过 [GitHub Releases](https://github.com/VOD-Studio/ArkClash/r
 | `SHA256SUMS` | 用于核对安装包完整性的校验和文件 |
 
 <Aside type="caution" title="安全提示">
-  请务必只从官方仓库 `VOD-Studio/ArkClash` 的 Releases 页面下载安装包，并在签名前核对 `SHA256SUMS`。你的签名密钥库（`.p12`）、证书（`.cer`）与 Profile（`.p7b`）仅保留在本机，切勿上传到任何公开位置。
+  签名密钥库（`.p12`）、证书（`.cer`）与 Profile（`.p7b`）仅保留在本机。
 </Aside>
 
-## 方式一：签名并安装发布包
+## 校验下载文件
+
+从官方仓库的同一个 GitHub 发布页下载 HAP 和 `SHA256SUMS`，保留下载时的文件名。在 Linux 上，在下载目录运行以下命令，确认下载的 HAP 显示 `OK`。其他平台可以计算 HAP 的 SHA-256，与 `SHA256SUMS` 中同名文件的值核对。
+
+```sh
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+## 安装已签名 HAP
+
+维护者提供的 `debug-signed.hap` 仅适用于其调试 Profile 中已登记的设备。自行签名生成的 HAP 也用同一条命令安装。
 
 <Steps>
 
-1. **下载安装包并校验完整性**
-
-   从 [GitHub Releases](https://github.com/VOD-Studio/ArkClash/releases/latest) 下载同一版本的 `ArkClash-<版本>-unsigned.hap`、`SHA256SUMS` 以及对应版本源码压缩包（安装命令会用到其中的 `Makefile`）。
-
-   ```sh
-   sha256sum -c SHA256SUMS --ignore-missing
-   ```
-
-2. **开启手机开发者模式并准备调试签名材料**
-
-   在设备上打开「开发者模式」和「USB 调试」，使用数据线连接电脑。准备以下调试签名材料：
-   - 调试密钥库（`.p12`）
-   - 调试证书（`.cer`）
-   - 调试 Profile（`.p7b`），需匹配包名 `com.vodstudio.arkclash` 及上述调试证书，并包含当前设备的 UDID。
-
-   详细申请步骤见华为文档。[申请调试 Profile](https://developer.huawei.com/consumer/cn/doc/App/agc-help-debug-profile-0000002248181278/)
-
-3. **使用命令行工具签名**
-
-   `hap-sign-tool.jar` 位于 HarmonyOS SDK 所附 OpenHarmony SDK 的 `toolchains/lib` 目录下。在解压后的项目根目录执行以下命令（将示例路径、密钥别名与 `<版本>` 替换为实际值，按提示输入密码）：
+1. 在设备上打开「开发者模式」和「USB 调试」，用数据线连接电脑，并在设备上同意调试授权。运行 `hdc list targets` 检查设备是否已连接。
+2. 在电脑的下载目录运行安装命令，把 `<版本>` 换成发布版本号。自行签名时，填入签名输出文件的路径。
 
    ```sh
-   mkdir -p dist
-   java -jar "/path/to/hap-sign-tool.jar" sign-app \
-     -mode localSign -signAlg SHA256withECDSA -compatibleVersion 26 -pwdInputMode 1 \
-     -keystoreFile "/path/to/debug.p12" -keyAlias "debugKey" \
-     -appCertFile "/path/to/debug.cer" -profileFile "/path/to/debug.p7b" \
-     -inFile "/path/to/ArkClash-<版本>-unsigned.hap" \
-     -outFile "dist/ArkClash-<版本>-release-signed.hap"
+   hdc install -r "ArkClash-<版本>-debug-signed.hap"
    ```
-
-   更多签名参数见 [华为命令行签名指南](https://developer.huawei.com/consumer/cn/doc/HarmonyOS-Guides/ide-hmos-command-line-building-app/)。
-
-4. **安装到手机**
-
-   签名完成后，在项目根目录执行安装命令：
-
-   ```sh
-   make install MODE=release
-   ```
-
-   如果设备已登记在维护者的调试 Profile 中，可以下载并校验 `ArkClash-<版本>-debug-signed.hap`，将它重命名为 `ArkClash-<版本>-release-signed.hap`，放进同版本源码的 `dist/` 目录，再执行 `make install MODE=release`。
 
 </Steps>
 
-## 方式二：使用 DevEco Studio 自动签名构建
+如果已解压同版本源码，也可将签名包保存为 `dist/ArkClash-<版本>-release-signed.hap`，在项目根目录运行 `make install MODE=release`。
 
-如果手头没有匹配 `com.vodstudio.arkclash` 包名的调试 Profile，推荐直接从源码配合 DevEco Studio 的自动签名构建：
+## 给未签名 HAP 签名
+
+校验 `ArkClash-<版本>-unsigned.hap` 后，准备调试密钥库（`.p12`）、签名证书（`.cer`）和调试 Profile（`.p7b`）。Profile 须匹配原包名 `com.vodstudio.arkclash` 与签名证书，并包含目标设备的 UDID。[华为调试 Profile 指南](https://developer.huawei.com/consumer/cn/doc/App/agc-help-debug-profile-0000002248181278/)
+
+`hap-sign-tool.jar` 位于 `hdc` 同目录下的 `lib/` 中。将示例路径、版本和密钥别名替换成实际值，在终端执行并按提示输入密码。[华为命令行签名指南](https://developer.huawei.com/consumer/cn/doc/HarmonyOS-Guides/ide-hmos-command-line-building-app/)
+
+```sh
+java -jar "/path/to/hap-sign-tool.jar" sign-app \
+  -mode localSign -signAlg SHA256withECDSA -compatibleVersion 26 -pwdInputMode 1 \
+  -keystoreFile "/path/to/debug.p12" -keyAlias "debugKey" \
+  -appCertFile "/path/to/debug.cer" -profileFile "/path/to/debug.p7b" \
+  -inFile "/path/to/ArkClash-<版本>-unsigned.hap" \
+  -outFile "ArkClash-<版本>-signed.hap"
+```
+
+用 `hdc install -r "ArkClash-<版本>-signed.hap"` 安装签名输出的 HAP。如果账号无法为原包名申请调试 Profile，可以改用自己的包名从源码构建。
+
+## 使用 DevEco Studio 自动签名构建
+
+从源码构建时，可以让 DevEco Studio 为自己的包名和设备生成调试签名。
 
 <Tabs>
   <TabItem label="快速步骤">
@@ -90,6 +85,11 @@ ArkClash 当前通过 [GitHub Releases](https://github.com/VOD-Studio/ArkClash/r
     完整的环境依赖、Command Line Tools 变量设置与 x86_64 模拟器构建步骤，请查看 [从源码构建](../../developer/build-from-source/)。
   </TabItem>
 </Tabs>
+
+## 其他安装与测试方式
+
+- 小白调试助手提供图形化的 HAP 签名和安装操作。ArkClash 在 HarmonyOS 7 上通过该工具安装的流程尚待真机验证。[小白调试助手](https://github.com/likuai2010/auto-installer/releases/tag/3.1.0)
+- 华为应用市场支持邀请测试和公开测试。维护者发布的测试版本上架后，用户可从邀请链接或应用市场测试专区获取。[邀请测试](https://developer.huawei.com/consumer/cn/doc/App/agc-help-appgallery-invite-test-guide-0000002292711373) · [公开测试](https://developer.huawei.com/consumer/cn/doc/App/agc-help-public-test-guide-0000002293706429)
 
 ## 应用内检查更新
 
