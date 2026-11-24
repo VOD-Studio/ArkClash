@@ -10,7 +10,7 @@
 
 - 检查：`go env GOVERSION`、`ls /Applications/DevEco-Studio.app`（macOS）、`gh auth status`。
 - 构建脚本优先使用 `HARMONYOS_TOOLS_HOME`（CLT），其次 `DEVECO_HOME`（Studio），再复用 `DEVECO_CLI_CLT_PATH`。Linux 未指定路径时，自动使用 `~/.local/opt/harmonyos-clt-*/command-line-tools` 下唯一的安装；有多个版本时必须显式选择，不自动切换 SDK。`DEVECO_SDK_HOME` 和 `OHOS_SDK` 的显式设置保持不变。
-- CLT 装在其他位置时，先执行 `export HARMONYOS_TOOLS_HOME=/实际路径/command-line-tools`；macOS 未指定路径时仍使用默认 Studio 目录。`make core` 单独读取 `OHOS_SDK`，本机可先 `source scripts/env.sh` 再构建内核。
+- CLT 装在其他位置时，先执行 `export HARMONYOS_TOOLS_HOME=/实际路径/command-line-tools`。macOS 未指定路径时默认使用 Studio。只有需要单独指定 OpenHarmony SDK 时才设置 `OHOS_SDK`。
 - 没装工具链时 **【人工】**：从华为开发者网站下载安装，需要登录华为账号。
 - **完成标准**：`make lint` 能跑完（缺少 shellcheck、codelinter 时提示跳过，不算失败）。
 
@@ -19,8 +19,8 @@
 `com.vodstudio.arkclash` 属于上游维护者。fork 用自己的华为账号签名时，通常要换成自己的包名，否则可能因为包名冲突而签名失败。
 
 - 改 `AppScope/app.json5` 的 `bundleName`。脚本和代码都从这里读包名，不用改别处。
-- 同步替换文档里写死的包名：`grep -rn "com.vodstudio.arkclash" AGENTS.md docs README.md`。
-- **完成标准**：上面的 grep 只剩下你决定保留的地方。
+- 用 `rg -n -F 'com.vodstudio.arkclash' AGENTS.md docs README.md website/src/content` 检查文档中的包名。上游发布包的签名说明仍使用上游包名。
+- **完成标准**：本机构建与安装步骤使用 fork 的包名。
 
 ## 3. 构建内核与 HAP
 

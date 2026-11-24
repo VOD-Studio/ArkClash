@@ -1,6 +1,6 @@
 # 0017 内核就绪与系统 VPN 转发分离
 
-- 状态：已采纳；宿主行为与 race 回归、Linux fd 所有权回归均已通过，ARM64 签名 HAP 已装机。真机已观察到未配置 TUN 地址时扩展和 controller 存活；界面、实际转发和性能验收尚未完成。
+- 状态：已采纳。宿主行为、race 与 Linux fd 所有权回归通过。ARM64 真机已验证已有授权下的无 TUN 预热、4 轮连断和代理命中。首次授权、长时间驻留及性能对照待验收。
 
 ## 背景
 
@@ -52,7 +52,7 @@ create/attach/detach/destroy 共用一条队列。onDestroy 立即作废宿主�
 
 ### 配置与界面
 
-`coreReady/coreStarting` 与 VPN 状态分开。核心运行且前台时订阅运行事件；流量、出口和服务探测仍要求实际连接。连接与 DNS 诊断的采集和显示条件见 [ADR-0019](0019-app-diagnostics-capture.md)。
+`coreReady/coreStarting` 与 VPN 状态分开。核心运行且前台时订阅运行事件，VPN 接通后订阅转发流量。出口和服务探测在连接时经内核，断开时走系统网络。连接与 DNS 诊断的采集和显示条件见 [ADR-0019](0019-app-diagnostics-capture.md)。
 
 首个配置提交并释放存储锁后，若核心仍为空，加载最新 current。reload 的 `expectedProfile` 区分省略与空串：省略不约束，空串只允许激活空核心，防止迟到激活覆盖新选择。删除最后一个配置先断开并清空运行配置，再删除文件，保留空核心。节点页、分组和 picker 共用核心就绪条件；拒绝授权后仍可从现有空态或菜单显式启动核心。
 

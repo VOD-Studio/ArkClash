@@ -1,0 +1,25 @@
+{
+  "name": "arkclash-website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync": "bun scripts/sync-docs.mjs",
+    "dev": "bun run sync && astro dev",
+    "build": "bun run sync && astro build",
+    "preview": "astro preview",
+    "check": "bun run sync && astro check"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.43.1",
+    "@astrojs/starlight-tailwind": "^5.0.0",
+    "@tailwindcss/vite": "^4.3.5",
+    "astro": "^7.4.13",
+    "mermaid": "^12.3.0",
+    "tailwindcss": "^4.3.5"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "typescript": "^6.0.0"
+  }
+}

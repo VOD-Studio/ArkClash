@@ -64,6 +64,8 @@ func newDiagnosticStreamServer(t *testing.T, wrap func(net.Conn, *bufio.ReadWrit
 		switch r.URL.Path {
 		case "/capture":
 			getDiagnosticCapture(w, r.WithContext(ctx))
+		case "/stats":
+			getDiagnosticStats(w, r.WithContext(ctx))
 		case "/dns":
 			getDiagnosticDns(w, r.WithContext(ctx))
 		case "/logs":
@@ -945,4 +947,171 @@ func TestDiagnosticsStreamSlowReaderUsesFiveSecondDeadline(t *testing.T) {
 	}
 	waitDiagnosticStream(t, execution.done)
 	assertDiagnosticStreamRetired(t, c, session)
+}
+
+func readDiagnosticStatsFrame(t *testing.T, conn net.Conn, reader *bufio.Reader) diagnosticStatsFrame {
+	t.Helper()
+	frame := readDiagnosticWSFrame(t, conn, reader)
+	if frame.Header.OpCode != ws.OpText {
+		t.Fatalf("stats opcode=%d", frame.Header.OpCode)
+	}
+	var payload diagnosticStatsFrame
+	if err := json.Unmarshal(frame.Payload, &payload); err != nil {
+		t.Fatalf("invalid stats json %q: %v", frame.Payload, err)
+	}
+	if payload.Type != "stats" || payload.BootID != runtimeBootID || payload.ConfigRevision != runtimeConfigRevision {
+		t.Fatalf("unexpected stats frame: %+v", payload)
+	}
+	return payload
+}
+
+func TestDiagnosticsStatsPushesCoalescedCountsWithoutTrafficSampling(t *testing.T) {
+	fixture(t)
+	previousInterval := diagnosticStatsInterval
+	diagnosticStatsInterval = 50 * time.Millisecond
+	t.Cleanup(func() { diagnosticStatsInterval = previousInterval })
+
+	rs := newDiagnosticTestResolver(t)
+	server := newDiagnosticStreamServer(t, nil)
+	baseline := newDiagnosticStreamTracker(t, "baseline.stats.test")
+
+	conn, reader, execution := dialDiagnosticStream(t, server, "stats", false)
+	initial := readDiagnosticStatsFrame(t, conn, reader)
+	if initial.Live != 1 || initial.Recent != 0 || initial.DNS != 0 {
+		t.Fatalf("initial stats=%+v want live=1 recent=0 dns=0", initial)
+	}
+
+	mu.Lock()
+	connections, queries := diagnosticConnections, diagnosticDNS
+	mu.Unlock()
+	if connections == nil || queries == nil {
+		t.Fatal("stats stream did not install both observers")
+	}
+
+	first := newDiagnosticStreamTracker(t, "first.stats.test")
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	second := newDiagnosticStreamTracker(t, "second.stats.test")
+	diagnosticTestQuery(t, rs, "one.stats.test.")
+	diagnosticTestQuery(t, rs, "two.stats.test.")
+
+	connections.mu.Lock()
+	noSampling := len(connections.sessions) == 0 && connections.sampleDue.IsZero() && connections.timer == nil &&
+		connections.connections[first.ID()].info == nil
+	connections.mu.Unlock()
+	if !noSampling {
+		t.Fatal("stats stream triggered connection traffic sampling or retained closed tracker info")
+	}
+
+	var updated diagnosticStatsFrame
+	for attempt := 0; attempt < 3; attempt++ {
+		updated = readDiagnosticStatsFrame(t, conn, reader)
+		if updated.Live == 2 && updated.Recent == 2 && updated.DNS == 2 {
+			break
+		}
+	}
+	if updated.Live != 2 || updated.Recent != 2 || updated.DNS != 2 {
+		t.Fatalf("coalesced stats=%+v want live=2 recent=2 dns=2", updated)
+	}
+
+	// 无变化期间不推送冗余帧，ping 应直接收到 pong。
+	time.Sleep(diagnosticStatsInterval + 20*time.Millisecond)
+	writeDiagnosticClientFrames(t, conn, ws.NewPingFrame([]byte("idle-stats")))
+	if pong := readDiagnosticWSFrame(t, conn, reader); pong.Header.OpCode != ws.OpPong || string(pong.Payload) != "idle-stats" {
+		t.Fatalf("idle stats emitted unexpected frame: opcode=%d payload=%q", pong.Header.OpCode, pong.Payload)
+	}
+
+	if err := baseline.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var closedFrame diagnosticStatsFrame
+	for attempt := 0; attempt < 2; attempt++ {
+		closedFrame = readDiagnosticStatsFrame(t, conn, reader)
+		if closedFrame.Live == 0 {
+			break
+		}
+	}
+	if closedFrame.Live != 0 || closedFrame.Recent != 2 || closedFrame.DNS != 2 {
+		t.Fatalf("post-close stats=%+v want live=0 recent=2 dns=2", closedFrame)
+	}
+
+	closeDiagnosticClient(t, conn, reader)
+	waitDiagnosticStream(t, execution.done)
+	waitDiagnosticStream(t, connections.workerDone)
+	waitDiagnosticStream(t, queries.workerDone)
+	mu.Lock()
+	retired := diagnosticConnections == nil && diagnosticDNS == nil && !hasDiagnosticStats()
+	mu.Unlock()
+	if !retired {
+		t.Fatal("closing last stats subscriber left collectors active")
+	}
+}
+
+func TestDiagnosticsStatsLifecycleCoexistenceAndValidation(t *testing.T) {
+	fixture(t)
+	// 校验非法与过期请求均拒绝且不安装观察器。
+	for _, tc := range []struct {
+		name   string
+		target string
+		status int
+		stop   bool
+	}{
+		{"missing-revision", "/stats?expectedBootId=" + runtimeBootID, http.StatusBadRequest, false},
+		{"stale-revision", "/stats?expectedBootId=" + runtimeBootID + "&expectedConfigRevision=999", http.StatusConflict, false},
+		{"stopped", diagnosticStreamTarget("stats"), http.StatusServiceUnavailable, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.stop {
+				mu.Lock()
+				running = false
+				mu.Unlock()
+				defer func() { mu.Lock(); running = true; mu.Unlock() }()
+			}
+			w := httptest.NewRecorder()
+			getDiagnosticStats(w, diagnosticStreamRequest(tc.target))
+			mu.Lock()
+			untouched := diagnosticConnections == nil && diagnosticDNS == nil && !hasDiagnosticStats()
+			mu.Unlock()
+			if w.Code != tc.status || !untouched {
+				t.Fatalf("status=%d body=%s untouched=%v", w.Code, w.Body.String(), untouched)
+			}
+		})
+	}
+
+	// capture 释放时仍有 stats 订阅，须保留采集器；stats 关闭后统一退休。
+	server := newDiagnosticStreamServer(t, nil)
+	capture, captureReader, captureExecution := dialDiagnosticStream(t, server, "capture", false)
+	readDiagnosticCaptureReady(t, capture, captureReader)
+	stats, statsReader, statsExecution := dialDiagnosticStream(t, server, "stats", false)
+	readDiagnosticStatsFrame(t, stats, statsReader)
+	mu.Lock()
+	connections, queries := diagnosticConnections, diagnosticDNS
+	mu.Unlock()
+	closeDiagnosticClient(t, capture, captureReader)
+	waitDiagnosticStream(t, captureExecution.done)
+	mu.Lock()
+	preserved := diagnosticCapture == nil && diagnosticConnections == connections && diagnosticDNS == queries && hasDiagnosticStats()
+	mu.Unlock()
+	if !preserved {
+		t.Fatal("releasing capture retired collectors still owned by stats")
+	}
+
+	// 配置热切换/停机时必须关闭活跃 stats 会话并回收全部采集器。
+	mu.Lock()
+	wait := reloadDiagnosticsLocked()
+	mu.Unlock()
+	wait()
+	waitDiagnosticStream(t, statsExecution.done)
+	waitDiagnosticStream(t, connections.workerDone)
+	waitDiagnosticStream(t, queries.workerDone)
+	mu.Lock()
+	cleared := diagnosticConnections == nil && diagnosticDNS == nil && !hasDiagnosticStats()
+	mu.Unlock()
+	if !cleared {
+		t.Fatal("reload did not retire stats stream and collectors")
+	}
 }

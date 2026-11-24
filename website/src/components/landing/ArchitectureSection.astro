@@ -1,0 +1,221 @@
+---
+import { withBase } from '../../lib/paths';
+import meta from '../../generated/meta.json';
+
+const highlights = [
+  {
+    badge: `Go ${meta.goVersion} 补丁工具链`,
+    title: '解决鸿蒙 musl TLSDESC 动态加载冲突',
+    desc: '通过专用 TLSDESC 补丁分别适配 ARM64 真机与 x86_64 模拟器，并自动校验构建产物零静态 TLS 重定位。',
+    href: withBase('/developer/platform-pitfalls/'),
+    linkLabel: '阅读平台陷阱记录',
+  },
+  {
+    badge: '防回环出站保护',
+    title: 'Go 出站逐 Socket 绑定物理网络',
+    desc: '通过 HarmonyOS Network Kit 原生接口在每次拨号前绑定默认物理网络，彻底避免内核流量回绕 TUN。',
+    href: withBase('/developer/adr/0008-bind-core-sockets-to-physical-network/'),
+    linkLabel: '查看 ADR-0008',
+  },
+  {
+    badge: `${meta.adrCount} 篇公开 ADR`,
+    title: '每个架构取舍都有迹可循',
+    desc: '从双进程通信、无 TUN 预热、诊断内存环到原子备份恢复，全部设计决策与被否决方案均公开记录。',
+    href: withBase('/developer/adr/'),
+    linkLabel: '浏览全部决策记录',
+  },
+];
+---
+
+<section id="architecture" class="scroll-mt-20 py-16 sm:py-24">
+  <div class="mx-auto max-w-6xl px-5 sm:px-8">
+    <div class="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
+      <div class="max-w-2xl">
+        <div
+          class="text-xs font-semibold tracking-[0.14em] uppercase"
+          style="color: var(--ark-brand);"
+        >
+          Architecture
+        </div>
+        <h2
+          class="mt-3 text-3xl font-bold tracking-[-0.03em] sm:text-[2.25rem]"
+          style="color: var(--ark-ink);"
+        >
+          为鸿蒙底层深度打磨的双进程架构
+        </h2>
+        <p class="mt-3.5 text-base leading-relaxed" style="color: var(--ark-ink-muted);">
+          UI 进程只管交互，VPN 扩展进程独占内核与 TUN，两者仅通过认证的本地 Controller 与原子文件通道协作。
+        </p>
+      </div>
+
+      <a
+        href={withBase('/developer/architecture/')}
+        class="ark-pill-secondary inline-flex shrink-0 items-center gap-2 self-start rounded-full px-5 py-2.5 text-sm font-semibold no-underline sm:self-auto"
+      >
+        <span>完整架构文档</span>
+        <span aria-hidden="true">→</span>
+      </a>
+    </div>
+
+    <!-- 极简高质感双进程架构图 -->
+    <div class="ark-card mt-10 overflow-hidden rounded-[28px] p-6 sm:p-10">
+      <div class="grid items-center gap-6 lg:grid-cols-11">
+        <!-- UI 进程 -->
+        <div
+          class="rounded-[22px] border p-5 sm:p-6 lg:col-span-4"
+          style="border-color: var(--ark-border); background-color: var(--ark-bg);"
+        >
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--ark-brand);">
+              UI 进程
+            </span>
+            <span
+              class="rounded-full px-2.5 py-0.5 text-[11px] font-medium"
+              style="background-color: var(--ark-bg-elevated); color: var(--ark-ink-soft);"
+            >
+              不加载内核
+            </span>
+          </div>
+          <div class="mt-2 font-mono text-sm font-semibold" style="color: var(--ark-ink);">
+            EntryAbility
+          </div>
+          <div class="mt-4 space-y-2 text-xs">
+            <div
+              class="rounded-xl border px-3.5 py-2.5 font-medium"
+              style="border-color: var(--ark-border); background-color: var(--ark-bg-elevated); color: var(--ark-ink);"
+            >
+              ArkUI 页面与功能模块
+              <span class="block font-mono text-[11px] font-normal" style="color: var(--ark-ink-soft);">
+                pages/ · features/* · components/
+              </span>
+            </div>
+            <div
+              class="rounded-xl border px-3.5 py-2.5 font-medium"
+              style="border-color: var(--ark-border); background-color: var(--ark-bg-elevated); color: var(--ark-ink);"
+            >
+              唯一内核访问层
+              <span class="block font-mono text-[11px] font-normal" style="color: var(--ark-ink-soft);">
+                client/CoreClient
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 跨进程双通道 -->
+        <div class="flex flex-col items-center justify-center gap-3 lg:col-span-3">
+          <div
+            class="w-full rounded-2xl border px-4 py-3 text-center"
+            style="border-color: var(--ark-brand-ring); background-color: var(--ark-brand-soft);"
+          >
+            <div class="text-xs font-semibold" style="color: var(--ark-brand);">
+              HTTP / WebSocket 控制面
+            </div>
+            <div class="mt-0.5 font-mono text-[11px]" style="color: var(--ark-ink-muted);">
+              127.0.0.1:19090 + secret
+            </div>
+          </div>
+
+          <div
+            class="hidden items-center gap-1 text-xs lg:flex"
+            style="color: var(--ark-ink-soft);"
+            aria-hidden="true"
+          >
+            <span>◄</span>
+            <span class="h-px w-16" style="background-color: var(--ark-border-strong);"></span>
+            <span>►</span>
+          </div>
+
+          <div
+            class="w-full rounded-2xl border px-4 py-3 text-center"
+            style="border-color: var(--ark-border); background-color: var(--ark-bg);"
+          >
+            <div class="text-xs font-semibold" style="color: var(--ark-ink);">
+              filesDir 原子文件通道
+            </div>
+            <div class="mt-0.5 font-mono text-[11px]" style="color: var(--ark-ink-soft);">
+              runtime.json · profiles/
+            </div>
+          </div>
+        </div>
+
+        <!-- VPN 扩展进程 -->
+        <div
+          class="rounded-[22px] border p-5 sm:p-6 lg:col-span-4"
+          style="border-color: var(--ark-border); background-color: var(--ark-bg);"
+        >
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+              VPN 进程
+            </span>
+            <span
+              class="rounded-full px-2.5 py-0.5 text-[11px] font-medium"
+              style="background-color: var(--ark-bg-elevated); color: var(--ark-ink-soft);"
+            >
+              独立保活
+            </span>
+          </div>
+          <div class="mt-2 font-mono text-sm font-semibold" style="color: var(--ark-ink);">
+            ClashVpnAbility
+          </div>
+          <div class="mt-4 space-y-2 text-xs">
+            <div
+              class="rounded-xl border px-3.5 py-2.5 font-medium"
+              style="border-color: var(--ark-border); background-color: var(--ark-bg-elevated); color: var(--ark-ink);"
+            >
+              NAPI 异步桥接层
+              <span class="block font-mono text-[11px] font-normal" style="color: var(--ark-ink-soft);">
+                libarkclash.so · 统一操作队列
+              </span>
+            </div>
+            <div
+              class="rounded-xl border px-3.5 py-2.5 font-medium"
+              style="border-color: var(--ark-border); background-color: var(--ark-bg-elevated); color: var(--ark-ink);"
+            >
+              mihomo 内核与 gVisor TUN
+              <span class="block font-mono text-[11px] font-normal" style="color: var(--ark-ink-soft);">
+                libclash.so · 物理网络逐 Socket 绑定
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 工程深度亮点卡片 -->
+    <div class="mt-5 grid grid-cols-1 gap-5 md:grid-cols-3">
+      {
+        highlights.map((item) => (
+          <a
+            href={item.href}
+            class="ark-card ark-card-hover group flex flex-col justify-between rounded-[24px] p-6 no-underline"
+          >
+            <div>
+              <span
+                class="inline-block rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                style="background-color: var(--ark-brand-soft); color: var(--ark-brand);"
+              >
+                {item.badge}
+              </span>
+              <h3
+                class="mt-4 text-[1.05rem] font-semibold tracking-[-0.015em]"
+                style="color: var(--ark-ink);"
+              >
+                {item.title}
+              </h3>
+              <p class="mt-2 text-sm leading-relaxed" style="color: var(--ark-ink-muted);">
+                {item.desc}
+              </p>
+            </div>
+            <div
+              class="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold transition-transform group-hover:translate-x-0.5"
+              style="color: var(--ark-brand);"
+            >
+              <span>{item.linkLabel}</span>
+              <span aria-hidden="true">→</span>
+            </div>
+          </a>
+        ))
+      }
+    </div>
+  </div>
+</section>

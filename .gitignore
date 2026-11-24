@@ -40,3 +40,21 @@
 /scripts/script-editor/node_modules/
 /entry/src/main/resources/rawfile/script-editor/editor.js
 /entry/src/main/resources/rawfile/script-editor/third-party.txt
+
+# 官网与文档站点构建产物及同步生成的文档（由 website/scripts/sync-docs.mjs 生成）
+/website/node_modules/
+/website/dist/
+/website/.astro/
+/website/src/generated/
+/website/src/assets/
+/website/public/favicon.png
+/website/public/assets/
+/website/src/content/docs/developer/architecture.md
+/website/src/content/docs/developer/platform-pitfalls.md
+/website/src/content/docs/developer/ci-and-release.md
+/website/src/content/docs/developer/fork-setup.md
+/website/src/content/docs/developer/contributing.md
+/website/src/content/docs/developer/security.md
+/website/src/content/docs/developer/glossary.md
+/website/src/content/docs/developer/changelog.md
+/website/src/content/docs/developer/adr/

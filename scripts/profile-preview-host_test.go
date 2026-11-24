@@ -148,12 +148,22 @@ func TestProfilePreviewMatchesComposedConfigAndCustomProfile(t *testing.T) {
 		},
 	})
 
+	unifiedDelay := true
+	tcpConcurrent := true
+	coreIPv6 := false
+	geodataLoader := "standard"
 	writePreviewJSON(t, generalSettingsPath(opts.HomeDir), generalSettings{
 		Revision:     "gen-1",
 		DelayTimeout: 5000,
 		LogLevel:     "warning",
 		Ports:        &generalPorts{Mixed: 7899},
 		Hosts:        map[string][]string{"preview.local": {"127.0.0.1"}},
+		CoreOverrides: &generalCoreOverrides{
+			UnifiedDelay:  &unifiedDelay,
+			TCPConcurrent: &tcpConcurrent,
+			IPv6:          &coreIPv6,
+			GeodataLoader: &geodataLoader,
+		},
 	})
 
 	if err := start(opts); err != nil {
@@ -208,9 +218,11 @@ func TestProfilePreviewMatchesComposedConfigAndCustomProfile(t *testing.T) {
 	if got.Tun.Enable || got.Tun.AutoRoute || got.Profile.StoreSelected ||
 		got.FindProcessMode != process.FindProcessOff || got.ExternalController != opts.Controller ||
 		got.Secret != "" || got.AllowLan || got.MixedPort != 7899 || !got.DNS.Enable || !got.DNS.IPv6 ||
+		!got.UnifiedDelay || !got.TCPConcurrent || got.IPv6 || got.GeodataLoader != "standard" ||
 		!reflect.DeepEqual(got.DNS.NameServer, servers) {
-		t.Fatalf("overrides not reflected in preview: tun=%+v profile=%+v fpm=%v ctrl=%q lan=%v port=%d dns=%+v",
-			got.Tun, got.Profile, got.FindProcessMode, got.ExternalController, got.AllowLan, got.MixedPort, got.DNS)
+		t.Fatalf("overrides not reflected in preview: tun=%+v profile=%+v fpm=%v ctrl=%q lan=%v port=%d dns=%+v unified=%v tcp=%v ipv6=%v loader=%q",
+			got.Tun, got.Profile, got.FindProcessMode, got.ExternalController, got.AllowLan, got.MixedPort, got.DNS,
+			got.UnifiedDelay, got.TCPConcurrent, got.IPv6, got.GeodataLoader)
 	}
 
 	// 结构化自定义配置跳过脚本和附加规则，仍应用 DNS、常规与平台覆写，并标记为未应用。

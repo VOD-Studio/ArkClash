@@ -1,6 +1,6 @@
 import {
   cancelProxyDelayOwner, ProxyDelayPhase, ProxyDelayTarget, ProxyDelayUpdate,
-  proxyMemberNode, ProxyNodeSnapshot, ProxySnapshot, testProxyDelays
+  proxyMemberNode, ProxyNodeSnapshot, ProxySnapshot, PROXY_TEST_URL, testProxyDelays
 } from '../../client/Proxies';
 import { newId } from '../../shared/profiles/Store';
 import {
@@ -35,14 +35,14 @@ export class ProxyTestSession {
     return this.frozenCompleted.get(groupName) ?? this.completed;
   }
 
-  seed(snapshot: ProxySnapshot): void {
+  seed(snapshot: ProxySnapshot, defaultTestUrl: string = PROXY_TEST_URL): void {
     if (this.activeBatches.size > 0) {
       return;
     }
     for (const name of proxyGroupNames(snapshot)) {
       const group = snapshot.nodes[name];
       for (const member of group.members) {
-        const leaf = resolveProxyLeaf(snapshot, member, group.url, group.name);
+        const leaf = resolveProxyLeaf(snapshot, member, group.url, group.name, defaultTestUrl);
         if (!leaf.resolved) {
           continue;
         }
@@ -58,7 +58,7 @@ export class ProxyTestSession {
   }
 
   start(filesDir: string, snapshot: ProxySnapshot, groupName: string, query: string,
-    nodeName: string = ''): void {
+    nodeName: string = '', defaultTestUrl: string = PROXY_TEST_URL): void {
     if (!snapshot.online) {
       this.onNotice('offline');
       return;
@@ -71,13 +71,14 @@ export class ProxyTestSession {
     if (this.activeBatches.has(batchKey)) {
       return;
     }
-    const members = nodeName === '' ? proxyMembers(snapshot, group, query, defaultProxyStyle(), this.completed) :
+    const members = nodeName === '' ?
+      proxyMembers(snapshot, group, query, defaultProxyStyle(), this.completed, defaultTestUrl) :
       group.members.filter((name: string): boolean => name === nodeName)
         .map((name: string): ProxyNodeSnapshot => proxyMemberNode(snapshot, group.name, name)!)
         .filter((node: ProxyNodeSnapshot): boolean => node !== undefined);
     const targets: Map<string, ProxyDelayTarget> = new Map<string, ProxyDelayTarget>();
     for (const member of members) {
-      const leaf = resolveProxyLeaf(snapshot, member.id, group.url, group.name);
+      const leaf = resolveProxyLeaf(snapshot, member.id, group.url, group.name, defaultTestUrl);
       const leafNode = proxyMemberNode(snapshot, leaf.group, leaf.id);
       if (leaf.resolved && !leaf.retired && leafNode !== undefined && canTestProxy(leafNode)) {
         const key = proxyDelayKey(snapshot, leaf);
@@ -93,7 +94,7 @@ export class ProxyTestSession {
     }
     const generation = this.generation;
     const keys = Array.from<string>(targets.keys());
-    this.holdGroup(snapshot, groupName);
+    this.holdGroup(snapshot, groupName, defaultTestUrl);
     this.activeBatches.add(batchKey);
     if (nodeName === '') {
       this.testingGroups.add(groupName);
@@ -182,13 +183,13 @@ export class ProxyTestSession {
     this.onChange(false);
   }
 
-  private holdGroup(snapshot: ProxySnapshot, groupName: string): void {
+  private holdGroup(snapshot: ProxySnapshot, groupName: string, defaultTestUrl: string): void {
     const holds = this.groupHolds.get(groupName) ?? 0;
     if (holds === 0) {
       const frozen: Map<string, number> = new Map<string, number>();
       const group = snapshot.nodes[groupName];
       for (const member of group.members) {
-        const leaf = resolveProxyLeaf(snapshot, member, group.url, group.name);
+        const leaf = resolveProxyLeaf(snapshot, member, group.url, group.name, defaultTestUrl);
         if (leaf.resolved) {
           const key = proxyDelayKey(snapshot, leaf);
           const delay = this.completed.get(key);

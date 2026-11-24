@@ -19,7 +19,14 @@
       "delayTimeout": 8000,
       "logLevel": "error",
       "captureLogs": false,
-      "closeConnections": false
+      "closeConnections": false,
+      "coreOverrides": {
+        "testUrl": "https://cp.cloudflare.com/generate_204",
+        "unifiedDelay": true,
+        "tcpConcurrent": false,
+        "ipv6": false,
+        "geodataLoader": "memconservative"
+      }
     }
   },
   "invalidSettingsRequest": {

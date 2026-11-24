@@ -79,6 +79,8 @@ func (c *diagnosticCollector) observeDNS(record dns.QueryRecord) {
 		c.dnsRecords[c.dnsHead] = query
 		c.dnsHead = (c.dnsHead + 1) % diagnosticDNSLimit
 	}
+	c.dnsAtomic.Store(int64(len(c.dnsRecords)))
+	notifyDiagnosticStats()
 	if len(c.sessions) != 0 {
 		c.broadcastLocked(diagnosticEvent{kind: "dns", dns: query})
 	}

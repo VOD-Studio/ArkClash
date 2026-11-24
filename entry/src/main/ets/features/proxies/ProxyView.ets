@@ -1,7 +1,9 @@
 import { common } from '@kit.AbilityKit';
 import { OutboundMode } from '../../client/Controller';
 import { ProfileSummary } from '../../shared/profiles/Summary';
-import { ProxyDelayPhase, ProxyNodeSnapshot, ProxySnapshot, isProxyGroup, proxyMemberNode } from '../../client/Proxies';
+import {
+  ProxyDelayPhase, ProxyNodeSnapshot, ProxySnapshot, PROXY_TEST_URL, isProxyGroup, proxyMemberNode
+} from '../../client/Proxies';
 import { KeyedListSource } from '../../components/KeyedListSource';
 import {
   canTestProxy, ProxyDensity, ProxyIconStyle, ProxyStyle, ProxyViewState,
@@ -21,6 +23,7 @@ export interface ProxyBrowserInput {
   mode: OutboundMode;
   picker: boolean;
   initialGroup: string;
+  defaultTestUrl?: string;
 }
 
 export interface ProxyPendingSelection {
@@ -148,13 +151,16 @@ export interface ProxyViewBuild {
   testingGroups: Set<string>;
   previous: ProxyGroupView[];
   picker: boolean;
+  defaultTestUrl?: string;
 }
 
 export function buildProxyViews(input: ProxyViewBuild): ProxyGroupView[] {
+  const defaultTestUrl = input.defaultTestUrl ?? PROXY_TEST_URL;
   const result: ProxyGroupView[] = [];
   for (const name of proxyGroupNames(input.snapshot)) {
     const source = input.snapshot.nodes[name];
-    const members = proxyMembers(input.snapshot, source, input.query, input.style, input.completedForGroup(name));
+    const members = proxyMembers(input.snapshot, source, input.query, input.style,
+      input.completedForGroup(name), defaultTestUrl);
     if (input.query.trim() !== '' && members.length === 0) {
       continue;
     }
@@ -179,7 +185,7 @@ export function buildProxyViews(input: ProxyViewBuild): ProxyGroupView[] {
         card = new ProxyNodeView(JSON.stringify([input.snapshot.profile, name, node.id]), node.id, node.name);
         group.allNodes.set(node.id, card);
       }
-      const leaf = resolveProxyLeaf(input.snapshot, node.id, source.url, source.name);
+      const leaf = resolveProxyLeaf(input.snapshot, node.id, source.url, source.name, defaultTestUrl);
       card.type = node.type;
       card.online = input.snapshot.online;
       card.addressable = node.selectable;

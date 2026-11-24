@@ -9,6 +9,7 @@ import { AppStorageV2, SymbolGlyphModifier } from '@kit.ArkUI';
 import { HdsBarStyle, HdsTabs, HdsTabsBarChangeMode, HdsTabsController, HdsTabsFloatingStyle } from '@kit.UIDesignKit';
 import { appUpdateState } from '../client/AppUpdate';
 import { connection, Connection } from '../client/Connection';
+import { DiagnosticFeedTarget } from '../client/Diagnostics';
 import { traffic } from '../client/Traffic';
 import { AppearanceState, appAppearance } from '../components/AppearanceState';
 import { hdsGlass } from '../components/Theme';
@@ -26,6 +27,7 @@ import { ToolRoute } from '../features/tools/ToolRoutes';
 import { ToolsPage } from '../features/tools/ToolsPage';
 import { ResourcesPage } from '../features/resources/ResourcesPage';
 import { ConnectionsPage } from '../features/tools/ConnectionsPage';
+import { RequestFeed } from '../features/tools/RecordLogic';
 import { DnsPage } from '../features/tools/DnsPage';
 import { DnsOverridesPage } from '../features/tools/DnsOverridesPage';
 import { ProfileExtensionPage } from '../features/profiles/ProfileExtensionPage';
@@ -64,6 +66,10 @@ interface ScriptRouteArgument { id: string; }
 interface ProfilePreviewRouteArgument {
   id: string;
   name: string;
+}
+
+interface ConnectionsRouteArgument {
+  feed?: RequestFeed;
 }
 
 @Entry
@@ -275,6 +281,15 @@ struct Index {
     this.stack.pushPath({ name: ToolRoute.IconSetPreview, param: argument });
   }
 
+  private openDiagnostic(target: DiagnosticFeedTarget): void {
+    if (target === 'dns') {
+      this.stack.pushPath({ name: ToolRoute.Dns });
+      return;
+    }
+    const argument: ConnectionsRouteArgument = { feed: target };
+    this.stack.pushPath({ name: ToolRoute.Connections, param: argument });
+  }
+
   @Builder
   Routes(name: string, param: Object) {
     if (name === ToolRoute.Theme) {
@@ -320,7 +335,8 @@ struct Index {
     } else if (name === ToolRoute.Resources) {
       ResourcesPage({ foreground: this.foreground, onScript: (id: string): void => this.openScriptEditor(id) })
     } else if (name === ToolRoute.Connections) {
-      ConnectionsPage({ foreground: this.foreground })
+      ConnectionsPage({ foreground: this.foreground,
+        initialFeed: param !== undefined ? (param as ConnectionsRouteArgument).feed : undefined })
     } else if (name === ToolRoute.Dns) {
       DnsPage({ foreground: this.foreground })
     } else if (name === ToolRoute.Backup) {
@@ -358,6 +374,7 @@ struct Index {
               onOpenProfiles: () => this.tabs.changeIndex(Tab.Profiles),
               onOpenProxies: () => { this.proxyPicker = true; },
               onOpenResources: (): void => { this.stack.pushPath({ name: ToolRoute.Resources }); },
+              onOpenDiagnostic: (target: DiagnosticFeedTarget): void => this.openDiagnostic(target),
               onRuntimePreview: (profile: string, name: string): void => this.openProfileRuntimePreview(profile, name)
             })
           }
@@ -464,6 +481,7 @@ struct Index {
   MiniBar() {
     ConnectionBar({
       expanded: this.miniBarExpanded,
+      visible: this.foreground && this.mainVisible,
       onOpen: () => this.tabs.changeIndex(Tab.Proxies)
     })
   }

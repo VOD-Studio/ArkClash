@@ -1,0 +1,323 @@
+---
+import { withBase } from '../../lib/paths';
+
+const services = [
+  { name: 'ChatGPT', icon: 'svc_chatgpt.svg' },
+  { name: 'Claude', icon: 'svc_claude.svg' },
+  { name: 'Gemini', icon: 'svc_gemini.svg' },
+  { name: 'DeepSeek', icon: 'svc_deepseek.svg' },
+  { name: 'Netflix', icon: 'svc_netflix.svg' },
+  { name: 'YouTube', icon: 'svc_youtube.svg' },
+  { name: 'Disney+', icon: 'svc_disney.svg' },
+  { name: 'Spotify', icon: 'svc_spotify.svg' },
+  { name: 'GitHub', icon: 'svc_github.svg' },
+  { name: 'Google', icon: 'svc_google.svg' },
+  { name: 'Telegram', icon: 'svc_telegram.svg' },
+  { name: 'Reddit', icon: 'svc_reddit.svg' },
+];
+
+const swatches = [
+  { name: '鸿蒙蓝', hex: '#007AFF' },
+  { name: '松石绿', hex: '#148F77' },
+  { name: '靛蓝紫', hex: '#635BFF' },
+  { name: '琥珀橙', hex: '#D97706' },
+  { name: '极简单色', hex: '#1E293B' },
+];
+---
+
+<section id="features" class="scroll-mt-20 py-16 sm:py-24">
+  <div class="mx-auto max-w-6xl px-5 sm:px-8">
+    <div class="max-w-2xl">
+      <div
+        class="text-xs font-semibold tracking-[0.14em] uppercase"
+        style="color: var(--ark-brand);"
+      >
+        Core Capabilities
+      </div>
+      <h2
+        class="mt-3 text-3xl font-bold tracking-[-0.03em] sm:text-[2.25rem]"
+        style="color: var(--ark-ink);"
+      >
+        简于界面，强于内核
+      </h2>
+      <p class="mt-3.5 text-base leading-relaxed" style="color: var(--ark-ink-muted);">
+        日常连接三步即用；当你需要精细分流、脚本覆写、链路诊断与跨设备同步时，整套能力就在手边。
+      </p>
+    </div>
+
+    <!-- Bento Grid 特性矩阵 -->
+    <div class="mt-12 grid grid-cols-1 gap-5 md:grid-cols-6">
+      <!-- 卡片 1：全场景订阅与配置（span 4） -->
+      <article class="ark-card ark-card-hover flex flex-col justify-between rounded-[28px] p-7 md:col-span-4">
+        <div>
+          <div
+            class="inline-flex h-10 w-10 items-center justify-center rounded-2xl"
+            style="background-color: var(--ark-brand-soft); color: var(--ark-brand);"
+          >
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="4" width="18" height="16" rx="3"></rect>
+              <path d="M7 9h10"></path>
+              <path d="M7 13h6"></path>
+            </svg>
+          </div>
+          <h3 class="mt-5 text-xl font-semibold tracking-[-0.02em]" style="color: var(--ark-ink);">
+            全场景订阅与结构化配置
+          </h3>
+          <p class="mt-2.5 max-w-xl text-sm leading-relaxed" style="color: var(--ark-ink-muted);">
+            支持扫码、相册识图以及 <code class="font-mono text-xs">clash://</code> / <code class="font-mono text-xs">clashmeta://</code> / <code class="font-mono text-xs">flclash://</code> 链接一键导入；原生支持 <strong>age 加密订阅</strong>、多条分享链接合成配置，也可从零结构化组装代理组、拨号链与规则，或直接编辑与预览完整 YAML。
+          </p>
+        </div>
+
+        <div class="mt-7 flex flex-wrap gap-2">
+          {
+            ['扫码与相册导入', 'age 私钥解密更新', 'URL Scheme 唤起', '批量节点合成', '结构化自定义配置', '每配置独立选点'].map(
+              (tag) => (
+                <span
+                  class="rounded-full border px-3 py-1 text-xs font-medium"
+                  style="border-color: var(--ark-border); background-color: var(--ark-bg); color: var(--ark-ink-muted);"
+                >
+                  {tag}
+                </span>
+              ),
+            )
+          }
+        </div>
+      </article>
+
+      <!-- 卡片 2：13 项主流服务协议探测（span 2） -->
+      <article class="ark-card ark-card-hover flex flex-col justify-between rounded-[28px] p-7 md:col-span-2">
+        <div>
+          <h3 class="text-xl font-semibold tracking-[-0.02em]" style="color: var(--ark-ink);">
+            13 项服务协议探测
+          </h3>
+          <p class="mt-2 text-sm leading-relaxed" style="color: var(--ark-ink-muted);">
+            按当前规则由内核直拨专用多步校验协议，真实判定地区与受限状态，拒绝首页 HEAD 误报。
+          </p>
+        </div>
+
+        <div class="mt-6 grid grid-cols-4 gap-2.5">
+          {
+            services.map((svc) => (
+              <div
+                title={svc.name}
+                class="flex aspect-square items-center justify-center rounded-2xl border bg-white p-2.5 shadow-2xs transition-transform duration-200 hover:scale-105 dark:bg-slate-100/95"
+                style="border-color: var(--ark-border);"
+              >
+                <img
+                  src={withBase(`/assets/services/${svc.icon}`)}
+                  alt={svc.name}
+                  width="24"
+                  height="24"
+                  loading="lazy"
+                  class="h-6 w-6 object-contain"
+                />
+              </div>
+            ))
+          }
+        </div>
+      </article>
+
+      <!-- 卡片 3：可编排的进阶覆写管线（span 3） -->
+      <article class="ark-card ark-card-hover flex flex-col justify-between rounded-[28px] p-7 md:col-span-3">
+        <div>
+          <div
+            class="inline-flex h-10 w-10 items-center justify-center rounded-2xl"
+            style="background-color: var(--ark-brand-soft); color: var(--ark-brand);"
+          >
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
+            </svg>
+          </div>
+          <h3 class="mt-5 text-xl font-semibold tracking-[-0.02em]" style="color: var(--ark-ink);">
+            可编排的覆写与自定义资源
+          </h3>
+          <p class="mt-2.5 text-sm leading-relaxed" style="color: var(--ark-ink-muted);">
+            在 VPN 进程内安全执行 QuickJS 脚本，配合全局/配置级附加规则、命名出口、托管规则集（YAML / Text / MRS）、本地代理库、正则筛选预设与图标集，并支持全局 DNS 逐项覆写与鸿蒙系统 DNS 追加。
+          </p>
+        </div>
+
+        <!-- 清晰管线图 -->
+        <div
+          class="mt-6 flex flex-wrap items-center gap-2 rounded-2xl border p-3.5 text-xs font-medium"
+          style="border-color: var(--ark-border); background-color: var(--ark-bg);"
+        >
+          <span class="rounded-lg px-2.5 py-1" style="background-color: var(--ark-bg-elevated); color: var(--ark-ink);">
+            源配置
+          </span>
+          <span style="color: var(--ark-ink-soft);" aria-hidden="true">→</span>
+          <span
+            class="rounded-lg px-2.5 py-1"
+            style="background-color: var(--ark-brand-soft); color: var(--ark-brand);"
+          >
+            QuickJS 脚本
+          </span>
+          <span style="color: var(--ark-ink-soft);" aria-hidden="true">→</span>
+          <span class="rounded-lg px-2.5 py-1" style="background-color: var(--ark-bg-elevated); color: var(--ark-ink);">
+            附加规则
+          </span>
+          <span style="color: var(--ark-ink-soft);" aria-hidden="true">→</span>
+          <span class="rounded-lg px-2.5 py-1" style="background-color: var(--ark-bg-elevated); color: var(--ark-ink);">
+            平台与 DNS
+          </span>
+        </div>
+      </article>
+
+      <!-- 卡片 4：实时诊断与流量洞察（span 3） -->
+      <article class="ark-card ark-card-hover flex flex-col justify-between rounded-[28px] p-7 md:col-span-3">
+        <div>
+          <div
+            class="inline-flex h-10 w-10 items-center justify-center rounded-2xl"
+            style="background-color: var(--ark-brand-soft); color: var(--ark-brand);"
+          >
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+            </svg>
+          </div>
+          <h3 class="mt-5 text-xl font-semibold tracking-[-0.02em]" style="color: var(--ark-ink);">
+            低耗电全链路实时诊断
+          </h3>
+          <p class="mt-2.5 text-sm leading-relaxed" style="color: var(--ark-ink-muted);">
+            应用存活期间在内存环持续采集最近 2,000 条请求与 3,000 条 DNS 查询，离开页面不丢记录、不落盘；工具页提供连接筛选/分组/关闭、DNS 缓存清理与 5,000 条日志捕获导出。
+          </p>
+        </div>
+
+        <!-- 极简实时连接示意列表 -->
+        <div
+          class="mt-6 space-y-2 rounded-2xl border p-3.5 font-mono text-[11.5px]"
+          style="border-color: var(--ark-border); background-color: var(--ark-bg);"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <span class="truncate" style="color: var(--ark-ink);">
+              <span class="mr-2 rounded px-1.5 py-0.5 text-[10px]" style="background-color: var(--ark-brand-soft); color: var(--ark-brand);">TCP</span>
+              api.github.com:443
+            </span>
+            <span class="tabular-nums shrink-0" style="color: var(--ark-ink-soft);">PROXY · 38 ms</span>
+          </div>
+          <div class="flex items-center justify-between gap-2 border-t pt-2" style="border-color: var(--ark-border);">
+            <span class="truncate" style="color: var(--ark-ink);">
+              <span class="mr-2 rounded bg-emerald-500/12 px-1.5 py-0.5 text-[10px] text-emerald-600 dark:text-emerald-400">DNS</span>
+              claude.ai · AAAA
+            </span>
+            <span class="tabular-nums shrink-0" style="color: var(--ark-ink-soft);">CACHE · 1 ms</span>
+          </div>
+          <div class="flex items-center justify-between gap-2 border-t pt-2" style="border-color: var(--ark-border);">
+            <span class="truncate" style="color: var(--ark-ink);">
+              <span class="mr-2 rounded px-1.5 py-0.5 text-[10px]" style="background-color: var(--ark-brand-soft); color: var(--ark-brand);">UDP</span>
+              dns.google:443
+            </span>
+            <span class="tabular-nums shrink-0" style="color: var(--ark-ink-soft);">DIRECT · 14 ms</span>
+          </div>
+        </div>
+      </article>
+
+      <!-- 卡片 5：内置 Geo 资源（span 2） -->
+      <article class="ark-card ark-card-hover flex flex-col justify-between rounded-[28px] p-7 md:col-span-2">
+        <div>
+          <div
+            class="inline-flex h-10 w-10 items-center justify-center rounded-2xl"
+            style="background-color: var(--ark-brand-soft); color: var(--ark-brand);"
+          >
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M2 12h20"></path>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+            </svg>
+          </div>
+          <h3 class="mt-5 text-xl font-semibold tracking-[-0.02em]" style="color: var(--ark-ink);">
+            内置 Geo 数据与热更新
+          </h3>
+          <p class="mt-2.5 text-sm leading-relaxed" style="color: var(--ark-ink-muted);">
+            内置 MMDB、ASN、GEOIP 与 GEOSITE；支持自定义源地址、24 小时自动更新与原子指针热切换，不重建 TUN。
+          </p>
+        </div>
+
+        <div class="mt-6 grid grid-cols-2 gap-2 font-mono text-[11px]">
+          {
+            ['MMDB', 'ASN', 'GEOIP', 'GEOSITE'].map((item) => (
+              <div
+                class="rounded-xl border px-3 py-2 text-center font-medium"
+                style="border-color: var(--ark-border); background-color: var(--ark-bg); color: var(--ark-ink-muted);"
+              >
+                {item}
+              </div>
+            ))
+          }
+        </div>
+      </article>
+
+      <!-- 卡片 6：OKLab 主题与安全备份（span 4） -->
+      <article class="ark-card ark-card-hover flex flex-col justify-between rounded-[28px] p-7 md:col-span-4">
+        <div>
+          <div
+            class="inline-flex h-10 w-10 items-center justify-center rounded-2xl"
+            style="background-color: var(--ark-brand-soft); color: var(--ark-brand);"
+          >
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path>
+            </svg>
+          </div>
+          <h3 class="mt-5 text-xl font-semibold tracking-[-0.02em]" style="color: var(--ark-ink);">
+            OKLab 动态外观与原子级备份恢复
+          </h3>
+          <p class="mt-2.5 max-w-xl text-sm leading-relaxed" style="color: var(--ark-ink-muted);">
+            从任意种子色在 OKLab 空间自动计算高对比度色板，实时预览浅色、深色、纯黑与沉浸光感；备份支持本地 ZIP 快照与 WebDAV 同步，由独立的 <code class="font-mono text-xs">libarkstore.so</code> 原子目录交换恢复，支持合并或覆盖。
+          </p>
+        </div>
+
+        <!-- 可轻点体验的色板预览条 -->
+        <div
+          class="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-4"
+          style="border-color: var(--ark-border); background-color: var(--ark-bg);"
+        >
+          <div class="flex items-center gap-2.5">
+            {
+              swatches.map((s, idx) => (
+                <button
+                  type="button"
+                  data-swatch-hex={s.hex}
+                  data-swatch-name={s.name}
+                  aria-label={`预览种子色：${s.name}`}
+                  class:list={[
+                    'ark-swatch h-7 w-7 cursor-pointer rounded-full border-2 transition-transform hover:scale-110',
+                    idx === 0 ? 'ring-2 ring-offset-2' : '',
+                  ]}
+                  style={`background-color: ${s.hex}; border-color: var(--ark-bg-elevated); --tw-ring-color: ${s.hex}; --tw-ring-offset-color: var(--ark-bg);`}
+                />
+              ))
+            }
+          </div>
+          <div class="flex items-center gap-2.5 text-xs">
+            <span id="ark-swatch-label" class="font-medium" style="color: var(--ark-ink-muted);">
+              种子色：鸿蒙蓝
+            </span>
+            <span
+              id="ark-swatch-pill"
+              class="rounded-full px-3 py-1 font-medium text-white transition-colors"
+              style="background-color: #007AFF;"
+            >
+              ZIP / WebDAV
+            </span>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<script>
+  const swatchButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.ark-swatch'));
+  const swatchLabel = document.getElementById('ark-swatch-label');
+  const swatchPill = document.getElementById('ark-swatch-pill');
+
+  swatchButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const hex = btn.dataset.swatchHex || '#007AFF';
+      const name = btn.dataset.swatchName || '鸿蒙蓝';
+      swatchButtons.forEach((item) => item.classList.remove('ring-2', 'ring-offset-2'));
+      btn.classList.add('ring-2', 'ring-offset-2');
+      if (swatchLabel) swatchLabel.textContent = `种子色：${name}`;
+      if (swatchPill) swatchPill.style.backgroundColor = hex;
+    });
+  });
+</script>

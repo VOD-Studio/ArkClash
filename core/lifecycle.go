@@ -436,6 +436,9 @@ func applyOverrides(rawCfg *config.RawConfig, opts startOptions) {
 	}
 	if opts.Profile != "" {
 		opts.DNS.Entries.apply(&rawCfg.DNS)
+		if opts.General.AppendSystemDNS {
+			appendSystemDNS(&rawCfg.DNS)
+		}
 	}
 
 	// 用户在界面上选过的出站模式和局域网代理优先于配置，热切换后不会被新配置改回去（ADR-0010）。

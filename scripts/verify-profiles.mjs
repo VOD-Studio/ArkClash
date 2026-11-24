@@ -1821,6 +1821,47 @@ test('给代理组设置和清除图标只修改该组的 YAML 字段', () => {
 });
 
 const customYaml = load(path.join(etsDir, 'shared/profiles/CustomProfileYaml.ets'));
+const customNetwork = load(path.join(etsDir, 'shared/profiles/CustomNetworkOptions.ets'));
+
+test('custom NTP and sniffer forms apply only edited settings', () => {
+  const source = `rules: ['MATCH,DIRECT']
+ntp: {enable: true, port: 123, dialer-proxy: DIRECT}
+sniffer:
+  skip-domain: [unchanged.example]
+  sniff:
+    http: {ports: [80, 8080-8090], override-destination: false}
+    TLS: {ports: [443]}
+`;
+  assert.equal(customNetwork.readCustomNetworkOptions(source, 'ntp').port, '123');
+  const fields = customNetwork.readCustomNetworkOptions(source, 'sniffer');
+  assert.equal(fields['sniff.HTTP.ports'], '80\n8080-8090');
+  assert.equal(fields['sniff.HTTP.override-destination'], 'false');
+  const ntp = customYaml.editCustomProfile(source, { kind: 'network', field: 'ntp',
+    networkChanges: { enable: 'false', interval: '60', port: null } });
+  const next = customYaml.editCustomProfile(ntp.source, { kind: 'network', field: 'sniffer', networkChanges: {
+    'sniff.HTTP.ports': '80\n8081-8090', 'sniff.HTTP.override-destination': null, 'sniff.QUIC': 'true',
+    'sniff.QUIC.ports': '443', 'sniff.TLS': null,
+  } });
+  const result = testYaml.parse(next.source);
+  assert.deepEqual(result.ntp, { enable: false, 'dialer-proxy': 'DIRECT', interval: 60 });
+  assert.deepEqual(result.sniffer, { 'skip-domain': ['unchanged.example'],
+    sniff: { http: { ports: ['80', '8081-8090'] }, QUIC: { ports: ['443'] } } });
+  assert.throws(() => customYaml.editCustomProfile(source, { kind: 'network', field: 'sniffer',
+    networkChanges: { 'sniff.HTTP.ports': '8090-8080' } }), /custom_network_invalid/);
+});
+
+test('editing legacy sniffer protocols preserves the settings of the remaining protocols', () => {
+  const source = "rules: ['MATCH,DIRECT']\nsniffer:\n  sniffing: [http, tls]\n  port-whitelist: [80, 443]\n";
+  assert.equal(customNetwork.readCustomNetworkOptions(source, 'sniffer')['sniff.HTTP.ports'], '80\n443');
+  const next = customYaml.editCustomProfile(source, { kind: 'network', field: 'sniffer',
+    networkChanges: { 'sniff.HTTP': null } });
+  assert.deepEqual(testYaml.parse(next.source).sniffer, { sniff: { TLS: { ports: [80, 443] } } });
+
+  const mixed = source + '  sniff: {HTTP: {}}\n';
+  const disabled = customYaml.editCustomProfile(mixed, { kind: 'network', field: 'sniffer',
+    networkChanges: { 'sniff.HTTP': null } });
+  assert.deepEqual(testYaml.parse(disabled.source).sniffer, { sniff: {} });
+});
 
 test('custom profile can be assembled from empty YAML and retains final rule order', () => {
   let draft = customYaml.editCustomProfile(customYaml.CUSTOM_EMPTY_YAML);

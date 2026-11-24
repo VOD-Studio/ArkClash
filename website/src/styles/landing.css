@@ -1,0 +1,153 @@
+@import 'tailwindcss';
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@theme {
+  --font-sans:
+    'HarmonyOS Sans SC', 'PingFang SC', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Noto Sans SC', sans-serif;
+  --font-mono:
+    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+:root {
+  color-scheme: light;
+  --ark-bg: #f6f8fb;
+  --ark-bg-elevated: #ffffff;
+  --ark-bg-subtle: #eef2f7;
+  --ark-bg-nav: rgba(246, 248, 251, 0.78);
+  --ark-border: rgba(15, 23, 42, 0.08);
+  --ark-border-strong: rgba(15, 23, 42, 0.14);
+  --ark-ink: #0f172a;
+  --ark-ink-muted: #4b586b;
+  --ark-ink-soft: #748296;
+  --ark-brand: #007aff;
+  --ark-brand-hover: #0066e0;
+  --ark-brand-soft: rgba(0, 122, 255, 0.1);
+  --ark-brand-ring: rgba(0, 122, 255, 0.22);
+  --ark-shadow-card:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px -16px rgba(15, 23, 42, 0.09);
+  --ark-shadow-phone:
+    0 24px 64px -20px rgba(15, 23, 42, 0.24),
+    0 4px 16px -4px rgba(15, 23, 42, 0.1);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --ark-bg: #0a0d12;
+  --ark-bg-elevated: #12161f;
+  --ark-bg-subtle: #191f2c;
+  --ark-bg-nav: rgba(10, 13, 18, 0.78);
+  --ark-border: rgba(255, 255, 255, 0.08);
+  --ark-border-strong: rgba(255, 255, 255, 0.15);
+  --ark-ink: #f1f5f9;
+  --ark-ink-muted: #9aa6b8;
+  --ark-ink-soft: #6c798c;
+  --ark-brand: #5ca3ff;
+  --ark-brand-hover: #7ab5ff;
+  --ark-brand-soft: rgba(92, 163, 255, 0.14);
+  --ark-brand-ring: rgba(92, 163, 255, 0.26);
+  --ark-shadow-card:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 12px 32px -18px rgba(0, 0, 0, 0.55);
+  --ark-shadow-phone:
+    0 28px 72px -16px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+html {
+  font-family: var(--font-sans);
+  background-color: var(--ark-bg);
+  color: var(--ark-ink);
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background-color: var(--ark-bg);
+  color: var(--ark-ink);
+  overflow-x: clip;
+}
+
+/* 顶部极克制的氛围光晕，仅用于提亮首屏空间感 */
+.ark-hero-wash {
+  background:
+    radial-gradient(60% 48% at 50% 0%, var(--ark-brand-soft), transparent 72%);
+}
+
+.ark-card {
+  background-color: var(--ark-bg-elevated);
+  border: 1px solid var(--ark-border);
+  box-shadow: var(--ark-shadow-card);
+  transition:
+    border-color 200ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ark-card-hover:hover {
+  border-color: var(--ark-border-strong);
+  transform: translateY(-2px);
+}
+
+.ark-glass {
+  background-color: var(--ark-bg-nav);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.ark-pill-primary {
+  background-color: var(--ark-brand);
+  color: #ffffff;
+  box-shadow: 0 8px 24px -8px var(--ark-brand-ring);
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+:root[data-theme='dark'] .ark-pill-primary {
+  color: #061325;
+}
+
+.ark-pill-primary:hover {
+  background-color: var(--ark-brand-hover);
+  transform: translateY(-1px);
+}
+
+.ark-pill-secondary {
+  background-color: var(--ark-bg-elevated);
+  color: var(--ark-ink);
+  border: 1px solid var(--ark-border-strong);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.ark-pill-secondary:hover {
+  background-color: var(--ark-bg-subtle);
+  transform: translateY(-1px);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .ark-card,
+  .ark-pill-primary,
+  .ark-pill-secondary {
+    transition: none;
+  }
+  .ark-card-hover:hover,
+  .ark-pill-primary:hover,
+  .ark-pill-secondary:hover {
+    transform: none;
+  }
+}

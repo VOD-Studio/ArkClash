@@ -27,8 +27,11 @@ export function verifySettingsContract(text: string): void {
   const settings = checkedGeneralSettings(request.settings);
   if (request.bootId !== 'fixture-boot' || request.expectedRevision !== defaults.revision ||
     settings.revision !== '9007199254740993' || settings.userAgent !== '契约测试 🧪' ||
-    settings.closeConnections !== false || settings.captureLogs !== false) {
-    throw new Error('请求字段应保留原始文本、修订和显式 false');
+    settings.closeConnections !== false || settings.captureLogs !== false ||
+    settings.coreOverrides?.testUrl !== 'https://cp.cloudflare.com/generate_204' ||
+    settings.coreOverrides?.unifiedDelay !== true || settings.coreOverrides?.tcpConcurrent !== false ||
+    settings.coreOverrides?.ipv6 !== false || settings.coreOverrides?.geodataLoader !== 'memconservative') {
+    throw new Error('请求字段应保留原始文本、修订、内核覆写和显式 false');
   }
   if (profileSettingsRequestJson<GeneralSettings>(request.bootId, request.expectedRevision, settings) !==
     JSON.stringify(request)) {

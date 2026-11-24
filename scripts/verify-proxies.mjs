@@ -24,7 +24,7 @@ const listUrl = await sourceModule('../entry/src/main/ets/components/KeyedListSo
 const proxyList = await import(listUrl);
 const viewUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyView.ets',
   `import { KeyedListSource } from ${JSON.stringify(listUrl)};\n` +
-  `import { isProxyGroup, proxyMemberNode } from ${JSON.stringify(clientUrl)};\n` +
+  `import { isProxyGroup, proxyMemberNode, PROXY_TEST_URL } from ${JSON.stringify(clientUrl)};\n` +
   `import { canTestProxy, proxyDelayKey, proxyGroupNames, proxyMembers, proxyPinnedMemberId, resolveProxyLeaf, selectableProxyGroup } from ${JSON.stringify(logicUrl)};\n`);
 const view = await import(viewUrl);
 
@@ -170,7 +170,7 @@ async function consumerHarness() {
     `import { copyProxyStyle, defaultProxyStyle } from ${JSON.stringify(logicUrl)};\n` +
     `import { loadProxyPreferences, saveProxyStyle, saveProxyView } from ${JSON.stringify(preferencesUrl)};\n`);
   const probesUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyTests.ets',
-    `import { cancelProxyDelayOwner, proxyMemberNode, testProxyDelays } from ${JSON.stringify(boundClientUrl)};\n` +
+    `import { cancelProxyDelayOwner, proxyMemberNode, PROXY_TEST_URL, testProxyDelays } from ${JSON.stringify(boundClientUrl)};\n` +
     `import { newId } from ${JSON.stringify(fixtureUrl)};\n` +
     `import { canTestProxy, defaultProxyStyle, proxyDelayKey, proxyGroupNames, proxyMembers, resolveProxyLeaf } from ${JSON.stringify(logicUrl)};\n`);
   return { fixtureUrl, native, client: await import(boundClientUrl), preferences: await import(preferencesUrl),
@@ -1045,6 +1045,7 @@ test('预热未连接的节点页与picker支持选择和测速，连断不清�
     `import { ProxyTestSession } from ${JSON.stringify(harness.probesUrl)};\n` +
     `import { proxyColumnCount, proxyGroupNames, validProxyView } from ${JSON.stringify(logicUrl)};\n` +
     `import { applyProxyDelayViews, buildProxyViews } from ${JSON.stringify(viewUrl)};\n` +
+    `const PROXY_TEST_URL = ${JSON.stringify(client.PROXY_TEST_URL)};\n` +
     `let current; export function setSnapshot(next) { current = next; }\n` +
     `export let attempts = 0;\n` +
     `export const connection = { coreReady: true, coreStarting: false, connected: false, busy: false,
@@ -1235,4 +1236,36 @@ test('代理节点保存到本地节点库按实例身份提取、校验并处�
   } finally {
     await fsp.rm(dir, { recursive: true, force: true });
   }
+});
+
+test('全局测速地址作为无自定义 url 代理组的默认测速地址，代理组自带 url 仍优先', async () => {
+  const customUrl = 'https://cp.cloudflare.com/generate_204';
+  assert.equal(logic.proxyTestUrl('', customUrl), customUrl);
+  assert.equal(logic.proxyTestUrl('https://group.example/204', customUrl), 'https://group.example/204');
+  assert.equal(logic.proxyTestUrl('', 'not-a-url'), client.PROXY_TEST_URL);
+  const state = snapshot();
+  state.online = true;
+  state.bootId = 'boot-test-url';
+  state.configRevision = 3;
+  const mainLeaf = logic.resolveProxyLeaf(state, 'Alpha US', state.nodes.Main.url, 'Main', customUrl);
+  assert.equal(mainLeaf.url, customUrl);
+  const autoLeaf = logic.resolveProxyLeaf(state, 'Alpha US', state.nodes.Auto.url, 'Auto', customUrl);
+  assert.equal(autoLeaf.url, 'https://example.org/204');
+  const harness = await consumerHarness();
+  const tests = new harness.ProxyTestSession(() => {}, () => {});
+  tests.start('/fixture', state, 'Main', '', 'Alpha US', customUrl);
+  await drainConsumers();
+  assert.equal(harness.native.requests.length, 1);
+  assert.equal(new URL(harness.native.requests[0].url).searchParams.get('url'), customUrl);
+  harness.native.requests[0].reply(200, '{"delay":55}');
+  await drainConsumers();
+  const views = view.buildProxyViews({
+    snapshot: state, style: logic.defaultProxyStyle(), view: { expanded: ['Main'], currentGroup: 'Main' },
+    query: '', columns: 2, latest: tests.latest, completedForGroup: name => tests.completedFor(name),
+    phases: tests.phases, pending: new Map(), testingGroups: tests.testingGroups, previous: [], picker: false,
+    defaultTestUrl: customUrl
+  });
+  const alpha = views.find(group => group.name === 'Main').nodes.find(node => node.id === 'Alpha US');
+  assert.equal(alpha.delay, 55);
+  tests.cancel();
 });

@@ -2,9 +2,18 @@ import { http } from '@kit.NetworkKit';
 import { call } from './Controller';
 import { ControllerSocket, ControllerSocketState } from './ControllerSocket';
 
+export type DiagnosticFeedTarget = 'live' | 'recent' | 'dns';
+
 export interface DiagnosticRuntime {
   bootId: string;
   configRevision: number;
+}
+
+export interface DiagnosticStatsFrame extends DiagnosticRuntime {
+  type: 'stats';
+  live: number;
+  recent: number;
+  dns: number;
 }
 
 export interface DiagnosticMetadata {
@@ -194,9 +203,108 @@ export function parseDiagnosticDns(text: string, runtime: DiagnosticRuntime): Di
   return frame;
 }
 
+export function parseDiagnosticStats(text: string, runtime: DiagnosticRuntime): DiagnosticStatsFrame {
+  const frame = diagnosticJson(text) as DiagnosticStatsFrame;
+  if (frame.type !== 'stats' || !validDiagnosticRuntime(frame) ||
+    frame.bootId !== runtime.bootId || frame.configRevision !== runtime.configRevision ||
+    !diagnosticCount(frame.live) || !diagnosticCount(frame.recent) || !diagnosticCount(frame.dns)) {
+    throw new Error('diagnostics_invalid_data');
+  }
+  return frame;
+}
+
 function diagnosticStreamPath(feed: string, runtime: DiagnosticRuntime): string {
   return `/arkclash/diagnostics/${feed}?expectedBootId=${encodeURIComponent(runtime.bootId)}` +
     `&expectedConfigRevision=${runtime.configRevision}`;
+}
+
+export function createDiagnosticStatsStream(runtime: DiagnosticRuntime,
+  onFrame: (frame: DiagnosticStatsFrame) => void,
+  onState: (state: ControllerSocketState) => void): ControllerSocket {
+  const identity: DiagnosticRuntime = { bootId: runtime.bootId, configRevision: runtime.configRevision };
+  const stream = new ControllerSocket(diagnosticStreamPath('stats', identity), (text: string): void => {
+    let frame: DiagnosticStatsFrame;
+    try { frame = parseDiagnosticStats(text, identity); }
+    catch (_error) { stream.fail('diagnostics_invalid_data'); return; }
+    onFrame(frame);
+  }, onState);
+  return stream;
+}
+
+@ObservedV2
+export class DiagnosticStats {
+  @Trace live: number = 0;
+  @Trace recent: number = 0;
+  @Trace dns: number = 0;
+  @Trace synced: boolean = false;
+  @Trace streamState: ControllerSocketState = 'closed';
+  private visible: boolean = false;
+  private ready: boolean = false;
+  private filesDir: string = '';
+  private runtime: DiagnosticRuntime = { bootId: '', configRevision: 0 };
+  private socket?: ControllerSocket;
+  private generation: number = 0;
+
+  observe(filesDir: string, visible: boolean, ready: boolean, bootId: string, configRevision: number): void {
+    this.filesDir = filesDir;
+    const valid = bootId !== '' && Number.isSafeInteger(configRevision) && configRevision > 0;
+    const nextBoot = valid ? bootId : '';
+    const nextRevision = valid ? configRevision : 0;
+    const runtimeChanged = nextBoot !== this.runtime.bootId || nextRevision !== this.runtime.configRevision;
+    if (runtimeChanged) {
+      this.runtime = { bootId: nextBoot, configRevision: nextRevision };
+      this.resetCounts();
+    }
+    this.visible = visible;
+    this.ready = ready && valid;
+    if (runtimeChanged || !this.visible || !this.ready || this.filesDir === '') {
+      this.stopStream();
+    }
+    if (this.visible && this.ready && this.filesDir !== '' && this.socket === undefined) {
+      this.startStream();
+    }
+  }
+
+  stop(): void {
+    this.visible = false;
+    this.stopStream();
+  }
+
+  private startStream(): void {
+    const generation = ++this.generation;
+    const identity: DiagnosticRuntime = { bootId: this.runtime.bootId, configRevision: this.runtime.configRevision };
+    const socket = createDiagnosticStatsStream(identity,
+      (frame: DiagnosticStatsFrame): void => {
+        if (generation !== this.generation || !this.visible || !this.ready) { return; }
+        this.live = frame.live;
+        this.recent = frame.recent;
+        this.dns = frame.dns;
+        this.synced = true;
+      },
+      (state: ControllerSocketState): void => {
+        if (generation !== this.generation) { return; }
+        this.streamState = state;
+        if (state !== 'open') { this.synced = false; }
+      });
+    this.socket = socket;
+    socket.start(this.filesDir);
+  }
+
+  private stopStream(): void {
+    ++this.generation;
+    const socket = this.socket;
+    this.socket = undefined;
+    socket?.stop();
+    this.synced = false;
+    this.streamState = 'closed';
+  }
+
+  private resetCounts(): void {
+    this.live = 0;
+    this.recent = 0;
+    this.dns = 0;
+    this.synced = false;
+  }
 }
 
 export function createConnectionsStream(runtime: DiagnosticRuntime,

@@ -8,7 +8,7 @@
 
 ## 决定
 
-- 运行时的查询和操作全部使用 mihomo 自带的 external-controller（REST + WebSocket），监听 `127.0.0.1:19090`，每次连接时由 UI 生成随机 secret。
+- 运行时的查询和操作使用 mihomo 自带的 external-controller（REST + WebSocket），监听 `127.0.0.1:19090`。现行流程由 UI 在拉起新宿主时生成随机 secret，普通连断复用该宿主。[ADR-0017](0017-core-ready-without-vpn.md)
 - 启动前的参数交接和启动失败的回报用 `filesDir` 下的文件（`shared/Runtime.ets`），因为扩展进程也可能被系统直接拉起，拿不到 UI 传的 Want 参数。
 
 ## 后果

@@ -1255,3 +1255,98 @@ test('旧代次close响应不能覆盖新代次pending动作或通知，clearCac
   assert.equal(dnsStore.notice, '');
   assert.equal(dnsStore.actionPending, false);
 }));
+
+test('DiagnosticStats 只在可见且核心就绪时订阅统计流，隐藏断开、代次变更归零且拒绝非法帧', async () => toolsCase(async h => {
+  const { DiagnosticStats, parseDiagnosticStats } = h.load('client/Diagnostics.ets');
+  assert.throws(() => parseDiagnosticStats('{"type":"connections"}', { bootId: 'boot-a', configRevision: 1 }),
+    /diagnostics_invalid_data/);
+  assert.throws(() => parseDiagnosticStats(JSON.stringify({
+    type: 'stats', bootId: 'boot-a', configRevision: 1, live: -1, recent: 0, dns: 0
+  }), { bootId: 'boot-a', configRevision: 1 }), /diagnostics_invalid_data/);
+  assert.throws(() => parseDiagnosticStats(JSON.stringify({
+    type: 'stats', bootId: 'boot-b', configRevision: 1, live: 0, recent: 0, dns: 0
+  }), { bootId: 'boot-a', configRevision: 1 }), /diagnostics_invalid_data/);
+
+  const stats = h.track(new DiagnosticStats());
+  stats.observe(h.context.filesDir, false, true, 'boot-a', 1);
+  stats.observe(h.context.filesDir, true, false, 'boot-a', 1);
+  await h.flush();
+  assert.equal(h.sockets.length, 0);
+
+  stats.observe(h.context.filesDir, true, true, 'boot-a', 1);
+  await h.flush();
+  assert.equal(h.sockets.length, 1);
+  const first = h.sockets[0];
+  assert.ok(first.address.includes('/arkclash/diagnostics/stats?expectedBootId=boot-a&expectedConfigRevision=1'));
+  const staleEmit = first.capture('message');
+  first.open();
+  first.emit({ type: 'stats', bootId: 'boot-a', configRevision: 1, live: 3, recent: 12, dns: 25 });
+  assert.equal(stats.synced, true);
+  assert.equal(stats.live, 3);
+  assert.equal(stats.recent, 12);
+  assert.equal(stats.dns, 25);
+
+  // 隐藏立即停流并取消重试，但保留最近显示数值避免切页闪回 0。
+  stats.observe(h.context.filesDir, false, true, 'boot-a', 1);
+  assert.equal(first.closed, true);
+  assert.equal(stats.live, 3);
+  assert.equal(stats.recent, 12);
+  assert.equal(stats.dns, 25);
+  assert.equal(h.timers.size, 0);
+
+  // 重新显示时按同一代次重连并接受刷新；旧 socket 回调无效。
+  stats.observe(h.context.filesDir, true, true, 'boot-a', 1);
+  await h.flush();
+  assert.equal(h.sockets.length, 2);
+  staleEmit(undefined, JSON.stringify({ type: 'stats', bootId: 'boot-a', configRevision: 1, live: 99, recent: 99, dns: 99 }));
+  assert.equal(stats.live, 3);
+  const second = h.sockets[1];
+  second.open();
+  second.emit({ type: 'stats', bootId: 'boot-a', configRevision: 1, live: 4, recent: 15, dns: 30 });
+  assert.equal(stats.live, 4);
+  assert.equal(stats.recent, 15);
+  assert.equal(stats.dns, 30);
+
+  // 配置代次变更时清零旧计数并切到新流。
+  stats.observe(h.context.filesDir, true, true, 'boot-a', 2);
+  assert.equal(second.closed, true);
+  assert.equal(stats.live, 0);
+  assert.equal(stats.recent, 0);
+  assert.equal(stats.dns, 0);
+  assert.equal(stats.synced, false);
+  await h.flush();
+  const third = h.sockets[2];
+  assert.ok(third.address.includes('expectedConfigRevision=2'));
+  third.open();
+  third.emit('{broken');
+  assert.equal(stats.streamState, 'failed');
+  assert.equal(third.closed, true);
+  assert.equal(h.timers.size, 0);
+}));
+
+test('仪表盘跳入连接页指定 initialFeed 不被异步偏好覆盖，普通打开仍恢复上次偏好', async () => toolsCase(async h => {
+  h.controls.preferences.set('diagnostics.requestFeed', 'live');
+  h.controls.preferences.set('diagnostics.grouping', 'rule');
+  const gate = deferredTools();
+  h.controls.preferenceGetGate = gate.promise;
+  const { ConnectionRecordsStore } = h.load('features/tools/RecordStores.ets');
+  const store = h.track(new ConnectionRecordsStore());
+  store.setConnection(true, 'boot-a', 1, true);
+  store.setVisible(true);
+  const loading = store.load(h.context, 'recent', true);
+  await h.flush();
+  assert.equal(store.feed, 'recent');
+  gate.resolve();
+  await loading;
+  assert.equal(store.feed, 'recent', '异步偏好不得覆写仪表盘指定的 initialFeed');
+  assert.equal(store.grouping, 'rule', '其余偏好（如分组）仍正常恢复');
+
+  // 页面保活重入（preserveFeed=true）不退回旧偏好。
+  h.controls.preferenceGetGate = undefined;
+  await store.load(h.context, undefined, true);
+  assert.equal(store.feed, 'recent');
+
+  // 从工具页普通打开（无 initialFeed、preserveFeed=false）恢复已保存偏好。
+  await store.load(h.context);
+  assert.equal(store.feed, 'live');
+}));

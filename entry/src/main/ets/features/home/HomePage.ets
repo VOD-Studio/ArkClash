@@ -5,6 +5,7 @@ import { curves, UIUtils } from '@kit.ArkUI';
 import { HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { TabPage } from '../../components/TabPage';
 import { uiResourceText } from '../../components/ResourceText';
+import { DiagnosticFeedTarget } from '../../client/Diagnostics';
 import { DashboardConnections } from './DashboardConnections';
 import { DashboardGroups } from './DashboardGroups';
 import { DashboardLan } from './DashboardLan';
@@ -53,6 +54,7 @@ export struct HomePage {
   @Event onUpdateProfile: () => void = () => {};
   @Event onOpenProxies: () => void = () => {};
   @Event onOpenResources: () => void = () => {};
+  @Event onOpenDiagnostic: (target: DiagnosticFeedTarget) => void = (_target: DiagnosticFeedTarget): void => {};
   @Event onEditingChanged: (editing: boolean) => void = () => {};
   @Local settings: DashboardSettings = dashboardSettings;
   @Local editing: boolean = false;
@@ -354,7 +356,8 @@ export struct HomePage {
       DashboardServices({ visible: this.visible, interactive: !this.editing, profileId: this.profileId,
         routeRevision: this.routeRevision })
     } else if (id === 'connections') {
-      DashboardConnections()
+      DashboardConnections({ visible: this.visible, interactive: !this.editing,
+        onOpen: (target: DiagnosticFeedTarget): void => { this.onOpenDiagnostic(target); } })
     } else if (id === 'lan') {
       DashboardLan({ visible: this.visible, interactive: !this.editing, routeRevision: this.routeRevision })
     } else if (id === 'memory') {

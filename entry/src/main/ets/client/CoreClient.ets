@@ -193,7 +193,7 @@ async function performStartCore(context: common.UIAbilityContext, mode: string,
       await vpnExtension.startVpnExtensionAbility(vpnWant(context));
     } catch (error) {
       if (error === undefined) {
-        throw new Error('VPN 授权被拒绝，请显式重试');
+        throw new Error('vpn_authorization_denied');
       }
       throw error as Error;
     }
@@ -242,7 +242,7 @@ interface VpnCommandBody {
 export async function connectVpn(context: common.UIAbilityContext, status: RuntimeStatus,
   isCurrent: () => boolean): Promise<RuntimeStatus> {
   if (status.profile === '') {
-    throw new Error('请先选择配置');
+    throw new Error('vpn_no_profile');
   }
   return changeVpn(context, status, true, isCurrent);
 }

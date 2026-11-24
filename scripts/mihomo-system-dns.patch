@@ -1,0 +1,59 @@
+--- a/dns/system.go
++++ b/dns/system.go
+@@ -27,6 +27,11 @@
+ 	dnsClients map[string]*systemDnsClient
+ 	lastFlush  time.Time
+ 	defaultNS  []dnsClient
++
++	ohosGeneration uint64
++	ohosClients    []dnsClient
++	ohosError      error
++	ohosRefresh    time.Duration
+ }
+
+ func (c *systemClient) ExchangeContext(ctx context.Context, m *D.Msg) (msg *D.Msg, err error) {
+--- a/dns/system_common.go
++++ b/dns/system_common.go
+@@ -12,9 +12,42 @@
+ 	"golang.org/x/exp/slices"
+ )
+
++var arkClashSystemDNS func() ([]string, error)
++var arkClashSystemDNSGeneration func() uint64
++
++// SetArkClashSystemDNS 在内核初始化时为显式 system:// 上游提供鸿蒙默认网络的 DNS。
++func SetArkClashSystemDNS(read func() ([]string, error), generation func() uint64) {
++	arkClashSystemDNS = read
++	arkClashSystemDNSGeneration = generation
++}
++
++func (c *systemClient) getArkClashDNSClients() ([]dnsClient, error) {
++	generation := arkClashSystemDNSGeneration()
++	if c.ohosGeneration == generation && time.Since(c.lastFlush) < c.ohosRefresh {
++		return c.ohosClients, c.ohosError
++	}
++	addresses, err := arkClashSystemDNS()
++	servers := make([]NameServer, 0, len(addresses))
++	for _, address := range addresses {
++		servers = append(servers, NameServer{Addr: net.JoinHostPort(address, "53"), Net: "udp"})
++	}
++	c.ohosClients = transform(servers, nil)
++	c.ohosError = err
++	c.ohosGeneration = generation
++	c.lastFlush = time.Now()
++	c.ohosRefresh = SystemDnsFlushTime
++	if len(servers) == 0 {
++		c.ohosRefresh = time.Second
++	}
++	return c.ohosClients, c.ohosError
++}
++
+ func (c *systemClient) getDnsClients() ([]dnsClient, error) {
+ 	c.mu.Lock()
+ 	defer c.mu.Unlock()
++	if arkClashSystemDNS != nil && len(c.defaultNS) == 0 {
++		return c.getArkClashDNSClients()
++	}
+ 	var err error
+ 	if time.Since(c.lastFlush) > SystemDnsFlushTime {
+ 		var nameservers []string

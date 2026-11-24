@@ -2,6 +2,8 @@
 
 - 状态：已采纳（2026-11-07）；目标选择和节点恢复规则由 [0012](0012-profile-state-and-runtime-separation.md) 补充。
 
+本记录描述初版热切换。当前内核在切换时收尾旧代转发任务，业务入口与 DNS 监听的应用失败按现有事务处理。[ADR-0017](0017-core-ready-without-vpn.md) · [ADR-0021](0021-global-dns-overrides.md) · [ADR-0029](0029-general-settings-and-log-capture.md)
+
 ## 背景
 
 热切换（见 `GLOSSARY.md`）要求切换期间 VPN 不断开。mihomo 没有重载接口：`PUT /configs` 不经过 `applyOverrides`，配置里的 tun、controller 等字段会直接生效，而且 [0009](0009-arkclash-commands-on-controller.md) 已经把它关掉了。FlClash 的做法是在进程内调 `hub.ApplyConfig`。但这个函数里的 `applyRoute` 每次都会无条件关掉 controller 的 `http.Server` 再重开（`hub/route/server.go` 的 `start()`），触发重载的那个请求会被掐断，界面的 `/traffic`、`/connections`、`/logs` WebSocket 也会全部断开。

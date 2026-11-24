@@ -1,4 +1,5 @@
 import { Document, isMap, isSeq, parseDocument, ToJSOptions, ToStringOptions } from 'yaml';
+import { applyCustomNetworkOptions, CustomNetworkChanges } from './CustomNetworkOptions';
 import { ProfileYamlMapping, ProfileYamlSequence, readProfileYaml } from './ProfileYamlFields';
 
 type CustomYamlFields = Record<string, Object | undefined>;
@@ -52,6 +53,7 @@ export interface CustomProfileMutation {
   text?: string;
   field?: string;
   definition?: CustomYamlFields;
+  networkChanges?: CustomNetworkChanges;
 }
 
 const EDITABLE_SECTIONS: string[] = ['proxy-providers', 'rule-providers', 'dns', 'ntp', 'sniffer', 'sub-rules'];
@@ -364,6 +366,10 @@ function executeMutation(document: CustomYamlDocument, mutation: CustomProfileMu
     case 'section':
       if (!EDITABLE_SECTIONS.includes(key) && key !== 'rules' && key !== 'proxies') { throw new Error('custom_shape'); }
       replaceSection(document, key, mutation.text ?? '');
+      break;
+    case 'network':
+      if (key !== 'ntp' && key !== 'sniffer') { throw new Error('custom_shape'); }
+      if (mutation.networkChanges !== undefined) { applyCustomNetworkOptions(document, key, mutation.networkChanges); }
       break;
     case 'order':
       if (!['rules', 'proxy-groups', 'proxies'].includes(key)) { throw new Error('custom_shape'); }

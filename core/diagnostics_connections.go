@@ -106,7 +106,9 @@ func (c *diagnosticCollector) baselineConnection(tracker statistic.Tracker) {
 	entry := newDiagnosticConnection(tracker)
 	entry.live = true
 	c.liveCount++
+	c.liveAtomic.Store(int64(c.liveCount))
 	c.connections[entry.dto.ID] = entry
+	notifyDiagnosticStats()
 }
 
 func (c *diagnosticCollector) openConnection(tracker statistic.Tracker) {
@@ -123,10 +125,13 @@ func (c *diagnosticCollector) openConnection(tracker statistic.Tracker) {
 		entry = newDiagnosticConnection(tracker)
 		entry.live = true
 		c.liveCount++
+		c.liveAtomic.Store(int64(c.liveCount))
 		c.connections[entry.dto.ID] = entry
 	}
 	entry.recent = true
 	c.appendRecentLocked(entry)
+	c.recentAtomic.Store(int64(len(c.recent)))
+	notifyDiagnosticStats()
 	if len(c.sessions) != 0 {
 		c.broadcastLocked(diagnosticEvent{kind: "opened", connection: entry.dto})
 		c.scheduleSampleLocked(time.Now())
@@ -169,6 +174,8 @@ func (c *diagnosticCollector) closeConnection(tracker statistic.Tracker) {
 	entry.closed = true
 	if entry.live {
 		c.liveCount--
+		c.liveAtomic.Store(int64(c.liveCount))
+		notifyDiagnosticStats()
 	}
 	entry.live = false
 	visible := len(c.sessions) != 0

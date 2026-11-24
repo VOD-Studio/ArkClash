@@ -63,6 +63,8 @@ interface VpnQueuedOperation {
   pending?: Promise<Object>;
 }
 
+type VpnIntent = 'started' | 'stopped';
+
 interface VpnCleanupResult {
   errors: string[];
   canceled?: VpnCommandError;
@@ -260,7 +262,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     return core.runtimeStatus().then((body: string): VpnNativeStatus => JSON.parse(body) as VpnNativeStatus);
   }
 
-  private async checkRequest(request: VpnOperationRequest, name: string,
+  private async checkRequest(request: VpnOperationRequest, intent: VpnIntent,
     generation: number): Promise<RuntimeConfig> {
     this.checkGeneration(generation);
     let runtime: RuntimeConfig | undefined = undefined;
@@ -272,17 +274,18 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     }
     this.checkGeneration(generation);
     if (runtime === undefined || runtime.secret !== this.runtimeSecret || request.bootId !== this.bootId ||
-      runtime.vpnOperation !== request.operationId || runtime.vpnIntent !== (name === 'connect' ? 'started' : 'stopped')) {
+      runtime.vpnOperation !== request.operationId || runtime.vpnIntent !== intent) {
       throw new VpnCommandError(409, 'conflict');
     }
     return runtime;
   }
 
-  private async checkOperation(operation: VpnQueuedOperation): Promise<RuntimeConfig> {
+  private async checkOperation(operation: VpnQueuedOperation,
+    intent: VpnIntent = operation.name === 'connect' ? 'started' : 'stopped'): Promise<RuntimeConfig> {
     if (this.latestOperation !== operation) {
       throw new VpnCommandError(409, 'conflict');
     }
-    const runtime = await this.checkRequest(operation.request, operation.name, operation.generation);
+    const runtime = await this.checkRequest(operation.request, intent, operation.generation);
     if (this.latestOperation !== operation) {
       throw new VpnCommandError(409, 'conflict');
     }
@@ -303,7 +306,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     }
     const generation = this.generation;
     await this.startup;
-    await this.checkRequest(request, name, generation);
+    await this.checkRequest(request, name === 'connect' ? 'started' : 'stopped', generation);
     const previous = this.latestOperation;
     if (previous !== undefined && previous.request.operationId === request.operationId) {
       if (previous.name !== name || previous.request.bootId !== request.bootId ||
@@ -443,13 +446,33 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     return stopped;
   }
 
-  private async observeCleanup(operation: VpnQueuedOperation | undefined, result: VpnCleanupResult): Promise<void> {
+  private async observeCleanup(operation: VpnQueuedOperation | undefined, result: VpnCleanupResult,
+    intent?: VpnIntent): Promise<void> {
     if (operation !== undefined) {
       try {
-        await this.checkOperation(operation);
+        await this.checkOperation(operation, intent);
       } catch (error) {
         result.canceled = error as VpnCommandError;
       }
+    }
+  }
+
+  private async resetFailedConnectIntent(operation: VpnQueuedOperation, result: VpnCleanupResult): Promise<boolean> {
+    const filesDir = this.context.filesDir;
+    try {
+      await withProfileStorage<void>(filesDir, async (): Promise<void> => {
+        const runtime = await this.checkOperation(operation);
+        runtime.vpnIntent = 'stopped';
+        await writeRuntime(filesDir, runtime);
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof VpnCommandError) {
+        result.canceled = error;
+      } else {
+        result.errors.push('vpn_state_failed');
+      }
+      return false;
     }
   }
 
@@ -476,8 +499,13 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       await this.observeCleanup(operation, result);
     }
     if (this.nativeInitialized) {
-      let intent = 'stopped';
-      if (!forceStopped && !this.stopped) {
+      let intent: VpnIntent = 'stopped';
+      let resetIntent = false;
+      if (!forceStopped && !this.stopped && operation?.name === 'connect' &&
+        result.errors.length === 0 && result.canceled === undefined) {
+        resetIntent = await this.resetFailedConnectIntent(operation, result);
+      }
+      if (!forceStopped && !this.stopped && !resetIntent) {
         try {
           const runtime = await readRuntime(this.context.filesDir);
           if (runtime?.secret === this.runtimeSecret && runtime.vpnIntent === 'started') {
@@ -495,7 +523,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       } catch (_error) {
         result.errors.push('vpn_state_failed');
       }
-      await this.observeCleanup(operation, result);
+      await this.observeCleanup(operation, result, resetIntent ? 'stopped' : undefined);
     }
     return result;
   }

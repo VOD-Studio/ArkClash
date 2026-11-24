@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/metacubex/mihomo/component/resolver"
@@ -12,6 +13,31 @@ import (
 	"github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/dns"
 )
+
+func TestAppendSystemDNSPreservesEffectiveUpstream(t *testing.T) {
+	for _, tc := range []struct {
+		configured []string
+		want       []string
+	}{
+		{[]string{"tls://1.1.1.1"}, []string{"tls://1.1.1.1", "system://"}},
+		{[]string{"9.9.9.9", "dhcp://system"}, []string{"9.9.9.9", "dhcp://system"}},
+		{[]string{"9.9.9.9", "system://#DIRECT"}, []string{"9.9.9.9", "system://#DIRECT"}},
+	} {
+		raw := config.DefaultRawConfig()
+		raw.DNS.NameServer = []string{"8.8.8.8"}
+		opts := startOptions{Profile: "test", General: generalSettings{AppendSystemDNS: true},
+			DNS: dnsOverrideSettings{Entries: dnsOverrideEntries{Servers: &tc.configured}}}
+		applyOverrides(raw, opts)
+		if !slices.Equal(raw.DNS.NameServer, tc.want) {
+			t.Fatalf("enabled with %v: got %v want %v", tc.configured, raw.DNS.NameServer, tc.want)
+		}
+		opts.General.AppendSystemDNS = false
+		applyOverrides(raw, opts)
+		if !slices.Equal(raw.DNS.NameServer, tc.configured) {
+			t.Fatalf("disabled with %v: got %v", tc.configured, raw.DNS.NameServer)
+		}
+	}
+}
 
 func TestDNSOverridesOnlyReplaceAddedFields(t *testing.T) {
 	raw := config.DefaultRawConfig()

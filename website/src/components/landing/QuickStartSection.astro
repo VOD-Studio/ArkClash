@@ -1,0 +1,86 @@
+---
+import { withBase } from '../../lib/paths';
+
+const steps = [
+  {
+    num: '01',
+    title: '签名并安装 HAP',
+    desc: '下载 GitHub Release 的 unsigned.hap，校验 SHA256SUMS 后使用自己的华为调试证书签名安装，或从源码构建。',
+  },
+  {
+    num: '02',
+    title: '导入订阅或配置',
+    desc: '支持扫码、相册识图、URL Scheme、age 加密订阅与本地 YAML，也可从空白结构化组装自定义配置。',
+  },
+  {
+    num: '03',
+    title: '授权并一键连接',
+    desc: '首次允许系统 VPN 授权后，即可在未连接时提前选节点测速；回到仪表盘轻点「连接」接管系统流量。',
+  },
+];
+---
+
+<section class="py-16 sm:py-24">
+  <div class="mx-auto max-w-6xl px-5 sm:px-8">
+    <div class="ark-card rounded-[32px] p-8 sm:p-12">
+      <div class="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+        <div class="max-w-xl">
+          <div
+            class="text-xs font-semibold tracking-[0.14em] uppercase"
+            style="color: var(--ark-brand);"
+          >
+            Quick Start
+          </div>
+          <h2
+            class="mt-3 text-3xl font-bold tracking-[-0.03em] sm:text-[2.15rem]"
+            style="color: var(--ark-ink);"
+          >
+            三步开启原生代理体验
+          </h2>
+          <p class="mt-3 text-sm leading-relaxed sm:text-base" style="color: var(--ark-ink-muted);">
+            需要 <strong>HarmonyOS 7（API 26）及以上的 ARM64 设备</strong>（也支持 x86_64 模拟器构建）。
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-3">
+          <a
+            href={withBase('/getting-started/installation/')}
+            class="ark-pill-primary rounded-full px-5 py-2.5 text-sm font-semibold no-underline"
+          >
+            安装与签名指南
+          </a>
+          <a
+            href={withBase('/developer/build-from-source/')}
+            class="ark-pill-secondary rounded-full px-5 py-2.5 text-sm font-semibold no-underline"
+          >
+            从源码构建
+          </a>
+        </div>
+      </div>
+
+      <div class="mt-10 grid grid-cols-1 gap-5 md:grid-cols-3">
+        {
+          steps.map((step) => (
+            <div
+              class="rounded-[22px] border p-6"
+              style="border-color: var(--ark-border); background-color: var(--ark-bg);"
+            >
+              <div
+                class="tabular-nums font-mono text-xs font-semibold"
+                style="color: var(--ark-brand);"
+              >
+                STEP {step.num}
+              </div>
+              <h3 class="mt-3 text-base font-semibold" style="color: var(--ark-ink);">
+                {step.title}
+              </h3>
+              <p class="mt-2 text-sm leading-relaxed" style="color: var(--ark-ink-muted);">
+                {step.desc}
+              </p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+</section>

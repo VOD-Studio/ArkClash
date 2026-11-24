@@ -5,7 +5,7 @@ import { getMainGroup, GroupSummary } from '../../client/Controller';
 import { traffic, Traffic } from '../../client/Traffic';
 import { formatSpeed } from '../../components/Format';
 import {
-  homeHasPendingCleanup, homeRunActionLabel, homeRuntimeAppearsStarted, homeShouldStopRuntime
+  homeHasPendingCleanup, homeRunActionLabel, homeRunFailureMessage, homeRuntimeAppearsStarted, homeShouldStopRuntime
 } from './HomeRunControls';
 
 const BUTTON_SIZE = 40;
@@ -18,11 +18,11 @@ const BUTTON_SIZE = 40;
 export struct ConnectionBar {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param expanded: boolean = false;
+  @Param visible: boolean = false;
   @Event onOpen: () => void = () => {};
   @Local conn: Connection = connection;
   @Local stats: Traffic = traffic;
   @Local group: GroupSummary | undefined = undefined;
-  @Local barHeight: number = 0;
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
   private generation: number = 0;
 
@@ -40,33 +40,42 @@ export struct ConnectionBar {
   }
 
   build() {
-    Row({ space: 10 }) {
-      Button({ type: ButtonType.Circle }) {
-        if (this.conn.busy) {
-          LoadingProgress()
-            .width(22)
-            .height(22)
-            .color(this.connectedLike() ? this.appStyle.palette.onBrand : this.appStyle.palette.brand)
-        } else {
-          SymbolGlyph(this.connectedLike() ? $r('sys.symbol.pause') : $r('sys.symbol.power'))
-            .fontSize(20)
-            .fontColor([this.connectedLike() ? this.appStyle.palette.onBrand : this.appStyle.palette.brand])
+    Row({ space: 2 }) {
+      // 迷你栏重建时也能在首帧居中，展开时按钮仍在左端等高的正方形内。
+      Stack({ alignContent: Alignment.Center }) {
+        Button({ type: ButtonType.Circle }) {
+          if (this.conn.busy) {
+            LoadingProgress()
+              .width(22)
+              .height(22)
+              .color(this.connectedLike() ? this.appStyle.palette.onBrand : this.appStyle.palette.brand)
+          } else {
+            SymbolGlyph(this.connectedLike() ? $r('sys.symbol.pause') : $r('sys.symbol.power'))
+              .fontSize(20)
+              .fontColor([this.connectedLike() ? this.appStyle.palette.onBrand : this.appStyle.palette.brand])
+          }
         }
+        .width(BUTTON_SIZE)
+        .height(BUTTON_SIZE)
+        .backgroundColor(this.connectedLike() ? this.appStyle.palette.brand : this.appStyle.palette.brandSoft)
+        .enabled(this.conn.state !== ConnectionState.Disconnecting)
+        .accessibilityText(homeRunActionLabel(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
+          this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState))
+        .onClick((): void => {
+          const shouldStop = homeShouldStopRuntime(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
+            this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState);
+          const operation = shouldStop ? this.conn.disconnect(this.context) : this.conn.connect(this.context);
+          operation.catch((error: Error): void => {
+            if (this.visible) {
+              const message = homeRunFailureMessage(error.message, this.cleanupPending(),
+                shouldStop ? $r('app.string.dash_vpn_stop_failed') : $r('app.string.dash_vpn_connect_failed'));
+              this.getUIContext().getPromptAction().showToast({ message: message, duration: 4000 });
+            }
+          });
+        })
       }
-      .width(BUTTON_SIZE)
-      .height(BUTTON_SIZE)
-      .backgroundColor(this.connectedLike() ? this.appStyle.palette.brand : this.appStyle.palette.brandSoft)
-      .enabled(this.conn.state !== ConnectionState.Disconnecting)
-      .accessibilityText(homeRunActionLabel(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
-        this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState))
-      .onClick((): void => {
-        const shouldStop = homeShouldStopRuntime(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
-          this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState);
-        const operation = shouldStop ? this.conn.disconnect(this.context) : this.conn.connect(this.context);
-        operation.catch((error: Error): void => {
-          this.getUIContext().getPromptAction().showToast({ message: this.conn.error || error.message });
-        });
-      })
+      .height('100%')
+      .aspectRatio(1)
 
       if (this.expanded) {
         Column({ space: 2 }) {
@@ -86,28 +95,29 @@ export struct ConnectionBar {
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
+        .margin({ right: 12 })
         .onClick(() => this.onOpen())
       }
     }
     .height('100%')
-    // 收起时迷你栏是直径等于栏高的圆，按钮放在左端那个正方形的正中；展开后按钮位置不变。
-    .padding({ left: Math.max(0, (this.barHeight - BUTTON_SIZE) / 2), right: 12 })
-    .onAreaChange((_old: Area, area: Area) => {
-      this.barHeight = area.height as number;
-    })
   }
 
   private connectedLike(): boolean {
-    return homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated) ||
+    return homeRuntimeAppearsStarted(this.conn.intent, this.conn.forward, this.conn.listenersOpen,
+      this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState) ||
       this.conn.state === ConnectionState.Disconnecting;
+  }
+
+  private cleanupPending(): boolean {
+    return homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached,
+      this.conn.vpnCreated, this.conn.hostState);
   }
 
   private primaryText(): ResourceStr {
     if (this.conn.hostState === 'unknown' && !this.conn.busy) {
       return $r('app.string.dash_runtime_unknown');
     }
-    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated) &&
-      this.conn.state !== ConnectionState.Disconnecting) {
+    if (this.cleanupPending() && this.conn.state !== ConnectionState.Disconnecting) {
       return $r('app.string.dash_cleanup_required');
     }
     if (this.conn.coreReady && this.group !== undefined) {
@@ -129,7 +139,7 @@ export struct ConnectionBar {
     if (this.conn.hostState === 'unknown' && !this.conn.busy) {
       return $r('app.string.dash_runtime_tap_to_confirm');
     }
-    if (homeHasPendingCleanup(this.conn.forward, this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated)) {
+    if (this.cleanupPending()) {
       return $r('app.string.dash_stop_retry');
     }
     if (!this.conn.connected) {

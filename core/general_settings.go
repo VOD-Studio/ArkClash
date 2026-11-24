@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"net/url"
 	"os"
 	"reflect"
 	"strconv"
@@ -39,17 +40,29 @@ type generalAuthentication struct {
 	Password string `json:"password"`
 }
 
+// 内核可选覆写项；指针为 nil 表示未覆写，沿用配置或内核默认值。
+type generalCoreOverrides struct {
+	TestURL       *string `json:"testUrl,omitempty"`
+	UnifiedDelay  *bool   `json:"unifiedDelay,omitempty"`
+	TCPConcurrent *bool   `json:"tcpConcurrent,omitempty"`
+	IPv6          *bool   `json:"ipv6,omitempty"`
+	GeodataLoader *string `json:"geodataLoader,omitempty"`
+}
+
 type generalSettings struct {
 	Revision         string                 `json:"revision"`
 	Ports            *generalPorts          `json:"ports,omitempty"`
 	Authentication   *generalAuthentication `json:"authentication,omitempty"`
 	ControllerSecret string                 `json:"controllerSecret"`
 	UserAgent        string                 `json:"userAgent"`
+	UserAgents       []string               `json:"userAgents,omitempty"`
+	AppendSystemDNS  bool                   `json:"appendSystemDns,omitempty"`
 	Hosts            map[string][]string    `json:"hosts"`
 	DelayTimeout     int                    `json:"delayTimeout"`
 	CloseConnections *bool                  `json:"closeConnections,omitempty"`
 	LogLevel         string                 `json:"logLevel"`
 	CaptureLogs      bool                   `json:"captureLogs"`
+	CoreOverrides    *generalCoreOverrides  `json:"coreOverrides,omitempty"`
 }
 
 const panelPort = 9090
@@ -80,6 +93,16 @@ func validGeneralText(value string, limit int) bool {
 func (s generalSettings) validate() error {
 	if !validGeneralText(s.Revision, 96) || s.Revision == "" || !validGeneralText(s.UserAgent, 512) {
 		return errGeneralInvalid
+	}
+	if len(s.UserAgents) > 64 {
+		return errGeneralInvalid
+	}
+	agents := make(map[string]bool, len(s.UserAgents))
+	for _, agent := range s.UserAgents {
+		if agent == "" || !validGeneralText(agent, 512) || agents[agent] {
+			return errGeneralInvalid
+		}
+		agents[agent] = true
 	}
 	switch s.DelayTimeout {
 	case 500, 1000, 2000, 5000, 8000:
@@ -117,7 +140,61 @@ func (s generalSettings) validate() error {
 			return errGeneralInvalid
 		}
 	}
+	if err := validateGeneralCoreOverrides(s.CoreOverrides); err != nil {
+		return err
+	}
 	return validateGeneralHosts(s.Hosts)
+}
+
+func validGeneralTestURL(value string) bool {
+	if value == "" || !validGeneralText(value, 2048) || strings.ContainsAny(value, " \t") {
+		return false
+	}
+	parsed, err := url.Parse(value)
+	return err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Hostname() != ""
+}
+
+func validateGeneralCoreOverrides(overrides *generalCoreOverrides) error {
+	if overrides == nil {
+		return nil
+	}
+	if overrides.TestURL != nil && !validGeneralTestURL(*overrides.TestURL) {
+		return errGeneralInvalid
+	}
+	if overrides.GeodataLoader != nil &&
+		*overrides.GeodataLoader != "standard" && *overrides.GeodataLoader != "memconservative" {
+		return errGeneralInvalid
+	}
+	return nil
+}
+
+func sameBoolPtr(left, right *bool) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
+}
+
+func sameStringPtr(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
+}
+
+// 比较会进入 RawConfig 的四项覆写；testUrl 仅由延迟测试读取，不触发内核配置重建。
+func (c *generalCoreOverrides) runtimeEqual(other *generalCoreOverrides) bool {
+	var left, right generalCoreOverrides
+	if c != nil {
+		left = *c
+	}
+	if other != nil {
+		right = *other
+	}
+	return sameBoolPtr(left.UnifiedDelay, right.UnifiedDelay) &&
+		sameBoolPtr(left.TCPConcurrent, right.TCPConcurrent) &&
+		sameBoolPtr(left.IPv6, right.IPv6) &&
+		sameStringPtr(left.GeodataLoader, right.GeodataLoader)
 }
 
 func validateGeneralHosts(hosts map[string][]string) error {
@@ -211,6 +288,20 @@ func (s generalSettings) apply(raw *config.RawConfig) {
 		}
 		raw.Hosts[domain] = values
 	}
+	if o := s.CoreOverrides; o != nil {
+		if o.UnifiedDelay != nil {
+			raw.UnifiedDelay = *o.UnifiedDelay
+		}
+		if o.TCPConcurrent != nil {
+			raw.TCPConcurrent = *o.TCPConcurrent
+		}
+		if o.IPv6 != nil {
+			raw.IPv6 = *o.IPv6
+		}
+		if o.GeodataLoader != nil {
+			raw.GeodataLoader = *o.GeodataLoader
+		}
+	}
 }
 
 func postGeneralSettings(w http.ResponseWriter, r *http.Request) {
@@ -251,6 +342,8 @@ func updateGeneralSettings(request profileSettingsRequest[generalSettings]) erro
 	next.General = s
 	rebuild := !reflect.DeepEqual(old.General.Hosts, s.Hosts) ||
 		old.General.UserAgent != s.UserAgent ||
+		old.General.AppendSystemDNS != s.AppendSystemDNS ||
+		!old.General.CoreOverrides.runtimeEqual(s.CoreOverrides) ||
 		s.Ports == nil && old.General.Ports != nil ||
 		s.Authentication == nil && old.General.Authentication != nil
 	previousInbound := desiredInbound

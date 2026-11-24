@@ -1,0 +1,53 @@
+---
+title: 简介与系统要求
+description: 了解 ArkClash 的核心特性、设计理念与 HarmonyOS 设备要求。
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+**ArkClash** 是一款基于 [mihomo](https://github.com/MetaCubeX/mihomo) 内核的原生 HarmonyOS NEXT 代理客户端。界面使用 ArkTS / ArkUI 编写，交互参考 FlClash v0.9.3，并以 GPL-3.0 协议开源。
+
+## 设计目标
+
+ArkClash 的目标是缩短启动与新连接建立时间，降低待机耗电，并保持内核长时间稳定运行。
+
+<CardGrid>
+  <Card title="UI 与 VPN 双进程隔离" icon="rocket">
+    界面进程以本地缓存渲染首帧。内核与 TUN 在独立的 VPN 扩展进程中运行。
+  </Card>
+  <Card title="无 TUN 核心预热" icon="star">
+    打开应用即可预热内核。内核就绪后，可以在连接 VPN 前选择节点和执行延迟测试。
+  </Card>
+  <Card title="无感配置热切换" icon="puzzle">
+    平台 TUN 由独立模块持有，切换配置或更新订阅时无需重建系统 VPN；每份配置独立记录已选节点。
+  </Card>
+  <Card title="按需推送" icon="approve-check-circle">
+    可见页面订阅所需的内核数据。连接与 DNS 的近期记录在采集通道存活时留在内存，重新打开页面即可查看。
+  </Card>
+</CardGrid>
+
+## 功能全景
+
+- **订阅与配置**：支持扫码、相册识图、`clash://` / `clashmeta://` / `flclash://` URL Scheme、`age` 加密订阅、批量分享链接合成、结构化自定义配置与 YAML 编辑预览。
+- **代理与探测**：支持分组与单节点延迟测试、每配置独立节点记忆；仪表盘实时显示速率、出口 IP 质量与 13 项主流服务专用协议连通探测。
+- **进阶覆写**：内置 QuickJS JavaScript 覆写脚本、全局与配置级附加规则、命名出口、本地代理库、托管规则集（YAML / Text / MRS）、正则筛选预设、代理组图标集，以及全局 DNS 逐项覆写与系统 DNS 追加。
+- **诊断与资源**：可查看近期请求、DNS 查询和内核日志。安装包内置 MMDB 和 GEOSITE，资源页还可下载 ASN 和 GEOIP，并支持自定义下载源和自动更新。
+- **外观与备份**：基于 OKLab 的动态调色板（浅色、深色、纯黑、自定义种子色与沉浸光感）；支持本地 ZIP 快照与 WebDAV 备份恢复。
+
+## 系统要求
+
+| 项目 | 要求 |
+|---|---|
+| 操作系统 | **HarmonyOS 7（API 26）及以上** |
+| CPU 架构 | **ARM64（`arm64-v8a`）真机**；另支持 `x86_64` 模拟器构建 |
+| 安装方式 | GitHub 发布包需要匹配的调试签名。也可用 DevEco Studio 自动签名并从源码构建 |
+
+<Aside type="note" title="真机验证说明">
+  基础 VPN 连接和代理转发已在 Pura 70 Ultra（API 26）上验证。冷启动到可操作耗时、开启代理待机 8 小时耗电、新连接延迟和 24 小时内核稳定性暂无公开的同机对照数据，具体测量方法见 [参与贡献与性能基准](../../developer/contributing/) 与 [ADR-0017](../../developer/adr/0017-core-ready-without-vpn/)。
+</Aside>
+
+## 下一步
+
+- [安装与签名](../installation/)
+- [首次连接](../first-connection/)
+- [系统架构](../../developer/architecture/) · [从源码构建](../../developer/build-from-source/)

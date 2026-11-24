@@ -1085,6 +1085,30 @@
       "value": "The operation did not complete. Retry or check the profile."
     },
     {
+      "name": "dash_vpn_no_profile",
+      "value": "Select a profile before connecting."
+    },
+    {
+      "name": "dash_vpn_authorization_denied",
+      "value": "VPN permission was denied. Tap Connect to request it again."
+    },
+    {
+      "name": "dash_vpn_create_failed",
+      "value": "Couldn’t create the VPN. Tap Connect to retry."
+    },
+    {
+      "name": "dash_vpn_attach_failed",
+      "value": "Couldn’t start VPN forwarding. Tap Connect to retry."
+    },
+    {
+      "name": "dash_vpn_connect_failed",
+      "value": "Couldn’t connect to the VPN. Please retry."
+    },
+    {
+      "name": "dash_vpn_stop_failed",
+      "value": "Couldn’t stop the VPN. Please retry."
+    },
+    {
       "name": "dash_save_conflict",
       "value": "Settings changed. The latest version is loaded and your draft is retained for retry."
     },
@@ -1662,7 +1686,7 @@
     },
     {
       "name": "dash_cleanup_required",
-      "value": "The tunnel or listeners remain active. Retry stopping."
+      "value": "VPN cleanup is unconfirmed. Retry stopping."
     },
     {
       "name": "proxy_node_not_addressable",
@@ -1806,7 +1830,7 @@
     },
     {
       "name": "dash_card_description_connections",
-      "value": "Current connections and routing statistics"
+      "value": "Active connections, recent requests, and DNS query counts"
     },
     {
       "name": "dash_card_description_memory",
@@ -3761,8 +3785,12 @@
       "value": "Subscription User-Agent"
     },
     {
-      "name": "general_ua_hint",
-      "value": "Leave empty to use the default User-Agent."
+      "name": "general_append_system_dns",
+      "value": "Append system DNS"
+    },
+    {
+      "name": "general_ua_preset_invalid",
+      "value": "Enter a valid User-Agent that is not already saved."
     },
     {
       "name": "general_hosts",
@@ -3847,6 +3875,54 @@
     {
       "name": "general_saved",
       "value": "Settings saved"
+    },
+    {
+      "name": "general_core_override_add",
+      "value": "Add override entry"
+    },
+    {
+      "name": "general_core_override_remove",
+      "value": "Remove override entry"
+    },
+    {
+      "name": "general_core_override_desc",
+      "value": "Entries added here replace the setting of every profile; anything not added keeps the profile's own setting, or the core default when the profile has none."
+    },
+    {
+      "name": "general_core_test_url",
+      "value": "Test URL"
+    },
+    {
+      "name": "general_core_test_url_hint",
+      "value": "Enter an http:// or https:// URL used for proxy groups that do not specify their own test URL."
+    },
+    {
+      "name": "general_core_unified_delay",
+      "value": "Unified delay"
+    },
+    {
+      "name": "general_core_tcp_concurrent",
+      "value": "TCP concurrent"
+    },
+    {
+      "name": "general_core_ipv6",
+      "value": "IPv6"
+    },
+    {
+      "name": "general_core_ipv6_hint",
+      "value": "Controls core-level IPv6 resolution and connections, independent of the TUN IPv6 toggle."
+    },
+    {
+      "name": "general_core_geodata_loader",
+      "value": "Geodata loader"
+    },
+    {
+      "name": "general_core_geodata_standard",
+      "value": "Standard"
+    },
+    {
+      "name": "general_core_geodata_memconservative",
+      "value": "Low memory (memconservative)"
     },
     {
       "name": "logs_filter",
@@ -4333,6 +4409,70 @@
       "value": "Rule providers"
     },
     {
+      "name": "custom_network_enabled",
+      "value": "Enabled"
+    },
+    {
+      "name": "custom_ntp_server",
+      "value": "NTP server"
+    },
+    {
+      "name": "custom_ntp_interval",
+      "value": "Sync interval (seconds)"
+    },
+    {
+      "name": "custom_ntp_dialer",
+      "value": "Dialer proxy"
+    },
+    {
+      "name": "custom_ntp_write_system",
+      "value": "Set system clock"
+    },
+    {
+      "name": "custom_sniff_destination",
+      "value": "Override destination"
+    },
+    {
+      "name": "custom_sniff_force_dns",
+      "value": "Force DNS mapping"
+    },
+    {
+      "name": "custom_sniff_parse_ip",
+      "value": "Sniff traffic without a domain"
+    },
+    {
+      "name": "custom_sniff_force_domain",
+      "value": "Domains to sniff"
+    },
+    {
+      "name": "custom_sniff_skip_domain",
+      "value": "Domains to skip"
+    },
+    {
+      "name": "custom_sniff_skip_source",
+      "value": "Source addresses to skip"
+    },
+    {
+      "name": "custom_sniff_skip_destination",
+      "value": "Destination addresses to skip"
+    },
+    {
+      "name": "custom_sniff_ports",
+      "value": "Ports and ranges"
+    },
+    {
+      "name": "custom_network_list_hint",
+      "value": "One entry per line"
+    },
+    {
+      "name": "custom_network_yaml",
+      "value": "Edit YAML"
+    },
+    {
+      "name": "custom_network_invalid",
+      "value": "Check the port, port ranges and sync interval."
+    },
+    {
       "name": "custom_sniffer",
       "value": "Sniffer"
     },
@@ -4767,6 +4907,18 @@
     {
       "name": "proxy_save_err_failed",
       "value": "Could not save node to local proxy library"
+    },
+    {
+      "name": "dash_conn_live",
+      "value": "Active"
+    },
+    {
+      "name": "dash_conn_recent",
+      "value": "Requests"
+    },
+    {
+      "name": "dash_conn_dns",
+      "value": "DNS"
     }
   ]
 }
