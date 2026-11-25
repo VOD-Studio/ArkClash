@@ -49,6 +49,8 @@ ARM64 的运行问题已在真机（Pura 70 Ultra，API 26）上验证；x86_64 
 - **影响**：`auto-route`、`auto-detect-interface`、按网卡绑定出站这类依赖网卡列表的功能都用不了，`core/tun.go` 里保持关闭。
 - **预期内的警告**：`[TUN] get tun name failed for fd`（ioctl 被拒），无害。
 
+升级 Tailscale 后复查 `scripts/tailscale-netmon.patch`。首次使用出站时应读取 Network Kit 的物理网络快照，并从系统回调接收切网事件。真机验收需要实际拨号和 DNS 查询，单独保存节点不会启动 tsnet。[ADR-0035](../adr/0035-tailscale-network-monitor.md)
+
 ## 5. 其他约束
 
 - MTU 范围为 576–1500，启用 IPv6 时为 1280–1500。TUN 地址在 `shared/VpnNetwork.ets` 和 `core/tun.go` 中定义，两处需同步。[ADR-0020](../adr/0020-vpn-network-settings.md)
