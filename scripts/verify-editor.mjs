@@ -84,3 +84,36 @@ test('YAML 上下文补全覆盖顶层、DNS、代理、代理组与规则', () 
   assert.ok(matchTarget?.options.some(o => o.label === 'DIRECT'));
   assert.ok(matchTarget?.options.some(o => o.label === '代理'));
 });
+
+test('Tailscale 类型、字段和布尔值按当前代理补全', () => {
+  for (const indent of ['', '  ']) {
+    const sample = [
+      'proxies:',
+      indent + '- type: ss',
+      indent + '  na',
+      indent + '- name: mesh',
+      indent + '  aut',
+      indent + '  type: "tailscale" # 当前节点',
+      indent + '  ephemeral: f',
+      indent + '  accept-routes: t',
+      indent + '  exit-node-allow-lan-access: f',
+      indent + '  auth-key: ',
+      indent + '- name: next',
+      indent + '  type: ta',
+      indent + '  ex',
+    ];
+    const labels = i => mod.computeYamlCompletion(sample, i, sample[i].length, true)?.options.map(o => o.label);
+    const fields = labels(4);
+    for (const field of ['name', 'type', 'udp', 'ip-version', 'interface-name', 'routing-mark', 'dialer-proxy',
+      'hostname', 'auth-key', 'control-url', 'state-dir', 'ephemeral', 'accept-routes', 'exit-node',
+      'exit-node-allow-lan-access']) {
+      assert.ok(fields.includes(field), field);
+    }
+    assert.ok(!fields.includes('server'));
+    assert.ok(!labels(2).includes('auth-key'));
+    assert.ok(!labels(12).includes('exit-node'));
+    assert.ok(labels(11).includes('tailscale'));
+    for (const i of [6, 7, 8]) assert.deepEqual(labels(i), ['true', 'false']);
+    assert.equal(labels(9), undefined);
+  }
+});
