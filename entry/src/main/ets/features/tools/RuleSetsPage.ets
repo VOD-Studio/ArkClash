@@ -467,7 +467,11 @@ export struct RuleSetsPage {
       }
       .width('100%').alignItems(HorizontalAlign.Start).enabled(!this.busy)
       .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
-    }.width('100%').align(Alignment.Top)
+    }
+    .width('100%')
+    .height(this.sheetMode === 'delete' ? 'auto' : '100%')
+    .align(Alignment.Top)
+    .nestedScroll({ scrollForward: NestedScrollMode.PARENT_FIRST, scrollBackward: NestedScrollMode.SELF_FIRST })
   }
 
   build() {

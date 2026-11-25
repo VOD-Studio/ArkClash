@@ -224,6 +224,8 @@ export struct AddedRuleEditor {
       .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
     }
     .width('100%')
+    .height('100%')
     .align(Alignment.Top)
+    .nestedScroll({ scrollForward: NestedScrollMode.PARENT_FIRST, scrollBackward: NestedScrollMode.SELF_FIRST })
   }
 }

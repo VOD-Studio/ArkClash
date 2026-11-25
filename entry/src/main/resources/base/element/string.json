@@ -2813,6 +2813,38 @@
       "value": "Set Proxy Server Nameserver to use this override."
     },
     {
+      "name": "dns_override_search",
+      "value": "Search override or YAML key"
+    },
+    {
+      "name": "dns_override_all_sections",
+      "value": "All"
+    },
+    {
+      "name": "dns_override_kind_toggle",
+      "value": "Switch"
+    },
+    {
+      "name": "dns_override_kind_choice",
+      "value": "Option"
+    },
+    {
+      "name": "dns_override_kind_text",
+      "value": "Text"
+    },
+    {
+      "name": "dns_override_kind_number",
+      "value": "Number"
+    },
+    {
+      "name": "dns_override_kind_list",
+      "value": "List"
+    },
+    {
+      "name": "dns_override_kind_policy",
+      "value": "Policy"
+    },
+    {
       "name": "network_excluded_apps",
       "value": "Apps excluded from VPN"
     },

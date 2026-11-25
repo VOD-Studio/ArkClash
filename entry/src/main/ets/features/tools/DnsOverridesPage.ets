@@ -10,8 +10,24 @@ import { EmptyState } from '../../components/EmptyState';
 import { ListRow } from '../../components/ListRow';
 import { uiResourceText } from '../../components/ResourceText';
 import { HEADER_ACTION, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
-import { DNS_OVERRIDE_SECTIONS, DnsOverrideField, DnsOverrideSection } from './DnsOverrideFields';
+import { DNS_OVERRIDE_SECTIONS, DnsFieldKind, DnsOverrideField, DnsOverrideSection } from './DnsOverrideFields';
 import { SettingsSection } from './SettingsSection';
+
+const SHEET_NESTED_SCROLL: NestedScrollOptions = {
+  scrollForward: NestedScrollMode.PARENT_FIRST,
+  scrollBackward: NestedScrollMode.SELF_FIRST
+};
+
+function dnsKindLabel(kind: DnsFieldKind): Resource {
+  switch (kind) {
+    case 'toggle': return $r('app.string.dns_override_kind_toggle');
+    case 'choice': return $r('app.string.dns_override_kind_choice');
+    case 'number': return $r('app.string.dns_override_kind_number');
+    case 'list': return $r('app.string.dns_override_kind_list');
+    case 'policy': return $r('app.string.dns_override_kind_policy');
+    default: return $r('app.string.dns_override_kind_text');
+  }
+}
 
 @ComponentV2
 export struct DnsOverridesPage {
@@ -22,7 +38,10 @@ export struct DnsOverridesPage {
   @Local private loading: boolean = true;
   @Local private loadFailed: boolean = false;
   @Local private saving: boolean = false;
+  @Local private savingKey: string = '';
   @Local private pickerShown: boolean = false;
+  @Local private pickerQuery: string = '';
+  @Local private pickerSection: number = -1;
   @Local private editorShown: boolean = false;
   @Local private field?: DnsOverrideField;
   @Local private draft: string = '';
@@ -71,6 +90,44 @@ export struct DnsOverridesPage {
     return section.fields.filter((field: DnsOverrideField): boolean => (this.entry(field.key) !== undefined) === added);
   }
 
+  private filteredPickerFields(section: DnsOverrideSection, sectionIndex: number): DnsOverrideField[] {
+    if (this.pickerSection >= 0 && this.pickerSection !== sectionIndex) {
+      return [];
+    }
+    const available = this.fields(section, false);
+    const query = this.pickerQuery.trim().toLowerCase();
+    if (query === '') {
+      return available;
+    }
+    const ui = this.getUIContext();
+    return available.filter((field: DnsOverrideField): boolean => {
+      const label = uiResourceText(ui, field.label).toLowerCase();
+      return label.includes(query) || field.key.toLowerCase().includes(query);
+    });
+  }
+
+  private totalAvailable(): number {
+    let count = 0;
+    for (const section of DNS_OVERRIDE_SECTIONS) {
+      count += this.fields(section, false).length;
+    }
+    return count;
+  }
+
+  private hasPickerMatches(): boolean {
+    return DNS_OVERRIDE_SECTIONS.some((section: DnsOverrideSection, index: number): boolean =>
+      this.filteredPickerFields(section, index).length > 0);
+  }
+
+  private openPicker(): void {
+    if (this.saving) {
+      return;
+    }
+    this.pickerQuery = '';
+    this.pickerSection = -1;
+    this.pickerShown = true;
+  }
+
   private summary(field: DnsOverrideField): ResourceStr {
     const entry = this.entry(field.key);
     if (Array.isArray(entry)) {
@@ -91,6 +148,7 @@ export struct DnsOverridesPage {
       return;
     }
     this.saving = true;
+    this.savingKey = field.key;
     const previous = this.settings;
     const entries: Record<string, DnsOverrideValue> = {};
     for (const key of Object.keys(previous.entries)) {
@@ -113,7 +171,10 @@ export struct DnsOverridesPage {
         this.settings = saved;
       }
       this.editorShown = false;
-      if (!DNS_OVERRIDE_SECTIONS.some((section: DnsOverrideSection): boolean => this.fields(section, false).length > 0)) {
+      if (this.pickerSection >= 0 && this.fields(DNS_OVERRIDE_SECTIONS[this.pickerSection], false).length === 0) {
+        this.pickerSection = -1;
+      }
+      if (this.totalAvailable() === 0) {
         this.pickerShown = false;
       }
       this.toast($r('app.string.dns_override_saved'));
@@ -130,6 +191,7 @@ export struct DnsOverridesPage {
       }
     } finally {
       this.saving = false;
+      this.savingKey = '';
     }
   }
 
@@ -207,9 +269,8 @@ export struct DnsOverridesPage {
         .attributeModifier(HEADER_ACTION)
         .systemMaterial(this.appStyle.headerMaterial())
         .accessibilityText($r('app.string.dns_override_add'))
-        .enabled(!this.saving && DNS_OVERRIDE_SECTIONS.some((section: DnsOverrideSection): boolean =>
-          this.fields(section, false).length > 0))
-        .onClick((): void => { this.pickerShown = true; })
+        .enabled(!this.saving && this.totalAvailable() > 0)
+        .onClick((): void => { this.openPicker(); })
       }
       .height('100%')
       .alignItems(VerticalAlign.Center)
@@ -226,7 +287,11 @@ export struct DnsOverridesPage {
   SettingRow(field: DnsOverrideField) {
     Row() {
       Button({ type: ButtonType.Circle }) {
-        SymbolGlyph($r('sys.symbol.minus')).fontSize(16).fontColor([$r('app.color.status_error')])
+        if (this.savingKey === field.key) {
+          LoadingProgress().width(16).height(16).color(this.appStyle.palette.brand)
+        } else {
+          SymbolGlyph($r('sys.symbol.minus')).fontSize(16).fontColor([$r('app.color.status_error')])
+        }
       }
       .width(40)
       .height(40)
@@ -260,41 +325,107 @@ export struct DnsOverridesPage {
   }
 
   @Builder
-  SectionRows(section: DnsOverrideSection, added: boolean) {
-    ForEach(this.fields(section, added), (field: DnsOverrideField) => {
-      if (this.fields(section, added)[0]?.key !== field.key) {
-        this.DividerLine(added ? 60 : 16)
+  AddedSectionRows(section: DnsOverrideSection) {
+    ForEach(this.fields(section, true), (field: DnsOverrideField) => {
+      if (this.fields(section, true)[0]?.key !== field.key) {
+        this.DividerLine(60)
       }
-      if (added) {
-        this.SettingRow(field)
-      } else {
-        ListRow({ title: field.label, chevron: field.kind !== 'toggle', onTap: (): void => this.addField(field) })
-          .enabled(!this.saving)
-      }
+      this.SettingRow(field)
     }, (field: DnsOverrideField): string => field.key)
   }
 
   @Builder
-  Sections(added: boolean) {
+  AddedSections() {
     ForEach(DNS_OVERRIDE_SECTIONS, (section: DnsOverrideSection) => {
-      if (this.fields(section, added).length > 0) {
-        SettingsSection({ heading: section.title, rows: (): void => this.SectionRows(section, added) })
+      if (this.fields(section, true).length > 0) {
+        SettingsSection({ heading: section.title, rows: (): void => this.AddedSectionRows(section) })
           .transition(this.reduceMotion ? TransitionEffect.IDENTITY : TransitionEffect.OPACITY)
       }
     }, (section: DnsOverrideSection): string => section.fields[0].key)
   }
 
   @Builder
+  PickerSectionRows(section: DnsOverrideSection) {
+    ForEach(this.filteredPickerFields(section, DNS_OVERRIDE_SECTIONS.indexOf(section)),
+      (field: DnsOverrideField, index: number) => {
+        if (index > 0) {
+          this.DividerLine(16)
+        }
+        DnsOverridePickerRow({
+          field: field,
+          busy: this.savingKey === field.key,
+          interactive: !this.saving,
+          onPick: (): void => this.addField(field)
+        })
+      }, (field: DnsOverrideField): string => field.key)
+  }
+
+  @Builder
   Picker() {
-    Scroll() {
-      Column({ space: 16 }) {
-        this.Sections(false)
+    Column() {
+      Search({ value: this.pickerQuery, placeholder: $r('app.string.dns_override_search') })
+        .textFont({ size: 15, family: this.appStyle.fontFamily })
+        .placeholderFont({ size: 15, family: this.appStyle.fontFamily })
+        .margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 4, bottom: 10 })
+        .onChange((text: string): void => { this.pickerQuery = text; })
+
+      Scroll() {
+        Row({ space: 8 }) {
+          DnsSectionChip({
+            label: $r('app.string.dns_override_all_sections'),
+            count: this.totalAvailable(),
+            selected: this.pickerSection === -1,
+            onSelect: (): void => { this.pickerSection = -1; }
+          })
+          ForEach(DNS_OVERRIDE_SECTIONS, (section: DnsOverrideSection, index: number) => {
+            if (this.fields(section, false).length > 0) {
+              DnsSectionChip({
+                label: section.title,
+                count: this.fields(section, false).length,
+                selected: this.pickerSection === index,
+                onSelect: (): void => { this.pickerSection = index; }
+              })
+            }
+          }, (section: DnsOverrideSection): string => section.fields[0].key)
+        }
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 12 })
       }
       .width('100%')
-      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .align(Alignment.Start)
+
+      if (this.hasPickerMatches()) {
+        List({ space: 16 }) {
+          ForEach(DNS_OVERRIDE_SECTIONS, (section: DnsOverrideSection, index: number) => {
+            if (this.filteredPickerFields(section, index).length > 0) {
+              ListItem() {
+                SettingsSection({
+                  heading: section.title,
+                  rows: (): void => this.PickerSectionRows(section)
+                })
+              }
+            }
+          }, (section: DnsOverrideSection): string => section.fields[0].key)
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+        .contentStartOffset(4)
+        .contentEndOffset(24)
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .nestedScroll(SHEET_NESTED_SCROLL)
+      } else {
+        EmptyState({
+          icon: $r('sys.symbol.magnifyingglass'),
+          title: $r('app.string.diagnostics_no_matches')
+        })
+        .layoutWeight(1)
+      }
     }
     .width('100%')
-    .align(Alignment.Top)
+    .height('100%')
   }
 
   @Builder
@@ -327,7 +458,20 @@ export struct DnsOverridesPage {
               .layoutWeight(1)
               .enabled(!this.saving)
               .onClick((): void => { this.editorShown = false; })
-            Button($r('app.string.action_save')).layoutWeight(1).enabled(!this.saving).onClick((): void => this.saveEditor())
+            Button() {
+              Row({ space: 8 }) {
+                if (this.saving) {
+                  LoadingProgress().width(18).height(18).color(this.appStyle.palette.onBrand)
+                }
+                Text($r('app.string.action_save')).fontFamily(this.appStyle.fontFamily)
+                  .fontColor(this.appStyle.palette.onBrand)
+              }
+            }
+            .height(40)
+            .layoutWeight(1)
+            .enabled(!this.saving)
+            .accessibilityText($r('app.string.action_save'))
+            .onClick((): void => this.saveEditor())
           }
           .width('100%')
         }
@@ -340,7 +484,9 @@ export struct DnsOverridesPage {
       .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
     }
     .width('100%')
+    .height('100%')
     .align(Alignment.Top)
+    .nestedScroll(SHEET_NESTED_SCROLL)
   }
 
   @Builder
@@ -356,12 +502,12 @@ export struct DnsOverridesPage {
       EmptyState({
         icon: $r('sys.symbol.connection'), title: $r('app.string.dns_override_empty'),
         hint: $r('app.string.dns_override_description'), actionLabel: $r('app.string.dns_override_add'),
-        onAction: (): void => { if (!this.saving) { this.pickerShown = true; } }
+        onAction: (): void => { this.openPicker(); }
       })
     } else {
       Scroll() {
         Column({ space: 16 }) {
-          this.Sections(true)
+          this.AddedSections()
           Text($r('app.string.dns_override_description'))
             .fontFamily(this.appStyle.fontFamily)
             .fontSize(13)
@@ -408,5 +554,99 @@ export struct DnsOverridesPage {
       .width('100%')
       .height('100%')
     }
+  }
+}
+
+@ComponentV2
+struct DnsSectionChip {
+  @Local private appStyle: AppearanceState = appAppearance;
+  @Param @Require label: ResourceStr;
+  @Param count: number = 0;
+  @Param selected: boolean = false;
+  @Event onSelect: () => void = (): void => {};
+
+  build() {
+    Button({ type: ButtonType.Capsule }) {
+      Row({ space: 4 }) {
+        Text(this.label)
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(13)
+          .fontWeight(this.selected ? FontWeight.Medium : FontWeight.Normal)
+          .fontColor(this.selected ? this.appStyle.palette.brand : $r('sys.color.font_primary'))
+        Text(`${this.count}`)
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(12)
+          .fontColor(this.selected ? this.appStyle.palette.brand : $r('sys.color.font_secondary'))
+      }
+      .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+    }
+    .buttonStyle(ButtonStyleMode.NORMAL)
+    .backgroundColor(this.selected ? this.appStyle.palette.selectionTonal : this.appStyle.palette.surfaceBlock)
+    .accessibilitySelected(this.selected)
+    .onClick((): void => this.onSelect())
+  }
+}
+
+@ComponentV2
+struct DnsOverridePickerRow {
+  @Local private appStyle: AppearanceState = appAppearance;
+  @Param @Require field: DnsOverrideField;
+  @Param busy: boolean = false;
+  @Param interactive: boolean = true;
+  @Event onPick: () => void = (): void => {};
+
+  build() {
+    Row({ space: 12 }) {
+      Column({ space: 2 }) {
+        Text(this.field.label)
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.field.key)
+          .fontFamily('monospace')
+          .fontSize(12)
+          .fontColor($r('sys.color.font_secondary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      Text(dnsKindLabel(this.field.kind))
+        .fontFamily(this.appStyle.fontFamily)
+        .fontSize(11)
+        .fontColor($r('sys.color.font_secondary'))
+        .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+        .borderRadius(8)
+        .backgroundColor(this.appStyle.palette.surfaceBlock)
+
+      if (this.busy) {
+        LoadingProgress().width(20).height(20).color(this.appStyle.palette.brand)
+      } else if (this.field.kind === 'toggle') {
+        Stack() {
+          SymbolGlyph($r('sys.symbol.plus')).fontSize(14).fontColor([this.appStyle.palette.brand])
+        }
+        .width(26)
+        .height(26)
+        .borderRadius(13)
+        .backgroundColor(this.appStyle.palette.brandSoft)
+      } else {
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(16)
+          .fontColor([$r('sys.color.font_tertiary')])
+      }
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 60 })
+    .padding({ left: 16, right: 14, top: 10, bottom: 10 })
+    .stateStyles({
+      pressed: { .backgroundColor($r('sys.color.interactive_pressed')) },
+      normal: { .backgroundColor(Color.Transparent) }
+    })
+    .enabled(this.interactive)
+    .onClick((): void => this.onPick())
   }
 }

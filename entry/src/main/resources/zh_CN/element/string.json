@@ -2793,6 +2793,38 @@
       "value": "请先配置 Proxy Server Nameserver，再启用此覆写。"
     },
     {
+      "name": "dns_override_search",
+      "value": "搜索覆写项或字段名"
+    },
+    {
+      "name": "dns_override_all_sections",
+      "value": "全部"
+    },
+    {
+      "name": "dns_override_kind_toggle",
+      "value": "开关"
+    },
+    {
+      "name": "dns_override_kind_choice",
+      "value": "选项"
+    },
+    {
+      "name": "dns_override_kind_text",
+      "value": "文本"
+    },
+    {
+      "name": "dns_override_kind_number",
+      "value": "数值"
+    },
+    {
+      "name": "dns_override_kind_list",
+      "value": "列表"
+    },
+    {
+      "name": "dns_override_kind_policy",
+      "value": "策略"
+    },
+    {
       "name": "network_excluded_apps",
       "value": "绕过 VPN 的应用"
     },
