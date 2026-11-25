@@ -28,6 +28,14 @@ interface ConnectionFilterSection {
   options: string[];
 }
 
+function menuLevelTransition(offsetX: number): TransitionEffect {
+  return TransitionEffect.asymmetric(
+    TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: offsetX }))
+      .animation({ delay: 60, duration: 150, curve: Curve.EaseOut }),
+    TransitionEffect.opacity(0).animation({ duration: 60, curve: Curve.EaseOut })
+  );
+}
+
 @ComponentV2
 export struct ConnectionsPage {
   @Param @Require topInset: number;
@@ -65,10 +73,8 @@ export struct ConnectionsPage {
     TransitionEffect.scale({ x: 0.94, y: 0.94, centerX: '90%', centerY: 0 })
       .combine(TransitionEffect.opacity(0)).animation({ duration: 140, curve: Curve.EaseIn })
   );
-  private readonly rootTransition: TransitionEffect = TransitionEffect.translate({ x: -16 })
-    .combine(TransitionEffect.opacity(0)).animation({ duration: 180, curve: Curve.EaseOut });
-  private readonly submenuTransition: TransitionEffect = TransitionEffect.translate({ x: 16 })
-    .combine(TransitionEffect.opacity(0)).animation({ duration: 180, curve: Curve.EaseOut });
+  private readonly rootTransition: TransitionEffect = menuLevelTransition(-16);
+  private readonly submenuTransition: TransitionEffect = menuLevelTransition(16);
 
   aboutToAppear(): void {
     this.reduceMotion = accessibility.isAnimationReduceEnabledSync();
