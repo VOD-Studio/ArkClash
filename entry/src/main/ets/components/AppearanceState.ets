@@ -34,7 +34,7 @@ export class AppearanceSettings {
   }
 
   clone(): AppearanceSettings {
-    const copy = new AppearanceSettings(this.swatches);
+    const copy = new AppearanceSettings(this.swatches.slice());
     copy.mode = this.mode;
     copy.pureBlack = this.pureBlack;
     copy.seed = this.seed;
@@ -112,7 +112,7 @@ export class AppearanceState {
   @Trace glass: AppearanceGlass = 'standard';
   @Trace systemSeed: number = DEFAULT_APPEARANCE_SEED;
   @Trace systemScale: number = 1;
-  @Trace saving: boolean = false;
+  private updates: Promise<void> = Promise.resolve();
   private prefs?: preferences.Preferences;
   private context?: common.UIAbilityContext;
   private lastSeed: number = DEFAULT_APPEARANCE_SEED;
@@ -121,7 +121,17 @@ export class AppearanceState {
   private lastStyle: AppearanceColorStyle = 'vivid';
   private overridesFontScale: boolean = false;
 
-  async load(context: common.UIAbilityContext): Promise<void> {
+  private enqueue(operation: () => Promise<void>): Promise<void> {
+    const result = this.updates.then(operation);
+    this.updates = result.catch((): void => {});
+    return result;
+  }
+
+  load(context: common.UIAbilityContext): Promise<void> {
+    return this.enqueue(() => this.read(context));
+  }
+
+  private async read(context: common.UIAbilityContext): Promise<void> {
     this.context = context;
     this.overridesFontScale = false;
     this.systemScale = context.config.fontSizeScale || 1;
@@ -162,25 +172,28 @@ export class AppearanceState {
     }
   }
 
-  async save(next: AppearanceSettings): Promise<void> {
+  save(update: (config: AppearanceSettings) => void): Promise<void> {
+    return this.enqueue(() => this.persist(update));
+  }
+
+  private async persist(update: (config: AppearanceSettings) => void): Promise<void> {
     const context = this.context;
-    if (context === undefined || this.saving) { return; }
-    this.saving = true;
-    const previous = this.config;
+    if (context === undefined) { throw new Error('appearance context unavailable'); }
+    const next = this.config.clone();
+    update(next);
+    const previous = JSON.stringify(this.config);
+    const encoded = JSON.stringify(next);
+    if (encoded === previous) { return; }
+    const prefs = this.prefs ?? await preferences.getPreferences(context, { name: 'appearance' });
+    this.prefs = prefs;
+    await prefs.put(PREF_KEY, encoded);
     try {
-      const prefs = this.prefs ?? await preferences.getPreferences(context, { name: 'appearance' });
-      this.prefs = prefs;
-      await prefs.put(PREF_KEY, JSON.stringify(next));
-      try {
-        await prefs.flush();
-      } catch (e) {
-        await prefs.put(PREF_KEY, JSON.stringify(previous));
-        throw e as Error;
-      }
-      this.apply(next);
-    } finally {
-      this.saving = false;
+      await prefs.flush();
+    } catch (e) {
+      await prefs.put(PREF_KEY, previous);
+      throw e as Error;
     }
+    this.apply(next);
   }
 
   get seed(): number { return this.config.seed || this.systemSeed; }

@@ -8,7 +8,6 @@ import { COMPACT_TITLE_SIZE, PAGE_GUTTER } from '../../components/Theme';
 struct ThemeFontRow {
   @Param family: string = '';
   @Param chosen: boolean = false;
-  @Param allowSelection: boolean = true;
   @Param tint: number = 0;
   @Event onChoose: (family: string) => void = () => {};
 
@@ -26,7 +25,7 @@ struct ThemeFontRow {
     }
     .width('100%').constraintSize({ minHeight: 56 }).padding({ left: 16, right: 16, top: 8, bottom: 8 })
     .buttonStyle(ButtonStyleMode.NORMAL).backgroundColor(Color.Transparent)
-    .accessibilitySelected(this.chosen).enabled(this.allowSelection)
+    .accessibilitySelected(this.chosen)
     .onClick(() => this.onChoose(this.family))
   }
 }
@@ -72,12 +71,12 @@ export struct ThemeFonts {
       List() {
         ListItem() {
           ThemeFontRow({ chosen: this.appStyle.fontFamily === '', tint: this.appStyle.palette.brand,
-            allowSelection: !this.appStyle.saving, onChoose: (family: string) => this.onChoose(family) })
+            onChoose: (family: string) => this.onChoose(family) })
         }
         LazyForEach(this.fonts, (family: string) => {
           ListItem() {
             ThemeFontRow({ family: family, chosen: this.appStyle.fontFamily === family,
-              tint: this.appStyle.palette.brand, allowSelection: !this.appStyle.saving,
+              tint: this.appStyle.palette.brand,
               onChoose: (chosen: string) => this.onChoose(chosen) })
           }
         }, (family: string): string => family)

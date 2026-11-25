@@ -63,7 +63,8 @@ export struct ThemePage {
   @Local private colorInitial: number = DEFAULT_APPEARANCE_SEED;
   @Local private scaleDraft: number = 0;
   @Local private styleMenuOpen: boolean = false;
-  private pending?: AppearanceSettings;
+  private pending?: (config: AppearanceSettings) => void;
+  private shown: boolean = false;
 
   @Computed
   get lightPreview(): AppearancePalette {
@@ -95,17 +96,13 @@ export struct ThemePage {
       config.swatches.every((seed: number, index: number): boolean => seed === APPEARANCE_SWATCHES[index]);
   }
 
-  private change(update: (config: AppearanceSettings) => void): void {
-    const config = this.appStyle.config.clone();
-    update(config);
-    this.save(config);
-  }
-
-  private async save(config: AppearanceSettings): Promise<void> {
+  private async change(update: (config: AppearanceSettings) => void): Promise<void> {
     try {
-      await this.appStyle.save(config);
+      await this.appStyle.save(update);
     } catch (_) {
-      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.theme_save_failed') });
+      if (this.shown) {
+        this.getUIContext().getPromptAction().showToast({ message: $r('app.string.theme_save_failed') });
+      }
     }
   }
 
@@ -118,42 +115,44 @@ export struct ThemePage {
   }
 
   private saveColor(seed: number): void {
-    const config = this.appStyle.config.clone();
     const previous = this.colorTarget;
-    const index = config.swatches.indexOf(previous);
-    if (previous === 0) {
-      if (!config.swatches.includes(seed)) { config.swatches = config.swatches.concat(seed); }
-      config.seed = seed;
-    } else if (index >= 0 && seed !== previous) {
-      config.swatches = config.swatches.slice();
-      if (config.swatches.includes(seed)) { config.swatches.splice(index, 1); }
-      else { config.swatches[index] = seed; }
-      if (config.seed === previous) { config.seed = seed; }
-    }
-    this.pending = config;
+    this.pending = (config: AppearanceSettings): void => {
+      const index = config.swatches.indexOf(previous);
+      if (previous === 0) {
+        if (!config.swatches.includes(seed)) { config.swatches.push(seed); }
+        config.seed = seed;
+      } else if (index >= 0 && seed !== previous) {
+        if (config.swatches.includes(seed)) { config.swatches.splice(index, 1); }
+        else { config.swatches[index] = seed; }
+        if (config.seed === previous) { config.seed = seed; }
+      }
+    };
     this.sheetOpen = false;
   }
 
   private confirmColors(): void {
-    const config = this.appStyle.config.clone();
+    const target = this.colorTarget;
     if (this.sheet === 'reset') {
-      config.seed = DEFAULT_APPEARANCE_SEED;
-      config.swatches = APPEARANCE_SWATCHES.slice();
-      config.style = 'vivid';
+      this.pending = (config: AppearanceSettings): void => {
+        config.seed = DEFAULT_APPEARANCE_SEED;
+        config.swatches = APPEARANCE_SWATCHES.slice();
+        config.style = 'vivid';
+      };
     } else {
-      config.swatches = config.swatches.filter((seed: number): boolean => seed !== this.colorTarget);
-      if (config.seed === this.colorTarget) {
-        config.seed = config.swatches.includes(DEFAULT_APPEARANCE_SEED) ? DEFAULT_APPEARANCE_SEED : 0;
-      }
+      this.pending = (config: AppearanceSettings): void => {
+        config.swatches = config.swatches.filter((seed: number): boolean => seed !== target);
+        if (config.seed === target) {
+          config.seed = config.swatches.includes(DEFAULT_APPEARANCE_SEED) ? DEFAULT_APPEARANCE_SEED : 0;
+        }
+      };
     }
-    this.pending = config;
     this.sheetOpen = false;
   }
 
   private finishSheet(): void {
     const pending = this.pending;
     this.pending = undefined;
-    if (pending !== undefined) { this.save(pending); }
+    if (pending !== undefined) { this.change(pending); }
   }
 
   private preview(index: number, motion: AppearanceMotion = this.appStyle.motion): void {
@@ -196,7 +195,7 @@ export struct ThemePage {
       if ($$.action !== undefined) {
         Button($$.action).fontFamily(this.appStyle.fontFamily).fontSize(13).height(40)
           .buttonStyle(ButtonStyleMode.TEXTUAL).fontColor(this.appStyle.palette.brand)
-          .enabled(!this.appStyle.saving).onClick(() => $$.onTap?.())
+          .onClick(() => $$.onTap?.())
       }
     }
     .width('100%').constraintSize({ minHeight: 40 })
@@ -217,7 +216,7 @@ export struct ThemePage {
     .backgroundColor($$.selected ? this.appStyle.palette.selectionTonal : this.appStyle.palette.cardBackground)
     .border({ width: 1.5, color: $$.selected ? this.appStyle.palette.brand : Color.Transparent })
     .accessibilityText(uiResourceText(this.getUIContext(), $$.label)).accessibilitySelected($$.selected)
-    .enabled(!this.appStyle.saving).onClick(() => $$.action())
+    .onClick(() => $$.action())
   }
 
   @Builder
@@ -263,7 +262,6 @@ export struct ThemePage {
     }
     .width(44).height(44).padding(0).buttonStyle(ButtonStyleMode.NORMAL).backgroundColor(Color.Transparent)
     .border({ width: 2, color: this.appStyle.config.seed === $$.seed ? $$.fill : Color.Transparent })
-    .enabled(!this.appStyle.saving)
     .id($$.seed === 0 ? 'theme-swatch-system' : `theme-swatch-${appearanceHex($$.seed).slice(1)}`)
     .accessibilityText($$.seed === 0 ? uiResourceText(this.getUIContext(), $r('app.string.theme_system')) :
       appearanceHex($$.seed))
@@ -301,7 +299,7 @@ export struct ThemePage {
         }
         .width(44).height(44).padding(0).buttonStyle(ButtonStyleMode.NORMAL)
         .backgroundColor(this.appStyle.palette.tileBackground)
-        .id('theme-color-add').enabled(!this.appStyle.saving)
+        .id('theme-color-add')
         .accessibilityText(uiResourceText(this.getUIContext(), $r('app.string.theme_add_color')))
         .onClick(() => this.openSheet('color'))
       }
@@ -316,7 +314,7 @@ export struct ThemePage {
       }
       .width('100%').constraintSize({ minHeight: 56 }).padding({ left: 16, right: 16 })
       .borderRadius(CARD_RADIUS).buttonStyle(ButtonStyleMode.NORMAL).backgroundColor(this.appStyle.palette.cardBackground)
-      .enabled(!this.appStyle.saving).onClick(() => { this.styleMenuOpen = true; })
+      .onClick(() => { this.styleMenuOpen = true; })
       .bindMenu(this.styleMenuOpen, this.ColorStyleMenu, { onDisappear: () => { this.styleMenuOpen = false; } })
     }
   }
@@ -343,7 +341,7 @@ export struct ThemePage {
       }
       .width('100%').constraintSize({ minHeight: 56 }).buttonStyle(ButtonStyleMode.NORMAL).borderRadius(CARD_RADIUS)
       .backgroundColor(this.appStyle.palette.cardBackground).id('theme-font-open')
-      .enabled(!this.appStyle.saving).onClick(() => this.openSheet('fonts'))
+      .onClick(() => this.openSheet('fonts'))
       this.Heading({ label: $r('app.string.theme_text_scale'), action:
         this.appStyle.config.customScale && this.appStyle.config.scale !== 1 ? $r('app.string.theme_reset') : undefined,
         onTap: () => this.change((config: AppearanceSettings) => { config.scale = 1; }) })
@@ -365,7 +363,7 @@ export struct ThemePage {
           max: TEXT_SCALE_MAX * 100, step: TEXT_SCALE_STEP * 100 })
           .width('100%').selectedColor(this.appStyle.palette.brand).blockColor(this.appStyle.palette.brand)
           .accessibilityText(uiResourceText(this.getUIContext(), $r('app.string.theme_text_scale')))
-          .enabled(this.appStyle.config.customScale && !this.appStyle.saving)
+          .enabled(this.appStyle.config.customScale)
           .id('theme-text-scale').onChange((value: number, mode: SliderChangeMode) => this.changeScale(value, mode))
       }
       .padding(16).width('100%').borderRadius(CARD_RADIUS).backgroundColor(this.appStyle.palette.cardBackground)
@@ -379,7 +377,7 @@ export struct ThemePage {
       .fontColor(this.appStyle.config.customScale === custom ? this.appStyle.palette.brand : $r('sys.color.font_primary'))
       .backgroundColor(this.appStyle.config.customScale === custom ? this.appStyle.palette.selectionTonal :
         this.appStyle.palette.cardBackground)
-      .accessibilitySelected(this.appStyle.config.customScale === custom).enabled(!this.appStyle.saving)
+      .accessibilitySelected(this.appStyle.config.customScale === custom)
       .onClick(() => this.change((config: AppearanceSettings) => { config.customScale = custom; }))
   }
 
@@ -498,5 +496,7 @@ export struct ThemePage {
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
     .backgroundColor(this.appStyle.palette.pageBackground)
+    .onShown((): void => { this.shown = true; })
+    .onHidden((): void => { this.shown = false; })
   }
 }
