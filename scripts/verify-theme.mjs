@@ -21,7 +21,7 @@ function loadComponent(file, imports = {}) {
 const palette = loadComponent('AppearancePalette');
 const { appearanceHex, appearancePalette, parseAppearanceHex } = palette;
 
-async function appearanceFixture(flush) {
+async function appearanceFixture(flush, system = { dark: false }) {
   const prefs = {
     cached: '', stored: '', writes: 0,
     async get() { return this.cached; },
@@ -30,10 +30,13 @@ async function appearanceFixture(flush) {
   };
   const { AppearanceState } = loadComponent('AppearanceState', {
     './AppearancePalette': palette,
-    '@kit.AbilityKit': { ConfigurationConstant: { ColorMode: {} } },
+    '@kit.AbilityKit': { ConfigurationConstant: { ColorMode: {
+      COLOR_MODE_DARK: 0, COLOR_MODE_LIGHT: 1, COLOR_MODE_NOT_SET: -1
+    } } },
     '@kit.ArkData': { preferences: { getPreferences: async () => prefs } },
     '@kit.ArkUI': {
-      uiAppearance: { getFontScale: () => 1 },
+      uiAppearance: { getFontScale: () => 1, getDarkMode: () => system.dark ? 0 : 1, DarkMode: { ALWAYS_DARK: 0 } },
+      ThemeControl: { setDefaultTheme() {} },
       uiMaterial: { ImmersiveMaterial: class {}, ImmersiveStyle: {} }
     },
     '@kit.LocalizationKit': {
@@ -42,7 +45,7 @@ async function appearanceFixture(flush) {
     '@kit.PerformanceAnalysisKit': { hilog: { warn() {}, error() {} } }
   });
   const state = new AppearanceState();
-  await state.load({ config: {} });
+  await state.load({ config: {}, setColorMode() {} });
   return { prefs, state };
 }
 
@@ -82,6 +85,31 @@ test('a failed theme save rolls back the swatches and the following selection st
   assert.equal(state.glass, 'standard');
   assert.equal(state.motion, 'fade');
   assert.deepEqual(JSON.parse(prefs.stored), { ...state.config });
+});
+
+test('only effective light/dark changes transition, including a return to the current system appearance', async () => {
+  const system = { dark: false };
+  const { state } = await appearanceFixture(async () => {}, system);
+  const transitions = [];
+  state.colorModeTransition = apply => {
+    const before = state.isDark;
+    apply();
+    transitions.push([before, state.isDark]);
+  };
+  const choose = mode => state.save(next => { next.mode = mode; });
+  await choose('light');
+  await choose('dark');
+  state.updateSystem({ colorMode: 0 });
+  await choose('system');
+  assert.equal(state.isDark, false);
+  system.dark = true;
+  state.updateSystem({ colorMode: 0 });
+  state.updateSystem({ colorMode: 0 });
+  await choose('dark');
+  system.dark = false;
+  await choose('system');
+  await state.save(next => { next.pureBlack = true; });
+  assert.deepEqual(transitions, [[false, true], [true, false], [false, true], [true, false]]);
 });
 
 function lum(argb) {

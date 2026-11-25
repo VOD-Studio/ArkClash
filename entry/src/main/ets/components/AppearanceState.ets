@@ -101,6 +101,18 @@ const STANDARD_SHEET = new uiMaterial.ImmersiveMaterial({ style: uiMaterial.Imme
 const ULTRA_SHEET = new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.THIN });
 const STANDARD_REGULAR = new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR });
 
+function systemDarkMode(fallback: boolean): boolean {
+  try {
+    return uiAppearance.getDarkMode() === uiAppearance.DarkMode.ALWAYS_DARK;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function resolvesDark(mode: AppearanceMode, systemDark: boolean): boolean {
+  return mode === 'system' ? systemDark : mode === 'dark';
+}
+
 @ObservedV2
 export class AppearanceState {
   @Trace config: AppearanceSettings = new AppearanceSettings();
@@ -112,6 +124,7 @@ export class AppearanceState {
   @Trace glass: AppearanceGlass = 'standard';
   @Trace systemSeed: number = DEFAULT_APPEARANCE_SEED;
   @Trace systemScale: number = 1;
+  colorModeTransition?: (apply: () => void) => void;
   private updates: Promise<void> = Promise.resolve();
   private prefs?: preferences.Preferences;
   private context?: common.UIAbilityContext;
@@ -140,7 +153,8 @@ export class AppearanceState {
     } catch (e) {
       hilog.warn(DOMAIN, TAG, 'System font scale unavailable: %{public}s', (e as Error).message);
     }
-    this.updateSystem(context.config);
+    const colorMode = context.config.colorMode;
+    this.applySystemColors(colorMode === undefined ? this.dark : colorMode === DARK);
     try {
       this.prefs = await preferences.getPreferences(context, { name: 'appearance' });
       const raw = await this.prefs.get(PREF_KEY, '');
@@ -153,14 +167,19 @@ export class AppearanceState {
   }
 
   updateSystem(config: Configuration): void {
-    if (config.colorMode !== undefined) { this.dark = config.colorMode === DARK; }
+    // Ability 的配置可能仍是上一次强制的颜色模式，跟随系统时以系统当前值为准。
+    const systemDark = config.colorMode === undefined ? this.dark : systemDarkMode(config.colorMode === DARK);
+    this.applySystemColors(systemDark);
+  }
+
+  private applySystemColors(systemDark: boolean): void {
     try {
       const color = resourceManager.getSysResourceManager().getColorByNameSync('ohos_id_color_emphasize');
       this.systemSeed = (color | 0xFF000000) >>> 0;
     } catch (e) {
       hilog.warn(DOMAIN, TAG, 'System accent unavailable: %{public}s', (e as Error).message);
     }
-    this.updatePalette();
+    this.apply(this.config, systemDark);
   }
 
   updateSystemFontScale(scale: number): void {
@@ -199,7 +218,7 @@ export class AppearanceState {
   get seed(): number { return this.config.seed || this.systemSeed; }
 
   get isDark(): boolean {
-    return this.config.mode === 'system' ? this.dark : this.config.mode === 'dark';
+    return resolvesDark(this.config.mode, this.dark);
   }
 
   headerMaterial(): uiMaterial.Material {
@@ -217,8 +236,19 @@ export class AppearanceState {
     return this.glass === 'ultra' ? ULTRA_SHEET : STANDARD_REGULAR;
   }
 
-  private apply(next: AppearanceSettings): void {
+  private apply(next: AppearanceSettings, systemDark: boolean = this.dark): void {
+    const followsSystem = next.mode === 'system' && this.config.mode !== 'system';
+    const currentSystemDark = followsSystem ? systemDarkMode(systemDark) : systemDark;
+    if (this.colorModeTransition !== undefined && this.isDark !== resolvesDark(next.mode, currentSystemDark)) {
+      this.colorModeTransition((): void => this.applySettings(next, currentSystemDark));
+    } else {
+      this.applySettings(next, currentSystemDark);
+    }
+  }
+
+  private applySettings(next: AppearanceSettings, systemDark: boolean): void {
     const previous = this.config;
+    this.dark = systemDark;
     this.config = next;
     this.fontFamily = next.font;
     this.floating = next.floating;
