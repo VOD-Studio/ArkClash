@@ -4,8 +4,10 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { i18n } from '@kit.LocalizationKit';
 import { webview } from '@kit.ArkWeb';
 import { appearanceHex } from '../../components/AppearancePalette';
+import { ScrollControls } from '../../components/ScrollControls';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
+import { EditorViewport } from './EditorViewport';
 
 const YAML_EDITOR_TEXT_PREFIX = 'arkclash-yaml:';
 const YAML_TRANSFER_CHUNK = 131072;
@@ -365,26 +367,29 @@ export struct YamlCodeEditor {
   build() {
     Column() {
       if (!this.loadFailed) {
-        this.Toolbar()
-        Web({ src: $rawfile('script-editor/index.html'), controller: this.web })
-          .width('100%')
-          .layoutWeight(1)
-          .enabled(this.editorEnabled)
-          .javaScriptAccess(true)
-          .fileAccess(false)
-          .domStorageAccess(false)
-          .blockNetwork(true)
-          .mixedMode(MixedMode.None)
-          .javaScriptProxy({ object: this.bridge, name: 'ArkEditorStatus', methodList: ['changed'], controller: this.web })
-          .onLoadIntercept((event: OnLoadInterceptEvent): boolean => event.data.isMainFrame() &&
-            !event.data.getRequestUrl().endsWith('/script-editor/index.html'))
-          .onPageEnd((): void => { this.startEditor(); })
-          .onErrorReceive((event: OnErrorReceiveEvent): void => {
-            if (event.request.isMainFrame()) {
-              this.loadFailed = true;
-              this.onReadyChange(false);
-            }
-          })
+        ScrollControls({ controls: (): void => this.Toolbar() }) {
+          EditorViewport({ controller: this.web, ready: this.ready }) {
+            Web({ src: $rawfile('script-editor/index.html'), controller: this.web })
+              .width('100%')
+              .height('100%')
+              .enabled(this.editorEnabled)
+              .javaScriptAccess(true)
+              .fileAccess(false)
+              .domStorageAccess(false)
+              .blockNetwork(true)
+              .mixedMode(MixedMode.None)
+              .javaScriptProxy({ object: this.bridge, name: 'ArkEditorStatus', methodList: ['changed'], controller: this.web })
+              .onLoadIntercept((event: OnLoadInterceptEvent): boolean => event.data.isMainFrame() &&
+                !event.data.getRequestUrl().endsWith('/script-editor/index.html'))
+              .onPageEnd((): void => { this.startEditor(); })
+              .onErrorReceive((event: OnErrorReceiveEvent): void => {
+                if (event.request.isMainFrame()) {
+                  this.loadFailed = true;
+                  this.onReadyChange(false);
+                }
+              })
+          }
+        }
       } else {
         Column({ space: 12 }) {
           Text($r('app.string.yaml_editor_failed')).fontSize(15).fontColor($r('sys.color.font_secondary'))

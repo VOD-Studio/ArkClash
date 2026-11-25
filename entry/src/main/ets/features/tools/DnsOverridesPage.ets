@@ -5,6 +5,7 @@ import {
 } from '../../client/DnsOverrides';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { ListRow } from '../../components/ListRow';
 import { uiResourceText } from '../../components/ResourceText';
@@ -14,7 +15,6 @@ import { SettingsSection } from './SettingsSection';
 
 @ComponentV2
 export struct DnsOverridesPage {
-  @Param @Require topInset: number;
   @Param foreground: boolean = true;
   @Param reduceMotion: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
@@ -376,12 +376,18 @@ export struct DnsOverridesPage {
       .width('100%')
       .height('100%')
       .align(Alignment.Top)
+      .clipContent(ContentClipMode.SAFE_AREA)
       .scrollBar(BarState.Off)
     }
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      pageShown: (): void => { this.shown = true; if (!this.saving) { this.load(); } },
+      pageHidden: (): void => { this.shown = false; }
+    }) {
       Stack() {
         this.Content()
         Column()
@@ -402,11 +408,5 @@ export struct DnsOverridesPage {
       .width('100%')
       .height('100%')
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .menus(this.HeaderMenus)
-    .padding({ top: this.topInset })
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((): void => { this.shown = true; if (!this.saving) { this.load(); } })
-    .onHidden((): void => { this.shown = false; })
   }
 }

@@ -39,7 +39,7 @@ import { AddedRulesPage } from '../features/tools/AddedRulesPage';
 import { RuleSetsPage } from '../features/tools/RuleSetsPage';
 import { ProxyFiltersPage } from '../features/tools/ProxyFiltersPage';
 import { IconSetPreviewPage, IconSetsPage } from '../features/tools/IconSetsPage';
-import { WindowInsets } from './WindowInsets';
+import { WindowInsets, windowInsets } from '../components/WindowInsets';
 import { DashboardTab } from './DashboardTab';
 
 enum Tab {
@@ -92,7 +92,7 @@ struct Index {
   @Local homeEditing: boolean = false;
   @Local closeEditSignal: number = 0;
   @Local conn: Connection = connection;
-  @Local insets: WindowInsets = AppStorageV2.connect(WindowInsets, () => new WindowInsets())!;
+  @Local insets: WindowInsets = windowInsets();
   @Local miniBarExpanded: boolean = false;
   @Local reduceMotion: boolean = true;
   private reductionListener: (enabled: boolean) => void = (enabled: boolean): void => {
@@ -293,62 +293,56 @@ struct Index {
   @Builder
   Routes(name: string, param: Object) {
     if (name === ToolRoute.Theme) {
-      ThemePage({ topInset: this.topInset(), reduceMotion: this.reduceMotion })
+      ThemePage({ reduceMotion: this.reduceMotion })
     } else if (name === ToolRoute.General) {
-      GeneralPage({ topInset: this.topInset() })
+      GeneralPage()
     } else if (name === ToolRoute.Logs) {
-      LogsPage({ topInset: this.topInset(), foreground: this.foreground })
+      LogsPage({ foreground: this.foreground })
     } else if (name === ToolRoute.AdvancedConfig) {
-      AdvancedConfigPage({ topInset: this.topInset(),
-        onOpen: (route: ToolRoute): void => { this.stack.pushPath({ name: route }); } })
+      AdvancedConfigPage({ onOpen: (route: ToolRoute): void => { this.stack.pushPath({ name: route }); } })
     } else if (name === ToolRoute.Network) {
-      NetworkPage({ topInset: this.topInset(), foreground: this.foreground })
+      NetworkPage({ foreground: this.foreground })
     } else if (name === ToolRoute.DnsOverrides) {
-      DnsOverridesPage({ topInset: this.topInset(), foreground: this.foreground, reduceMotion: this.reduceMotion })
+      DnsOverridesPage({ foreground: this.foreground, reduceMotion: this.reduceMotion })
     } else if (name === ToolRoute.AddedRules) {
-      AddedRulesPage({ topInset: this.topInset(), foreground: this.foreground, reduceMotion: this.reduceMotion })
+      AddedRulesPage({ foreground: this.foreground, reduceMotion: this.reduceMotion })
     } else if (name === ToolRoute.LocalProxies) {
-      LocalProxiesPage({ topInset: this.topInset(), foreground: this.foreground })
+      LocalProxiesPage({ foreground: this.foreground })
     } else if (name === ToolRoute.RuleSets) {
-      RuleSetsPage({ topInset: this.topInset(), foreground: this.foreground })
+      RuleSetsPage({ foreground: this.foreground })
     } else if (name === ToolRoute.ProxyFilters) {
-      ProxyFiltersPage({ topInset: this.topInset(), foreground: this.foreground })
+      ProxyFiltersPage({ foreground: this.foreground })
     } else if (name === ToolRoute.IconSets) {
-      IconSetsPage({ topInset: this.topInset(),
-        foreground: this.foreground, onPreview: (id: string): void => this.openIconSet(id) })
+      IconSetsPage({ foreground: this.foreground, onPreview: (id: string): void => this.openIconSet(id) })
     } else if (name === ToolRoute.IconSetPreview) {
-      IconSetPreviewPage({ topInset: this.topInset(), setId: (param as IconSetRouteArgument).id })
+      IconSetPreviewPage({ setId: (param as IconSetRouteArgument).id })
     } else if (name === ToolRoute.Scripts) {
-      ScriptsPage({ topInset: this.topInset(),
-        foreground: this.foreground, onEdit: (id: string): void => this.openScriptEditor(id) })
+      ScriptsPage({ foreground: this.foreground, onEdit: (id: string): void => this.openScriptEditor(id) })
     } else if (name === ToolRoute.ScriptEditor) {
-      ScriptEditorPage({ topInset: this.topInset(),
-        scriptId: (param as ScriptRouteArgument).id, foreground: this.foreground,
+      ScriptEditorPage({ scriptId: (param as ScriptRouteArgument).id, foreground: this.foreground,
         onClose: (): void => { this.stack.pop(); } })
     } else if (name === ToolRoute.ProfileExtension) {
-      ProfileExtensionPage({ topInset: this.topInset(),
-        profileId: (param as ScriptRouteArgument).id, currentProfile: this.profiles.current,
+      ProfileExtensionPage({ profileId: (param as ScriptRouteArgument).id, currentProfile: this.profiles.current,
         foreground: this.foreground, onScripts: (): void => { this.stack.pushPath({ name: ToolRoute.Scripts }); },
         onStandardRules: (): void => { this.stack.pushPath({ name: ToolRoute.ProfileRules, param: param }); } })
     } else if (name === ToolRoute.ProfileRuntimePreview) {
-      ProfileRuntimePreviewPage({ topInset: this.topInset(), profileId: (param as ProfilePreviewRouteArgument).id,
+      ProfileRuntimePreviewPage({ profileId: (param as ProfilePreviewRouteArgument).id,
         profileName: (param as ProfilePreviewRouteArgument).name, foreground: this.foreground })
     } else if (name === ToolRoute.ProfileRules) {
-      AddedRulesPage({ topInset: this.topInset(), profileId: (param as ScriptRouteArgument).id,
+      AddedRulesPage({ profileId: (param as ScriptRouteArgument).id,
         foreground: this.foreground, reduceMotion: this.reduceMotion,
         onGlobalRules: (): void => { this.stack.pushPath({ name: ToolRoute.AddedRules }); } })
     } else if (name === ToolRoute.Resources) {
-      ResourcesPage({ topInset: this.topInset(),
-        foreground: this.foreground, onScript: (id: string): void => this.openScriptEditor(id) })
+      ResourcesPage({ foreground: this.foreground, onScript: (id: string): void => this.openScriptEditor(id) })
     } else if (name === ToolRoute.Connections) {
-      ConnectionsPage({ topInset: this.topInset(), foreground: this.foreground,
+      ConnectionsPage({ foreground: this.foreground,
         initialFeed: param !== undefined ? (param as ConnectionsRouteArgument).feed : undefined })
     } else if (name === ToolRoute.Dns) {
-      DnsPage({ topInset: this.topInset(), foreground: this.foreground })
+      DnsPage({ foreground: this.foreground })
     } else if (name === ToolRoute.Backup) {
-      BackupPage({ topInset: this.topInset(), onChanged: (): void => this.backupChanged() })
+      BackupPage({ onChanged: (): void => this.backupChanged() })
     } else if (name === ToolRoute.About) {
-      AboutPage({ topInset: this.topInset() })
+      AboutPage()
     }
   }
 

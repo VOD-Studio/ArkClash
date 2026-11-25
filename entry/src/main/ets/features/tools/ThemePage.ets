@@ -4,6 +4,7 @@ import { AppearanceColorStyle, AppearancePalette, appearanceHex, appearanceInk, 
 import { APPEARANCE_SWATCHES, AppearanceGlass, AppearanceMode, AppearanceMotion, AppearanceSettings,
   AppearanceState, appAppearance, TEXT_SCALE_MAX, TEXT_SCALE_MIN, TEXT_SCALE_STEP } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { uiResourceText } from '../../components/ResourceText';
 import { CARD_RADIUS, PAGE_GUTTER } from '../../components/Theme';
 import { ThemeColorEditor } from './ThemeColorEditor';
@@ -52,7 +53,6 @@ type ThemeSheet = 'color' | 'delete' | 'reset' | 'fonts';
 
 @ComponentV2
 export struct ThemePage {
-  @Param @Require topInset: number;
   @Param reduceMotion: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private previewTab: number = 0;
@@ -417,7 +417,11 @@ export struct ThemePage {
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      pageShown: (): void => { this.shown = true; },
+      pageHidden: (): void => { this.shown = false; }
+    }) {
       Scroll() {
         Column({ space: 16 }) {
           ThemePreview({ colors: this.appStyle.palette, floating: this.appStyle.floating, glass: this.appStyle.glass,
@@ -493,6 +497,7 @@ export struct ThemePage {
         .constraintSize({ maxWidth: 640 })
       }
       .width('100%').height('100%').align(Alignment.Top).scrollBar(BarState.Off)
+      .clipContent(ContentClipMode.SAFE_AREA)
       .bindSheet($$this.sheetOpen, this.SheetBody, {
         height: this.sheet === 'color' || this.sheet === 'fonts' ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
         preferType: SheetType.BOTTOM, showClose: this.sheet === 'fonts',
@@ -502,10 +507,5 @@ export struct ThemePage {
         onDisappear: () => this.finishSheet()
       })
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .padding({ top: this.topInset })
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((): void => { this.shown = true; })
-    .onHidden((): void => { this.shown = false; })
   }
 }

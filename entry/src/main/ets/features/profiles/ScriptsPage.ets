@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { formatUpdatedAgo } from '../../components/Format';
 import { ListSource } from '../../components/ListSource';
@@ -96,7 +97,6 @@ struct ConfigScriptRow {
 
 @ComponentV2
 export struct ScriptsPage {
-  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Event onEdit: (id: string) => void = (_id: string): void => {};
@@ -296,7 +296,12 @@ export struct ScriptsPage {
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      pageShown: (): void => { this.shown = true; this.refresh(); },
+      pageHidden: (): void => { this.shown = false; }
+    }) {
       Column() {
         Column() {
         if (this.loading) {
@@ -319,7 +324,8 @@ export struct ScriptsPage {
               }, (item: ConfigScript): string => item.id)
             }
           }.width('100%').layoutWeight(1).padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
-            .contentStartOffset(16).contentEndOffset(24).cachedCount(2).scrollBar(BarState.Off)
+            .contentStartOffset(16).contentEndOffset(24).cachedCount(2, true).scrollBar(BarState.Off)
+            .clipContent(ContentClipMode.SAFE_AREA)
         }
       }.width('100%').height('100%')
       .bindSheet($$this.urlShown, this.UrlSheet(), { height: SheetSize.FIT_CONTENT,
@@ -331,10 +337,5 @@ export struct ScriptsPage {
         title: { title: $r('app.string.script_delete_title') }, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
         onWillDismiss: (action: DismissSheetAction): void => { if (!this.busy) { action.dismiss(); } } })
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.HeaderMenus)
-    .padding({ top: this.topInset })
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((): void => { this.shown = true; this.refresh(); })
-    .onHidden((): void => { this.shown = false; })
   }
 }

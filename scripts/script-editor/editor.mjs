@@ -51,11 +51,30 @@ let editor;
 let original;
 let reported;
 let readOnlyMode = false;
+let topInset = 0;
 let pendingOpenSettings = null;
 let pendingOpenChunks = [];
 let pendingReplaceChunks = [];
 const wrapping = new Compartment();
 const appearance = new Compartment();
+
+function reserveSearchPanel(height) {
+  document.documentElement.style.setProperty('--search-height', `${height}px`);
+  editor?.requestMeasure();
+}
+
+const searchPanelSize = new ResizeObserver(([entry]) => {
+  if (entry.target.isConnected) reserveSearchPanel(entry.borderBoxSize[0].blockSize);
+});
+
+function trackSearchPanel(update) {
+  const open = searchPanelOpen(update.state);
+  if (open === searchPanelOpen(update.startState)) return;
+  searchPanelSize.disconnect();
+  const panel = open && update.view.dom.querySelector('.cm-panels-top');
+  if (panel) searchPanelSize.observe(panel);
+  else reserveSearchPanel(0);
+}
 
 function report(update) {
   const { state } = update;
@@ -102,6 +121,8 @@ function ariaLabel(settings) {
 }
 
 function openDocument(source, settings) {
+  searchPanelSize.disconnect();
+  document.documentElement.style.removeProperty('--search-height');
   editor?.destroy();
   reported = '';
   readOnlyMode = Boolean(settings.readOnly);
@@ -111,6 +132,8 @@ function openDocument(source, settings) {
     indentUnit.of('  '), bracketMatching(),
     ...languageExtensions(language, readOnlyMode),
     search({ top: true }), EditorState.phrases.of(settings.chinese ? phrases : {}),
+    EditorView.updateListener.of(trackSearchPanel),
+    EditorView.scrollMargins.of(() => ({ top: topInset })),
     EditorView.contentAttributes.of({ 'aria-label': ariaLabel(settings),
       autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false' }),
     wrapping.of([]), appearance.of(theme(false)),
@@ -144,6 +167,11 @@ function replaceDocumentText(text) {
 }
 
 window.arkScriptEditor = {
+  setTopInset(inset) {
+    topInset = Math.max(0, inset);
+    document.documentElement.style.setProperty('--editor-top', `${topInset}px`);
+    editor?.requestMeasure();
+  },
   open(source, settings) {
     return openDocument(source, settings);
   },

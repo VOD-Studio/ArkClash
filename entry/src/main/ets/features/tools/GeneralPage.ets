@@ -6,6 +6,7 @@ import { GeneralSettingsState, generalSettingsState } from '../../client/General
 import { Connection, connection } from '../../client/Connection';
 import { appAppearance, AppearanceState } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { ListRow } from '../../components/ListRow';
 import { uiResourceText } from '../../components/ResourceText';
 import { PAGE_GUTTER } from '../../components/Theme';
@@ -68,7 +69,6 @@ function geodataLoaderLabel(loader: string): Resource {
 
 @ComponentV2
 export struct GeneralPage {
-  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private settings: GeneralSettingsState = generalSettingsState;
   @Local private updates: AppUpdateState = appUpdateState;
@@ -818,7 +818,9 @@ export struct GeneralPage {
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.Header()
+    }) {
       Stack() {
         Scroll() {
           Column({ space: 16 }) {
@@ -836,6 +838,7 @@ export struct GeneralPage {
           }.width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
             .enabled(!this.isSaving)
         }.width('100%').height('100%').align(Alignment.Top).scrollBar(BarState.Off)
+          .clipContent(ContentClipMode.SAFE_AREA)
         Column()
           .bindSheet($$this.corePickerOpen, this.CoreOverridePicker, {
             title: { title: $r('app.string.general_core_override_add') }, height: SheetSize.MEDIUM,
@@ -853,9 +856,6 @@ export struct GeneralPage {
           })
       }.width('100%').height('100%')
     }
-    .title(this.Header, { systemMaterial: this.appStyle.regularMaterial() })
-    .padding({ top: this.topInset })
-    .backgroundColor(this.appStyle.palette.pageBackground)
   }
 }
 

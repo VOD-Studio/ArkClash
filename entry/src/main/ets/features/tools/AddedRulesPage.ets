@@ -1,9 +1,11 @@
+import { ScrollControls } from '../../components/ScrollControls';
 import { common } from '@kit.AbilityKit';
 import { AddedRule, AddedRulesSettings, ProfileAddedRules, profileAddedRules, addedRuleText, emptyAddedRules, newAddedRule, readAddedRules,
   namedExits, saveAddedRules, validAddedRule, validExitName } from '../../client/AddedRules';
 import { readRuleSets, RuleSetItem } from '../../client/RuleSets';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { KeyedListSource } from '../../components/KeyedListSource';
 import { HEADER_ACTION, HEADER_ICON_SIZE, HEADER_GAP, PAGE_GUTTER } from '../../components/Theme';
@@ -25,7 +27,6 @@ class AddedRuleListItem {
 
 @ComponentV2
 export struct AddedRulesPage {
-  @Param @Require topInset: number;
   @Param foreground: boolean = true;
   @Param reduceMotion: boolean = true;
   @Param profileId: string = '';
@@ -369,7 +370,8 @@ export struct AddedRulesPage {
     .layoutWeight(1)
     .enabled(!this.saving)
     .scrollBar(BarState.Off)
-    .cachedCount(2)
+    .cachedCount(2, true)
+    .clipContent(ContentClipMode.SAFE_AREA)
     .contentStartOffset(12)
     .contentEndOffset(24)
     .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
@@ -415,20 +417,24 @@ export struct AddedRulesPage {
   }
 
   @Builder
+  FilterControls() {
+    if (this.profileId !== '' && !this.loading && !this.loadFailed) {
+      ProfileRuleOptions({ standard: this.standard(), globals: this.settings.rules,
+        ruleSets: this.ruleSets, saving: this.saving, onGlobalRules: (): void => this.onGlobalRules(),
+        onChange: (next: ProfileAddedRules): void => { this.commit(next.rules, false, next); } })
+        .margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 12 })
+    }
+    if (this.searchShown) {
+      TextInput({ text: this.query, placeholder: $r('app.string.added_rules_search_hint') })
+        .height(40)
+        .margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
+        .onChange((value: string): void => this.updateSearch(value))
+    }
+  }
+
+  @Builder
   Content() {
-    Column() {
-      if (this.profileId !== '' && !this.loading && !this.loadFailed) {
-        ProfileRuleOptions({ standard: this.standard(), globals: this.settings.rules,
-          ruleSets: this.ruleSets, saving: this.saving, onGlobalRules: (): void => this.onGlobalRules(),
-          onChange: (next: ProfileAddedRules): void => { this.commit(next.rules, false, next); } })
-          .margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 12 })
-      }
-      if (this.searchShown) {
-        TextInput({ text: this.query, placeholder: $r('app.string.added_rules_search_hint') })
-          .height(40)
-          .margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
-          .onChange((value: string): void => this.updateSearch(value))
-      }
+    ScrollControls({ controls: (): void => this.FilterControls() }) {
       if (this.loading) {
         Column() {
           LoadingProgress().width(32).height(32).color(this.appStyle.palette.brand)
@@ -447,11 +453,16 @@ export struct AddedRulesPage {
         this.RuleList()
       }
     }
-    .width('100%').height('100%')
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      pageShown: (): void => { this.shown = true; if (!this.saving) { this.load(); } },
+      pageHidden: (): void => { this.shown = false; },
+      handleBack: (): boolean => this.handleBack()
+    }) {
       Stack() {
         this.Content()
         Column()
@@ -476,13 +487,6 @@ export struct AddedRulesPage {
       }
       .width('100%').height('100%')
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .menus(this.HeaderMenus)
-    .padding({ top: this.topInset })
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((): void => { this.shown = true; if (!this.saving) { this.load(); } })
-    .onHidden((): void => { this.shown = false; })
-    .onBackPressed((): boolean => this.handleBack())
   }
 }
 

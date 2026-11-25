@@ -1,7 +1,9 @@
+import { ScrollControls } from '../../components/ScrollControls';
 import { common } from '@kit.AbilityKit';
 import { checkProxyFilter } from '../../client/ProxyFilterValidation';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { KeyedListSource } from '../../components/KeyedListSource';
 import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
@@ -22,7 +24,6 @@ class ProxyFilterRowItem {
 
 @ComponentV2
 export struct ProxyFiltersPage {
-  @Param @Require topInset: number;
   @Param foreground: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private loading: boolean = true;
@@ -290,18 +291,23 @@ export struct ProxyFiltersPage {
         .onMove(this.managing && !this.saving && this.query.trim() === '' ?
           (from: number, to: number): void => this.move(from, to) : undefined)
     }
-    .width('100%').layoutWeight(1).enabled(!this.saving).scrollBar(BarState.Off).cachedCount(2)
+    .width('100%').layoutWeight(1).enabled(!this.saving).scrollBar(BarState.Off).cachedCount(2, true)
+    .clipContent(ContentClipMode.SAFE_AREA)
     .contentStartOffset(12).contentEndOffset(24).padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
   }
 
   @Builder
+  FilterControls() {
+    if (this.searchShown) {
+      TextInput({ text: this.query, placeholder: $r('app.string.proxy_filter_search') })
+        .height(40).margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
+        .onChange((text: string): void => { this.query = text; this.refreshRows(); })
+    }
+  }
+
+  @Builder
   Content() {
-    Column() {
-      if (this.searchShown) {
-        TextInput({ text: this.query, placeholder: $r('app.string.proxy_filter_search') })
-          .height(40).margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
-          .onChange((text: string): void => { this.query = text; this.refreshRows(); })
-      }
+    ScrollControls({ controls: (): void => this.FilterControls() }) {
       if (this.loading) {
         Column() { LoadingProgress().width(32).height(32).color(this.appStyle.palette.brand) }
           .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
@@ -314,7 +320,7 @@ export struct ProxyFiltersPage {
       } else {
         this.FilterList()
       }
-    }.width('100%').height('100%')
+    }
   }
 
   @Builder
@@ -373,22 +379,22 @@ export struct ProxyFiltersPage {
   }
 
   build() {
-    NavDestination() {
-      this.Content()
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      pageShown: (): void => { this.shown = true; if (!this.saving) { this.load(); } },
+      pageHidden: (): void => { this.shown = false; },
+      handleBack: (): boolean => this.back()
+    }) {
+      Stack() { this.Content() }
+        .width('100%').height('100%')
+        .bindSheet($$this.sheetShown, this.SheetBody, {
+          title: { title: this.deleting ? $r('app.string.action_delete') :
+            this.editing === undefined ? $r('app.string.action_add') : $r('app.string.action_edit') },
+          height: SheetSize.FIT_CONTENT, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
+          onWillDismiss: (action: DismissSheetAction): void => this.closeSheet((): void => action.dismiss())
+        })
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .menus(this.HeaderMenus)
-    .padding({ top: this.topInset })
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .bindSheet($$this.sheetShown, this.SheetBody, {
-      title: { title: this.deleting ? $r('app.string.action_delete') :
-        this.editing === undefined ? $r('app.string.action_add') : $r('app.string.action_edit') },
-      height: SheetSize.FIT_CONTENT, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
-      onWillDismiss: (action: DismissSheetAction): void => this.closeSheet((): void => action.dismiss())
-    })
-    .onShown((): void => { this.shown = true; if (!this.saving) { this.load(); } })
-    .onHidden((): void => { this.shown = false; })
-    .onBackPressed((): boolean => this.back())
   }
 }
 

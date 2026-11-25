@@ -5,10 +5,13 @@ import { i18n } from '@kit.LocalizationKit';
 import { webview } from '@kit.ArkWeb';
 import { applyConfigScript } from '../../shared/profiles/ScriptApply';
 import { appearanceHex } from '../../components/AppearancePalette';
+import { ScrollControls } from '../../components/ScrollControls';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { ConfigScript, readConfigScripts, saveConfigScript, SCRIPT_TEMPLATE } from '../../shared/profiles/Scripts';
+import { EditorViewport } from './EditorViewport';
 import { configScriptError } from './ScriptMessages';
 
 const EDITOR_TEXT_PREFIX = 'arkclash-editor:';
@@ -38,7 +41,6 @@ class ScriptEditorStatusBridge {
 
 @ComponentV2
 export struct ScriptEditorPage {
-  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Param scriptId: string = '';
   @Param foreground: boolean = true;
@@ -297,56 +299,66 @@ export struct ScriptEditorPage {
     }.width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 12, bottom: 24 })
   }
 
+  @Builder
+  EditorControls() {
+    this.EditorToolbar()
+    if (this.record?.url) {
+      Text($r('app.string.script_remote_edit_hint')).fontSize(13).fontColor($r('sys.color.font_secondary'))
+        .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
+    }
+    if (this.failure !== '') {
+      Text(this.failure).fontSize(13).fontColor($r('app.color.status_error'))
+        .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
+    }
+  }
+
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      handleBack: (): boolean => this.requestBack()
+    }) {
       Column() {
         Column() {
-        if (this.loaded && !this.editorFailed) {
-          this.EditorToolbar()
-          if (this.record?.url) {
-            Text($r('app.string.script_remote_edit_hint')).fontSize(13).fontColor($r('sys.color.font_secondary'))
-              .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
-          }
-          if (this.failure !== '') {
-            Text(this.failure).fontSize(13).fontColor($r('app.color.status_error'))
-              .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
-          }
-          Web({ src: $rawfile('script-editor/index.html'), controller: this.web })
-            .width('100%').layoutWeight(1).enabled(!this.saving).javaScriptAccess(true)
-            .fileAccess(false).domStorageAccess(false).blockNetwork(true).mixedMode(MixedMode.None)
-            .javaScriptProxy({ object: this.bridge, name: 'ArkEditorStatus', methodList: ['changed'], controller: this.web })
-            .onLoadIntercept((event: OnLoadInterceptEvent): boolean => event.data.isMainFrame() &&
-              !event.data.getRequestUrl().endsWith('/script-editor/index.html'))
-            .onPageEnd((): void => { this.startEditor(); })
-            .onErrorReceive((event: OnErrorReceiveEvent): void => {
-              if (event.request.isMainFrame()) { this.editorFailed = true; }
+          if (this.loaded && !this.editorFailed) {
+            ScrollControls({ controls: (): void => this.EditorControls() }) {
+              EditorViewport({ controller: this.web, ready: this.ready }) {
+                Web({ src: $rawfile('script-editor/index.html'), controller: this.web })
+                  .width('100%').height('100%').enabled(!this.saving).javaScriptAccess(true)
+                  .fileAccess(false).domStorageAccess(false).blockNetwork(true).mixedMode(MixedMode.None)
+                  .javaScriptProxy({ object: this.bridge, name: 'ArkEditorStatus', methodList: ['changed'], controller: this.web })
+                  .onLoadIntercept((event: OnLoadInterceptEvent): boolean => event.data.isMainFrame() &&
+                    !event.data.getRequestUrl().endsWith('/script-editor/index.html'))
+                  .onPageEnd((): void => { this.startEditor(); })
+                  .onErrorReceive((event: OnErrorReceiveEvent): void => {
+                    if (event.request.isMainFrame()) { this.editorFailed = true; }
+                  })
+              }
+            }
+          } else if (this.editorFailed || this.loadFailed) {
+            Text(this.editorFailed ? $r('app.string.script_editor_failed') : this.failure).margin(16)
+            Button($r('app.string.action_retry')).onClick((): void => {
+              if (this.editorFailed) {
+                this.webStarted = false;
+                this.web = new webview.WebviewController();
+                this.editorFailed = false;
+              } else { this.load(); }
             })
-        } else if (this.editorFailed || this.loadFailed) {
-          Text(this.editorFailed ? $r('app.string.script_editor_failed') : this.failure).margin(16)
-          Button($r('app.string.action_retry')).onClick((): void => {
-            if (this.editorFailed) {
-              this.webStarted = false;
-              this.web = new webview.WebviewController();
-              this.editorFailed = false;
-            } else { this.load(); }
-          })
-        } else {
-          LoadingProgress().width(28).height(28).margin({ top: 20 })
-        }
-      }.width('100%').height('100%')
-      .bindSheet($$this.nameShown, this.NameSheet(), { height: SheetSize.FIT_CONTENT,
-        title: { title: $r('app.string.script_name_hint') }, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
-        onWillDismiss: (action: DismissSheetAction): void => { this.saveAfterName = false; action.dismiss(); },
-        onDisappear: (): void => {
-          if (this.saveAfterName && this.scriptName !== '') { this.saveAfterName = false; this.save(); }
-          else { this.saveAfterName = false; }
-        } })
+          } else {
+            LoadingProgress().width(28).height(28).margin({ top: 20 })
+          }
+        }.width('100%').height('100%')
+        .bindSheet($$this.nameShown, this.NameSheet(), { height: SheetSize.FIT_CONTENT,
+          title: { title: $r('app.string.script_name_hint') }, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
+          onWillDismiss: (action: DismissSheetAction): void => { this.saveAfterName = false; action.dismiss(); },
+          onDisappear: (): void => {
+            if (this.saveAfterName && this.scriptName !== '') { this.saveAfterName = false; this.save(); }
+            else { this.saveAfterName = false; }
+          } })
       }.width('100%').height('100%')
       .bindSheet($$this.closeShown, this.CloseSheet(), { height: SheetSize.FIT_CONTENT,
         title: { title: $r('app.string.profile_unsaved_title') }, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
         onDisappear: (): void => { if (this.saveAfterName) { this.saveAfterName = false; this.save(); } } })
-    }.title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.HeaderMenus)
-      .padding({ top: this.topInset })
-      .backgroundColor(this.appStyle.palette.pageBackground).onBackPressed((): boolean => this.requestBack())
+    }
   }
 }

@@ -2,6 +2,7 @@ import { AppearanceState, appAppearance } from '../../components/AppearanceState
 import { bundleManager, common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { ListRow } from '../../components/ListRow';
 import { CARD_RADIUS, PAGE_GUTTER } from '../../components/Theme';
 
@@ -9,21 +10,21 @@ const SOURCE_URL = 'https://github.com/VOD-Studio/ArkClash';
 
 @ComponentV2
 export struct AboutPage {
-  @Param @Require topInset: number;
-  @Local private appStyle: AppearanceState = appAppearance;
-
   @Builder
   HeaderTitle() {
     DestinationTitle({ titleText: $r('app.string.tools_about') })
   }
 
   build() {
-    NavDestination() {
-      AboutContent()
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle()
+    }) {
+      Scroll() {
+        AboutContent()
+      }
+      .width('100%').height('100%').align(Alignment.Top)
+      .clipContent(ContentClipMode.SAFE_AREA).scrollBar(BarState.Off)
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .padding({ top: this.topInset })
-    .backgroundColor(this.appStyle.palette.pageBackground)
   }
 }
 

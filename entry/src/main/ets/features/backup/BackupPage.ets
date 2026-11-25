@@ -3,6 +3,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { appAppearance, AppearanceState } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { ListRow } from '../../components/ListRow';
 import { PAGE_GUTTER } from '../../components/Theme';
 import {
@@ -19,7 +20,6 @@ type BackupLinkState = 'idle' | 'checking' | 'ready' | 'failed';
 
 @ComponentV2
 export struct BackupPage {
-  @Param @Require topInset: number;
   @Event onChanged: () => void = (): void => {};
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private settings: BackupSettings = { policy: 'merge' };
@@ -383,7 +383,11 @@ export struct BackupPage {
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.Header(),
+      pageShown: (): void => { this.visible = true; this.load(true); },
+      pageHidden: (): void => { this.visible = false; ++this.probeGeneration; }
+    }) {
       Scroll() {
         Column({ space: 10 }) {
           this.Remote()
@@ -411,14 +415,10 @@ export struct BackupPage {
         }.width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
       }
       .width('100%').height('100%').align(Alignment.Top).scrollBar(BarState.Off)
+      .clipContent(ContentClipMode.SAFE_AREA)
       .bindSheet($$this.sheetVisible, this.Sheet, { height: this.prompt === 'account' ? SheetSize.LARGE : SheetSize.MEDIUM,
         title: { title: this.sheetTitle() }, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
         onDisappear: (): void => this.sheetClosed() })
     }
-    .title(this.Header, { systemMaterial: this.appStyle.regularMaterial() })
-    .padding({ top: this.topInset })
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((): void => { this.visible = true; this.load(true); })
-    .onHidden((): void => { this.visible = false; ++this.probeGeneration; })
   }
 }

@@ -1,3 +1,4 @@
+import { ScrollControls } from '../../components/ScrollControls';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { accessibility } from '@kit.AccessibilityKit';
 import { common } from '@kit.AbilityKit';
@@ -5,6 +6,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { connection, Connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { DnsFilterSheet } from './DnsFilterSheet';
@@ -17,7 +19,6 @@ import { dnsRecords, DnsRecordsStore } from './RecordStores';
 
 @ComponentV2
 export struct DnsPage {
-  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Local store: DnsRecordsStore = dnsRecords;
@@ -282,22 +283,31 @@ export struct DnsPage {
     }
   }
 
+  @Builder
+  FilterControls() {
+    Column({ space: 8 }) {
+      if (this.searchShown || this.store.query !== '') {
+        Search({ value: this.store.query, placeholder: $r('app.string.diagnostics_search_hint') })
+          .textFont({ size: 16, family: this.appStyle.fontFamily }).placeholderFont({ size: 16, family: this.appStyle.fontFamily })
+          .accessibilityText($r('app.string.diagnostics_search'))
+          .onChange((query: string): void => { this.store.setQuery(query); })
+      }
+      RecordFilterChips({ facets: this.store.facets,
+        onRemove: (field: string, option: string): void => { this.store.toggleFacet(field, option); } })
+      this.StatusContent()
+    }
+    .width('100%').alignItems(HorizontalAlign.Start)
+    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+  }
+
   build() {
-    NavDestination() {
-      Column({ space: 8 }) {
-        Column({ space: 8 }) {
-          if (this.searchShown || this.store.query !== '') {
-            Search({ value: this.store.query, placeholder: $r('app.string.diagnostics_search_hint') })
-              .textFont({ size: 16, family: this.appStyle.fontFamily }).placeholderFont({ size: 16, family: this.appStyle.fontFamily })
-              .accessibilityText($r('app.string.diagnostics_search'))
-              .onChange((query: string): void => { this.store.setQuery(query); })
-          }
-          RecordFilterChips({ facets: this.store.facets,
-            onRemove: (field: string, option: string): void => { this.store.toggleFacet(field, option); } })
-          this.StatusContent()
-        }
-        .width('100%').alignItems(HorizontalAlign.Start)
-        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      pageShown: (_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); },
+      pageHidden: (_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); }
+    }) {
+      ScrollControls({ controls: (): void => this.FilterControls() }) {
         Stack() {
           DnsRecordList({ store: this.store, active: this.shown && this.foreground, reduceMotion: this.reduceMotion,
             onOpen: (id: string): void => { this.openDetails(id); } })
@@ -308,6 +318,7 @@ export struct DnsPage {
                 actionLabel: this.emptyAction, onAction: (): void => { this.store.retry(); } })
             }
             .width('100%').height('100%')
+            .clipContent(ContentClipMode.SAFE_AREA)
             .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.emptyTransition)
           }
         }
@@ -330,13 +341,6 @@ export struct DnsPage {
           onDisappear: (): void => { this.detailOpen = false; this.store.select(''); }
         })
       }
-      .width('100%').height('100%')
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .menus(this.HeaderMenus)
-    .padding({ top: this.topInset })
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })
-    .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); })
   }
 }

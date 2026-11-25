@@ -1,3 +1,4 @@
+import { ScrollControls } from '../../components/ScrollControls';
 import { common } from '@kit.AbilityKit';
 import { Connection, connection } from '../../client/Connection';
 import { ControllerSocket, ControllerSocketState } from '../../client/ControllerSocket';
@@ -5,6 +6,7 @@ import { GeneralSettingsState, generalSettingsState } from '../../client/General
 import { exportLogs, LogFrame, LogRecord, logStream, LOG_LIMIT } from '../../client/Logs';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { ListRow } from '../../components/ListRow';
 import { KeyedListSource } from '../../components/KeyedListSource';
 import { HEADER_ACTION, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
@@ -18,7 +20,6 @@ interface LogListRow {
 
 @ComponentV2
 export struct LogsPage {
-  @Param @Require topInset: number;
   @Param foreground: boolean = false;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private conn: Connection = connection;
@@ -214,21 +215,31 @@ export struct LogsPage {
     }.padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 12, bottom: 8 })
   }
 
+  @Builder
+  LogControls() {
+    if (this.settings.saved.captureLogs) { this.Controls() }
+    if (this.gaps || this.evicted > 0) {
+      Text(this.gaps ? $r('app.string.logs_gap') : $r('app.string.logs_evicted', this.evicted))
+        .fontSize(13).fontColor($r('sys.color.font_secondary'))
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
+    }
+  }
+
   build() {
-    NavDestination() {
-      Column() {
-        if (this.settings.saved.captureLogs) { this.Controls() }
-        if (this.gaps || this.evicted > 0) {
-          Text(this.gaps ? $r('app.string.logs_gap') : $r('app.string.logs_evicted', this.evicted))
-            .fontSize(13).fontColor($r('sys.color.font_secondary'))
-            .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
-        }
+    ScrollDestination({
+      heading: (): void => this.Header(),
+      actions: (): void => this.Actions(),
+      pageShown: (_reason: VisibilityChangeReason): void => { this.shown = true; this.sync(); },
+      pageHidden: (_reason: VisibilityChangeReason): void => { this.shown = false; this.sync(); }
+    }) {
+      ScrollControls({ controls: (): void => this.LogControls() }) {
         if (this.shownCount > 0) {
           List({ space: 6 }) {
             LazyForEach(this.rows, (row: LogListRow) => {
               ListItem() { LogRecordItem({ record: row.record }) }
             }, (row: LogListRow): string => row.key)
-          }.layoutWeight(1).width('100%').cachedCount(3)
+          }.layoutWeight(1).width('100%').cachedCount(3, true)
+            .clipContent(ContentClipMode.SAFE_AREA)
             .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 16 })
         } else {
           Column({ space: 12 }) {
@@ -238,16 +249,10 @@ export struct LogsPage {
             }
           }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
         }
-      }.width('100%').height('100%')
-        .bindSheet($$this.filtering, this.FilterSheet, { title: { title: $r('app.string.logs_filter') },
+        Column().bindSheet($$this.filtering, this.FilterSheet, { title: { title: $r('app.string.logs_filter') },
           height: SheetSize.MEDIUM, systemMaterial: this.appStyle.sheetMaterial(), showClose: true })
+      }
     }
-    .title(this.Header, { systemMaterial: this.appStyle.regularMaterial() })
-    .menus(this.Actions)
-    .padding({ top: this.topInset })
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.sync(); })
-    .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.sync(); })
   }
 }
 

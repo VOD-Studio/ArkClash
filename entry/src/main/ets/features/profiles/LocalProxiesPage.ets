@@ -1,7 +1,9 @@
+import { ScrollControls } from '../../components/ScrollControls';
 import { common } from '@kit.AbilityKit';
 import { decodeProxyLinks, encodeProxyLinks, validateProxyDefinitions } from '../../client/LocalProxyCore';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { ListSource } from '../../components/ListSource';
 import { CARD_RADIUS, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
@@ -57,7 +59,6 @@ struct LocalProxyRow {
 
 @ComponentV2
 export struct LocalProxiesPage {
-  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Local private snapshot: LocalProxySnapshot = emptyLocalProxies();
@@ -380,7 +381,8 @@ export struct LocalProxiesPage {
         }, (item: LocalProxy): string => `${item.id}:${item.revision}`)
       }
     }.width('100%').layoutWeight(1).padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
-      .contentStartOffset(12).contentEndOffset(24).cachedCount(2).scrollBar(BarState.Off)
+      .contentStartOffset(12).contentEndOffset(24).cachedCount(2, true).scrollBar(BarState.Off)
+      .clipContent(ContentClipMode.SAFE_AREA)
   }
 
   @Builder
@@ -444,15 +446,29 @@ export struct LocalProxiesPage {
       onSaved: (snapshot: LocalProxySnapshot, message: ResourceStr): void => this.editorSaved(snapshot, message) })
   }
 
+  @Builder
+  SearchControl() {
+    if (this.search) {
+      TextInput({ text: this.query, placeholder: $r('app.string.local_proxy_search') })
+        .height(40).margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
+        .onChange((text: string): void => { this.query = text; this.showRows(); })
+    }
+  }
+
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.Title(),
+      actions: (): void => this.Header(),
+      pageShown: (): void => { this.shown = true; this.refresh(); },
+      pageHidden: (): void => { this.shown = false; this.generation++; },
+      handleBack: (): boolean => {
+        if (this.selected.length > 0) { this.selected = []; return true; }
+        if (this.search) { this.search = false; this.query = ''; this.showRows(); return true; }
+        return this.busy;
+      }
+    }) {
       Stack() {
-        Column() {
-          if (this.search) {
-            TextInput({ text: this.query, placeholder: $r('app.string.local_proxy_search') })
-              .height(40).margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
-              .onChange((text: string): void => { this.query = text; this.showRows(); })
-          }
+        ScrollControls({ controls: (): void => this.SearchControl() }) {
           if (this.loading) {
             Column() { LoadingProgress().width(28).height(28).color(this.appStyle.palette.brand) }
               .width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
@@ -464,7 +480,7 @@ export struct LocalProxiesPage {
               onAction: (): void => { if (this.failed) { this.refresh(); } else { this.openEditor(); } } })
               .layoutWeight(1)
           } else { this.Rows() }
-        }.width('100%').height('100%')
+        }
         Column().bindSheet($$this.editShown, this.EditorSheet, {
           title: { title: this.editorProxy === undefined ? $r('app.string.local_proxy_add') :
             $r('app.string.local_proxy_edit') }, height: SheetSize.LARGE, showClose: true,
@@ -482,15 +498,6 @@ export struct LocalProxiesPage {
           onWillDismiss: (_action: DismissSheetAction): void => this.closeLinks()
         })
       }.width('100%').height('100%')
-    }.title(this.Title, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.Header)
-      .padding({ top: this.topInset })
-      .backgroundColor(this.appStyle.palette.pageBackground)
-      .onShown((): void => { this.shown = true; this.refresh(); })
-      .onHidden((): void => { this.shown = false; this.generation++; })
-      .onBackPressed((): boolean => {
-        if (this.selected.length > 0) { this.selected = []; return true; }
-        if (this.search) { this.search = false; this.query = ''; this.showRows(); return true; }
-        return this.busy;
-      })
+    }
   }
 }

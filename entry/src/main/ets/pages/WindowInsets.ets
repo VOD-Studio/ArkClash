@@ -1,6 +1,12 @@
-/** 主窗口沉浸式布局后的避让区域，px。由 EntryAbility 写入，页面读取。 */
-@ObservedV2
-export class WindowInsets {
-  @Trace top: number = 0;
-  @Trace bottom: number = 0;
+import { window } from '@kit.ArkUI';
+import { windowInsets } from '../components/WindowInsets';
+
+export function observeWindowInsets(win: window.Window): void {
+  const insets = windowInsets();
+  const update = (): void => {
+    insets.top = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM).topRect.height;
+    insets.bottom = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR).bottomRect.height;
+  };
+  update();
+  win.on('avoidAreaChange', update);
 }

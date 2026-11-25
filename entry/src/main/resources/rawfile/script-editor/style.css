@@ -1,10 +1,16 @@
 :root { color-scheme: light; --surface: #fff; --ink: #21232a; --accent: #006bd6; --font: 14px; }
 :root.dark { color-scheme: dark; --surface: #191b20; --ink: #e8e9ef; }
 html, body, #editor { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--surface); }
+#editor::after {
+  content: ''; position: fixed; inset: 0 0 auto; height: var(--editor-top, 0px); z-index: 10; pointer-events: none;
+  backdrop-filter: blur(6px); background: color-mix(in srgb, var(--surface) 40%, transparent);
+  mask-image: linear-gradient(to bottom, black 60%, transparent);
+}
 .cm-editor { height: 100%; color: var(--ink); font-size: var(--font); }
 .cm-editor .cm-scroller { font-family: monospace; line-height: 1.55; }
 .cm-editor .cm-gutters { background: var(--surface); color: color-mix(in srgb, var(--ink) 62%, transparent); }
-.cm-editor .cm-content { padding-block: 10px; }
+.cm-editor .cm-content { padding-block: calc(10px + var(--editor-top, 0px) + var(--search-height, 0px)) 10px; }
+.cm-editor .cm-panels-top { position: absolute; inset: var(--editor-top, 0px) 0 auto; z-index: 5; }
 .cm-editor .cm-panels { border-color: color-mix(in srgb, var(--ink) 18%, transparent); background: var(--surface); color: var(--ink); }
 .cm-editor .cm-search { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 32px 8px 8px; }
 .cm-editor .cm-search br { flex-basis: 100%; content: ''; }

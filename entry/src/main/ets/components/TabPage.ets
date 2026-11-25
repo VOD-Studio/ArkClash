@@ -2,22 +2,15 @@ import { AppearanceState, appAppearance } from './AppearanceState';
 import { LengthMetrics } from '@kit.ArkUI';
 import { uiResourceText } from './ResourceText';
 import {
-  HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, HdsTitleBarContentStyle,
-  ScrollEffectType, TitleBarContentOptions
+  HdsNavigation, HdsNavigationMenuItemOptions, HdsNavigationTitleMode, TitleBarContentOptions
 } from '@kit.UIDesignKit';
 import {
-  FLOATING_BAR_INSET, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER, SECTION_GAP, hdsGlass,
+  FLOATING_BAR_INSET, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER, SECTION_GAP, immersiveTitleStyle,
   TAB_HEADER_HEIGHT, TAB_TITLE_LINE_HEIGHT, TAB_TITLE_SIZE
 } from './Theme';
 
 // 单帧滚动超过这个距离（vp）才算换了方向，过滤手指的细微抖动。
 const DIRECTION_THRESHOLD = 2;
-
-// IMMERSIVE_GRADIENT_BLUR 默认按深色头图配白字，状态栏颜色也跟着标题走；页面是浅底，显式用正文色。
-const CONTENT_STYLE: HdsTitleBarContentStyle = {
-  titleStyle: { mainTitleColor: $r('sys.color.font_primary') },
-  menuStyle: { iconColor: $r('sys.color.icon_primary'), backgroundColor: $r('sys.color.comp_background_tertiary') }
-};
 
 interface TabPageHeaderState {
   title: ResourceStr;
@@ -166,15 +159,7 @@ export struct TabPage {
       padding: { start: LengthMetrics.vp(0), end: LengthMetrics.vp(0) },
       // 窗口是沉浸式布局，标题栏要自己让开状态栏。
       avoidLayoutSafeArea: true,
-      style: {
-        scrollEffectOpts: {
-          enableScrollEffect: true,
-          scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
-        },
-        systemMaterialEffect: hdsGlass(this.appStyle.glass),
-        originalStyle: { contentStyle: CONTENT_STYLE },
-        scrollEffectStyle: { contentStyle: CONTENT_STYLE }
-      },
+      style: immersiveTitleStyle(this.appStyle.glass),
       content: this.headerContent(this.title, this.menus, this.customTitle)
     })
     // 内容铺进状态栏，从状态栏和标题栏下面滚过；标题栏自己让开状态栏（avoidLayoutSafeArea）。
