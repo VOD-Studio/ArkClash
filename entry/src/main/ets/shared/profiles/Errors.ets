@@ -29,7 +29,7 @@ export function errorString(error: Object): string {
     return new ProfileError(code, errorDetail(message)).message;
   }
   const lower = message.toLowerCase();
-  if (lower.includes('timeout') || lower.includes('timed out')) {
+  if (lower.includes('timeout') || lower.includes('timed out') || lower.includes('deadline exceeded')) {
     return 'timeout';
   }
   if (lower.includes('certificate') || lower.includes('ssl') || lower.includes('tls')) {

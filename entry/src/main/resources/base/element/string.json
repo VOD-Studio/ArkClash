@@ -1390,7 +1390,7 @@
     },
     {
       "name": "profile_err_timeout",
-      "value": "The download did not finish within 20 seconds."
+      "value": "Download timed out. Check your connection and try again."
     },
     {
       "name": "profile_err_dns",

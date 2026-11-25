@@ -2037,6 +2037,7 @@ test('YAML 语法错误仅保留脱敏行列位置，且未知字段与注释可
   assert.equal(bad.error.includes('secret-node-pass-123'), false);
   assert.equal(errors.errorString(new Error(bad.error)), bad.error);
   assert.equal(errors.errorString(new Error('invalid_yaml:secret-leak')), 'invalid_yaml');
+  assert.equal(errors.errorString(new Error('context deadline exceeded')), 'timeout');
   assert.equal(errors.errorString(new Error('preview_core_unavailable')), 'preview_core_unavailable');
   assert.equal(errors.errorString(new Error('preview_custom_tun')), 'preview_custom_tun');
 });
