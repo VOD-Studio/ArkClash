@@ -19,8 +19,7 @@ interface TabPageHeaderState {
 }
 
 /**
- * 一级页面的骨架，按 UI Design Kit 官方写法：标题栏叠在内容上，内容滚到标题栏下面时
- * 出现沉浸式渐变模糊（IMMERSIVE_GRADIENT_BLUR），不裁剪内容。
+ * 一级页面的标题栏叠在内容上，正文可从渐变模糊的标题栏背后滚过。
  * 滚动方向通过 onScrollDirection 交给页面层，由它让 HdsTabs 收起页签栏、展开迷你栏。
  */
 @ComponentV2

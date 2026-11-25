@@ -80,7 +80,11 @@ const TITLE_CONTENT_STYLE: HdsTitleBarContentStyle = {
 
 export function immersiveTitleStyle(glass: AppearanceGlass): TitleBarStyleOptions {
   return {
-    scrollEffectOpts: { enableScrollEffect: true, scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR },
+    // HDS 的滚动过渡从透明开始，仅在关闭沉浸光感时保留。
+    scrollEffectOpts: {
+      enableScrollEffect: glass === 'none',
+      scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+    },
     systemMaterialEffect: hdsGlass(glass),
     originalStyle: { contentStyle: TITLE_CONTENT_STYLE },
     scrollEffectStyle: { contentStyle: TITLE_CONTENT_STYLE }
