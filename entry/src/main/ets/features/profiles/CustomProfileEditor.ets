@@ -71,6 +71,13 @@ function toNames(text: string): string[] {
 
 function asChoice(name: string): CustomChoice { return { key: name, label: name, detail: '' }; }
 
+interface CustomProfileIconAction {
+  icon: Resource;
+  label: ResourceStr;
+  available: boolean;
+  invoke: () => void;
+}
+
 @ComponentV2
 @ReusableV2
 struct CustomProfileRow {
@@ -87,10 +94,11 @@ struct CustomProfileRow {
   @Event onDelete: () => void = (): void => {};
 
   @Builder
-  IconAction(icon: Resource, label: ResourceStr, enabled: boolean, action: () => void) {
+  IconAction($$: CustomProfileIconAction) {
     Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.TEXTUAL }) {
-      SymbolGlyph(icon).fontSize(17).fontColor([$r('sys.color.font_secondary')])
-    }.width(40).height(40).enabled(enabled).accessibilityText(uiResourceText(this.getUIContext(), label)).onClick(action)
+      SymbolGlyph($$.icon).fontSize(17).fontColor([$r('sys.color.font_secondary')])
+    }.width(40).height(40).enabled($$.available)
+      .accessibilityText(uiResourceText(this.getUIContext(), $$.label)).onClick((): void => $$.invoke())
   }
 
   build() {
@@ -107,18 +115,18 @@ struct CustomProfileRow {
       }.layoutWeight(1).constraintSize({ minHeight: 56 })
       .accessibilityText(uiResourceText(this.getUIContext(), this.entry.label)).onClick((): void => this.onOpen())
       if (this.ordered) {
-        this.IconAction($r('sys.symbol.chevron_up'), $r('app.string.custom_move_up'),
-          this.controlsEnabled && this.entry.index > 0, (): void => this.onMove(-1))
-        this.IconAction($r('sys.symbol.chevron_down'), $r('app.string.custom_move_down'),
-          this.controlsEnabled && !this.last, (): void => this.onMove(1))
+        this.IconAction({ icon: $r('sys.symbol.chevron_up'), label: $r('app.string.custom_move_up'),
+          available: this.controlsEnabled && this.entry.index > 0, invoke: (): void => this.onMove(-1) })
+        this.IconAction({ icon: $r('sys.symbol.chevron_down'), label: $r('app.string.custom_move_down'),
+          available: this.controlsEnabled && !this.last, invoke: (): void => this.onMove(1) })
       }
       if (this.renamable) {
-        this.IconAction($r('sys.symbol.pencil_line'), $r('app.string.custom_rename_node'), this.controlsEnabled,
-          (): void => this.onRename())
+        this.IconAction({ icon: $r('sys.symbol.pencil_line'), label: $r('app.string.custom_rename_node'),
+          available: this.controlsEnabled, invoke: (): void => this.onRename() })
       }
       if (this.removable) {
-        this.IconAction($r('sys.symbol.trash'), $r('app.string.action_delete'), this.controlsEnabled,
-          (): void => this.onDelete())
+        this.IconAction({ icon: $r('sys.symbol.trash'), label: $r('app.string.action_delete'),
+          available: this.controlsEnabled, invoke: (): void => this.onDelete() })
       }
     }.padding({ right: this.removable ? 8 : 0 }).width('100%')
       .backgroundColor(this.style.palette.cardBackground).borderRadius(24)

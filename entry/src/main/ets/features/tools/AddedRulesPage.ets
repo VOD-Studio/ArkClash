@@ -312,38 +312,26 @@ export struct AddedRulesPage {
   }
 
   @Builder
-  HeaderAction(icon: Resource, label: Resource, available: boolean, action: () => void) {
-    Button({ type: ButtonType.Circle }) {
-      SymbolGlyph(icon).fontSize(HEADER_ICON_SIZE).fontColor([$r('sys.color.font_primary')])
-    }
-    .attributeModifier(HEADER_ACTION)
-    .systemMaterial(this.appStyle.headerMaterial())
-    .accessibilityText(label)
-    .enabled(available)
-    .onClick((): void => action())
-  }
-
-  @Builder
   HeaderMenus() {
     Row({ space: HEADER_GAP }) {
       if (this.selecting) {
-        this.HeaderAction($r('sys.symbol.xmark'), $r('app.string.action_cancel'), !this.saving,
-          (): void => this.clearSelection())
-        this.HeaderAction($r('sys.symbol.checkmark'), $r('app.string.added_rules_select_all'),
-          !this.saving && this.visibleCount > 0, (): void => this.selectVisible())
-        this.HeaderAction($r('sys.symbol.trash'), $r('app.string.action_delete'),
-          !this.saving && this.selectedVisible().length > 0, (): void => { this.deleteShown = true; })
+        AddedRuleHeaderButton({ icon: $r('sys.symbol.xmark'), label: $r('app.string.action_cancel'),
+          available: !this.saving, onPress: (): void => this.clearSelection() })
+        AddedRuleHeaderButton({ icon: $r('sys.symbol.checkmark'), label: $r('app.string.added_rules_select_all'),
+          available: !this.saving && this.visibleCount > 0, onPress: (): void => this.selectVisible() })
+        AddedRuleHeaderButton({ icon: $r('sys.symbol.trash'), label: $r('app.string.action_delete'),
+          available: !this.saving && this.selectedVisible().length > 0, onPress: (): void => { this.deleteShown = true; } })
       } else {
-        this.HeaderAction($r('sys.symbol.magnifyingglass'), $r('app.string.diagnostics_search'),
-          !this.loading && !this.loadFailed, (): void => this.toggleSearch())
+        AddedRuleHeaderButton({ icon: $r('sys.symbol.magnifyingglass'), label: $r('app.string.diagnostics_search'),
+          available: !this.loading && !this.loadFailed, onPress: (): void => this.toggleSearch() })
         if (this.rules().length > 0) {
-          this.HeaderAction($r('sys.symbol.checkmark'), $r('app.string.added_rules_select'),
-            !this.saving, (): void => { this.selecting = true; })
+          AddedRuleHeaderButton({ icon: $r('sys.symbol.checkmark'), label: $r('app.string.added_rules_select'),
+            available: !this.saving, onPress: (): void => { this.selecting = true; } })
         }
-        this.HeaderAction($r('sys.symbol.bolt'), $r('app.string.added_rules_presets'),
-          !this.loading && !this.loadFailed && !this.saving, (): void => { this.presetsShown = true; })
-        this.HeaderAction($r('sys.symbol.plus'), $r('app.string.action_add'),
-          !this.loading && !this.loadFailed && !this.saving, (): void => this.openEdit())
+        AddedRuleHeaderButton({ icon: $r('sys.symbol.bolt'), label: $r('app.string.added_rules_presets'),
+          available: !this.loading && !this.loadFailed && !this.saving, onPress: (): void => { this.presetsShown = true; } })
+        AddedRuleHeaderButton({ icon: $r('sys.symbol.plus'), label: $r('app.string.action_add'),
+          available: !this.loading && !this.loadFailed && !this.saving, onPress: (): void => this.openEdit() })
       }
     }
     .height('100%')
@@ -487,6 +475,26 @@ export struct AddedRulesPage {
       }
       .width('100%').height('100%')
     }
+  }
+}
+
+@ComponentV2
+struct AddedRuleHeaderButton {
+  @Local private appStyle: AppearanceState = appAppearance;
+  @Param @Require icon: Resource;
+  @Param @Require label: Resource;
+  @Param available: boolean = true;
+  @Event onPress: () => void = (): void => {};
+
+  build() {
+    Button({ type: ButtonType.Circle }) {
+      SymbolGlyph(this.icon).fontSize(HEADER_ICON_SIZE).fontColor([$r('sys.color.font_primary')])
+    }
+    .attributeModifier(HEADER_ACTION)
+    .systemMaterial(this.appStyle.headerMaterial())
+    .accessibilityText(this.label)
+    .enabled(this.available)
+    .onClick((): void => this.onPress())
   }
 }
 
