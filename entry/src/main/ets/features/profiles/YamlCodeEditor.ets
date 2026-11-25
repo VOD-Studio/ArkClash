@@ -21,6 +21,7 @@ interface YamlEditorAppearance {
   chinese: boolean;
   language: string;
   readOnly: boolean;
+  topInset: number;
 }
 
 interface YamlEditorToolbarAction {
@@ -32,9 +33,14 @@ interface YamlEditorToolbarAction {
 
 class YamlEditorStatusBridge {
   private notify: (dirty: boolean, undo: boolean, redo: boolean) => void;
+  private onPainted: () => void;
 
-  constructor(notify: (dirty: boolean, undo: boolean, redo: boolean) => void) { this.notify = notify; }
+  constructor(notify: (dirty: boolean, undo: boolean, redo: boolean) => void, onPainted: () => void) {
+    this.notify = notify;
+    this.onPainted = onPainted;
+  }
   changed(dirty: boolean, undo: boolean, redo: boolean): void { this.notify(dirty, undo, redo); }
+  painted(): void { this.onPainted(); }
 }
 
 interface YamlCodeEditorHost {
@@ -86,12 +92,15 @@ export struct YamlCodeEditor {
   @Event onDirtyChange: (dirty: boolean) => void = (_dirty: boolean): void => {};
   @Event onReadyChange: (ready: boolean) => void = (_ready: boolean): void => {};
   @Local private ready: boolean = false;
+  @Local private webPainted: boolean = false;
   @Local private loadFailed: boolean = false;
   @Local private undoEnabled: boolean = false;
   @Local private redoEnabled: boolean = false;
   @Local private fontIndex: number = 0;
   @Local private wrapLines: boolean = false;
   private fontSizes: number[] = [14, 17, 20];
+  private viewportInset: number = 0;
+  private revealTimer: number = -1;
   private mounted: boolean = false;
   private webGeneration: number = 0;
   private webStarted: boolean = false;
@@ -104,6 +113,10 @@ export struct YamlCodeEditor {
     this.undoEnabled = undo;
     this.redoEnabled = redo;
     this.onDirtyChange(dirty);
+  }, (): void => {
+    if (!this.mounted) { return; }
+    this.clearRevealTimer();
+    this.webPainted = true;
   });
 
   aboutToAppear(): void {
@@ -115,8 +128,16 @@ export struct YamlCodeEditor {
 
   aboutToDisappear(): void {
     this.mounted = false;
+    this.clearRevealTimer();
     ++this.webGeneration;
     this.controller?.attach(undefined, this.pendingText);
+  }
+
+  private clearRevealTimer(): void {
+    if (this.revealTimer !== -1) {
+      clearTimeout(this.revealTimer);
+      this.revealTimer = -1;
+    }
   }
 
   private attachController(): void {
@@ -144,14 +165,15 @@ export struct YamlCodeEditor {
 
   private editorAppearance(): YamlEditorAppearance {
     return {
-      dark: this.appStyle.dark,
+      dark: this.appStyle.isDark,
       surface: appearanceHex(this.appStyle.palette.pageBackground),
       accent: appearanceHex(this.appStyle.palette.brand),
       font: this.fontSizes[this.fontIndex],
       wrap: this.wrapLines,
       chinese: i18n.System.getSystemLanguage().startsWith('zh'),
       language: 'yaml',
-      readOnly: this.readOnly
+      readOnly: this.readOnly,
+      topInset: this.viewportInset
     };
   }
 
@@ -170,12 +192,20 @@ export struct YamlCodeEditor {
   private async startEditor(): Promise<void> {
     if (!this.mounted || this.webStarted) { return; }
     this.webStarted = true;
+    this.webPainted = false;
+    this.clearRevealTimer();
     const generation = ++this.webGeneration;
     try {
       const opened = await this.openInWeb(this.pendingText, generation);
       if (this.mounted && generation === this.webGeneration) {
         this.ready = opened;
         this.onReadyChange(opened);
+        if (opened && !this.webPainted) {
+          this.revealTimer = setTimeout((): void => {
+            this.revealTimer = -1;
+            if (this.mounted && generation === this.webGeneration) { this.webPainted = true; }
+          }, 350);
+        }
       }
     } catch (_error) {
       if (this.mounted && generation === this.webGeneration) {
@@ -299,6 +329,8 @@ export struct YamlCodeEditor {
   private retryWeb(): void {
     this.webStarted = false;
     this.ready = false;
+    this.webPainted = false;
+    this.clearRevealTimer();
     this.loadFailed = false;
     this.web = new webview.WebviewController();
   }
@@ -368,17 +400,20 @@ export struct YamlCodeEditor {
     Column() {
       if (!this.loadFailed) {
         ScrollControls({ controls: (): void => this.Toolbar() }) {
-          EditorViewport({ controller: this.web, ready: this.ready }) {
+          EditorViewport({ controller: this.web, ready: this.ready, painted: this.webPainted,
+            onInsetChange: (inset: number): void => { this.viewportInset = inset; } }) {
             Web({ src: $rawfile('script-editor/index.html'), controller: this.web })
               .width('100%')
               .height('100%')
               .enabled(this.editorEnabled)
+              .backgroundColor(this.appStyle.palette.pageBackground)
+              .darkMode(this.appStyle.isDark ? WebDarkMode.On : WebDarkMode.Off)
               .javaScriptAccess(true)
               .fileAccess(false)
               .domStorageAccess(false)
               .blockNetwork(true)
               .mixedMode(MixedMode.None)
-              .javaScriptProxy({ object: this.bridge, name: 'ArkEditorStatus', methodList: ['changed'], controller: this.web })
+              .javaScriptProxy({ object: this.bridge, name: 'ArkEditorStatus', methodList: ['changed', 'painted'], controller: this.web })
               .onLoadIntercept((event: OnLoadInterceptEvent): boolean => event.data.isMainFrame() &&
                 !event.data.getRequestUrl().endsWith('/script-editor/index.html'))
               .onPageEnd((): void => { this.startEditor(); })
