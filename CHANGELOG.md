@@ -90,6 +90,47 @@
 
 * **ui:** 使用系统异步接口采集界面进程内存，避免在 ArkTS 主线程同步读取 smaps。
 
+## [0.6.2](https://github.com/VOD-Studio/ArkClash/compare/v0.6.1...v0.6.2) (2026-11-25)
+
+
+### 新增
+
+* animate appearance mode transitions ([59a6257](https://github.com/VOD-Studio/ArkClash/commit/59a6257fe6b9a0f97a80df2149f1f180c99de085))
+* **editor:** 补全 Tailscale 出站配置 ([28fbc31](https://github.com/VOD-Studio/ArkClash/commit/28fbc319c287814ff83ca75a363ba7358b3fe9dc))
+* **profiles:** 节点改名时更新 Tailscale DNS 引用 ([aa4f6fb](https://github.com/VOD-Studio/ArkClash/commit/aa4f6fb03b00753749ebf85bbb1e78c3b3ee451e))
+* **profiles:** 补齐订阅卡片一级菜单图标 ([3295e2d](https://github.com/VOD-Studio/ArkClash/commit/3295e2d8fcef8870719ed9246c56e5e2216612cb))
+* **proxies:** 支持 Tailscale 节点浏览器登录 ([e908e9d](https://github.com/VOD-Studio/ArkClash/commit/e908e9dc7536b2175b7b6c8aedca2e442d6279d1))
+* **tools:** 为最近请求的更多菜单添加分层动效 ([0691968](https://github.com/VOD-Studio/ArkClash/commit/069196898a726635a948d22ad2f612e3820b2325))
+* **tools:** 重设计 DNS 查询多选筛选面板 ([e302259](https://github.com/VOD-Studio/ArkClash/commit/e302259da0f2ca664aa43d42f5150b00542452cc))
+* 完善 Tailscale 代理体验并修复 0.6.2 交互缺陷 ([#118](https://github.com/VOD-Studio/ArkClash/issues/118)) ([1fed9f7](https://github.com/VOD-Studio/ArkClash/commit/1fed9f77a16443336f93974e7aaa779e13978e89))
+
+
+### 修复
+
+* **core:** 按转发状态选择订阅下载出口 ([a9f9757](https://github.com/VOD-Studio/ArkClash/commit/a9f9757c5d7cd534fb0efce5c0b7c2c5c108f00d))
+* **core:** 支持请求指定内置拨号期限 ([5e39617](https://github.com/VOD-Studio/ArkClash/commit/5e39617431c3acfab279d30813a737e0fe07e2cc))
+* **core:** 跨 tailnet 切换时保留真实目标 IP ([486d533](https://github.com/VOD-Studio/ArkClash/commit/486d53319e3a1965405cdb088279f30999590d9f))
+* **core:** 通过鸿蒙默认网络启动 Tailscale 出站 ([1f34972](https://github.com/VOD-Studio/ArkClash/commit/1f34972445abd5f304ef37cef4e51fc26f837ec6))
+* **tools:** 为主题入口使用调色盘图标 ([5234c6c](https://github.com/VOD-Studio/ArkClash/commit/5234c6c1a831689e666347a93f66ef780c7725eb))
+* **tools:** 为常规设置操作补充行内加载状态 ([b49da16](https://github.com/VOD-Studio/ArkClash/commit/b49da163dd6032739c104c369cf6da3f8b2818dc))
+* **tools:** 修复连接和 DNS 查询页面的过滤标签显示问题 ([3fb77f6](https://github.com/VOD-Studio/ArkClash/commit/3fb77f6efe50edee5598455be9ca70fccc35e954))
+* **tools:** 消除更多菜单切层时的文字重影 ([d0f12d7](https://github.com/VOD-Studio/ArkClash/commit/d0f12d751ace979e25dd07905fe81b08520ee02b))
+* **tools:** 重构 DNS 添加覆写项面板并修复无法滚动问题 ([0efc5ae](https://github.com/VOD-Studio/ArkClash/commit/0efc5ae141959e5944c381256a2c7dbbc6da106a))
+* **ui:** 修复附加规则等页面顶部操作按钮不响应状态更新 ([54752b1](https://github.com/VOD-Studio/ArkClash/commit/54752b1b4cccdad58182079630aba505fbc0e01f))
+* **ui:** 正确提示订阅下载超时 ([f797501](https://github.com/VOD-Studio/ArkClash/commit/f79750127b7fcd6f9294f04bd4d6c6a43eab7648))
+* **ui:** 消除主题选项保存时的闪烁 ([b05a5fc](https://github.com/VOD-Studio/ArkClash/commit/b05a5fc7684db83fc6c07c2e9ca924a7d1e4dbae))
+* **ui:** 消除新建脚本界面的白屏和布局闪烁 ([e2f307b](https://github.com/VOD-Studio/ArkClash/commit/e2f307b8727d3e5d6852f897a99323b2491f8fb3))
+* **ui:** 统一主题字体选择器的排版 ([2f900d9](https://github.com/VOD-Studio/ArkClash/commit/2f900d97849f0123bffedb04b96c5420dbb7cae2))
+* **ui:** 统一滚动页面的沉浸式标题栏 ([0f5ba48](https://github.com/VOD-Studio/ArkClash/commit/0f5ba4896a1ba53d0f271b83117d2745df015c49))
+* **ui:** 让标题栏毛玻璃从首屏生效 ([dacb5ef](https://github.com/VOD-Studio/ArkClash/commit/dacb5ef4afc34214df41b26e39ed499be710ee94))
+* **ui:** 让页面转场覆盖状态栏区域 ([c717f33](https://github.com/VOD-Studio/ArkClash/commit/c717f33c1f130d9c7cf0e1f1f9113aa5f5247b16))
+* **ui:** 防止主题字号滑块松手时回跳 ([eb38107](https://github.com/VOD-Studio/ArkClash/commit/eb381075ae291bbe2da04d84c756f9fc1a84d7c9))
+
+
+### 性能
+
+* **core:** 常规请求与内核设置改为原地热更新 ([80db976](https://github.com/VOD-Studio/ArkClash/commit/80db976ca8bc442c58628dfbfad24a6c8616e065))
+
 ## [0.6.1](https://github.com/VOD-Studio/ArkClash/compare/v0.6.0...v0.6.1) (2026-11-24)
 
 
