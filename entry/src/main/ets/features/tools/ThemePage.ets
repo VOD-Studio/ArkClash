@@ -63,6 +63,7 @@ export struct ThemePage {
   @Local private colorInitial: number = DEFAULT_APPEARANCE_SEED;
   @Local private scaleDraft: number = 0;
   @Local private styleMenuOpen: boolean = false;
+  private scaleRevision: number = 0;
   private pending?: (config: AppearanceSettings) => void;
   private shown: boolean = false;
 
@@ -83,7 +84,7 @@ export struct ThemePage {
 
   @Computed
   get displayedScale(): number {
-    if (this.scaleDraft > 0) { return this.scaleDraft; }
+    if (this.appStyle.config.customScale && this.scaleDraft > 0) { return this.scaleDraft; }
     const scale = this.appStyle.config.customScale ? this.appStyle.config.scale : this.appStyle.systemScale;
     return Math.min(1.75, scale);
   }
@@ -174,13 +175,13 @@ export struct ThemePage {
   }
 
   private changeScale(value: number, mode: SliderChangeMode): void {
-    this.scaleDraft = value / 100;
+    const revision = ++this.scaleRevision;
+    const scale = value / 100;
+    this.scaleDraft = scale;
     if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
-      const scale = this.scaleDraft;
-      this.scaleDraft = 0;
-      if (scale !== this.appStyle.config.scale) {
-        this.change((config: AppearanceSettings) => { config.scale = scale; });
-      }
+      this.change((config: AppearanceSettings) => { config.scale = scale; }).then((): void => {
+        if (revision === this.scaleRevision) { this.scaleDraft = 0; }
+      });
     }
   }
 
