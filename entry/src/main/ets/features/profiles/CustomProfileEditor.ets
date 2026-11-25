@@ -25,7 +25,8 @@ import { ProfileSheetHeader } from './ProfileSheetHeader';
 import { uiResourceText } from '../../components/ResourceText';
 import { YamlCodeEditor, YamlCodeEditorController } from './YamlCodeEditor';
 
-type CustomPanel = 'overview' | 'groups' | 'group' | 'rules' | 'rule' | 'nodes' | 'network' | 'text' | 'import' | 'issues';
+type CustomPanel = 'overview' | 'groups' | 'group' | 'rules' | 'rule' | 'nodes' | 'rename' | 'network' | 'text' |
+  'import' | 'issues';
 type CustomPicker = 'members' | 'providers' | 'node' | 'dialer' | 'ruleTarget' | 'ruleProvider' | 'filter';
 
 interface CustomEditorRow {
@@ -42,6 +43,7 @@ function customFailure(error: Object): ResourceStr {
   const code = (error as Error).message ?? '';
   if (code === 'custom_shape') { return $r('app.string.custom_invalid_shape'); }
   if (code === 'custom_network_invalid') { return $r('app.string.custom_network_invalid'); }
+  if (code === 'custom_dns_name') { return $r('app.string.custom_dns_reference_name'); }
   return describeError(errorString(error));
 }
 
@@ -75,10 +77,12 @@ struct CustomProfileRow {
   @Local private style: AppearanceState = appAppearance;
   @Param @Require entry: CustomEditorRow;
   @Param ordered: boolean = false;
+  @Param renamable: boolean = false;
   @Param removable: boolean = false;
   @Param last: boolean = false;
   @Param controlsEnabled: boolean = true;
   @Event onOpen: () => void = (): void => {};
+  @Event onRename: () => void = (): void => {};
   @Event onMove: (offset: number) => void = (_offset: number): void => {};
   @Event onDelete: () => void = (): void => {};
 
@@ -108,6 +112,10 @@ struct CustomProfileRow {
         this.IconAction($r('sys.symbol.chevron_down'), $r('app.string.custom_move_down'),
           this.controlsEnabled && !this.last, (): void => this.onMove(1))
       }
+      if (this.renamable) {
+        this.IconAction($r('sys.symbol.pencil_line'), $r('app.string.custom_rename_node'), this.controlsEnabled,
+          (): void => this.onRename())
+      }
       if (this.removable) {
         this.IconAction($r('sys.symbol.trash'), $r('app.string.action_delete'), this.controlsEnabled,
           (): void => this.onDelete())
@@ -128,6 +136,7 @@ export struct CustomProfileEditor {
   @Local private ready: boolean = false;
   @Local private loadedError: boolean = false;
   @Local private groupName: string = '';
+  @Local private nodeName: string = '';
   @Local private groupType: string = 'select';
   @Local private members: string = '';
   @Local private providers: string = '';
@@ -240,8 +249,19 @@ export struct CustomProfileEditor {
     try {
       this.publish(await inspectCustomProfile(source, mutation));
       if (this.active) { this.go(destination); }
-    } catch (error) { this.toast(customFailure(error as Object)); }
+    } catch (error) {
+      const code = (error as Error).message;
+      if (code === 'custom_node_name') { this.toast($r('app.string.custom_issue_name', mutation.text ?? '')); }
+      else if (code === 'custom_node_duplicate') { this.toast($r('app.string.custom_issue_duplicate', mutation.text ?? '')); }
+      else { this.toast(customFailure(error as Object)); }
+    }
     finally { this.draft.busy = false; }
+  }
+
+  private openNodeName(index: number): void {
+    this.editIndex = index;
+    this.nodeName = this.view?.nodes[index]?.name ?? '';
+    this.go('rename');
   }
 
   private openGroup(index: number): void {
@@ -419,7 +439,7 @@ export struct CustomProfileEditor {
       return;
     }
     const next: CustomPanel = this.panel === 'group' ? 'groups' :
-      this.panel === 'rule' ? 'rules' : this.panel === 'text' ? this.yamlReturn : 'overview';
+      this.panel === 'rule' ? 'rules' : this.panel === 'rename' ? 'nodes' : this.panel === 'text' ? this.yamlReturn : 'overview';
     if (this.draft.editing && this.panel !== 'import') {
       this.confirm($r('app.string.profile_unsaved_message'), (): void => this.go(next));
     } else { this.go(next); }
@@ -545,6 +565,7 @@ export struct CustomProfileEditor {
       case 'rules': return $r('app.string.custom_rules');
       case 'rule': return $r('app.string.custom_rule');
       case 'nodes': return $r('app.string.custom_nodes');
+      case 'rename': return $r('app.string.custom_rename_node');
       case 'import': return $r('app.string.custom_import');
       case 'network': return this.networkTitle(this.networkSection);
       case 'text': return this.editTitle;
@@ -557,6 +578,7 @@ export struct CustomProfileEditor {
     switch (this.panel) {
       case 'overview': return this.view !== undefined && this.draft.dirty();
       case 'group': return this.groupName.trim() !== '';
+      case 'rename': return this.draft.editing && this.nodeName.trim() !== '';
       case 'rule': return this.ruleExit.trim() !== '' && (this.ruleType === 'MATCH' || this.rulePayload.trim() !== '');
       case 'network':
       case 'text': return this.draft.editing;
@@ -568,6 +590,7 @@ export struct CustomProfileEditor {
     switch (this.panel) {
       case 'overview': this.save(); break;
       case 'group': this.saveGroup(); break;
+      case 'rename': this.mutate({ kind: 'rename-node', index: this.editIndex, text: this.nodeName }, 'nodes'); break;
       case 'rule': {
         const parts = this.ruleType === 'MATCH' ? ['MATCH', this.ruleExit.trim()] :
           [this.ruleType, this.rulePayload.trim(), this.ruleExit.trim()];
@@ -677,6 +700,7 @@ export struct CustomProfileEditor {
         LazyForEach(this.rows, (entry: CustomEditorRow) => {
           ListItem() {
             CustomProfileRow({ entry: entry, ordered: this.panel === 'rules' || this.panel === 'groups',
+              renamable: this.panel === 'nodes', onRename: (): void => this.openNodeName(entry.index),
               removable: this.panel !== 'issues', last: entry.index === this.rows.totalCount() - 1,
               controlsEnabled: !this.draft.busy, onOpen: (): void => this.openRow(entry.index),
               onMove: (offset: number): void => this.order(entry.index, offset),
@@ -786,6 +810,15 @@ export struct CustomProfileEditor {
           this.GroupForm()
         } else if (this.panel === 'rule') {
           this.RuleForm()
+        } else if (this.panel === 'rename') {
+          Column({ space: 8 }) {
+            this.Label($r('app.string.field_name'))
+            TextInput({ text: this.nodeName }).fontFamily(this.style.fontFamily).maxLength(255).enabled(!this.draft.busy)
+              .onChange((text: string): void => {
+                this.nodeName = text;
+                this.draft.editing = text.trim() !== this.view?.nodes[this.editIndex]?.name;
+              })
+          }.layoutWeight(1).width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
         } else if (this.panel === 'network') {
           CustomNetworkForm({ section: this.networkSection, settings: this.networkSettings, busy: this.draft.busy,
             onEdit: (key: string, setting: string | undefined): void => this.editNetwork(key, setting),

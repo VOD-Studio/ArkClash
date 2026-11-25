@@ -114,7 +114,7 @@ function networkValue(kind: CustomNetworkKind, text: string): Object {
   return text.trim();
 }
 
-function editableNetworkMapping(document: Document<ProfileYamlMapping>, path: string[],
+export function editableNetworkMapping(document: Document<ProfileYamlMapping>, path: string[],
   resolved: CustomNetworkMapping): ProfileYamlMapping {
   const node = document.getIn(path, true) as Object | undefined;
   if (isMap(node) && !(node as ProfileYamlMapping).has('<<')) { return node as ProfileYamlMapping; }

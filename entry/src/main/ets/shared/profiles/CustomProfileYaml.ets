@@ -1,5 +1,6 @@
 import { Document, isMap, isSeq, parseDocument, ToJSOptions, ToStringOptions } from 'yaml';
-import { applyCustomNetworkOptions, CustomNetworkChanges } from './CustomNetworkOptions';
+import { url } from '@kit.ArkTS';
+import { applyCustomNetworkOptions, CustomNetworkChanges, editableNetworkMapping } from './CustomNetworkOptions';
 import { ProfileYamlMapping, ProfileYamlSequence, readProfileYaml } from './ProfileYamlFields';
 
 type CustomYamlFields = Record<string, Object | undefined>;
@@ -161,6 +162,7 @@ function editableMapping(document: CustomYamlDocument, key: string, index: numbe
   const node = sequence.items[index];
   if (isMap(node) && !(node as ProfileYamlMapping).has('<<')) { return node as ProfileYamlMapping; }
   const mapping = document.createNode(fields(list(field(rootFields(document), key))[index])) as ProfileYamlMapping;
+  if (isMap(node)) { mapping.anchor = (node as ProfileYamlMapping).anchor; }
   sequence.items[index] = mapping;
   return mapping;
 }
@@ -229,6 +231,24 @@ function putNode(document: CustomYamlDocument, definition: CustomYamlFields): vo
   sequence.items.push(document.createNode(definition));
 }
 
+function renameNode(document: CustomYamlDocument, index: number, name: string): void {
+  const sequence = editableSequence(document, 'proxies');
+  if (index < 0 || index >= sequence.items.length) { throw new Error('conflict'); }
+  const root = rootFields(document);
+  const nodes = list(field(root, 'proxies'));
+  const previous = textField(fields(nodes[index]), 'name');
+  if (name === previous) { return; }
+  if (!validTargetName(name, 255)) { throw new Error('custom_node_name'); }
+  const names = nodes.concat(list(field(root, 'proxy-groups'))).map((row: Object): string => textField(fields(row), 'name'));
+  if (names.includes(name)) { throw new Error('custom_node_duplicate'); }
+  editableMapping(document, 'proxies', index, sequence).set('name', name);
+  // 修复导入配置中的重名时，仍有同名目标，原有引用应留给它。
+  if (previous !== '' && !CUSTOM_BUILTINS.includes(previous.toUpperCase()) && previous.toUpperCase() !== 'GLOBAL' &&
+    names.indexOf(previous) === names.lastIndexOf(previous)) {
+    renameTarget(document, previous, name);
+  }
+}
+
 function putRule(document: CustomYamlDocument, index: number, text: string): void {
   const sequence = editableSequence(document, 'rules');
   if (index < 0) { sequence.items.push(document.createNode(text)); }
@@ -274,7 +294,7 @@ function renameTarget(document: CustomYamlDocument, previous: string, next: stri
     for (let index = 0; index < rows.length; index++) {
       const row = fields(rows[index]);
       const members = strings(field(row, 'proxies'));
-      const properties = ['dialer-proxy', 'default-selected'];
+      const properties = ['dialer-proxy', 'default-selected', 'empty-fallback'];
       if (!members.includes(previous) &&
         !properties.some((property: string): boolean => textField(row, property) === previous)) { continue; }
       const mapping = editableMapping(document, key, index, editableSequence(document, key));
@@ -302,45 +322,82 @@ function renameTarget(document: CustomYamlDocument, previous: string, next: stri
 function renameNetworkTargets(document: CustomYamlDocument, root: CustomYamlFields, previous: string, next: string): void {
   const ntp = field(root, 'ntp');
   if (ntp !== undefined && ntp !== null && textField(fields(ntp), 'dialer-proxy') === previous) {
-    document.setIn(['ntp', 'dialer-proxy'], next);
+    editableNetworkMapping(document, ['ntp'], fields(ntp)).set('dialer-proxy', next);
   }
   const dns = field(root, 'dns');
   if (dns === undefined || dns === null) { return; }
   const dnsFields = fields(dns);
   for (const key of ['nameserver', 'fallback', 'default-nameserver', 'proxy-server-nameserver', 'direct-nameserver']) {
-    renameDnsEntry(document, ['dns', key], field(dnsFields, key), previous, next);
+    renameDnsEntry(document, dnsFields, [key], field(dnsFields, key), previous, next);
   }
   for (const key of ['nameserver-policy', 'proxy-server-nameserver-policy']) {
     const policy = field(dnsFields, key);
     for (const domain of mappingKeys(policy)) {
-      renameDnsEntry(document, ['dns', key, domain], field(fields(policy), domain), previous, next);
+      renameDnsEntry(document, dnsFields, [key, domain], field(fields(policy), domain), previous, next);
     }
   }
 }
 
-function renameDnsEntry(document: CustomYamlDocument, path: string[], entries: Object | undefined,
+function renameDnsEntry(document: CustomYamlDocument, dns: CustomYamlFields, path: string[], entries: Object | undefined,
   previous: string, next: string): void {
-  if (typeof entries === 'string') {
-    const updated = renameDnsServer(entries, previous, next);
-    if (entries !== updated) { document.setIn(path, updated); }
-  } else if (Array.isArray(entries)) {
-    const servers = strings(entries);
-    const updated = servers.map((server: string): string => renameDnsServer(server, previous, next));
-    if (updated.some((server: string, index: number): boolean => server !== servers[index])) {
-      document.setIn(path, updated);
-    }
+  if (typeof entries !== 'string' && !Array.isArray(entries)) { return; }
+  const servers = typeof entries === 'string' ? [entries] : strings(entries);
+  const updated = servers.map((server: string): string => renameDnsServer(server, previous, next));
+  if (servers.every((server: string, index: number): boolean => server === updated[index])) { return; }
+  let parent = editableNetworkMapping(document, ['dns'], dns);
+  if (path.length === 2) {
+    parent = editableNetworkMapping(document, ['dns', path[0]], fields(field(dns, path[0])));
   }
+  const key = path[path.length - 1];
+  const sequence = parent.get(key, true);
+  if (isSeq(sequence)) {
+    updated.forEach((server: string, index: number): void => {
+      if (server !== servers[index]) { (sequence as ProfileYamlSequence).set(index, server); }
+    });
+  } else {
+    parent.set(key, typeof entries === 'string' ? updated[0] : updated);
+  }
+}
+
+function decodedDnsName(value: string): string {
+  try { return decodeURIComponent(value); } catch (_error) { return value; }
+}
+
+function dnsProxyHost(name: string): string {
+  // Go 的 net/url 在 host 中只允许对非 ASCII 字符和百分号转义。空格等字符无法表示。
+  if (/[^a-zA-Z0-9._~!$&'()*+;=:%<>"[\]\u0080-\uFFFF-]/.test(name)) { throw new Error('custom_dns_name'); }
+  if (name.includes('[')) {
+    const literal = /^\[([^\]%]+)(?:%[^\]]+)?\](?::\d*)?$/.exec(name);
+    if (literal === null) { throw new Error('custom_dns_name'); }
+    try { new url.URL('http://[' + literal[1] + ']'); } catch (_error) { throw new Error('custom_dns_name'); }
+  } else if (name.includes(':') && !/:\d*$/.test(name)) {
+    throw new Error('custom_dns_name');
+  }
+  return name.replace(/%/g, '%25');
 }
 
 function renameDnsServer(server: string, previous: string, next: string): string {
-  const separator = server.indexOf('#');
-  if (separator < 0) { return server; }
-  const options = server.slice(separator + 1).split('&');
-  const updated = options.map((option: string): string => {
-    if (option === previous) { return next; }
-    return option === 'proxy=' + previous ? 'proxy=' + next : option;
-  });
-  return server.slice(0, separator + 1) + updated.join('&');
+  const overlay = /^(ts|tailscale|et|easytier):\/\/([^/?#]+)/i.exec(server);
+  if (overlay !== null) {
+    const authority = overlay[2];
+    const host = authority.slice(authority.lastIndexOf('@') + 1);
+    if (decodedDnsName(host) === previous) {
+      server = server.slice(0, overlay[0].length - host.length) + dnsProxyHost(next) + server.slice(overlay[0].length);
+    }
+  }
+  const hash = server.indexOf('#');
+  if (hash < 0) { return server; }
+  // 内核先解码片段再按 & 切分，最后一个不带等号的参数是拨号代理。
+  const options = server.slice(hash + 1).split(/(&|%26)/i);
+  for (let i = options.length - 1; i >= 0; i -= 2) {
+    const option = decodedDnsName(options[i]);
+    if (option.includes('=')) { continue; }
+    if (option !== previous) { break; }
+    if (/[&=]/.test(next)) { throw new Error('custom_dns_name'); }
+    options[i] = encodeURIComponent(next);
+    return server.slice(0, hash + 1) + options.join('');
+  }
+  return server;
 }
 
 function executeMutation(document: CustomYamlDocument, mutation: CustomProfileMutation): void {
@@ -352,6 +409,9 @@ function executeMutation(document: CustomYamlDocument, mutation: CustomProfileMu
       break;
     case 'node':
       if (mutation.definition !== undefined) { putNode(document, mutation.definition); }
+      break;
+    case 'rename-node':
+      renameNode(document, index, (mutation.text ?? '').trim());
       break;
     case 'dialer': {
       const sequence = editableSequence(document, 'proxies');
@@ -413,9 +473,13 @@ function issue(code: string, subject: string, reference: string = '', blocking: 
   return { code: code, subject: subject, reference: reference, blocking: blocking };
 }
 
+function validTargetName(name: string, length: number): boolean {
+  return name !== '' && name.length <= length && !/[,\r\n\x00]/.test(name) &&
+    name === name.trim() && name.toUpperCase() !== 'GLOBAL' && !CUSTOM_BUILTINS.includes(name.toUpperCase());
+}
+
 function checkName(name: string, length: number, targets: Set<string>, issues: CustomIssue[]): void {
-  if (name === '' || name.length > length || /[,\r\n\x00]/.test(name) ||
-    name !== name.trim() || name.toUpperCase() === 'GLOBAL' || CUSTOM_BUILTINS.includes(name.toUpperCase())) {
+  if (!validTargetName(name, length)) {
     issues.push(issue('name', name));
   } else if (targets.has(name)) { issues.push(issue('duplicate', name)); }
   targets.add(name);

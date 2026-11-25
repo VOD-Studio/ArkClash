@@ -4397,6 +4397,14 @@
       "value": "Nodes and dialers"
     },
     {
+      "name": "custom_rename_node",
+      "value": "Rename node"
+    },
+    {
+      "name": "custom_dns_reference_name",
+      "value": "A DNS server references this node. Choose a name that its DNS URL can use."
+    },
+    {
       "name": "custom_issues",
       "value": "Configuration issues"
     },

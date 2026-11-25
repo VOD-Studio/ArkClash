@@ -4377,6 +4377,14 @@
       "value": "节点与拨号链"
     },
     {
+      "name": "custom_rename_node",
+      "value": "重命名节点"
+    },
+    {
+      "name": "custom_dns_reference_name",
+      "value": "DNS 服务器引用了此名称，请使用可写入 DNS 地址的名称。"
+    },
+    {
       "name": "custom_issues",
       "value": "配置问题"
     },
