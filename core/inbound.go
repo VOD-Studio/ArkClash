@@ -15,13 +15,14 @@ import (
 	"github.com/metacubex/mihomo/tunnel"
 )
 
-// 只保存重开入口所需的数据，不能延长旧节点、provider 或 resolver 的寿命。
+// 只保存重开入口与常规设置原地热更新所需的数据，不能延长旧节点、provider 或 resolver 的寿命。
 type inboundSettings struct {
 	inbound   config.Inbound
 	custom    []map[string]any
 	tunnels   []LC.Tunnel
 	dnsListen string
 	dnsMark   int
+	baseline  generalBaseline
 }
 
 var desiredInbound inboundSettings

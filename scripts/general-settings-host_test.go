@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/metacubex/mihomo/component/geodata"
 	mihomoHttp "github.com/metacubex/mihomo/component/http"
 	"github.com/metacubex/mihomo/component/resolver"
+	"github.com/metacubex/mihomo/dns"
 	"github.com/metacubex/mihomo/log"
 )
 
@@ -100,13 +102,15 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	if tunListener != tun || current.General.Revision != "inbound-configured" {
 		t.Fatal("conflict changed live configuration")
 	}
+	beforeRevision := runtimeConfigRevision
 	next.Revision = "hosts-configured"
 	next.Hosts = map[string][]string{"general.test": {"192.0.2.21"}}
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	if tunListener != tun {
-		t.Fatal("Hosts update replaced platform TUN")
+	if tunListener != tun || runtimeConfigRevision != beforeRevision {
+		t.Fatalf("Hosts update rebuilt runtime or replaced platform TUN: rev=%d->%d tunSame=%v",
+			beforeRevision, runtimeConfigRevision, tunListener == tun)
 	}
 	host, ok := resolver.DefaultHosts.Search("general.test", false)
 	if !ok || host.IPs[0].String() != "192.0.2.21" {
@@ -118,6 +122,9 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
+	if runtimeConfigRevision != beforeRevision {
+		t.Fatalf("UA update rebuilt runtime: rev=%d->%d", beforeRevision, runtimeConfigRevision)
+	}
 	if mihomoHttp.UA() != "ArkClash-Test-v2" {
 		t.Fatalf("expected live UA ArkClash-Test-v2, got %q", mihomoHttp.UA())
 	}
@@ -126,14 +133,38 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 		strings.Join(stored.UserAgents, ",") != "ArkClash-Test,ArkClash-Test-v2" {
 		t.Fatal("settings were not persisted")
 	}
+	serviceBeforeSystemDNS := resolver.DefaultService
 	next.Revision = "system-dns-enabled"
 	next.AppendSystemDNS = true
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
 	stored, err = readGeneralSettings(opts.HomeDir)
-	if err != nil || !stored.AppendSystemDNS || tunListener != tun {
-		t.Fatalf("could not persist system DNS without replacing the TUN: %v", err)
+	if err != nil || !stored.AppendSystemDNS || tunListener != tun || runtimeConfigRevision != beforeRevision {
+		t.Fatalf("system DNS toggle rebuilt runtime or replaced TUN: rev=%d->%d err=%v",
+			beforeRevision, runtimeConfigRevision, err)
+	}
+	if resolver.DefaultService == serviceBeforeSystemDNS {
+		t.Fatal("system DNS toggle did not refresh live DNS service")
+	}
+	serversWithSystem := desiredInbound.baseline.dnsServers(current.Profile, true)
+	if len(serversWithSystem) == 0 || serversWithSystem[len(serversWithSystem)-1].Net != "system" {
+		t.Fatalf("expected trailing system nameserver, got %+v", serversWithSystem)
+	}
+	// 关闭追加系统 DNS 同样原地热更新，且移除附加的 system 上游。
+	serviceWithSystemDNS := resolver.DefaultService
+	next.Revision = "system-dns-disabled"
+	next.AppendSystemDNS = false
+	if err := saveGeneralTestSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	if tunListener != tun || runtimeConfigRevision != beforeRevision || resolver.DefaultService == serviceWithSystemDNS {
+		t.Fatalf("disabling system DNS did not live-update cleanly: rev=%d->%d", beforeRevision, runtimeConfigRevision)
+	}
+	for _, server := range desiredInbound.baseline.dnsServers(current.Profile, false) {
+		if server.Net == "system" {
+			t.Fatalf("unexpected system nameserver after disabling: %+v", server)
+		}
 	}
 }
 
@@ -272,19 +303,24 @@ rules: ['MATCH,DIRECT']
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	if tunListener != tun {
-		t.Fatal("core overrides replaced platform TUN")
+	if tunListener != tun || runtimeConfigRevision != beforeRevision {
+		t.Fatalf("core overrides rebuilt runtime or replaced TUN: rev=%d->%d tunSame=%v",
+			beforeRevision, runtimeConfigRevision, tunListener == tun)
 	}
 	if !adapter.UnifiedDelay.Load() || !dialer.GetTcpConcurrent() || !resolver.DisableIPv6 || geodata.LoaderName() != "memconservative" {
 		t.Fatalf("core overrides did not apply: unified=%v tcp=%v disableIPv6=%v loader=%q",
 			adapter.UnifiedDelay.Load(), dialer.GetTcpConcurrent(), resolver.DisableIPv6, geodata.LoaderName())
 	}
 
-	// 移除覆写后恢复配置自身的值，同时保留磁盘持久化一致性。
+	// 移除覆写后原地恢复配置自身的值，同时保留磁盘持久化一致性。
 	next.Revision = "core-cleared"
 	next.CoreOverrides = nil
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
+	}
+	if tunListener != tun || runtimeConfigRevision != beforeRevision {
+		t.Fatalf("clearing core overrides rebuilt runtime or replaced TUN: rev=%d->%d tunSame=%v",
+			beforeRevision, runtimeConfigRevision, tunListener == tun)
 	}
 	if adapter.UnifiedDelay.Load() || dialer.GetTcpConcurrent() || resolver.DisableIPv6 || geodata.LoaderName() != "standard" {
 		t.Fatalf("clearing core overrides did not restore profile values: unified=%v tcp=%v disableIPv6=%v loader=%q",
@@ -308,6 +344,116 @@ rules: ['MATCH,DIRECT']
 		if err := saveGeneralTestSettings(invalid); !errors.Is(err, errGeneralInvalid) {
 			t.Fatalf("expected errGeneralInvalid for %+v, got %v", bad, err)
 		}
+	}
+}
+
+func TestGeneralLiveUpdateRollbackAndRestoreBaseline(t *testing.T) {
+	opts := lifecycleOptions(t)
+	opts.Profile = "live-rollback"
+	dnsPortListener := reserveGeneralPort(t)
+	dnsListenAddr := dnsPortListener.Addr().String()
+	dnsPortListener.Close()
+	opts.ConfigPath = lifecycleWriteProfile(t, opts, opts.Profile, fmt.Sprintf(`mode: rule
+log-level: silent
+global-ua: Profile-Baseline-UA
+unified-delay: false
+tcp-concurrent: false
+ipv6: true
+geodata-loader: standard
+hosts:
+  profile.test: 192.0.2.10
+dns:
+  enable: true
+  listen: %s
+  enhanced-mode: fake-ip
+  nameserver:
+    - 1.1.1.1
+proxies: []
+rules: ['MATCH,DIRECT']
+`, dnsListenAddr))
+	if err := start(opts); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stop() })
+	if err := attachTun(13, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
+		t.Fatal(err)
+	}
+
+	beforeRevision := runtimeConfigRevision
+	// 覆盖 UA 与 Hosts 后再清空，应原地恢复到配置自身的值，且 DNS 监听地址保持不重建。
+	next := current.General
+	next.Revision = "override-ua-hosts"
+	next.UserAgent = "Custom-UA"
+	next.Hosts = map[string][]string{"profile.test": {"192.0.2.99"}, "extra.test": {"192.0.2.88"}}
+	next.AppendSystemDNS = true
+	if err := saveGeneralTestSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	if runtimeConfigRevision != beforeRevision {
+		t.Fatalf("unexpected rebuild: %d -> %d", beforeRevision, runtimeConfigRevision)
+	}
+	if mihomoHttp.UA() != "Custom-UA" {
+		t.Fatalf("expected Custom-UA, got %q", mihomoHttp.UA())
+	}
+	if tcp, udp := dns.ArkClashServerSnapshot(); tcp == "" || udp == "" {
+		t.Fatalf("DNS listener lost after live update: tcp=%q udp=%q", tcp, udp)
+	}
+
+	next.Revision = "restore-ua-hosts"
+	next.UserAgent = ""
+	next.Hosts = nil
+	next.AppendSystemDNS = false
+	if err := saveGeneralTestSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	if mihomoHttp.UA() != "Profile-Baseline-UA" {
+		t.Fatalf("UA did not restore to profile baseline: %q", mihomoHttp.UA())
+	}
+	if host, ok := resolver.DefaultHosts.Search("profile.test", false); !ok || host.IPs[0].String() != "192.0.2.10" {
+		t.Fatalf("profile host did not restore: ok=%v host=%+v", ok, host)
+	}
+	if _, ok := resolver.DefaultHosts.Search("extra.test", false); ok {
+		t.Fatal("removed host override remained active")
+	}
+
+	// 制造落盘失败（用同名非空目录阻断 os.Rename），验证全部运行态字段与 DNS 服务干净回滚。
+	settingsPath := generalSettingsPath(opts.HomeDir)
+	if err := os.Remove(settingsPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(settingsPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settingsPath+"/blocker", []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(settingsPath) })
+
+	prevService := resolver.DefaultService
+	yes, no := true, false
+	memc := "memconservative"
+	failing := current.General
+	failing.Revision = "should-rollback"
+	failing.UserAgent = "Broken-UA"
+	failing.AppendSystemDNS = true
+	failing.Hosts = map[string][]string{"rollback.test": {"192.0.2.77"}}
+	failing.CoreOverrides = &generalCoreOverrides{
+		UnifiedDelay:  &yes,
+		TCPConcurrent: &yes,
+		IPv6:          &no,
+		GeodataLoader: &memc,
+	}
+	if err := saveGeneralTestSettings(failing); !errors.Is(err, errGeneralIO) {
+		t.Fatalf("expected errGeneralIO, got %v", err)
+	}
+	if mihomoHttp.UA() != "Profile-Baseline-UA" || adapter.UnifiedDelay.Load() || dialer.GetTcpConcurrent() ||
+		resolver.DisableIPv6 || geodata.LoaderName() != "standard" || resolver.DefaultService != prevService {
+		t.Fatalf("rollback left dirty state: ua=%q unified=%v tcp=%v disableIPv6=%v loader=%q serviceSame=%v",
+			mihomoHttp.UA(), adapter.UnifiedDelay.Load(), dialer.GetTcpConcurrent(),
+			resolver.DisableIPv6, geodata.LoaderName(), resolver.DefaultService == prevService)
+	}
+	if _, ok := resolver.DefaultHosts.Search("rollback.test", false); ok {
+		t.Fatal("rollback left dirty host entry")
 	}
 }
 

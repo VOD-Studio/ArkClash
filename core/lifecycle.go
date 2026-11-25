@@ -241,8 +241,16 @@ func composeRawConfig(rawCfg *config.RawConfig, opts startOptions) error {
 }
 
 func prepareRawConfig(rawCfg *config.RawConfig, opts startOptions, settings *inboundSettings) (*config.Config, error) {
+	var baseline generalBaseline
+	if settings != nil {
+		baseline = captureRawGeneralBaseline(rawCfg, opts)
+	}
 	if err := composeRawConfig(rawCfg, opts); err != nil {
 		return nil, err
+	}
+	if settings != nil {
+		baseline.dnsRespectRules = rawCfg.DNS.RespectRules
+		baseline.dnsHasFakeIPRange6 = rawCfg.DNS.FakeIPRange6 != ""
 	}
 	// 配置解析可能初始化缺失的 Geo，来源必须先固定为页面设置。
 	setGeoURLs(opts.Geo)
@@ -257,7 +265,9 @@ func prepareRawConfig(rawCfg *config.RawConfig, opts startOptions, settings *inb
 		}
 	}
 	if settings != nil {
+		baseline.finalizeDNS(cfg.DNS, opts.Profile != "" && opts.General.AppendSystemDNS)
 		*settings = captureInbound(cfg, mappings)
+		settings.baseline = baseline
 	}
 	return cfg, nil
 }

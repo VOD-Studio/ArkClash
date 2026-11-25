@@ -112,14 +112,21 @@ func (e dnsOverrideEntries) apply(raw *config.RawDNS) {
 	replaceDNSField(&raw.DirectNameServerFollowPolicy, e.DirectFollowPolicy)
 }
 
-func appendSystemDNS(raw *config.RawDNS) {
-	for _, server := range raw.NameServer {
+func hasSystemDNS(servers []string) bool {
+	for _, server := range servers {
 		if server == "system" || server == "dhcp://system" {
-			return
+			return true
 		}
 		if parsed, err := url.Parse(server); err == nil && parsed.Scheme == "system" {
-			return
+			return true
 		}
+	}
+	return false
+}
+
+func appendSystemDNS(raw *config.RawDNS) {
+	if hasSystemDNS(raw.NameServer) {
+		return
 	}
 	raw.NameServer = append(raw.NameServer, "system://")
 }

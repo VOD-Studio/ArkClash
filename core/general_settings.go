@@ -3,23 +3,32 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"net/url"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
+	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/inbound"
+	"github.com/metacubex/mihomo/common/utils"
 	"github.com/metacubex/mihomo/component/auth"
+	"github.com/metacubex/mihomo/component/dialer"
+	"github.com/metacubex/mihomo/component/fakeip"
+	"github.com/metacubex/mihomo/component/geodata"
+	mihomoHttp "github.com/metacubex/mihomo/component/http"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/component/trie"
 	"github.com/metacubex/mihomo/config"
 	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/dns"
 	"github.com/metacubex/mihomo/listener"
 	authStore "github.com/metacubex/mihomo/listener/auth"
 	"github.com/metacubex/mihomo/log"
@@ -182,21 +191,6 @@ func sameStringPtr(left, right *string) bool {
 	return *left == *right
 }
 
-// 比较会进入 RawConfig 的四项覆写；testUrl 仅由延迟测试读取，不触发内核配置重建。
-func (c *generalCoreOverrides) runtimeEqual(other *generalCoreOverrides) bool {
-	var left, right generalCoreOverrides
-	if c != nil {
-		left = *c
-	}
-	if other != nil {
-		right = *other
-	}
-	return sameBoolPtr(left.UnifiedDelay, right.UnifiedDelay) &&
-		sameBoolPtr(left.TCPConcurrent, right.TCPConcurrent) &&
-		sameBoolPtr(left.IPv6, right.IPv6) &&
-		sameStringPtr(left.GeodataLoader, right.GeodataLoader)
-}
-
 func validateGeneralHosts(hosts map[string][]string) error {
 	if len(hosts) > 256 {
 		return errGeneralInvalid
@@ -321,6 +315,327 @@ func postGeneralSettings(w http.ResponseWriter, r *http.Request) {
 	render.NoContent(w, r)
 }
 
+// 记录当前生效配置在应用常规覆写前的基线，使请求与内核设置可原地热更新并恢复配置原值。
+type generalBaseline struct {
+	ready               bool
+	globalUA            string
+	unifiedDelay        bool
+	tcpConcurrent       bool
+	ipv6                bool
+	geodataLoader       string
+	rawHosts            map[string]any
+	storeFakeIP         bool
+	dnsAlreadyHasSystem bool
+	dnsRespectRules     bool
+	dnsHasFakeIPRange6  bool
+	dnsConfig           *config.DNS
+	dnsBaseServers      []dns.NameServer
+}
+
+type dnsRuntimeSnapshot struct {
+	defaultResolver    resolver.Resolver
+	defaultHostMapper  resolver.Enhancer
+	defaultService     resolver.Service
+	useSystemHosts     bool
+	proxyHostResolver  resolver.Resolver
+	directHostResolver resolver.Resolver
+}
+
+func cloneRawHosts(source map[string]any) map[string]any {
+	if len(source) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(source))
+	for key, value := range source {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func captureRawGeneralBaseline(rawCfg *config.RawConfig, opts startOptions) generalBaseline {
+	rawServers := rawCfg.DNS.NameServer
+	if opts.Profile != "" && opts.DNS.Entries.Servers != nil {
+		rawServers = *opts.DNS.Entries.Servers
+	}
+	return generalBaseline{
+		globalUA:            rawCfg.GlobalUA,
+		unifiedDelay:        rawCfg.UnifiedDelay,
+		tcpConcurrent:       rawCfg.TCPConcurrent,
+		ipv6:                rawCfg.IPv6,
+		geodataLoader:       rawCfg.GeodataLoader,
+		rawHosts:            cloneRawHosts(rawCfg.Hosts),
+		storeFakeIP:         rawCfg.Profile.StoreFakeIP,
+		dnsAlreadyHasSystem: hasSystemDNS(rawServers),
+	}
+}
+
+func systemDNSNameServer(respectRules, preferH3 bool) dns.NameServer {
+	proxyName := ""
+	if respectRules {
+		proxyName = dns.RespectRules
+	}
+	return dns.NameServer{
+		Net:       "system",
+		ProxyName: proxyName,
+		Params:    map[string]string{},
+		PreferH3:  preferH3,
+	}
+}
+
+func (b *generalBaseline) finalizeDNS(parsed *config.DNS, appendedSystem bool) {
+	if parsed != nil {
+		dnsCopy := *parsed
+		dnsCopy.FakeIPPool = nil
+		dnsCopy.FakeIPPool6 = nil
+		dnsCopy.NameServer = nil
+		servers := slices.Clone(parsed.NameServer)
+		if appendedSystem && !b.dnsAlreadyHasSystem && len(servers) > 0 {
+			systemNS := systemDNSNameServer(b.dnsRespectRules, dnsCopy.PreferH3)
+			if servers[len(servers)-1].Equal(systemNS) {
+				servers = servers[:len(servers)-1]
+			}
+		}
+		b.dnsConfig = &dnsCopy
+		b.dnsBaseServers = servers
+	}
+	b.ready = true
+}
+
+func (b generalBaseline) effectiveUA(s generalSettings) string {
+	if s.UserAgent != "" {
+		return s.UserAgent
+	}
+	return b.globalUA
+}
+
+func (b generalBaseline) effectiveUnifiedDelay(s generalSettings) bool {
+	if s.CoreOverrides != nil && s.CoreOverrides.UnifiedDelay != nil {
+		return *s.CoreOverrides.UnifiedDelay
+	}
+	return b.unifiedDelay
+}
+
+func (b generalBaseline) effectiveTCPConcurrent(s generalSettings) bool {
+	if s.CoreOverrides != nil && s.CoreOverrides.TCPConcurrent != nil {
+		return *s.CoreOverrides.TCPConcurrent
+	}
+	return b.tcpConcurrent
+}
+
+func (b generalBaseline) effectiveIPv6(s generalSettings) bool {
+	if s.CoreOverrides != nil && s.CoreOverrides.IPv6 != nil {
+		return *s.CoreOverrides.IPv6
+	}
+	return b.ipv6
+}
+
+func (b generalBaseline) effectiveGeodataLoader(s generalSettings) string {
+	if s.CoreOverrides != nil && s.CoreOverrides.GeodataLoader != nil {
+		return *s.CoreOverrides.GeodataLoader
+	}
+	return b.geodataLoader
+}
+
+func (b generalBaseline) dnsServers(profile string, appendSystem bool) []dns.NameServer {
+	servers := slices.Clone(b.dnsBaseServers)
+	if profile != "" && appendSystem && !b.dnsAlreadyHasSystem && b.dnsConfig != nil {
+		systemNS := systemDNSNameServer(b.dnsRespectRules, b.dnsConfig.PreferH3)
+		if !slices.ContainsFunc(servers, systemNS.Equal) {
+			servers = append(servers, systemNS)
+		}
+	}
+	return servers
+}
+
+func buildMergedHosts(base map[string]any, overrides map[string][]string) (*trie.DomainTrie[resolver.HostValue], error) {
+	merged := cloneRawHosts(base)
+	if len(overrides) > 0 && merged == nil {
+		merged = make(map[string]any, len(overrides))
+	}
+	for domain, values := range overrides {
+		for original := range merged {
+			if original != domain && strings.EqualFold(original, domain) {
+				delete(merged, original)
+			}
+		}
+		merged[domain] = values
+	}
+
+	tree := trie.New[resolver.HostValue]()
+	localhost, _ := resolver.NewHostValueByIPs([]netip.Addr{netip.AddrFrom4([4]byte{127, 0, 0, 1})})
+	if err := tree.Insert("localhost", localhost); err != nil {
+		log.Errorln("insert localhost to host error: %s", err.Error())
+	}
+
+	for domain, anyValue := range merged {
+		hosts, err := utils.ToStringSlice(anyValue)
+		if err != nil {
+			return nil, err
+		}
+		if len(hosts) == 1 && hosts[0] == "lan" {
+			if addrs, err := net.InterfaceAddrs(); err != nil {
+				log.Errorln("insert lan to host error: %s", err)
+			} else {
+				hosts = make([]string, 0, len(addrs))
+				for _, addr := range addrs {
+					if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() && !ipnet.IP.IsLinkLocalUnicast() {
+						hosts = append(hosts, ipnet.IP.String())
+					}
+				}
+			}
+		}
+		value, err := resolver.NewHostValue(hosts)
+		if err != nil {
+			return nil, fmt.Errorf("%s is not a valid value", anyValue)
+		}
+		if value.IsDomain {
+			node := tree.Search(value.Domain)
+			for node != nil && node.Data().IsDomain {
+				if node.Data().Domain == domain {
+					return nil, fmt.Errorf("%s, there is a cycle in domain name mapping", domain)
+				}
+				node = tree.Search(node.Data().Domain)
+			}
+		}
+		if err := tree.Insert(domain, value); err != nil {
+			log.Warnln("skip invalid hosts entry: %s", err)
+		}
+	}
+	tree.Optimize()
+	return tree, nil
+}
+
+func buildLiveDNSConfig(base generalBaseline, profile string, appendSystem, effectiveIPv6 bool) (*config.DNS, error) {
+	if base.dnsConfig == nil {
+		return nil, nil
+	}
+	dnsCfg := *base.dnsConfig
+	dnsCfg.NameServer = base.dnsServers(profile, appendSystem)
+	if dnsCfg.Enable && dnsCfg.EnhancedMode == C.DNSFakeIP {
+		// 必须分配全新的 FakeIP 池，避免 PatchFrom 对同一池重入加锁死锁。
+		if dnsCfg.FakeIPRange.IsValid() {
+			pool, err := fakeip.New(fakeip.Options{
+				IPNet:       dnsCfg.FakeIPRange,
+				Size:        1000,
+				Persistence: base.storeFakeIP,
+			})
+			if err != nil {
+				return nil, err
+			}
+			dnsCfg.FakeIPPool = pool
+		}
+		if effectiveIPv6 && dnsCfg.IPv6 && dnsCfg.FakeIPRange6.IsValid() {
+			pool6, err := fakeip.New(fakeip.Options{
+				IPNet:       dnsCfg.FakeIPRange6,
+				Size:        1000,
+				Persistence: base.storeFakeIP,
+			})
+			if err != nil {
+				return nil, err
+			}
+			dnsCfg.FakeIPPool6 = pool6
+		}
+	}
+	return &dnsCfg, nil
+}
+
+func captureDNSRuntime() dnsRuntimeSnapshot {
+	return dnsRuntimeSnapshot{
+		defaultResolver:    resolver.DefaultResolver,
+		defaultHostMapper:  resolver.DefaultHostMapper,
+		defaultService:     resolver.DefaultService,
+		useSystemHosts:     resolver.UseSystemHosts,
+		proxyHostResolver:  resolver.ProxyServerHostResolver,
+		directHostResolver: resolver.DirectHostResolver,
+	}
+}
+
+func applyLiveDNSLocked(c *config.DNS, generalIPv6 bool, target inboundSettings) {
+	if !c.Enable {
+		resolver.DefaultResolver = nil
+		resolver.DefaultHostMapper = nil
+		resolver.DefaultService = nil
+		resolver.ProxyServerHostResolver = nil
+		resolver.DirectHostResolver = nil
+		if tunListener != nil && target.dnsListen != "" {
+			dns.ReCreateServer("", nil, nil)
+		}
+		return
+	}
+
+	ipv6 := c.IPv6 && generalIPv6
+	r := dns.NewResolver(dns.Config{
+		Main:                 c.NameServer,
+		Fallback:             c.Fallback,
+		IPv6:                 ipv6,
+		IPv6Timeout:          c.IPv6Timeout,
+		FallbackIPFilter:     c.FallbackIPFilter,
+		FallbackDomainFilter: c.FallbackDomainFilter,
+		FallbackLazyQuery:    c.FallbackLazyQuery,
+		Default:              c.DefaultNameserver,
+		Policy:               c.NameServerPolicy,
+		ProxyServer:          c.ProxyServerNameserver,
+		ProxyServerPolicy:    c.ProxyServerPolicy,
+		DirectServer:         c.DirectNameServer,
+		DirectFollowPolicy:   c.DirectFollowPolicy,
+		CacheAlgorithm:       c.CacheAlgorithm,
+		CacheMaxSize:         c.CacheMaxSize,
+	})
+	m := dns.NewEnhancer(dns.EnhancerConfig{
+		IPv6:          ipv6,
+		EnhancedMode:  c.EnhancedMode,
+		FakeIPPool:    c.FakeIPPool,
+		FakeIPPool6:   c.FakeIPPool6,
+		FakeIPSkipper: c.FakeIPSkipper,
+		FakeIPTTL:     c.FakeIPTTL,
+		UseHosts:      c.UseHosts,
+	})
+
+	if old := resolver.DefaultHostMapper; old != nil {
+		if enhancer, ok := old.(*dns.ResolverEnhancer); ok {
+			m.PatchFrom(enhancer)
+		}
+	}
+
+	s := dns.NewService(r, m)
+	resolver.DefaultResolver = r
+	resolver.DefaultHostMapper = m
+	resolver.DefaultService = s
+	resolver.UseSystemHosts = c.UseSystemHosts
+
+	if r.ProxyResolver.Invalid() {
+		resolver.ProxyServerHostResolver = r.ProxyResolver
+	} else {
+		resolver.ProxyServerHostResolver = r.Resolver
+	}
+
+	if r.DirectResolver.Invalid() {
+		resolver.DirectHostResolver = r.DirectResolver
+	} else {
+		resolver.DirectHostResolver = r.Resolver
+	}
+
+	if tunListener != nil && target.dnsListen != "" {
+		lc := inbound.NewListenConfig()
+		lc.SetRouteMark(target.dnsMark)
+		dns.ReCreateServer(target.dnsListen, lc, s)
+	}
+}
+
+func restoreDNSRuntimeLocked(snap dnsRuntimeSnapshot, target inboundSettings) {
+	resolver.DefaultResolver = snap.defaultResolver
+	resolver.DefaultHostMapper = snap.defaultHostMapper
+	resolver.DefaultService = snap.defaultService
+	resolver.UseSystemHosts = snap.useSystemHosts
+	resolver.ProxyServerHostResolver = snap.proxyHostResolver
+	resolver.DirectHostResolver = snap.directHostResolver
+	if tunListener != nil && target.dnsListen != "" {
+		lc := inbound.NewListenConfig()
+		lc.SetRouteMark(target.dnsMark)
+		dns.ReCreateServer(target.dnsListen, lc, snap.defaultService)
+	}
+}
+
 func updateGeneralSettings(request profileSettingsRequest[generalSettings]) error {
 	mu.Lock()
 	var wait func()
@@ -340,25 +655,76 @@ func updateGeneralSettings(request profileSettingsRequest[generalSettings]) erro
 	}
 	next := old
 	next.General = s
-	rebuild := !reflect.DeepEqual(old.General.Hosts, s.Hosts) ||
-		old.General.UserAgent != s.UserAgent ||
-		old.General.AppendSystemDNS != s.AppendSystemDNS ||
-		!old.General.CoreOverrides.runtimeEqual(s.CoreOverrides) ||
-		s.Ports == nil && old.General.Ports != nil ||
-		s.Authentication == nil && old.General.Authentication != nil
 	previousInbound := desiredInbound
 	targetInbound := previousInbound
-	var cfg *config.Config
+	baseline := previousInbound.baseline
+
+	hostsChanged := !reflect.DeepEqual(old.General.Hosts, s.Hosts)
+	uaChanged := old.General.UserAgent != s.UserAgent
+	appendDNSChanged := old.General.AppendSystemDNS != s.AppendSystemDNS
+	var oldOverrides, nextOverrides generalCoreOverrides
+	if old.General.CoreOverrides != nil {
+		oldOverrides = *old.General.CoreOverrides
+	}
+	if s.CoreOverrides != nil {
+		nextOverrides = *s.CoreOverrides
+	}
+	unifiedChanged := !sameBoolPtr(oldOverrides.UnifiedDelay, nextOverrides.UnifiedDelay)
+	tcpChanged := !sameBoolPtr(oldOverrides.TCPConcurrent, nextOverrides.TCPConcurrent)
+	ipv6Changed := !sameBoolPtr(oldOverrides.IPv6, nextOverrides.IPv6)
+	loaderChanged := !sameStringPtr(oldOverrides.GeodataLoader, nextOverrides.GeodataLoader)
+	liveGeneralChanged := hostsChanged || uaChanged || appendDNSChanged ||
+		unifiedChanged || tcpChanged || ipv6Changed || loaderChanged
+
+	rebuild := s.Ports == nil && old.General.Ports != nil ||
+		s.Authentication == nil && old.General.Authentication != nil ||
+		(liveGeneralChanged && !baseline.ready)
+	if !rebuild && baseline.ready && baseline.dnsConfig != nil {
+		nextIPv6 := baseline.effectiveIPv6(s)
+		// 开启 IPv6 且原配置因禁用 IPv6 跳过了 fake-ip-range6 初始化时，走完整重建以交由内核校验 IPv6 环境。
+		if ipv6Changed && nextIPv6 && baseline.dnsHasFakeIPRange6 && !baseline.dnsConfig.FakeIPRange6.IsValid() {
+			rebuild = true
+		}
+		if ipv6Changed && !nextIPv6 && baseline.dnsConfig.EnhancedMode == C.DNSFakeIP && !baseline.dnsConfig.FakeIPRange.IsValid() {
+			rebuild = true
+		}
+		if (appendDNSChanged || ipv6Changed) && baseline.dnsConfig.Enable && len(baseline.dnsServers(next.Profile, s.AppendSystemDNS)) == 0 {
+			rebuild = true
+		}
+	}
+
+	var (
+		cfg       *config.Config
+		nextHosts *trie.DomainTrie[resolver.HostValue]
+		nextDNS   *config.DNS
+	)
 	if rebuild {
 		var err error
 		cfg, err = parseProfileSettingsConfig(&next, &targetInbound)
 		if err != nil {
 			return errGeneralApply
 		}
-	} else if s.Ports != nil {
-		p := s.Ports
-		b := &targetInbound.inbound
-		b.MixedPort, b.Port, b.SocksPort, b.RedirPort, b.TProxyPort = p.Mixed, p.HTTP, p.SOCKS, p.Redir, p.TProxy
+	} else {
+		if s.Ports != nil {
+			p := s.Ports
+			b := &targetInbound.inbound
+			b.MixedPort, b.Port, b.SocksPort, b.RedirPort, b.TProxyPort = p.Mixed, p.HTTP, p.SOCKS, p.Redir, p.TProxy
+		}
+		if hostsChanged {
+			var err error
+			nextHosts, err = buildMergedHosts(baseline.rawHosts, s.Hosts)
+			if err != nil {
+				return errGeneralApply
+			}
+		}
+		dnsChanged := (appendDNSChanged && next.Profile != "" && !baseline.dnsAlreadyHasSystem) || ipv6Changed
+		if dnsChanged && baseline.dnsConfig != nil {
+			var err error
+			nextDNS, err = buildLiveDNSConfig(baseline, next.Profile, s.AppendSystemDNS, baseline.effectiveIPv6(s))
+			if err != nil {
+				return errGeneralApply
+			}
+		}
 	}
 	if err := preflightGeneralPorts(targetInbound, s.ControllerSecret != ""); err != nil {
 		return err
@@ -375,13 +741,52 @@ func updateGeneralSettings(request profileSettingsRequest[generalSettings]) erro
 	}
 
 	oldAuth := authStore.Default.Authenticator()
+	oldUA := mihomoHttp.UA()
+	oldUnified := adapter.UnifiedDelay.Load()
+	oldTCP := dialer.GetTcpConcurrent()
+	oldDisableIPv6 := resolver.DisableIPv6
+	oldLoader := geodata.LoaderName()
+	oldHosts := resolver.DefaultHosts
+	oldDNS := captureDNSRuntime()
+	appliedLive := false
+
 	if rebuild {
 		wait, err = reloadPreparedLocked(next, cfg, targetInbound, true)
 	} else {
 		err = applyGeneralListenersLocked(targetInbound, s.Authentication)
+		if err == nil && liveGeneralChanged {
+			appliedLive = true
+			if uaChanged {
+				mihomoHttp.SetUA(baseline.effectiveUA(s))
+			}
+			if unifiedChanged {
+				adapter.UnifiedDelay.Store(baseline.effectiveUnifiedDelay(s))
+			}
+			if tcpChanged {
+				dialer.SetTcpConcurrent(baseline.effectiveTCPConcurrent(s))
+			}
+			if loaderChanged {
+				geodata.SetLoader(baseline.effectiveGeodataLoader(s))
+			}
+			if ipv6Changed {
+				resolver.DisableIPv6 = !baseline.effectiveIPv6(s)
+			}
+			if hostsChanged {
+				resolver.DefaultHosts = resolver.NewHosts(nextHosts)
+			}
+			if nextDNS != nil {
+				applyLiveDNSLocked(nextDNS, baseline.effectiveIPv6(s), targetInbound)
+			}
+		}
 	}
 	if err == nil {
 		if os.Rename(staged, path) == nil {
+			if nextDNS != nil {
+				if oldDNS.defaultResolver != nil {
+					oldDNS.defaultResolver.ResetConnection()
+				}
+				resolver.ResetConnection()
+			}
 			current = next
 			log.SetLevel(s.level())
 			if !s.CaptureLogs && diagnosticLogs != nil {
@@ -406,6 +811,17 @@ func updateGeneralSettings(request profileSettingsRequest[generalSettings]) erro
 			cleanupFailure = errors.Join(cleanupFailure, closeBusinessInbounds(), stopTun(), parseErr)
 		}
 	} else if !rebuild {
+		if appliedLive {
+			mihomoHttp.SetUA(oldUA)
+			adapter.UnifiedDelay.Store(oldUnified)
+			dialer.SetTcpConcurrent(oldTCP)
+			geodata.SetLoader(oldLoader)
+			resolver.DisableIPv6 = oldDisableIPv6
+			resolver.DefaultHosts = oldHosts
+			if nextDNS != nil {
+				restoreDNSRuntimeLocked(oldDNS, previousInbound)
+			}
+		}
 		authStore.Default.SetAuthenticator(oldAuth)
 		inbound.SetSkipAuthPrefixes(previousInbound.inbound.SkipAuthPrefixes)
 		if rollbackErr := applyGeneralListenersLocked(previousInbound, nil); rollbackErr != nil {
