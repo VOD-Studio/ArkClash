@@ -399,7 +399,7 @@ export struct YamlCodeEditor {
   build() {
     Column() {
       if (!this.loadFailed) {
-        ScrollControls({ controls: (): void => this.Toolbar() }) {
+        ScrollControls({ controls: (): void => this.Toolbar(), backdrop: 'none' }) {
           EditorViewport({ controller: this.web, ready: this.ready, painted: this.webPainted,
             onInsetChange: (inset: number): void => { this.viewportInset = inset; } }) {
             Web({ src: $rawfile('script-editor/index.html'), controller: this.web })

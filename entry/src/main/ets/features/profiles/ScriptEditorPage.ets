@@ -351,7 +351,7 @@ export struct ScriptEditorPage {
       Column() {
         Column() {
           if (!this.editorFailed && !this.loadFailed) {
-            ScrollControls({ controls: (): void => this.EditorControls() }) {
+            ScrollControls({ controls: (): void => this.EditorControls(), backdrop: 'none' }) {
               EditorViewport({ controller: this.web, ready: this.ready, painted: this.webPainted,
                 onInsetChange: (inset: number): void => { this.viewportInset = inset; } }) {
                 if (this.loaded) {

@@ -16,6 +16,7 @@ struct ScrollControlsBar {
 @ComponentV2
 export struct ScrollControls {
   @Param @Require controls: () => void;
+  @Param backdrop: 'blur' | 'none' = 'blur';
   @BuilderParam content: () => void = emptyScrollContent;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private controlsHeight: number = 0;
@@ -26,7 +27,9 @@ export struct ScrollControls {
       Column() { this.content() }
         .width('100%').height('100%').safeAreaPadding({ top: this.controlsHeight })
       ScrollControlsBar({ content: this.controls })
-        .backgroundColor(this.appStyle.palette.pageBackground)
+        .backgroundColor(this.backdrop === 'blur' && this.controlsHeight > 0 && this.appStyle.glass === 'none' ?
+          this.appStyle.palette.pageBackground : Color.Transparent)
+        .backdropBlur(this.backdrop === 'blur' && this.controlsHeight > 0 && this.appStyle.glass !== 'none' ? 20 : 0)
         .onSizeChange((_previous: SizeOptions, next: SizeOptions): void => {
           this.controlsHeight = Number(next.height ?? 0);
         })

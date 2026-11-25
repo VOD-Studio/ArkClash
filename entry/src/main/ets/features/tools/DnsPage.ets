@@ -258,20 +258,24 @@ export struct DnsPage {
     if (this.store.visibleRecords > 0) {
       if (!this.store.ready) {
         Text($r('app.string.diagnostics_disconnected')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
+          .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
       } else if (this.store.error !== '' || this.store.streamState === 'failed') {
         Row({ space: 8 }) {
           Text(this.emptyTitle).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('app.color.status_error')).layoutWeight(1)
           Button($r('app.string.diagnostics_retry')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
             .onClick((): void => { this.store.retry(); })
         }
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
       } else if (!this.store.synced) {
         Text($r('app.string.diagnostics_connecting')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
+          .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
       }
     }
     if (this.store.interruptions > 0 || this.store.dropped > 0 || this.store.evicted > 0) {
       Text($r('app.string.diagnostics_gap', this.store.interruptions, this.store.dropped, this.store.evicted))
         .fontFamily(this.appStyle.fontFamily)
         .fontSize(12).fontColor($r('sys.color.font_secondary'))
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
     }
     if (this.store.preferenceError !== '') {
       Row({ space: 8 }) {
@@ -280,24 +284,27 @@ export struct DnsPage {
         Button($r('app.string.diagnostics_retry_preferences')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
           .enabled(!this.preferencePending).onClick((): void => { this.retryPreferences(); })
       }
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
     }
   }
 
   @Builder
   FilterControls() {
-    Column({ space: 8 }) {
+    Column() {
       if (this.searchShown || this.store.query !== '') {
         Search({ value: this.store.query, placeholder: $r('app.string.diagnostics_search_hint') })
           .textFont({ size: 16, family: this.appStyle.fontFamily }).placeholderFont({ size: 16, family: this.appStyle.fontFamily })
           .accessibilityText($r('app.string.diagnostics_search'))
+          .margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 6, bottom: 6 })
           .onChange((query: string): void => { this.store.setQuery(query); })
       }
-      RecordFilterChips({ facets: this.store.facets,
-        onRemove: (field: string, option: string): void => { this.store.toggleFacet(field, option); } })
+      if (this.hasActiveFilters) {
+        RecordFilterChips({ facets: this.store.facets,
+          onRemove: (field: string, option: string): void => { this.store.toggleFacet(field, option); } })
+      }
       this.StatusContent()
     }
     .width('100%').alignItems(HorizontalAlign.Start)
-    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
   }
 
   build() {
