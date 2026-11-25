@@ -23,6 +23,7 @@ export struct ProxyNodeCard {
   private press: ProxyPressState = new ProxyPressState();
   @Event onChoose: () => void = () => {};
   @Event onTest: () => void = () => {};
+  @Event onTailscaleLogin: () => void = () => {};
   @Event onSaveToLibrary: () => void = () => {};
 
   aboutToAppear(): void {
@@ -94,6 +95,14 @@ export struct ProxyNodeCard {
           .selectIcon(true)
           .enabled(this.active && this.node.selectable)
           .onClick(() => this.onChoose())
+      }
+      if (this.node.type.toLowerCase() === 'tailscale' && this.node.online && !this.node.leafRetired) {
+        MenuItem({
+          content: $r('app.string.proxy_tailscale_login'),
+          symbolStartIcon: new SymbolGlyphModifier($r('sys.symbol.link'))
+        })
+          .enabled(this.active)
+          .onClick(() => this.onTailscaleLogin())
       }
       if (isExportableProxyNode(this.node)) {
         MenuItem({

@@ -52,6 +52,7 @@ func init() {
 			r.Get("/status", getStatus)
 			r.Get("/proxies", getProxySnapshot)
 			r.Post("/proxies/definition", postProxyDefinition)
+			r.Post("/proxies/tailscale-login", postTailscaleLogin)
 			r.Get("/providers", getRuntimeProviders)
 			r.Get("/providers/events", getRuntimeProviderEvents)
 			r.Post("/providers/update", postRuntimeProviderUpdate)

@@ -75,6 +75,7 @@ export struct ProxyTabGrid {
                 groupType: this.group.type,
                 onChoose: (node: string) => this.onChoose(node),
                 onTest: (node: string) => this.onTest(node),
+                onTailscaleLogin: (node: string): void => { this.browser.loginTailscale(this.group.name, node); },
                 onSaveToLibrary: (node: string) => this.onSaveToLibrary(node)
               })
             }

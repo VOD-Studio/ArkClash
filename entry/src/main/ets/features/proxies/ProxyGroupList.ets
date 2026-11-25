@@ -298,6 +298,7 @@ export struct ProxyGroupList {
         motionEnabled: this.motionEnabled, nestedSurface: true, groupType: $$.group.type,
         onChoose: (node: string) => this.browser.choose($$.group.name, node),
         onTest: (node: string) => this.browser.test($$.group.name, node),
+        onTailscaleLogin: (node: string): void => { this.browser.loginTailscale($$.group.name, node); },
         onSaveToLibrary: (node: string) => this.onSaveToLibrary($$.group.name, node)
       })
     }

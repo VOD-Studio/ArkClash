@@ -1,14 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -22,6 +26,118 @@ import (
 	C "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/tunnel"
 )
+
+type loginTestAdapter struct {
+	C.ProxyAdapter
+	login func(context.Context) (string, string, error)
+}
+
+func (a *loginTestAdapter) Type() C.AdapterType { return C.Tailscale }
+func (a *loginTestAdapter) ArkClashTailscaleLogin(ctx context.Context) (string, string, error) {
+	return a.login(ctx)
+}
+
+func loginProxyFixture(t *testing.T, login func(context.Context) (string, string, error)) proxyDefinitionRequest {
+	t.Helper()
+	cfg := fixture(t)
+	proxy := adapter.NewProxy(&loginTestAdapter{cfg.Proxies["DIRECT"].Adapter(), login})
+	mu.Lock()
+	defer mu.Unlock()
+	proxies := maps.Clone(cfg.Proxies)
+	proxies["login"] = proxy
+	tunnel.UpdateProxies(proxies, cfg.Providers)
+	graph := currentProxyGraph()
+	return proxyDefinitionRequest{BootID: runtimeBootID, ConfigRevision: runtimeConfigRevision, ID: graph.Proxies["login"].ID}
+}
+
+func TestTailscaleLoginStatesAndPrivateErrors(t *testing.T) {
+	const address = "https://example.invalid/auth/private"
+	var state, authURL string
+	var failure error
+	req := loginProxyFixture(t, func(ctx context.Context) (string, string, error) {
+		if _, ok := ctx.Deadline(); !ok {
+			t.Error("backend call lacks a deadline")
+		}
+		return state, authURL, failure
+	})
+	for _, sample := range []struct {
+		state, url string
+		err        error
+		code       int
+	}{
+		{"authorize", address, nil, 200},
+		{"running", address, nil, 200},
+		{"key-configured", address, nil, 200},
+		{"needs-approval", address, nil, 200},
+		{"pending", address, nil, 200},
+		{"authorize", "https://user@example.invalid/auth/private", nil, 503},
+		{"authorize", "file:///auth/private", nil, 503},
+		{"authorize", "", nil, 503},
+		{"unknown", address, nil, 503},
+		{"", "", errors.New(address), 503},
+	} {
+		state, authURL, failure = sample.state, sample.url, sample.err
+		data, _ := json.Marshal(req)
+		rec := httptest.NewRecorder()
+		postTailscaleLogin(rec, httptest.NewRequest(http.MethodPost, "/arkclash/proxies/tailscale-login", bytes.NewReader(data)))
+		if rec.Code != sample.code || rec.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("state %q status=%d", state, rec.Code)
+		}
+		if sample.code != 200 {
+			if !strings.Contains(rec.Body.String(), "tailscale_login_failed") || strings.Contains(rec.Body.String(), "/auth/") {
+				t.Fatal("backend failure exposed details")
+			}
+			continue
+		}
+		var result tailscaleLoginResponse
+		if json.Unmarshal(rec.Body.Bytes(), &result) != nil || result.State != state || result.ID != req.ID ||
+			result.BootID != req.BootID || result.ConfigRevision != req.ConfigRevision {
+			t.Fatalf("state %q lost request identity", state)
+		}
+		if (state == "authorize" && result.AuthURL != address) || (state != "authorize" && strings.Contains(rec.Body.String(), "authUrl")) {
+			t.Fatalf("state %q returned incorrect URL", state)
+		}
+	}
+	wrongGroup := req
+	wrongGroup.Group = "Manual"
+	if _, status, _ := requestTailscaleLogin(context.Background(), wrongGroup); status != http.StatusNotFound {
+		t.Fatalf("unrelated member returned %d", status)
+	}
+	direct := req
+	direct.ID = snapshotNodeID(t, "Manual", "DIRECT")
+	if _, status, _ := requestTailscaleLogin(context.Background(), direct); status != http.StatusBadRequest {
+		t.Fatalf("non-Tailscale proxy returned %d", status)
+	}
+}
+
+func TestTailscaleLoginDiscardsResponseAfterConfigChange(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	req := loginProxyFixture(t, func(ctx context.Context) (string, string, error) {
+		close(started)
+		select {
+		case <-release:
+			return "authorize", "https://example.invalid/auth/private", nil
+		case <-ctx.Done():
+			return "", "", ctx.Err()
+		}
+	})
+	done := make(chan struct{})
+	var response tailscaleLoginResponse
+	var code int
+	go func() {
+		response, code, _ = requestTailscaleLogin(context.Background(), req)
+		close(done)
+	}()
+	<-started
+	mu.Lock()
+	runtimeConfigRevision++
+	mu.Unlock()
+	close(release)
+	<-done
+	if code != http.StatusConflict || response.AuthURL != "" {
+		t.Errorf("retired instance returned HTTP %d", code)
+	}
+}
 
 type proxyHTTPNode struct {
 	Name    string `json:"name"`

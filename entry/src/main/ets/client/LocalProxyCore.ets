@@ -1,5 +1,5 @@
 import { common } from '@kit.AbilityKit';
-import { taskpool } from '@kit.ArkTS';
+import { taskpool, url } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
 import { connection } from './Connection';
 import { call } from '../shared/ControllerRequest';
@@ -10,7 +10,7 @@ interface LocalProxyRequest {
   lines?: string[];
 }
 
-interface RuntimeProxyDefinitionRequest {
+export interface RuntimeProxyTarget {
   bootId: string;
   configRevision: number;
   id: string;
@@ -24,6 +24,17 @@ export interface RuntimeProxyDefinition {
   name: string;
   provider?: string;
   definition: ProxyDefinition;
+}
+
+export interface TailscaleLoginResult {
+  state: 'authorize' | 'running' | 'key-configured' | 'needs-approval' | 'pending';
+  authUrl?: string;
+}
+
+interface TailscaleLoginResponse extends TailscaleLoginResult {
+  bootId: string;
+  configRevision: number;
+  id: string;
 }
 
 const RUNTIME_PROXY_ERRORS: string[] = [
@@ -94,7 +105,7 @@ export async function decodeProxyLinks(context: common.UIAbilityContext, lines: 
 
 export async function fetchRuntimeProxyDefinition(filesDir: string, bootId: string, configRevision: number,
   id: string, group: string): Promise<RuntimeProxyDefinition> {
-  const body: RuntimeProxyDefinitionRequest = {
+  const body: RuntimeProxyTarget = {
     bootId: bootId,
     configRevision: configRevision,
     id: id,
@@ -115,5 +126,35 @@ export async function fetchRuntimeProxyDefinition(filesDir: string, bootId: stri
   } catch (error) {
     const message = (error as Error).message;
     throw new Error(RUNTIME_PROXY_ERRORS.includes(message) ? message : 'local_proxy_core_unavailable');
+  }
+}
+
+function validTailscaleLoginUrl(raw: string): boolean {
+  if (raw.length > 8192 || !/^https?:\/\/[^/?#@]+(?:[/?#]|$)/i.test(raw) ||
+    /[\s\\\u0000-\u001f\u007f]/.test(raw)) {
+    return false;
+  }
+  const address = url.URL.parseURL(raw);
+  return address.hostname !== '' && address.username === '' && address.password === '';
+}
+
+export async function requestTailscaleLogin(filesDir: string, target: RuntimeProxyTarget): Promise<TailscaleLoginResult> {
+  try {
+    const response = await call(filesDir, http.RequestMethod.POST, '/arkclash/proxies/tailscale-login',
+      JSON.stringify(target), 15000, 64 * 1024);
+    const login = JSON.parse(response) as TailscaleLoginResponse;
+    if (login.bootId !== target.bootId || login.configRevision !== target.configRevision || login.id !== target.id) {
+      throw new Error('proxy_stale_config');
+    }
+    if (login.state === 'authorize' && typeof login.authUrl === 'string' && validTailscaleLoginUrl(login.authUrl)) {
+      return { state: 'authorize', authUrl: login.authUrl };
+    }
+    if (['running', 'key-configured', 'needs-approval', 'pending'].includes(login.state)) {
+      return { state: login.state };
+    }
+    throw new Error('tailscale_login_failed');
+  } catch (error) {
+    const message = (error as Error).message;
+    throw new Error(RUNTIME_PROXY_ERRORS.includes(message) ? message : 'tailscale_login_failed');
   }
 }

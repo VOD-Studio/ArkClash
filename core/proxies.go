@@ -207,24 +207,33 @@ func isBuiltinProxyType(kind C.AdapterType) bool {
 	}
 }
 
-func lookupProxyDefinition(req proxyDefinitionRequest) (proxyDefinitionResponse, int, error) {
+// 调用方持有 mu，身份必须同时匹配宿主、配置修订和组内成员。
+func lookupProxyLocked(req proxyDefinitionRequest) (C.Proxy, int, error) {
 	if req.BootID == "" || req.ConfigRevision == 0 || req.ID == "" {
-		return proxyDefinitionResponse{}, http.StatusBadRequest, errors.New("proxy_invalid_request")
+		return nil, http.StatusBadRequest, errors.New("proxy_invalid_request")
 	}
-	mu.Lock()
-	defer mu.Unlock()
 	if !running {
-		return proxyDefinitionResponse{}, http.StatusConflict, errors.New("core_not_running")
+		return nil, http.StatusConflict, errors.New("core_not_running")
 	}
 	if current.Profile == "" {
-		return proxyDefinitionResponse{}, http.StatusConflict, errors.New("core_profile_unavailable")
+		return nil, http.StatusConflict, errors.New("core_profile_unavailable")
 	}
 	if req.BootID != runtimeBootID || req.ConfigRevision != runtimeConfigRevision {
-		return proxyDefinitionResponse{}, http.StatusConflict, errors.New("proxy_stale_config")
+		return nil, http.StatusConflict, errors.New("proxy_stale_config")
 	}
 	proxy, ok := currentProxyMember(req.ID, req.Group)
 	if !ok {
-		return proxyDefinitionResponse{}, http.StatusNotFound, errors.New("proxy_not_found")
+		return nil, http.StatusNotFound, errors.New("proxy_not_found")
+	}
+	return proxy, http.StatusOK, nil
+}
+
+func lookupProxyDefinition(req proxyDefinitionRequest) (proxyDefinitionResponse, int, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	proxy, status, err := lookupProxyLocked(req)
+	if err != nil {
+		return proxyDefinitionResponse{}, status, err
 	}
 	if _, isGroup := proxy.Adapter().(outboundgroup.ProxyGroup); isGroup || isBuiltinProxyType(proxy.Type()) {
 		return proxyDefinitionResponse{}, http.StatusBadRequest, errors.New("proxy_not_exportable")

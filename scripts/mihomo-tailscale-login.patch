@@ -1,0 +1,160 @@
+--- a/adapter/outbound/base.go
++++ b/adapter/outbound/base.go
+@@ -398,6 +398,22 @@
+ 	return pc, nil
+ }
+ 
++// ArkClashTailscaleLogin 保留原适配器的生命周期，避免为浏览器授权另建节点身份。
++func (p *autoCloseProxyAdapter) ArkClashTailscaleLogin(ctx context.Context) (string, string, error) {
++	adapter := p.ProxyAdapter
++	if mux, ok := adapter.(*SingMux); ok {
++		adapter = mux.ProxyAdapter
++	}
++	login, ok := adapter.(interface {
++		arkClashTailscaleLogin(context.Context) (string, string, error)
++	})
++	if !ok {
++		return "", "", fmt.Errorf("Tailscale login unavailable")
++	}
++	defer runtime.KeepAlive(p)
++	return login.arkClashTailscaleLogin(ctx)
++}
++
+ func (p *autoCloseProxyAdapter) Close() error {
+ 	p.closeOnce.Do(func() {
+ 		log.Debugln("Closing outdated proxy [%s]", p.Name())
+--- a/adapter/outbound/tailscale.go
++++ b/adapter/outbound/tailscale.go
+@@ -41,6 +41,9 @@
+ 	cancel      context.CancelFunc
+ 	startOnce   sync.Once
+ 	startErr    error
++
++	loginStartOnce sync.Once
++	loginReady     chan struct{}
+ 
+ 	backendInitOnce sync.Once
+ 	backendInitCh   chan struct{}
+@@ -152,30 +155,23 @@
+ 		ControlURL: option.ControlURL,
+ 		Ephemeral:  option.Ephemeral,
+ 		SystemDialer: func(ctx context.Context, network, address string) (net.Conn, error) {
+-			log.Debugln("[Tailscale](%s) SystemDialer: start dial %s %s", option.Name, network, address)
+ 			conn, err := outbound.dialer.DialContext(ctx, network, address)
+-			log.Debugln("[Tailscale](%s) SystemDialer: finish dial %s %s, err: %v", option.Name, network, address, err)
++			log.Debugln("[Tailscale] system dial finished, success=%t", err == nil)
+ 			return conn, err
+ 		},
+ 		SystemPacketListener: func(ctx context.Context, network, address string) (net.PacketConn, error) {
+-			log.Debugln("[Tailscale](%s) SystemPacketListener: start listen %s %s", option.Name, network, address)
+ 			pc, err := outbound.dialer.ListenPacket(ctx, network, address, netip.AddrPort{})
+-			log.Debugln("[Tailscale](%s) SystemPacketListener: finish listen %s %s, err: %v", option.Name, network, address, err)
++			log.Debugln("[Tailscale] system packet listener finished, success=%t", err == nil)
+ 			return pc, err
+ 		},
+ 		ExtraRootCAs: ca.GetCertPool(),
+ 		LookupHook: func(ctx context.Context, host string) ([]netip.Addr, error) {
+-			log.Debugln("[Tailscale](%s) LookupHook: start lookup %s", option.Name, host)
+ 			ips, err := resolver.LookupIPWithResolver(ctx, host, resolver.ProxyServerHostResolver)
+-			log.Debugln("[Tailscale](%s) LookupHook: finish lookup %s, ips: %v, err: %v", option.Name, host, ips, err)
++			log.Debugln("[Tailscale] DNS lookup finished, success=%t", err == nil)
+ 			return ips, err
+ 		},
+-		UserLogf: func(format string, args ...any) {
+-			log.Infoln("[Tailscale](%s) %s", option.Name, fmt.Sprintf(format, args...))
+-		},
+-		Logf: func(format string, args ...any) {
+-			log.Debugln("[Tailscale](%s) %s", option.Name, fmt.Sprintf(format, args...))
+-		},
++		// tsnet 默认将节点身份与授权链接写进日志，授权只经本地认证接口返回。
++		UserLogf: func(string, ...any) {},
+ 	}
+ 	dnsTransport := tailscaleDNSTransport{tailscale: outbound}
+ 	outbound.dnsResolver = dns.NewResolverFromClient(dnsTransport)
+@@ -203,6 +199,77 @@
+ 	return t.startErr
+ }
+ 
++func (t *Tailscale) arkClashTailscaleLogin(ctx context.Context) (string, string, error) {
++	// 首次启动 tsnet 还会读取状态和初始化网卡。多个短时请求共享这一次启动。
++	t.loginStartOnce.Do(func() {
++		t.loginReady = make(chan struct{})
++		go func() {
++			defer close(t.loginReady)
++			_ = t.start()
++		}()
++	})
++	select {
++	case <-ctx.Done():
++		return "", "", ctx.Err()
++	case <-t.ctx.Done():
++		return "", "", t.ctx.Err()
++	case <-t.loginReady:
++	}
++	if t.startErr != nil {
++		return "", "", t.startErr
++	}
++	lc, err := t.server.LocalClient()
++	if err != nil {
++		return "", "", err
++	}
++	st, err := lc.StatusWithoutPeers(ctx)
++	if err != nil {
++		return "", "", err
++	}
++	switch st.BackendState {
++	case ipn.Running.String():
++		return "running", "", nil
++	case ipn.NeedsMachineAuth.String():
++		return "needs-approval", "", nil
++	}
++	if t.option.AuthKey != "" {
++		return "key-configured", "", nil
++	}
++	if st.AuthURL != "" {
++		return "authorize", st.AuthURL, nil
++	}
++	watcher, err := lc.WatchIPNBus(ctx, ipn.NotifyInitialState)
++	if err != nil {
++		return "", "", err
++	}
++	defer watcher.Close()
++	requested := false
++	for {
++		event, err := watcher.Next()
++		if err != nil {
++			return "", "", err
++		}
++		if event.State != nil {
++			switch *event.State {
++			case ipn.Running:
++				return "running", "", nil
++			case ipn.NeedsMachineAuth:
++				return "needs-approval", "", nil
++			}
++		}
++		if event.BrowseToURL != nil && *event.BrowseToURL != "" {
++			return "authorize", *event.BrowseToURL, nil
++		}
++		if !requested && event.State != nil && *event.State == ipn.NeedsLogin {
++			// 先订阅再触发登录，防止漏掉首次下发的地址。
++			if err := lc.StartLoginInteractive(ctx); err != nil {
++				return "", "", err
++			}
++			requested = true
++		}
++	}
++}
++
+ func (t *Tailscale) ensureStarted(ctx context.Context) error {
+ 	if err := t.start(); err != nil {
+ 		return err
+@@ -244,7 +311,7 @@
+ 		}
+ 		if exitNodeNeedsStatus && *n.State == ipn.Running {
+ 			if err := t.applyExitNodePrefs(t.ctx); err != nil {
+-				log.Warnln("[Tailscale](%s) set exit node failed: %v", t.Name(), err)
++				log.Warnln("[Tailscale] set exit node failed (%T)", err)
+ 			}
+ 			return
+ 		}

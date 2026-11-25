@@ -26,7 +26,7 @@ before(async () => {
     'added_rules.go', 'rule_set_data.go', 'rule_sets.go', 'profile_settings.go', 'profile_scripts.go', 'profile_preview.go', 'local_proxies.go', 'local_proxy_links.go',
     'proxy_filters.go', 'diagnostics_connections.go', 'diagnostics_dns.go', 'diagnostics_stream.go',
     'diagnostics_stats.go', 'diagnostics_logs.go', 'general_settings.go', 'panel_controller.go', 'backup.go', 'profile_subscription_age.go',
-    'tailscale_watch.go']) {
+    'tailscale_watch.go', 'tailscale_login.go']) {
     await copyFile(join(root, 'core', file), join(sandbox, file));
   }
   for (const file of ['contracts-host_test.go', 'backup-live-host_test.go', 'core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go',

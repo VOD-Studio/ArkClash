@@ -1,0 +1,23 @@
+--- a/ipn/ipnlocal/local.go
++++ b/ipn/ipnlocal/local.go
+@@ -1436,7 +1436,10 @@
+ 		s.Version = version.Long()
+ 		s.TUN = !b.sys.IsNetstack()
+ 		s.BackendState = b.state.String()
+-		s.AuthURL = b.authURL
++		// 主动查询和实时浏览器事件必须遵守相同的控制端域名与协议规则。
++		if b.validPopBrowserURLLocked(b.authURL) {
++			s.AuthURL = b.authURL
++		}
+ 		if prefs := b.pm.CurrentPrefs(); prefs.Valid() && prefs.AutoUpdate().Check {
+ 			s.ClientVersion = b.lastClientVersion
+ 		}
+@@ -3740,7 +3743,7 @@
+ 			ini.SessionID = sessionID
+ 			state := b.state
+ 			ini.State = &state
+-			if b.state == ipn.NeedsLogin && b.authURL != "" {
++			if b.state == ipn.NeedsLogin && b.validPopBrowserURLLocked(b.authURL) {
+ 				authURL := b.authURL
+ 				ini.BrowseToURL = &authURL
+ 			}

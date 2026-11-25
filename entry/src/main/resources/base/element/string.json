@@ -4857,6 +4857,30 @@
       "value": "Provider update failed; previous content kept"
     },
     {
+      "name": "proxy_tailscale_login",
+      "value": "Log in to Tailscale"
+    },
+    {
+      "name": "proxy_tailscale_running",
+      "value": "This node is logged in to Tailscale"
+    },
+    {
+      "name": "proxy_tailscale_pending",
+      "value": "The login link is being prepared. Try again shortly."
+    },
+    {
+      "name": "proxy_tailscale_key_configured",
+      "value": "This node uses a configured auth key"
+    },
+    {
+      "name": "proxy_tailscale_needs_approval",
+      "value": "This node is waiting for administrator approval"
+    },
+    {
+      "name": "proxy_tailscale_failed",
+      "value": "Could not open Tailscale login. Try again."
+    },
+    {
       "name": "proxy_save_to_library",
       "value": "Save to local proxy library"
     },

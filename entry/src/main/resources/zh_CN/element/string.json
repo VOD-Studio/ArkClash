@@ -4837,6 +4837,30 @@
       "value": "Provider 更新失败，已保留原有效资源"
     },
     {
+      "name": "proxy_tailscale_login",
+      "value": "登录 Tailscale"
+    },
+    {
+      "name": "proxy_tailscale_running",
+      "value": "此节点已登录 Tailscale"
+    },
+    {
+      "name": "proxy_tailscale_pending",
+      "value": "登录链接准备中，请稍后再试"
+    },
+    {
+      "name": "proxy_tailscale_key_configured",
+      "value": "此节点使用已配置的授权密钥登录"
+    },
+    {
+      "name": "proxy_tailscale_needs_approval",
+      "value": "此节点正在等待管理员批准"
+    },
+    {
+      "name": "proxy_tailscale_failed",
+      "value": "无法打开 Tailscale 登录，请重试"
+    },
+    {
       "name": "proxy_save_to_library",
       "value": "保存到本地节点库"
     },
