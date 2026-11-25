@@ -20,7 +20,7 @@ interface FetchResult {
   error?: string;
 }
 
-// 在线订阅按当前规则经内核下载；失败保留原配置，不改变用户选择的出口策略。
+// 内核按实际转发状态选择订阅出口，下载失败时保留原配置。
 export class KernelDownloader implements Downloader {
   private filesDir: string;
 

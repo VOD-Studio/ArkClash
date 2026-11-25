@@ -176,6 +176,115 @@ func TestRuleFetchDeadlineClosesActualProxyHandshake(t *testing.T) {
 	}
 }
 
+func TestSubscriptionFetchUsesForwardingState(t *testing.T) {
+	fixture(t)
+	installProbeConfig(t, "mode: rule\nlog-level: silent\nrules: ['MATCH,REJECT']\n")
+	setForward := func(forward string) {
+		t.Helper()
+		mu.Lock()
+		defer mu.Unlock()
+		intent := "started"
+		tunListener = nil
+		if forward == "stopped" {
+			intent = "stopped"
+		} else if forward == "running" {
+			fd := 1
+			tunListener = &fd
+		}
+		if err := updateVpnState(intent, forward, tunListener != nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	const content = "proxies: []\n"
+	entered, release := make(chan struct{}), make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/pending" {
+			close(entered)
+			<-release
+		} else {
+			mu.Lock()
+			publishRuntime()
+			mu.Unlock()
+		}
+		_, _ = io.WriteString(w, content)
+	}))
+	defer server.Close()
+	defer unblock()
+	key := ""
+	for _, tc := range []struct {
+		name    string
+		forward string
+		key     *string
+		success bool
+	}{
+		{"standby", "stopped", &key, true},
+		{"paused", "paused", &key, true},
+		{"forwarding", "running", &key, false},
+		{"preparing", "preparing", &key, false},
+		{"raw resource in standby", "stopped", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setForward(tc.forward)
+			target := filepath.Join(current.HomeDir, "profiles", tc.name+".yaml")
+			got := fetch(fetchRequest{URL: server.URL, Path: target, AgeSecretKey: tc.key, TimeoutMs: 1000})
+			data, err := os.ReadFile(target)
+			if tc.success {
+				if got.Error != "" || got.Status != http.StatusOK || err != nil || string(data) != content {
+					t.Fatalf("direct download: status=%d error=%q file=%v", got.Status, got.Error, err)
+				}
+			} else if got.Error == "" || !os.IsNotExist(err) {
+				t.Fatalf("unexpected download: %+v file=%v", got, err)
+			}
+			if tunnel.Mode().String() != "rule" {
+				t.Fatal("subscription changed the global mode")
+			}
+		})
+	}
+
+	setForward("stopped")
+	target := filepath.Join(current.HomeDir, "profiles", "pending.yaml")
+	done := make(chan fetchResult, 1)
+	go func() {
+		done <- fetch(fetchRequest{URL: server.URL + "/pending", Path: target, AgeSecretKey: &key})
+	}()
+	receiveProbeSignal(t, entered, "pending direct request never reached the origin")
+	setForward("running")
+	setForward("stopped")
+	unblock()
+	if got := <-done; got.Error != "canceled" {
+		t.Fatalf("stale direct download: %+v", got)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("stale candidate remained: %v", err)
+	}
+}
+
+func TestSubscriptionSlowTLSUsesRequestDeadline(t *testing.T) {
+	fixture(t)
+	installProbeConfig(t, "mode: rule\nlog-level: silent\nrules: ['MATCH,DIRECT']\n")
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "proxies: []\n")
+	}))
+	server.TLS = &tls.Config{GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
+		time.Sleep(5200 * time.Millisecond)
+		return nil, nil
+	}}
+	server.StartTLS()
+	defer server.Close()
+	if err := ca.AddCertificate(string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}))); err != nil {
+		t.Fatal(err)
+	}
+	defer ca.ResetCertificate()
+	key := ""
+	target := filepath.Join(current.HomeDir, "profiles", "slow-tls.yaml")
+	got := fetch(fetchRequest{URL: server.URL, Path: target, AgeSecretKey: &key, TimeoutMs: 9000})
+	if got.Status != http.StatusOK || got.Error != "" {
+		t.Fatalf("subscription handshake within the request deadline: %+v", got)
+	}
+}
+
 func TestRuleDNSCancellationClosesQueryWithoutBackgroundRetry(t *testing.T) {
 	fixture(t)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

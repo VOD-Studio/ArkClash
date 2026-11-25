@@ -90,7 +90,7 @@ func postBackupDAV(w http.ResponseWriter, r *http.Request) {
 	}
 	file, err := backup.WorkspaceArchive(home, req.Work)
 	if err == nil {
-		ctx, stop := ruleRequestContext(r.Context())
+		ctx, stop := ruleRequestContext(r.Context(), nil)
 		defer stop()
 		transport := backup.DirectTransport()
 		if status.Forward == "running" {

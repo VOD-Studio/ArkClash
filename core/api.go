@@ -403,7 +403,7 @@ type fetchRequest struct {
 	Path         string            `json:"path"`      // 响应体写到这里，必须在配置目录下
 	TimeoutMs    int               `json:"timeoutMs"` // 整个请求的上限
 	MaxBytes     int64             `json:"maxBytes"`
-	AgeSecretKey *string           `json:"ageSecretKey"` // 未设置时按原始文件下载。
+	AgeSecretKey *string           `json:"ageSecretKey"` // 普通订阅传空串，加密订阅传私钥，其他资源省略。
 }
 
 type fetchResult struct {
@@ -412,10 +412,28 @@ type fetchResult struct {
 	Error  string            `json:"error,omitempty"`
 }
 
-// 在线下载只经当前规则拨号；失败不降级直连，响应体不通过 NAPI 传大字符串。
-func fetch(req fetchRequest) fetchResult {
-	if _, ok := runningProfile(); !ok {
+// 待机和暂停的订阅请求指定 DIRECT，转发时沿用规则。正文直接写入候选文件。
+func fetch(req fetchRequest) (result fetchResult) {
+	status := runtimeSnapshot.Load()
+	if status == nil || !status.Running {
 		return fetchResult{Error: "core is not running"}
+	}
+	var subscription *statusResponse
+	if req.AgeSecretKey != nil {
+		switch status.Forward {
+		case "stopped", "paused", "running":
+			subscription = status
+		default:
+			return fetchResult{Error: "busy"}
+		}
+		defer func() {
+			if !subscription.subscriptionRouteCurrent() {
+				if result.Status == http.StatusOK {
+					_ = os.Remove(req.Path)
+				}
+				result = fetchResult{Error: "canceled"}
+			}
+		}()
 	}
 	if err := checkProfilePath(req.Path); err != nil {
 		return fetchResult{Error: err.Error()}
@@ -425,7 +443,7 @@ func fetch(req fetchRequest) fetchResult {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(req.TimeoutMs)*time.Millisecond)
 	defer cancel()
-	ctx, finishRuleRequest := ruleRequestContext(ctx)
+	ctx, finishRuleRequest := ruleRequestContext(ctx, subscription)
 	defer finishRuleRequest()
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, req.URL, nil)
@@ -438,6 +456,10 @@ func fetch(req fetchRequest) fetchResult {
 	transport, err := newRuleTransport()
 	if err != nil {
 		return fetchResult{Error: "tls"}
+	}
+	if subscription != nil {
+		// 订阅的连接、TLS 握手和响应体共用请求期限。
+		transport.TLSHandshakeTimeout = 0
 	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport}
@@ -452,7 +474,7 @@ func fetch(req fetchRequest) fetchResult {
 	}
 	defer resp.Body.Close()
 
-	result := fetchResult{Status: resp.StatusCode, Header: map[string]string{}}
+	result = fetchResult{Status: resp.StatusCode, Header: map[string]string{}}
 	for k, v := range resp.Header {
 		if len(v) > 0 {
 			result.Header[strings.ToLower(k)] = v[0]

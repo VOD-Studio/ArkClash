@@ -439,7 +439,7 @@ func commitRuleSets(ctx context.Context, request ruleSetRequest, catalog ruleSet
 func downloadRuleSet(ctx context.Context, source string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	ctx, finish := ruleRequestContext(ctx)
+	ctx, finish := ruleRequestContext(ctx, nil)
 	defer finish()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
 	if err != nil {
