@@ -51,11 +51,31 @@ let editor;
 let original;
 let reported;
 let readOnlyMode = false;
+let topInset = 0;
+let paintToken = 0;
 let pendingOpenSettings = null;
 let pendingOpenChunks = [];
 let pendingReplaceChunks = [];
 const wrapping = new Compartment();
 const appearance = new Compartment();
+
+function reserveSearchPanel(height) {
+  document.documentElement.style.setProperty('--search-height', `${height}px`);
+  editor?.requestMeasure();
+}
+
+const searchPanelSize = new ResizeObserver(([entry]) => {
+  if (entry.target.isConnected) reserveSearchPanel(entry.borderBoxSize[0].blockSize);
+});
+
+function trackSearchPanel(update) {
+  const open = searchPanelOpen(update.state);
+  if (open === searchPanelOpen(update.startState)) return;
+  searchPanelSize.disconnect();
+  const panel = open && update.view.dom.querySelector('.cm-panels-top');
+  if (panel) searchPanelSize.observe(panel);
+  else reserveSearchPanel(0);
+}
 
 function report(update) {
   const { state } = update;
@@ -68,13 +88,22 @@ function report(update) {
   reported = signature;
 }
 
-function setAppearance(settings) {
+function applyAppearanceVars(settings) {
   const root = document.documentElement;
-  root.classList.toggle('dark', settings.dark);
-  root.style.setProperty('--surface', settings.surface);
-  root.style.setProperty('--accent', settings.accent);
-  root.style.setProperty('--font', `${settings.font}px`);
-  editor.dispatch({ effects: [appearance.reconfigure(theme(settings.dark)),
+  root.classList.toggle('dark', Boolean(settings.dark));
+  if (settings.surface) root.style.setProperty('--surface', settings.surface);
+  if (settings.accent) root.style.setProperty('--accent', settings.accent);
+  if (settings.font) root.style.setProperty('--font', `${settings.font}px`);
+  if (typeof settings.topInset === 'number' && Number.isFinite(settings.topInset)) {
+    topInset = Math.max(0, settings.topInset);
+    root.style.setProperty('--editor-top', `${topInset}px`);
+  }
+}
+
+function setAppearance(settings) {
+  applyAppearanceVars(settings);
+  if (!editor) return;
+  editor.dispatch({ effects: [appearance.reconfigure(theme(Boolean(settings.dark))),
     wrapping.reconfigure(settings.wrap ? EditorView.lineWrapping : [])] });
 }
 
@@ -102,6 +131,9 @@ function ariaLabel(settings) {
 }
 
 function openDocument(source, settings) {
+  searchPanelSize.disconnect();
+  document.documentElement.style.removeProperty('--search-height');
+  applyAppearanceVars(settings);
   editor?.destroy();
   reported = '';
   readOnlyMode = Boolean(settings.readOnly);
@@ -111,9 +143,12 @@ function openDocument(source, settings) {
     indentUnit.of('  '), bracketMatching(),
     ...languageExtensions(language, readOnlyMode),
     search({ top: true }), EditorState.phrases.of(settings.chinese ? phrases : {}),
+    EditorView.updateListener.of(trackSearchPanel),
+    EditorView.scrollMargins.of(() => ({ top: topInset })),
     EditorView.contentAttributes.of({ 'aria-label': ariaLabel(settings),
       autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false' }),
-    wrapping.of([]), appearance.of(theme(false)),
+    wrapping.of(settings.wrap ? EditorView.lineWrapping : []),
+    appearance.of(theme(Boolean(settings.dark))),
   ];
   if (readOnlyMode) {
     extensions.push(
@@ -133,7 +168,12 @@ function openDocument(source, settings) {
     state: EditorState.create({ doc: source, extensions }),
   });
   original = editor.state.doc;
-  setAppearance(settings);
+  const token = ++paintToken;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (token === paintToken) window.ArkEditorStatus?.painted?.();
+    });
+  });
   return true;
 }
 
@@ -144,6 +184,11 @@ function replaceDocumentText(text) {
 }
 
 window.arkScriptEditor = {
+  setTopInset(inset) {
+    topInset = Math.max(0, inset);
+    document.documentElement.style.setProperty('--editor-top', `${topInset}px`);
+    editor?.requestMeasure();
+  },
   open(source, settings) {
     return openDocument(source, settings);
   },

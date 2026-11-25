@@ -1036,9 +1036,13 @@ test('实际Controller摘要沿URLTest退休actual取旧实例，明确retired�
   assert.equal(summary.retired, true);
 });
 
-test('预热未连接的节点页与picker支持选择和测速，连断不清结果，拒绝后缓存页可显式重试', async () => {
+async function warmBrowserHarness() {
   const harness = await consumerHarness();
+  const loginUrl = await sourceModule('../entry/src/main/ets/client/LocalProxyCore.ets',
+    `import { call, http } from ${JSON.stringify(harness.fixtureUrl)};\n` +
+    `const url = { URL: { parseURL: input => new URL(input) } };\n`);
   const browserUrl = await sourceModule('../entry/src/main/ets/features/proxies/Proxies.ets',
+    `import { requestTailscaleLogin } from ${JSON.stringify(loginUrl)};\n` +
     `import { KeyedListSource } from ${JSON.stringify(listUrl)};\n` +
     `import { ProxyAppearance } from ${JSON.stringify(harness.appearanceUrl)};\n` +
     `import { ProxySelectionSession } from ${JSON.stringify(harness.selectionUrl)};\n` +
@@ -1049,7 +1053,7 @@ test('预热未连接的节点页与picker支持选择和测速，连断不清�
     `let current; export function setSnapshot(next) { current = next; }\n` +
     `export let attempts = 0;\n` +
     `export const connection = { coreReady: true, coreStarting: false, connected: false, busy: false,
-      offlineWritable: false, bootId: 'warm', mode: 'rule',
+      offlineWritable: false, bootId: 'warm', configRevision: 7, mode: 'rule',
       async ensureReady(_context, automatic) {
         assertExplicit(automatic); attempts++;
         if (attempts === 1) throw new Error('authorization_denied');
@@ -1069,9 +1073,14 @@ test('预热未连接的节点页与picker支持选择和测速，连断不清�
   const browser = new module.ProxyBrowser();
   const input = {
     context: { filesDir: '/fixture' }, profile: 'one', summary: undefined, ready: true,
-    visible: true, online: true, offlineWritable: false, bootId: 'warm', mode: 'rule',
+    visible: true, online: true, offlineWritable: false, bootId: 'warm', configRevision: 7, mode: 'rule',
     picker: false, initialGroup: 'Main'
   };
+  return { harness, module, current, browser, input };
+}
+
+test('预热未连接的节点页与picker支持选择和测速，连断不清结果，拒绝后缓存页可显式重试', async () => {
+  const { harness, module, current, browser, input } = await warmBrowserHarness();
   browser.configure(input);
   await browser.refresh();
   const selected = current.nodes.Main.now;
@@ -1125,6 +1134,68 @@ test('预热未连接的节点页与picker支持选择和测速，连断不清�
   await browser.startCore();
   assert.equal(module.attempts, 2);
   assert.equal(browser.online, true);
+  browser.suspend();
+});
+
+test('Tailscale 登录按组内实例身份打开授权链接，切换配置或离开页面时丢弃旧响应', async () => {
+  const { harness, module, current, browser, input } = await warmBrowserHarness();
+  const opened = [];
+  input.context.openLink = async address => { opened.push(address); };
+  const member = { ...current.nodes['Alpha US'], type: 'Tailscale', selectable: false };
+  current.memberNodes.Main = {
+    a: { ...member, id: 'a', provider: 'first' }, b: { ...member, id: 'b', provider: 'second' }
+  };
+  current.nodes.Main.members = ['a', 'b'];
+  browser.configure(input);
+  await browser.refresh();
+  const target = { bootId: 'warm', configRevision: 7, id: 'b', group: 'Main' };
+  const address = 'https://login.example.test/a/fixture';
+  function request() {
+    const reply = browser.loginTailscale('Main', 'b');
+    const command = harness.native.commands.shift();
+    assert.equal(command.method, 'POST');
+    assert.equal(command.path, '/arkclash/proxies/tailscale-login');
+    assert.deepEqual(JSON.parse(command.body), target);
+    return { reply, command };
+  }
+  async function answer(fields) {
+    const { reply, command } = request();
+    command.resolve(JSON.stringify({ ...target, ...fields }));
+    await reply;
+  }
+  const first = request();
+  await browser.loginTailscale('Main', 'b');
+  assert.equal(harness.native.commands.length, 0);
+  first.command.resolve(JSON.stringify({ ...target, state: 'authorize', authUrl: address }));
+  await first.reply;
+  await answer({ state: 'authorize', authUrl: 'http://headscale.example.test/register/fixture' });
+  assert.deepEqual(opened, [address, 'http://headscale.example.test/register/fixture']);
+  for (const state of ['running', 'key-configured', 'needs-approval', 'pending']) {
+    await answer({ state, authUrl: address });
+    assert.equal(browser.notice, 'tailscale-' + state);
+  }
+  for (const authUrl of ['file:///tmp/test', 'javascript:test()', 'https://name@host.test/x',
+    'https://@host.test/', 'https:////host.test/', 'https://first.test\\@second.test/', 'https://host.test/\n']) {
+    await answer({ state: 'authorize', authUrl });
+    assert.equal(browser.notice, 'tailscale-failed');
+  }
+  for (const changed of [{ id: 'a' }, { bootId: 'other' }, { configRevision: 8 }]) {
+    await answer({ state: 'authorize', authUrl: address, ...changed });
+    assert.equal(browser.notice, 'tailscale-stale');
+  }
+  const switched = request();
+  module.connection.configRevision++;
+  switched.command.resolve(JSON.stringify({ ...target, state: 'authorize', authUrl: address }));
+  await switched.reply;
+  module.connection.configRevision--;
+  const hidden = request();
+  browser.suspend();
+  browser.configure({ ...input, visible: true });
+  await browser.refresh();
+  hidden.command.resolve(JSON.stringify({ ...target, state: 'authorize', authUrl: address }));
+  await hidden.reply;
+  assert.equal(opened.length, 2);
+  assert.equal(harness.native.commands.length, 0);
   browser.suspend();
 });
 

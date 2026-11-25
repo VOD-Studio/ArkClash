@@ -121,7 +121,7 @@ func (m *geoManager) update(job *geoJob) (outcome string, resultErr error) {
 	if !validGeoURL(job.source) {
 		return "", errors.New("geo_invalid_url")
 	}
-	requestCtx, finishRuleRequest := ruleRequestContext(ctx)
+	requestCtx, finishRuleRequest := ruleRequestContext(ctx, nil)
 	defer finishRuleRequest()
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, job.source, nil)
 	if err != nil {

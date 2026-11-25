@@ -3,6 +3,7 @@ import { Connection, connection } from '../../client/Connection';
 import { readVpnNetworkSettings, saveVpnNetworkSettings } from '../../client/VpnNetworkSettings';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { ListRow } from '../../components/ListRow';
 import { PAGE_GUTTER } from '../../components/Theme';
 import {
@@ -334,7 +335,11 @@ export struct NetworkPage {
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      pageShown: (): void => { this.active = true; this.load(); },
+      pageHidden: (): void => { this.active = false; }
+    }) {
       Scroll() {
         Column({ space: 16 }) {
           if (this.loadFailed) {
@@ -358,6 +363,7 @@ export struct NetworkPage {
       .width('100%')
       .height('100%')
       .align(Alignment.Top)
+      .clipContent(ContentClipMode.SAFE_AREA)
       .scrollBar(BarState.Off)
       .bindSheet($$this.editing, this.Editor, {
         title: { title: this.editorTitle() },
@@ -368,10 +374,6 @@ export struct NetworkPage {
         systemMaterial: this.appStyle.sheetMaterial()
       })
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((): void => { this.active = true; this.load(); })
-    .onHidden((): void => { this.active = false; })
   }
 }
 

@@ -1,5 +1,6 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { ListRow } from '../../components/ListRow';
 import { PAGE_GUTTER } from '../../components/Theme';
 import { SettingsSection } from './SettingsSection';
@@ -70,7 +71,9 @@ export struct AdvancedConfigPage {
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle()
+    }) {
       Scroll() {
         Column({ space: 20 }) {
           SettingsSection({ rows: (): void => this.Entries() })
@@ -81,9 +84,8 @@ export struct AdvancedConfigPage {
       .width('100%')
       .height('100%')
       .align(Alignment.Top)
+      .clipContent(ContentClipMode.SAFE_AREA)
       .scrollBar(BarState.Off)
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .backgroundColor(this.appStyle.palette.pageBackground)
   }
 }

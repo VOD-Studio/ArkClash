@@ -13,6 +13,7 @@ export struct ProxyNodeLine {
   @Param groupType: string = '';
   @Event onChoose: (node: string) => void = () => {};
   @Event onTest: (node: string) => void = () => {};
+  @Event onTailscaleLogin: (node: string) => void = () => {};
   @Event onSaveToLibrary: (node: string) => void = () => {};
 
   build() {
@@ -27,6 +28,7 @@ export struct ProxyNodeLine {
           groupType: this.groupType,
           onChoose: () => this.onChoose(node.id),
           onTest: () => this.onTest(node.id),
+          onTailscaleLogin: () => this.onTailscaleLogin(node.id),
           onSaveToLibrary: () => this.onSaveToLibrary(node.id)
         })
           .layoutWeight(1)

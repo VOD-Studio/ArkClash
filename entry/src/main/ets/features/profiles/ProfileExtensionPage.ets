@@ -4,6 +4,7 @@ import { profileAddedRules, readAddedRules } from '../../client/AddedRules';
 import { getRuntimeStatus } from '../../client/Controller';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { ListSource } from '../../components/ListSource';
 import { ListRow } from '../../components/ListRow';
 import { CARD_RADIUS, PAGE_GUTTER } from '../../components/Theme';
@@ -185,7 +186,13 @@ export struct ProfileExtensionPage {
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      handleBack: (): boolean => this.saving || this.applying,
+      pageShown: (): void => { this.shown = true; this.refresh(); },
+      pageHidden: (): void => { this.shown = false; }
+    }) {
       Column() {
         if (this.loading) {
           LoadingProgress().width(28).height(28).margin({ top: 20 })
@@ -218,13 +225,10 @@ export struct ProfileExtensionPage {
             }, (item: ConfigScript): string => item.id)
             ListItem() { this.Footer() }
           }.width('100%').layoutWeight(1).padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
-            .contentEndOffset(24).cachedCount(2).scrollBar(BarState.Off)
+            .contentEndOffset(24).cachedCount(2, true).scrollBar(BarState.Off)
+            .clipContent(ContentClipMode.SAFE_AREA)
         }
       }.width('100%').height('100%')
-    }.title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.HeaderMenus)
-      .backgroundColor(this.appStyle.palette.pageBackground)
-      .onBackPressed((): boolean => this.saving || this.applying)
-      .onShown((): void => { this.shown = true; this.refresh(); })
-      .onHidden((): void => { this.shown = false; })
+    }
   }
 }

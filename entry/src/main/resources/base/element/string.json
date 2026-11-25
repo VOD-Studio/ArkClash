@@ -461,6 +461,14 @@
       "value": "Font family"
     },
     {
+      "name": "theme_installed_fonts",
+      "value": "Installed fonts"
+    },
+    {
+      "name": "theme_font_sample",
+      "value": "Aa Bb 0123"
+    },
+    {
       "name": "theme_font_retry",
       "value": "Could not load fonts. Retry"
     },
@@ -1390,7 +1398,7 @@
     },
     {
       "name": "profile_err_timeout",
-      "value": "The download did not finish within 20 seconds."
+      "value": "Download timed out. Check your connection and try again."
     },
     {
       "name": "profile_err_dns",
@@ -2043,6 +2051,26 @@
     {
       "name": "diagnostics_filters",
       "value": "Filters"
+    },
+    {
+      "name": "diagnostics_dns_filters",
+      "value": "Filter DNS queries"
+    },
+    {
+      "name": "diagnostics_filter_any",
+      "value": "Any"
+    },
+    {
+      "name": "diagnostics_filter_count",
+      "value": "%d selected"
+    },
+    {
+      "name": "diagnostics_apply_filters",
+      "value": "Apply filters"
+    },
+    {
+      "name": "diagnostics_no_filter_options",
+      "value": "No DNS queries to filter yet"
     },
     {
       "name": "diagnostics_grouping",
@@ -2783,6 +2811,38 @@
     {
       "name": "dns_override_proxy_servers_required",
       "value": "Set Proxy Server Nameserver to use this override."
+    },
+    {
+      "name": "dns_override_search",
+      "value": "Search override or YAML key"
+    },
+    {
+      "name": "dns_override_all_sections",
+      "value": "All"
+    },
+    {
+      "name": "dns_override_kind_toggle",
+      "value": "Switch"
+    },
+    {
+      "name": "dns_override_kind_choice",
+      "value": "Option"
+    },
+    {
+      "name": "dns_override_kind_text",
+      "value": "Text"
+    },
+    {
+      "name": "dns_override_kind_number",
+      "value": "Number"
+    },
+    {
+      "name": "dns_override_kind_list",
+      "value": "List"
+    },
+    {
+      "name": "dns_override_kind_policy",
+      "value": "Policy"
     },
     {
       "name": "network_excluded_apps",
@@ -4397,6 +4457,14 @@
       "value": "Nodes and dialers"
     },
     {
+      "name": "custom_rename_node",
+      "value": "Rename node"
+    },
+    {
+      "name": "custom_dns_reference_name",
+      "value": "A DNS server references this node. Choose a name that its DNS URL can use."
+    },
+    {
       "name": "custom_issues",
       "value": "Configuration issues"
     },
@@ -4847,6 +4915,30 @@
     {
       "name": "provider_err_update_failed",
       "value": "Provider update failed; previous content kept"
+    },
+    {
+      "name": "proxy_tailscale_login",
+      "value": "Log in to Tailscale"
+    },
+    {
+      "name": "proxy_tailscale_running",
+      "value": "This node is logged in to Tailscale"
+    },
+    {
+      "name": "proxy_tailscale_pending",
+      "value": "The login link is being prepared. Try again shortly."
+    },
+    {
+      "name": "proxy_tailscale_key_configured",
+      "value": "This node uses a configured auth key"
+    },
+    {
+      "name": "proxy_tailscale_needs_approval",
+      "value": "This node is waiting for administrator approval"
+    },
+    {
+      "name": "proxy_tailscale_failed",
+      "value": "Could not open Tailscale login. Try again."
     },
     {
       "name": "proxy_save_to_library",

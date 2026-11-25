@@ -2,8 +2,10 @@ import { common } from '@kit.AbilityKit';
 import { connection } from '../../client/Connection';
 import { fetchProfilePreview, isPreviewHostUnavailable, ProfilePreviewGuard, RuntimeProfilePreview }
   from '../../client/ProfilePreview';
+import { ScrollControls } from '../../components/ScrollControls';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { configScriptError } from './ScriptMessages';
 import { YamlCodeEditor, YamlCodeEditorController } from './YamlCodeEditor';
@@ -118,8 +120,28 @@ export struct ProfileRuntimePreviewPage {
     }.height('100%').padding({ right: PAGE_GUTTER })
   }
 
+  @Builder
+  PreviewStatus() {
+    if (this.preview !== undefined) {
+      Column({ space: 6 }) {
+        Text(this.versionSummary(this.preview)).fontFamily(this.appStyle.fontFamily)
+          .fontSize(13).lineHeight(18).fontColor($r('sys.color.font_secondary'))
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+        if (!this.preview.applied) {
+          Text($r('app.string.profile_preview_not_applied')).fontFamily(this.appStyle.fontFamily)
+            .fontSize(13).lineHeight(18).fontColor($r('app.color.warning')).width('100%')
+        }
+      }.width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8, bottom: 4 })
+    }
+  }
+
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      pageShown: (): void => { this.shown = true; },
+      pageHidden: (): void => { this.shown = false; }
+    }) {
       Column() {
         if (this.loading || this.startingCore) {
           Column({ space: 12 }) {
@@ -145,27 +167,17 @@ export struct ProfileRuntimePreviewPage {
             Button($r('app.string.action_retry')).height(44).onClick((): void => { this.load(); })
           }.width('100%').layoutWeight(1).justifyContent(FlexAlign.Center).padding(PAGE_GUTTER)
         } else if (this.preview !== undefined) {
-          Column({ space: 6 }) {
-            Text(this.versionSummary(this.preview)).fontFamily(this.appStyle.fontFamily)
-              .fontSize(13).lineHeight(18).fontColor($r('sys.color.font_secondary'))
-              .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
-            if (!this.preview.applied) {
-              Text($r('app.string.profile_preview_not_applied')).fontFamily(this.appStyle.fontFamily)
-                .fontSize(13).lineHeight(18).fontColor($r('app.color.warning')).width('100%')
-            }
-          }.width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8, bottom: 4 })
-          YamlCodeEditor({
-            initialText: this.preview.yaml,
-            readOnly: true,
-            editorEnabled: true,
-            foreground: this.foreground && this.shown,
-            controller: this.editorController
-          })
+          ScrollControls({ controls: (): void => this.PreviewStatus() }) {
+            YamlCodeEditor({
+              initialText: this.preview.yaml,
+              readOnly: true,
+              editorEnabled: true,
+              foreground: this.foreground && this.shown,
+              controller: this.editorController
+            })
+          }
         }
       }.width('100%').height('100%')
-    }.title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.HeaderMenus)
-      .backgroundColor(this.appStyle.palette.pageBackground)
-      .onShown((): void => { this.shown = true; })
-      .onHidden((): void => { this.shown = false; })
+    }
   }
 }

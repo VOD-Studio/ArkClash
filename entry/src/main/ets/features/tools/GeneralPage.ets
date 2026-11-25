@@ -6,6 +6,7 @@ import { GeneralSettingsState, generalSettingsState } from '../../client/General
 import { Connection, connection } from '../../client/Connection';
 import { appAppearance, AppearanceState } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { ListRow } from '../../components/ListRow';
 import { uiResourceText } from '../../components/ResourceText';
 import { PAGE_GUTTER } from '../../components/Theme';
@@ -24,6 +25,20 @@ type CoreOverrideKey = 'testUrl' | 'unifiedDelay' | 'tcpConcurrent' | 'ipv6' | '
 
 const PORT_LABELS: string[] = ['Mixed', 'HTTP', 'SOCKS', 'Redir', 'TProxy'];
 const CORE_OVERRIDE_KEYS: CoreOverrideKey[] = ['testUrl', 'unifiedDelay', 'tcpConcurrent', 'ipv6', 'geodataLoader'];
+const SHEET_NESTED_SCROLL: NestedScrollOptions = {
+  scrollForward: NestedScrollMode.PARENT_FIRST,
+  scrollBackward: NestedScrollMode.SELF_FIRST
+};
+
+function coreOverrideYamlKey(key: CoreOverrideKey): string {
+  switch (key) {
+    case 'testUrl': return 'test-url';
+    case 'unifiedDelay': return 'unified-delay';
+    case 'tcpConcurrent': return 'tcp-concurrent';
+    case 'ipv6': return 'ipv6';
+    case 'geodataLoader': return 'geodata-loader';
+  }
+}
 
 function generatedCredential(length: number): string {
   return util.generateRandomUUID(true).replace(new RegExp('-', 'g'), '').slice(0, length);
@@ -73,6 +88,9 @@ export struct GeneralPage {
   @Local private updates: AppUpdateState = appUpdateState;
   @Local private conn: Connection = connection;
   @Local private isSaving: boolean = false;
+  @Local private savingKey: string = '';
+  @Local private pendingSwitchKey: string = '';
+  @Local private pendingSwitchValue: boolean = false;
   @Local private loadFailed: boolean = false;
   @Local private editing: boolean = false;
   @Local private editor: GeneralEditor = 'ports';
@@ -239,9 +257,14 @@ export struct GeneralPage {
     return $r('app.string.general_save_failed');
   }
 
-  private async save(draft: GeneralSettings, inEditor: boolean = false): Promise<void> {
+  private switchChecked(key: string, savedValue: boolean): boolean {
+    return this.pendingSwitchKey === key ? this.pendingSwitchValue : savedValue;
+  }
+
+  private async save(draft: GeneralSettings, inEditor: boolean = false, opKey: string = ''): Promise<void> {
     if (this.isSaving) { return; }
     this.isSaving = true;
+    this.savingKey = opKey;
     this.editorError = '';
     try {
       await this.settings.save(this.context(), draft);
@@ -249,18 +272,23 @@ export struct GeneralPage {
       if (this.availableCoreOverrides().length === 0) {
         this.corePickerOpen = false;
       }
-      this.getUIContext().getPromptAction().showToast({ message: $r('app.string.general_saved') });
+      if (this.mounted) {
+        this.getUIContext().getPromptAction().showToast({ message: $r('app.string.general_saved') });
+      }
     } catch (error) {
       const label = this.errorLabel(error as Error);
       if (inEditor) { this.editorError = label; }
-      else { this.getUIContext().getPromptAction().showToast({ message: label }); }
+      else if (this.mounted) { this.getUIContext().getPromptAction().showToast({ message: label }); }
       if ((error as Error).message.includes('general_settings_conflict')) { this.load(); }
     } finally {
       this.isSaving = false;
+      this.savingKey = '';
+      this.pendingSwitchKey = '';
     }
   }
 
   private openEditor(editor: GeneralEditor): void {
+    if (this.isSaving) { return; }
     const saved = this.settings.saved;
     this.editor = editor;
     this.editorRevision = saved.revision;
@@ -307,6 +335,7 @@ export struct GeneralPage {
   }
 
   private addCoreOverride(key: CoreOverrideKey): void {
+    if (this.isSaving) { return; }
     if (key === 'testUrl' || key === 'geodataLoader') {
       // 下一层编辑 Sheet 需等当前选择 Sheet 消失后再打开（docs/agents/ui.md）。
       this.pendingCoreEditor = key;
@@ -321,7 +350,7 @@ export struct GeneralPage {
       case 'ipv6': overrides.ipv6 = false; break;
     }
     draft.coreOverrides = compactGeneralCoreOverrides(overrides);
-    this.save(draft);
+    this.save(draft, false, `add:${key}`);
   }
 
   private openPendingCoreEditor(): void {
@@ -333,6 +362,7 @@ export struct GeneralPage {
   }
 
   private removeCoreOverride(key: CoreOverrideKey): void {
+    if (this.isSaving) { return; }
     const draft = this.draft();
     const overrides = cloneCoreOverrides(draft.coreOverrides);
     switch (key) {
@@ -343,13 +373,16 @@ export struct GeneralPage {
       case 'geodataLoader': overrides.geodataLoader = undefined; break;
     }
     draft.coreOverrides = compactGeneralCoreOverrides(overrides);
-    this.save(draft);
+    this.save(draft, false, `remove:${key}`);
   }
 
   private setCoreToggle(key: CoreOverrideKey, isOn: boolean): void {
-    if (!this.hasCoreOverride(key) || this.coreOverrideChecked(key) === isOn) {
+    if (this.isSaving || !this.hasCoreOverride(key) || this.coreOverrideChecked(key) === isOn) {
       return;
     }
+    const opKey = `core:${key}`;
+    this.pendingSwitchKey = opKey;
+    this.pendingSwitchValue = isOn;
     const draft = this.draft();
     const overrides = cloneCoreOverrides(draft.coreOverrides);
     switch (key) {
@@ -358,10 +391,11 @@ export struct GeneralPage {
       case 'ipv6': overrides.ipv6 = isOn; break;
     }
     draft.coreOverrides = compactGeneralCoreOverrides(overrides);
-    this.save(draft);
+    this.save(draft, false, opKey);
   }
 
   private selectGeodataLoader(loader: GeneralGeodataLoader): void {
+    if (this.isSaving) { return; }
     const draft = this.draft();
     draft.revision = this.editorRevision;
     if (draft.coreOverrides?.geodataLoader === loader) {
@@ -371,10 +405,11 @@ export struct GeneralPage {
     const overrides = cloneCoreOverrides(draft.coreOverrides);
     overrides.geodataLoader = loader;
     draft.coreOverrides = compactGeneralCoreOverrides(overrides);
-    this.save(draft, true);
+    this.save(draft, true, `choice:${loader}`);
   }
 
   private saveEditor(inheritPorts: boolean = false): void {
+    if (this.isSaving) { return; }
     const draft = this.draft();
     draft.revision = this.editorRevision;
     try {
@@ -411,7 +446,7 @@ export struct GeneralPage {
           draft.coreOverrides = compactGeneralCoreOverrides(overrides);
           break;
       }
-      this.save(draft, true);
+      this.save(draft, true, inheritPorts ? 'editor:inherit' : 'editor:save');
     } catch (error) {
       this.editorError = this.errorLabel(error as Error);
     }
@@ -449,6 +484,7 @@ export struct GeneralPage {
   }
 
   private setSwitch(kind: GeneralToggle, isOn: boolean): void {
+    if (this.isSaving) { return; }
     const draft = this.draft();
     switch (kind) {
       case 'capture':
@@ -464,21 +500,26 @@ export struct GeneralPage {
         draft.appendSystemDns = isOn;
         break;
     }
-    this.save(draft);
+    const opKey = `switch:${kind}`;
+    this.pendingSwitchKey = opKey;
+    this.pendingSwitchValue = isOn;
+    this.save(draft, false, opKey);
   }
 
   private selectLevel(level: string): void {
+    if (this.isSaving) { return; }
     const draft = this.draft();
     if (draft.logLevel === level) { this.closeEditor(); return; }
     draft.logLevel = level;
-    this.save(draft, true);
+    this.save(draft, true, `choice:${level}`);
   }
 
   private selectTimeout(ms: number): void {
+    if (this.isSaving) { return; }
     const draft = this.draft();
     if (draft.delayTimeout === ms) { this.closeEditor(); return; }
     draft.delayTimeout = ms;
-    this.save(draft, true);
+    this.save(draft, true, `choice:${ms}`);
   }
 
   private hostCount(): string {
@@ -513,7 +554,7 @@ export struct GeneralPage {
         this.settings.saved.ports.mixed.toString(), onTap: (): void => this.openEditor('ports') })
     this.Rule()
     GeneralSwitchRow({ label: $r('app.string.lan_proxy'),
-      checked: this.desiredAllowLan(), interactive: !this.allowLanSaving,
+      checked: this.desiredAllowLan(), interactive: !this.allowLanSaving, busy: this.allowLanSaving,
       onToggle: (isOn: boolean): void => { this.toggleAllowLan(isOn); } })
     this.Rule()
     ListRow({ title: $r('app.string.general_auth'),
@@ -534,7 +575,8 @@ export struct GeneralPage {
       onTap: (): void => this.openEditor('timeout') })
     this.Rule()
     GeneralSwitchRow({ label: $r('app.string.general_close_connections'),
-      checked: this.settings.saved.closeConnections ?? true, interactive: !this.isSaving,
+      checked: this.switchChecked('switch:closeConnections', this.settings.saved.closeConnections ?? true),
+      interactive: !this.isSaving, busy: this.savingKey === 'switch:closeConnections',
       onToggle: (isOn: boolean): void => this.setSwitch('closeConnections', isOn) })
   }
 
@@ -542,7 +584,11 @@ export struct GeneralPage {
   CoreOverrideRow(key: CoreOverrideKey) {
     Row() {
       Button({ type: ButtonType.Circle }) {
-        SymbolGlyph($r('sys.symbol.minus')).fontSize(16).fontColor([$r('app.color.status_error')])
+        if (this.savingKey === `remove:${key}`) {
+          LoadingProgress().width(18).height(18).color($r('app.color.status_error'))
+        } else {
+          SymbolGlyph($r('sys.symbol.minus')).fontSize(16).fontColor([$r('app.color.status_error')])
+        }
       }
       .width(40)
       .height(40)
@@ -555,13 +601,11 @@ export struct GeneralPage {
           value: this.settings.saved.coreOverrides?.testUrl ?? DEFAULT_GENERAL_TEST_URL,
           onTap: (): void => this.openEditor('testUrl') })
           .layoutWeight(1)
-          .enabled(!this.isSaving)
       } else if (key === 'geodataLoader') {
         ListRow({ title: this.coreOverrideLabel(key),
           value: geodataLoaderLabel(this.settings.saved.coreOverrides?.geodataLoader ?? 'memconservative'),
           onTap: (): void => this.openEditor('geodataLoader') })
           .layoutWeight(1)
-          .enabled(!this.isSaving)
       } else {
         Text(this.coreOverrideLabel(key))
           .fontFamily(this.appStyle.fontFamily)
@@ -569,7 +613,14 @@ export struct GeneralPage {
           .fontColor($r('sys.color.font_primary'))
           .layoutWeight(1)
           .padding({ left: 12 })
-        Toggle({ type: ToggleType.Switch, isOn: this.coreOverrideChecked(key) })
+        if (this.savingKey === `core:${key}`) {
+          LoadingProgress()
+            .width(20)
+            .height(20)
+            .color(this.appStyle.palette.brand)
+            .margin({ right: 8 })
+        }
+        Toggle({ type: ToggleType.Switch, isOn: this.switchChecked(`core:${key}`, this.coreOverrideChecked(key)) })
           .accessibilityText(uiResourceText(this.getUIContext(), this.coreOverrideLabel(key)))
           .selectedColor(this.appStyle.palette.brand)
           .enabled(!this.isSaving)
@@ -590,6 +641,7 @@ export struct GeneralPage {
     this.Rule()
     GeneralSwitchRow({ label: $r('app.string.general_auto_check_update'),
       checked: this.updates.automatic, interactive: this.updates.preferenceReady && !this.updates.preferenceSaving,
+      busy: this.updates.preferenceSaving,
       onToggle: (isOn: boolean): void => {
         this.updates.setAutomatic(this.context(), isOn).catch((): void => {
           this.getUIContext().getPromptAction().showToast({ message: $r('app.string.general_save_failed') });
@@ -600,7 +652,8 @@ export struct GeneralPage {
       value: this.hostCount(), onTap: (): void => this.openEditor('hosts') })
     this.Rule()
     GeneralSwitchRow({ label: $r('app.string.general_append_system_dns'),
-      checked: this.settings.saved.appendSystemDns ?? false, interactive: !this.isSaving,
+      checked: this.switchChecked('switch:appendSystemDns', this.settings.saved.appendSystemDns ?? false),
+      interactive: !this.isSaving, busy: this.savingKey === 'switch:appendSystemDns',
       onToggle: (isOn: boolean): void => this.setSwitch('appendSystemDns', isOn) })
     ForEach(this.addedCoreOverrides(), (key: CoreOverrideKey): void => {
       this.Rule()
@@ -629,8 +682,7 @@ export struct GeneralPage {
         pressed: { .backgroundColor($r('sys.color.interactive_pressed')) },
         normal: { .backgroundColor(Color.Transparent) }
       })
-      .enabled(!this.isSaving)
-      .onClick((): void => { this.corePickerOpen = true; })
+      .onClick((): void => { if (!this.isSaving) { this.corePickerOpen = true; } })
     }
   }
 
@@ -640,9 +692,14 @@ export struct GeneralPage {
       if (this.availableCoreOverrides()[0] !== key) {
         this.Rule()
       }
-      ListRow({ title: this.coreOverrideLabel(key), chevron: key === 'testUrl' || key === 'geodataLoader',
-        onTap: (): void => this.addCoreOverride(key) })
-        .enabled(!this.isSaving)
+      CoreOverridePickerRow({
+        label: this.coreOverrideLabel(key),
+        yamlKey: coreOverrideYamlKey(key),
+        opensEditor: key === 'testUrl' || key === 'geodataLoader',
+        busy: this.savingKey === `add:${key}`,
+        interactive: !this.isSaving,
+        onSelect: (): void => this.addCoreOverride(key)
+      })
     }, (key: CoreOverrideKey): string => key)
   }
 
@@ -659,7 +716,9 @@ export struct GeneralPage {
       .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
     }
     .width('100%')
+    .height('100%')
     .align(Alignment.Top)
+    .nestedScroll(SHEET_NESTED_SCROLL)
   }
 
   @Builder
@@ -667,8 +726,10 @@ export struct GeneralPage {
     ListRow({ title: $r('app.string.general_log_level'), value: logLevelLabel(this.settings.saved.logLevel),
       onTap: (): void => this.openEditor('level') })
     this.Rule()
-    GeneralSwitchRow({ label: $r('app.string.general_capture_logs'), checked: this.settings.saved.captureLogs,
-      interactive: !this.isSaving, onToggle: (isOn: boolean): void => this.setSwitch('capture', isOn) })
+    GeneralSwitchRow({ label: $r('app.string.general_capture_logs'),
+      checked: this.switchChecked('switch:capture', this.settings.saved.captureLogs),
+      interactive: !this.isSaving, busy: this.savingKey === 'switch:capture',
+      onToggle: (isOn: boolean): void => this.setSwitch('capture', isOn) })
   }
 
   @Builder
@@ -682,8 +743,19 @@ export struct GeneralPage {
     }, (label: string): string => label)
     Text($r('app.string.general_ports_hint')).fontSize(13).fontColor($r('sys.color.font_secondary'))
     if (this.settings.saved.ports !== undefined) {
-      Button($r('app.string.general_inherit')).buttonStyle(ButtonStyleMode.TEXTUAL)
-        .enabled(!this.isSaving).onClick((): void => this.saveEditor(true))
+      Button() {
+        if (this.savingKey === 'editor:inherit') {
+          LoadingProgress().width(18).height(18).color(this.appStyle.palette.brand)
+        } else {
+          Text($r('app.string.general_inherit'))
+            .fontFamily(this.appStyle.fontFamily)
+            .fontSize(16)
+            .fontColor(this.appStyle.palette.brand)
+        }
+      }
+      .buttonStyle(ButtonStyleMode.TEXTUAL)
+      .enabled(!this.isSaving)
+      .onClick((): void => this.saveEditor(true))
     }
   }
 
@@ -725,18 +797,21 @@ export struct GeneralPage {
       ForEach(GENERAL_LEVELS, (level: string): void => {
         ListRow({ title: logLevelLabel(level), chevron: false,
           trailingIcon: level === this.settings.saved.logLevel ? $r('sys.symbol.checkmark') : undefined,
+          busy: this.savingKey === `choice:${level}`,
           onTap: (): void => this.selectLevel(level) })
       }, (level: string): string => level)
     } else if (this.editor === 'geodataLoader') {
       ForEach(GENERAL_GEODATA_LOADERS, (loader: string): void => {
         ListRow({ title: geodataLoaderLabel(loader), chevron: false,
           trailingIcon: loader === this.editorText ? $r('sys.symbol.checkmark') : undefined,
+          busy: this.savingKey === `choice:${loader}`,
           onTap: (): void => this.selectGeodataLoader(loader as GeneralGeodataLoader) })
       }, (loader: string): string => loader)
     } else {
       ForEach(GENERAL_TIMEOUTS, (ms: number): void => {
         ListRow({ title: $r('app.string.proxy_delay_ms', ms), chevron: false,
           trailingIcon: ms === this.settings.saved.delayTimeout ? $r('sys.symbol.checkmark') : undefined,
+          busy: this.savingKey === `choice:${ms}`,
           onTap: (): void => this.selectTimeout(ms) })
       }, (ms: number): string => ms.toString())
     }
@@ -807,17 +882,32 @@ export struct GeneralPage {
         }
         if (this.editor !== 'level' && this.editor !== 'timeout' && this.editor !== 'geodataLoader' &&
           !this.agentEditorOpen) {
-          Button($r('app.string.action_save')).id('general-editor-save').width('100%').height(48)
-            .enabled(!this.isSaving).onClick((): void => this.saveEditor())
+          Button() {
+            if (this.savingKey === 'editor:save') {
+              LoadingProgress().width(20).height(20).color($r('sys.color.font_on_primary'))
+            } else {
+              Text($r('app.string.action_save'))
+                .fontFamily(this.appStyle.fontFamily)
+                .fontSize(16)
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('sys.color.font_on_primary'))
+            }
+          }
+          .id('general-editor-save')
+          .width('100%')
+          .height(48)
+          .enabled(!this.isSaving)
+          .onClick((): void => this.saveEditor())
         }
       }.width('100%').alignItems(HorizontalAlign.Start)
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 12, bottom: 24 })
-        .enabled(!this.isSaving)
-    }.width('100%').height('100%').align(Alignment.Top)
+    }.width('100%').height('100%').align(Alignment.Top).nestedScroll(SHEET_NESTED_SCROLL)
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.Header()
+    }) {
       Stack() {
         Scroll() {
           Column({ space: 16 }) {
@@ -833,8 +923,8 @@ export struct GeneralPage {
               SettingsSection({ heading: $r('app.string.tools_logs'), rows: (): void => this.Diagnostics() })
             }
           }.width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
-            .enabled(!this.isSaving)
         }.width('100%').height('100%').align(Alignment.Top).scrollBar(BarState.Off)
+          .clipContent(ContentClipMode.SAFE_AREA)
         Column()
           .bindSheet($$this.corePickerOpen, this.CoreOverridePicker, {
             title: { title: $r('app.string.general_core_override_add') }, height: SheetSize.MEDIUM,
@@ -852,8 +942,6 @@ export struct GeneralPage {
           })
       }.width('100%').height('100%')
     }
-    .title(this.Header, { systemMaterial: this.appStyle.regularMaterial() })
-    .backgroundColor(this.appStyle.palette.pageBackground)
   }
 }
 
@@ -862,15 +950,84 @@ struct GeneralSwitchRow {
   @Param @Require label: Resource;
   @Param checked: boolean = false;
   @Param interactive: boolean = true;
+  @Param busy: boolean = false;
   @Event onToggle: (isOn: boolean) => void = () => {};
   @Local private appStyle: AppearanceState = appAppearance;
 
   build() {
-    Row() {
+    Row({ space: 8 }) {
       Text(this.label).fontFamily(this.appStyle.fontFamily).fontSize(16).layoutWeight(1)
+      if (this.busy) {
+        LoadingProgress().width(20).height(20).color(this.appStyle.palette.brand)
+      }
       Toggle({ type: ToggleType.Switch, isOn: this.checked }).accessibilityText(this.label)
         .selectedColor(this.appStyle.palette.brand).enabled(this.interactive)
         .onChange((isOn: boolean): void => { this.onToggle(isOn); })
     }.constraintSize({ minHeight: 56 }).padding({ left: 16, right: 16 }).width('100%')
+  }
+}
+
+@ComponentV2
+struct CoreOverridePickerRow {
+  @Param @Require label: Resource;
+  @Param @Require yamlKey: string;
+  @Param opensEditor: boolean = false;
+  @Param busy: boolean = false;
+  @Param interactive: boolean = true;
+  @Event onSelect: () => void = () => {};
+  @Local private appStyle: AppearanceState = appAppearance;
+
+  build() {
+    Row({ space: 12 }) {
+      Column({ space: 2 }) {
+        Text(this.label)
+          .fontFamily(this.appStyle.fontFamily)
+          .fontSize(15)
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.yamlKey)
+          .fontFamily('monospace')
+          .fontSize(12)
+          .fontColor($r('sys.color.font_secondary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+
+      if (this.busy) {
+        LoadingProgress()
+          .width(20)
+          .height(20)
+          .color(this.appStyle.palette.brand)
+      } else if (this.opensEditor) {
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(16)
+          .fontColor([$r('sys.color.font_tertiary')])
+      } else {
+        Stack() {
+          SymbolGlyph($r('sys.symbol.plus'))
+            .fontSize(14)
+            .fontColor([this.appStyle.palette.brand])
+        }
+        .width(26)
+        .height(26)
+        .borderRadius(13)
+        .backgroundColor(this.appStyle.palette.brandSoft)
+      }
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 56 })
+    .padding({ left: 16, right: 14, top: 8, bottom: 8 })
+    .stateStyles({
+      pressed: { .backgroundColor($r('sys.color.interactive_pressed')) },
+      normal: { .backgroundColor(Color.Transparent) }
+    })
+    .onClick((): void => {
+      if (this.interactive) {
+        this.onSelect();
+      }
+    })
   }
 }

@@ -1,3 +1,4 @@
+import { ScrollControls } from '../../components/ScrollControls';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { FrameCallback, LengthMetrics, UIContext } from '@kit.ArkUI';
 import { DiagnosticDnsRecord } from '../../client/Diagnostics';
@@ -13,6 +14,8 @@ import { recordColumnTitle, recordInitiatorText } from './RecordLabels';
 import { ConnectionListRow, ConnectionRecordsStore, DnsListRow, DnsRecordsStore } from './RecordStores';
 
 export const RECORD_LIST_ANIMATION: AnimateParam = { duration: 220, curve: Curve.EaseOut };
+// 表格行较矮，标题、搜索框和表头背后最多还要绘制六行。
+const TABLE_CACHE_ROWS = 6;
 
 export function recordListTransition(offsetY: number = 0): TransitionEffect {
   const fade = TransitionEffect.opacity(0);
@@ -978,9 +981,9 @@ export struct ConnectionRecordList {
     this.rowSpacing = this.layout.tableMode ? 0 : 8;
   }
 
-  private resizeContent(area: Area): void {
+  private resizeContent(area: SizeOptions): void {
     const width = Number(area.width);
-    if (!Number.isFinite(width) || width <= 0) { return; }
+    if (!Number.isFinite(width) || width <= 0 || width === this.contentWidth) { return; }
     this.contentWidth = width;
     this.configure();
     this.restore();
@@ -1021,19 +1024,23 @@ export struct ConnectionRecordList {
       (key: string): void => this.store.setAnchor(key));
   }
 
-  build() {
-    Column() {
-      if (this.layout.tableMode && this.store.visibleRecords > 0) {
-        Row() {
-          RecordTableHeader({ layout: this.layout, active: this.active,
-            onSort: (column: RecordColumn): void => this.sortBy(column),
-            onSave: (widths: Record<string, number>): void => this.saveWidths(widths),
-            onReset: (): void => this.saveWidths({}) })
-            .layoutWeight(1)
-        }
-        .width('100%')
-        .padding({ left: 8, right: 8 })
+  @Builder
+  TableHeader() {
+    if (this.layout.tableMode && this.store.visibleRecords > 0) {
+      Row() {
+        RecordTableHeader({ layout: this.layout, active: this.active,
+          onSort: (column: RecordColumn): void => this.sortBy(column),
+          onSave: (widths: Record<string, number>): void => this.saveWidths(widths),
+          onReset: (): void => this.saveWidths({}) })
+          .layoutWeight(1)
       }
+      .width('100%')
+      .padding({ left: 8, right: 8 })
+    }
+  }
+
+  build() {
+    ScrollControls({ controls: (): void => this.TableHeader() }) {
       List({ scroller: this.viewport.scroller, space: this.rowSpacing }) {
         LazyForEach(this.store.source, (row: ConnectionListRow) => {
           ListItem() {
@@ -1050,12 +1057,15 @@ export struct ConnectionRecordList {
       .width('100%')
       .layoutWeight(1)
       .padding({ left: this.layout.gutter, right: this.layout.gutter })
-      .cachedCount(2)
+      .cachedCount(this.layout.tableMode ? TABLE_CACHE_ROWS : 2, true)
+      .contentStartOffset(8)
+      .clipContent(ContentClipMode.SAFE_AREA)
       .maintainVisibleContentPosition(!this.store.following && this.store.feed === 'recent')
       .edgeEffect(EdgeEffect.Spring)
       .scrollBar(BarState.Auto)
       .onAppear((): void => { this.viewport.bind(this.active); this.restore(); })
       .onDisAppear((): void => this.viewport.release())
+      .onSizeChange((_previous: SizeOptions, next: SizeOptions): void => this.resizeContent(next))
       .onScrollIndex((first: number, last: number, _center: number): void => this.recordVisible(first, last))
       .onDidScroll((_offset: number, _state: ScrollState): void => {
         if (this.store.feed === 'recent') {
@@ -1080,9 +1090,6 @@ export struct ConnectionRecordList {
           .onClick((): void => this.backToLatest())
       }
     }
-    .width('100%')
-    .height('100%')
-    .onAreaChange((_before: Area, after: Area): void => this.resizeContent(after))
   }
 }
 
@@ -1119,9 +1126,9 @@ export struct DnsRecordList {
     this.rowSpacing = this.layout.tableMode ? 0 : 8;
   }
 
-  private resizeContent(area: Area): void {
+  private resizeContent(area: SizeOptions): void {
     const width = Number(area.width);
-    if (!Number.isFinite(width) || width <= 0) { return; }
+    if (!Number.isFinite(width) || width <= 0 || width === this.contentWidth) { return; }
     this.contentWidth = width;
     this.configure();
     this.restore();
@@ -1145,19 +1152,23 @@ export struct DnsRecordList {
     this.viewport.reconcile<DnsListRow>(this.getUIContext(), this.store.source, true, '');
   }
 
-  build() {
-    Column() {
-      if (this.layout.tableMode && this.store.visibleRecords > 0) {
-        Row() {
-          RecordTableHeader({ layout: this.layout, active: this.active,
-            onSort: (column: RecordColumn): void => this.sortBy(column),
-            onSave: (widths: Record<string, number>): void => this.saveWidths(widths),
-            onReset: (): void => this.saveWidths({}) })
-            .layoutWeight(1)
-        }
-        .width('100%')
-        .padding({ left: 8, right: 8 })
+  @Builder
+  TableHeader() {
+    if (this.layout.tableMode && this.store.visibleRecords > 0) {
+      Row() {
+        RecordTableHeader({ layout: this.layout, active: this.active,
+          onSort: (column: RecordColumn): void => this.sortBy(column),
+          onSave: (widths: Record<string, number>): void => this.saveWidths(widths),
+          onReset: (): void => this.saveWidths({}) })
+          .layoutWeight(1)
       }
+      .width('100%')
+      .padding({ left: 8, right: 8 })
+    }
+  }
+
+  build() {
+    ScrollControls({ controls: (): void => this.TableHeader() }) {
       List({ scroller: this.viewport.scroller, space: this.rowSpacing }) {
         LazyForEach(this.store.source, (row: DnsListRow) => {
           ListItem() {
@@ -1172,12 +1183,15 @@ export struct DnsRecordList {
       .width('100%')
       .layoutWeight(1)
       .padding({ left: this.layout.gutter, right: this.layout.gutter })
-      .cachedCount(2)
+      .cachedCount(this.layout.tableMode ? TABLE_CACHE_ROWS : 2, true)
+      .contentStartOffset(8)
+      .clipContent(ContentClipMode.SAFE_AREA)
       .maintainVisibleContentPosition(!this.store.following)
       .edgeEffect(EdgeEffect.Spring)
       .scrollBar(BarState.Auto)
       .onAppear((): void => { this.viewport.bind(this.active); this.restore(); })
       .onDisAppear((): void => this.viewport.release())
+      .onSizeChange((_previous: SizeOptions, next: SizeOptions): void => this.resizeContent(next))
       .onScrollIndex((first: number, last: number, _center: number): void => {
         this.viewport.capture<DnsListRow>(this.store.source, first, last, (key: string): void => this.store.setAnchor(key));
       })
@@ -1200,8 +1214,5 @@ export struct DnsRecordList {
           .onClick((): void => this.backToLatest())
       }
     }
-    .width('100%')
-    .height('100%')
-    .onAreaChange((_before: Area, after: Area): void => this.resizeContent(after))
   }
 }

@@ -128,8 +128,10 @@ export struct IconSetGrid {
             }
           }, (entry: IconSetGridEntry): string => entry.key)
         }.layoutWeight(1).width('100%').columnsTemplate(this.columns).columnsGap(8).rowsGap(8)
-          .cachedCount(2).scrollBar(BarState.Off)
-          .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 12, bottom: 20 })
+          .cachedCount(2, true).scrollBar(BarState.Off)
+          .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 20 })
+          .safeAreaPadding({ top: 12 })
+          .clipContent(ContentClipMode.SAFE_AREA)
       }
     }.width('100%').height('100%')
       .onAreaChange((_oldArea: Area, area: Area): void => this.measure(Number(area.width)))

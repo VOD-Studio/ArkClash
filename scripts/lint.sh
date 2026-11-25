@@ -43,6 +43,7 @@ lint_go() {
       cp core/go.mod core/go.sum "$lint_deps/"
       cd core
       go mod edit -modfile "$lint_deps/go.mod" "-replace=github.com/metacubex/mihomo=$lint_deps/mihomo"
+      bash "$ROOT/scripts/prepare-tailscale.sh" "$lint_deps/tailscale" "$lint_deps/go.mod" || exit 1
       CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" go vet -modfile "$lint_deps/go.mod" -tags with_gvisor ./...
     ) || failed=1
   else
@@ -136,6 +137,7 @@ lint_vuln() {
       chmod -R u+w "$vuln_deps/core"
       cd "$vuln_deps/core"
       go mod edit "-replace=github.com/metacubex/mihomo=$vuln_deps/mihomo"
+      bash "$ROOT/scripts/prepare-tailscale.sh" "$vuln_deps/tailscale" "$vuln_deps/core/go.mod" || exit 1
       CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" \
         "$ROOT/.toolchain/bin/govulncheck" -tags with_gvisor ./...
     ) || failed=1

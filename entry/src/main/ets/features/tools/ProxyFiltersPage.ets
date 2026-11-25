@@ -1,7 +1,9 @@
+import { ScrollControls } from '../../components/ScrollControls';
 import { common } from '@kit.AbilityKit';
 import { checkProxyFilter } from '../../client/ProxyFilterValidation';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { KeyedListSource } from '../../components/KeyedListSource';
 import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
@@ -242,36 +244,27 @@ export struct ProxyFiltersPage {
   }
 
   @Builder
-  HeaderButton(icon: Resource, label: Resource, available: boolean, action: () => void) {
-    Button({ type: ButtonType.Circle }) {
-      SymbolGlyph(icon).fontSize(HEADER_ICON_SIZE).fontColor([$r('sys.color.font_primary')])
-    }
-    .attributeModifier(HEADER_ACTION).systemMaterial(this.appStyle.headerMaterial())
-    .accessibilityText(label).enabled(available).onClick(action)
-  }
-
-  @Builder
   HeaderMenus() {
     Row({ space: HEADER_GAP }) {
       if (this.managing) {
-        this.HeaderButton($r('sys.symbol.checkmark'), $r('app.string.dash_done'), !this.saving,
-          (): void => { this.managing = false; this.selectedIds = []; })
-        this.HeaderButton($r('sys.symbol.checkmark_circle'), $r('app.string.added_rules_select_all'),
-          this.visibleIds.length > 0 && !this.saving, (): void => this.selectVisible())
-        this.HeaderButton($r('sys.symbol.trash'), $r('app.string.action_delete'),
-          this.visibleSelection().length > 0 && !this.saving, (): void => {
+        ProxyFilterHeaderButton({ icon: $r('sys.symbol.checkmark'), label: $r('app.string.dash_done'),
+          available: !this.saving, onPress: (): void => { this.managing = false; this.selectedIds = []; } })
+        ProxyFilterHeaderButton({ icon: $r('sys.symbol.checkmark_circle'), label: $r('app.string.added_rules_select_all'),
+          available: this.visibleIds.length > 0 && !this.saving, onPress: (): void => this.selectVisible() })
+        ProxyFilterHeaderButton({ icon: $r('sys.symbol.trash'), label: $r('app.string.action_delete'),
+          available: this.visibleSelection().length > 0 && !this.saving, onPress: (): void => {
             this.deleting = true;
             this.sheetShown = true;
-          })
+          } })
       } else {
-        this.HeaderButton($r('sys.symbol.magnifyingglass'), $r('app.string.diagnostics_search'),
-          !this.loadFailed && !this.loading, (): void => this.toggleSearch())
+        ProxyFilterHeaderButton({ icon: $r('sys.symbol.magnifyingglass'), label: $r('app.string.diagnostics_search'),
+          available: !this.loadFailed && !this.loading, onPress: (): void => this.toggleSearch() })
         if (this.count > 0) {
-          this.HeaderButton($r('sys.symbol.square_and_pencil'), $r('app.string.action_edit'), !this.saving,
-            (): void => { this.managing = true; })
+          ProxyFilterHeaderButton({ icon: $r('sys.symbol.square_and_pencil'), label: $r('app.string.action_edit'),
+            available: !this.saving, onPress: (): void => { this.managing = true; } })
         }
-        this.HeaderButton($r('sys.symbol.plus'), $r('app.string.action_add'),
-          !this.loadFailed && !this.loading && !this.saving, (): void => this.openEditor())
+        ProxyFilterHeaderButton({ icon: $r('sys.symbol.plus'), label: $r('app.string.action_add'),
+          available: !this.loadFailed && !this.loading && !this.saving, onPress: (): void => this.openEditor() })
       }
     }.height('100%').alignItems(VerticalAlign.Center).padding({ right: PAGE_GUTTER })
   }
@@ -289,18 +282,23 @@ export struct ProxyFiltersPage {
         .onMove(this.managing && !this.saving && this.query.trim() === '' ?
           (from: number, to: number): void => this.move(from, to) : undefined)
     }
-    .width('100%').layoutWeight(1).enabled(!this.saving).scrollBar(BarState.Off).cachedCount(2)
+    .width('100%').layoutWeight(1).enabled(!this.saving).scrollBar(BarState.Off).cachedCount(2, true)
+    .clipContent(ContentClipMode.SAFE_AREA)
     .contentStartOffset(12).contentEndOffset(24).padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
   }
 
   @Builder
+  FilterControls() {
+    if (this.searchShown) {
+      TextInput({ text: this.query, placeholder: $r('app.string.proxy_filter_search') })
+        .height(40).margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
+        .onChange((text: string): void => { this.query = text; this.refreshRows(); })
+    }
+  }
+
+  @Builder
   Content() {
-    Column() {
-      if (this.searchShown) {
-        TextInput({ text: this.query, placeholder: $r('app.string.proxy_filter_search') })
-          .height(40).margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
-          .onChange((text: string): void => { this.query = text; this.refreshRows(); })
-      }
+    ScrollControls({ controls: (): void => this.FilterControls() }) {
       if (this.loading) {
         Column() { LoadingProgress().width(32).height(32).color(this.appStyle.palette.brand) }
           .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
@@ -313,7 +311,7 @@ export struct ProxyFiltersPage {
       } else {
         this.FilterList()
       }
-    }.width('100%').height('100%')
+    }
   }
 
   @Builder
@@ -372,21 +370,39 @@ export struct ProxyFiltersPage {
   }
 
   build() {
-    NavDestination() {
-      this.Content()
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      pageShown: (): void => { this.shown = true; if (!this.saving) { this.load(); } },
+      pageHidden: (): void => { this.shown = false; },
+      handleBack: (): boolean => this.back()
+    }) {
+      Stack() { this.Content() }
+        .width('100%').height('100%')
+        .bindSheet($$this.sheetShown, this.SheetBody, {
+          title: { title: this.deleting ? $r('app.string.action_delete') :
+            this.editing === undefined ? $r('app.string.action_add') : $r('app.string.action_edit') },
+          height: SheetSize.FIT_CONTENT, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
+          onWillDismiss: (action: DismissSheetAction): void => this.closeSheet((): void => action.dismiss())
+        })
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .menus(this.HeaderMenus)
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .bindSheet($$this.sheetShown, this.SheetBody, {
-      title: { title: this.deleting ? $r('app.string.action_delete') :
-        this.editing === undefined ? $r('app.string.action_add') : $r('app.string.action_edit') },
-      height: SheetSize.FIT_CONTENT, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
-      onWillDismiss: (action: DismissSheetAction): void => this.closeSheet((): void => action.dismiss())
-    })
-    .onShown((): void => { this.shown = true; if (!this.saving) { this.load(); } })
-    .onHidden((): void => { this.shown = false; })
-    .onBackPressed((): boolean => this.back())
+  }
+}
+
+@ComponentV2
+struct ProxyFilterHeaderButton {
+  @Local private appStyle: AppearanceState = appAppearance;
+  @Param @Require icon: Resource;
+  @Param @Require label: Resource;
+  @Param available: boolean = true;
+  @Event onPress: () => void = (): void => {};
+
+  build() {
+    Button({ type: ButtonType.Circle }) {
+      SymbolGlyph(this.icon).fontSize(HEADER_ICON_SIZE).fontColor([$r('sys.color.font_primary')])
+    }
+    .attributeModifier(HEADER_ACTION).systemMaterial(this.appStyle.headerMaterial())
+    .accessibilityText(this.label).enabled(this.available).onClick((): void => this.onPress())
   }
 }
 

@@ -1,4 +1,5 @@
 import { connection } from '../../client/Connection';
+import { requestTailscaleLogin, RuntimeProxyTarget } from '../../client/LocalProxyCore';
 import { ProfileEvent, ProfileEvents } from '../../client/ProfileCommands';
 import { ProxySnapshot, PROXY_TEST_URL, readOfflineProxies, readOnlineProxies } from '../../client/Proxies';
 import { KeyedListSource } from '../../components/KeyedListSource';
@@ -40,6 +41,7 @@ export class ProxyBrowser {
   private refreshSequence: number = 0;
   private contextEpoch: number = 0;
   private snapshotEpoch: number = -1;
+  private loginRequest?: RuntimeProxyTarget;
   private mutation: number = 0;
   private selection: ProxySelectionSession = new ProxySelectionSession((): void => {
     this.mutation++;
@@ -87,6 +89,9 @@ export class ProxyBrowser {
     }
     this.online = input.online;
     this.offlineWritable = input.offlineWritable;
+    if (changedContext || !input.visible) {
+      this.loginRequest = undefined;
+    }
     if (changedContext) {
       this.contextEpoch++;
       this.refreshSequence++;
@@ -131,6 +136,7 @@ export class ProxyBrowser {
 
   suspend(): void {
     this.refreshSequence++;
+    this.loginRequest = undefined;
     this.selection.unobserve();
     this.events.stop();
     this.tests.cancel();
@@ -291,6 +297,44 @@ export class ProxyBrowser {
       this.tests.start(this.input.context.filesDir, this.snapshot, group, this.query, node, this.defaultTestUrl());
     } else {
       this.notice = this.online ? 'notReady' : 'offline';
+    }
+  }
+
+  async loginTailscale(group: string, id: string): Promise<void> {
+    const input = this.input;
+    const snapshot = this.snapshot;
+    const node = snapshot?.memberNodes[group]?.[id];
+    if (this.loginRequest?.id === id && this.loginRequest.group === group) {
+      return;
+    }
+    this.beginAction();
+    if (input?.visible !== true || !snapshot?.online || this.loadError || this.snapshotEpoch !== this.contextEpoch ||
+      !connection.coreReady || connection.coreStarting || connection.bootId !== snapshot.bootId ||
+      connection.configRevision !== snapshot.configRevision || node === undefined || node.retired ||
+      node.type.toLowerCase() !== 'tailscale') {
+      this.notice = 'notReady';
+      return;
+    }
+    const target: RuntimeProxyTarget = { bootId: snapshot.bootId, configRevision: snapshot.configRevision,
+      group: group, id: id };
+    this.loginRequest = target;
+    const epoch = this.contextEpoch;
+    const current = (): boolean => this.loginRequest === target && epoch === this.contextEpoch &&
+      connection.coreReady && connection.bootId === target.bootId && connection.configRevision === target.configRevision;
+    try {
+      const result = await requestTailscaleLogin(input.context.filesDir, target);
+      if (!current()) { return; }
+      if (result.state === 'authorize' && result.authUrl !== undefined) {
+        await input.context.openLink(result.authUrl);
+      } else {
+        this.notice = `tailscale-${result.state}`;
+      }
+    } catch (error) {
+      if (current()) {
+        this.notice = (error as Error).message === 'proxy_stale_config' ? 'tailscale-stale' : 'tailscale-failed';
+      }
+    } finally {
+      if (this.loginRequest === target) { this.loginRequest = undefined; }
     }
   }
 

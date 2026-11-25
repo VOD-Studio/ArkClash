@@ -1,3 +1,4 @@
+import { ScrollControls } from '../../components/ScrollControls';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { accessibility } from '@kit.AccessibilityKit';
 import { common } from '@kit.AbilityKit';
@@ -5,12 +6,15 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { connection, Connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
+import { DnsFilterSheet } from './DnsFilterSheet';
 import { DnsRecordDetails } from './RecordDetails';
-import { RecordActionMenu, RecordFilterChips, RecordMenuOption, RecordMenuState } from './RecordFilters';
-import { recordColumnTitle, recordErrorText, recordFacetText } from './RecordLabels';
+import { RecordFilterChips } from './RecordFilters';
+import { recordErrorText } from './RecordLabels';
 import { DnsRecordList, RECORD_LIST_ANIMATION, recordListTransition } from './RecordList';
+import { RecordFacets } from './RecordLogic';
 import { dnsRecords, DnsRecordsStore } from './RecordStores';
 
 @ComponentV2
@@ -23,12 +27,12 @@ export struct DnsPage {
   @Local searchShown: boolean = false;
   @Local detailsShown: boolean = false;
   @Local preferencePending: boolean = false;
-  @Local menuState: RecordMenuState = new RecordMenuState();
+  @Local filtersShown: boolean = false;
   @Local reduceMotion: boolean = true;
   private active: boolean = false;
   private generation: number = 0;
   private consumedNotice: number = 0;
-  private actionOpen: boolean = false;
+  private filterOpen: boolean = false;
   private detailOpen: boolean = false;
   private runtimeBoot: string = '';
   private runtimeRevision: number = 0;
@@ -55,7 +59,10 @@ export struct DnsPage {
     const forwardingReady = this.conn.connected && !this.conn.busy;
     const changed = this.runtimeBoot !== this.conn.bootId || this.runtimeRevision !== this.conn.configRevision;
     const entering = visible && !this.active;
-    if (visible !== this.active || changed || ready !== this.runtimeReady) { ++this.generation; }
+    if (visible !== this.active || changed || ready !== this.runtimeReady) {
+      ++this.generation;
+      this.filtersShown = false;
+    }
     this.active = visible;
     this.runtimeReady = ready;
     if (changed) { this.runtimeBoot = this.conn.bootId; this.runtimeRevision = this.conn.configRevision; }
@@ -139,30 +146,23 @@ export struct DnsPage {
       $r('app.string.diagnostics_retry') : '';
   }
 
-  private menu(title: ResourceStr, options: RecordMenuOption[], onSelect: (choice: string) => void): void {
-    if (!this.active || this.actionOpen || this.detailsShown || this.detailOpen) { return; }
-    const generation = this.generation;
-    this.actionOpen = true;
-    this.menuState.open(title, options, (choice: string): void => {
-      this.actionOpen = false;
-      if (choice !== '' && this.isCurrent(generation)) { onSelect(choice); }
-    });
+  @Computed
+  get hasActiveFilters(): boolean {
+    return Object.keys(this.store.facets).some((key: string): boolean => this.store.facets[key].length > 0);
   }
 
-  private filtersMenu(): void {
-    const fields: string[] = ['type', 'initiator', 'cache', 'rcode'];
-    const choices: RecordMenuOption[] = fields.map<RecordMenuOption>((field: string): RecordMenuOption => {
-      return { key: field, title: recordColumnTitle(field) };
-    });
-    this.menu($r('app.string.diagnostics_filters'), choices, (field: string): void => {
-      const options: RecordMenuOption[] = this.store.facetOptions(field).map<RecordMenuOption>(
-        (option: string): RecordMenuOption => { return { key: option, title: recordFacetText(field, option) }; });
-      this.menu(recordColumnTitle(field), options, (option: string): void => { this.store.toggleFacet(field, option); });
-    });
+  @Computed
+  get filterSheetHeight(): Length {
+    return this.store.totalRecords > 0 || this.hasActiveFilters ? '70%' : 228;
+  }
+
+  private openFilters(): void {
+    if (!this.active || this.filtersShown || this.filterOpen || this.detailsShown || this.detailOpen) { return; }
+    this.filtersShown = true;
   }
 
   private openDetails(id: string): void {
-    if (!this.active || this.actionOpen || this.detailsShown || this.detailOpen) { return; }
+    if (!this.active || this.filtersShown || this.filterOpen || this.detailsShown || this.detailOpen) { return; }
     this.store.select(id);
     this.detailsShown = this.store.selected !== undefined;
   }
@@ -179,7 +179,7 @@ export struct DnsPage {
   }
 
   private async clearCache(): Promise<void> {
-    if (!this.active || !this.store.canAct || this.actionOpen || this.detailsShown || this.detailOpen) { return; }
+    if (!this.active || !this.store.canAct || this.filtersShown || this.filterOpen || this.detailsShown || this.detailOpen) { return; }
     await this.store.clearCache();
   }
 
@@ -222,16 +222,28 @@ export struct DnsPage {
       .onClick((): void => { this.searchShown = !this.searchShown; })
       Button({ type: ButtonType.Circle }) {
         SymbolGlyph($r('sys.symbol.slider_horizontal_2')).fontSize(HEADER_ICON_SIZE)
-          .fontColor([$r('sys.color.font_primary')])
+          .fontColor([this.hasActiveFilters ? this.appStyle.palette.brand : $r('sys.color.font_primary')])
       }
       .attributeModifier(HEADER_ACTION)
       .systemMaterial(this.appStyle.headerMaterial())
       .accessibilityText($r('app.string.diagnostics_filters'))
-      .onClick((): void => { this.filtersMenu(); })
+      .onClick((): void => { this.openFilters(); })
     }
     .height('100%')
     .alignItems(VerticalAlign.Center)
     .padding({ right: PAGE_GUTTER })
+  }
+
+  @Builder
+  FilterSheet() {
+    DnsFilterSheet({ store: this.store, reduceMotion: this.reduceMotion,
+      onClose: (): void => { this.filtersShown = false; },
+      onApply: (facets: RecordFacets): void => {
+        if (this.active && this.filtersShown) {
+          this.store.setFacets(facets);
+          this.filtersShown = false;
+        }
+      } })
   }
 
   @Builder
@@ -246,20 +258,24 @@ export struct DnsPage {
     if (this.store.visibleRecords > 0) {
       if (!this.store.ready) {
         Text($r('app.string.diagnostics_disconnected')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
+          .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
       } else if (this.store.error !== '' || this.store.streamState === 'failed') {
         Row({ space: 8 }) {
           Text(this.emptyTitle).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('app.color.status_error')).layoutWeight(1)
           Button($r('app.string.diagnostics_retry')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
             .onClick((): void => { this.store.retry(); })
         }
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
       } else if (!this.store.synced) {
         Text($r('app.string.diagnostics_connecting')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
+          .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
       }
     }
     if (this.store.interruptions > 0 || this.store.dropped > 0 || this.store.evicted > 0) {
       Text($r('app.string.diagnostics_gap', this.store.interruptions, this.store.dropped, this.store.evicted))
         .fontFamily(this.appStyle.fontFamily)
         .fontSize(12).fontColor($r('sys.color.font_secondary'))
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
     }
     if (this.store.preferenceError !== '') {
       Row({ space: 8 }) {
@@ -268,25 +284,37 @@ export struct DnsPage {
         Button($r('app.string.diagnostics_retry_preferences')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
           .enabled(!this.preferencePending).onClick((): void => { this.retryPreferences(); })
       }
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
     }
   }
 
+  @Builder
+  FilterControls() {
+    Column() {
+      if (this.searchShown || this.store.query !== '') {
+        Search({ value: this.store.query, placeholder: $r('app.string.diagnostics_search_hint') })
+          .textFont({ size: 16, family: this.appStyle.fontFamily }).placeholderFont({ size: 16, family: this.appStyle.fontFamily })
+          .accessibilityText($r('app.string.diagnostics_search'))
+          .margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 6, bottom: 6 })
+          .onChange((query: string): void => { this.store.setQuery(query); })
+      }
+      if (this.hasActiveFilters) {
+        RecordFilterChips({ facets: this.store.facets,
+          onRemove: (field: string, option: string): void => { this.store.toggleFacet(field, option); } })
+      }
+      this.StatusContent()
+    }
+    .width('100%').alignItems(HorizontalAlign.Start)
+  }
+
   build() {
-    NavDestination() {
-      Column({ space: 8 }) {
-        Column({ space: 8 }) {
-          if (this.searchShown || this.store.query !== '') {
-            Search({ value: this.store.query, placeholder: $r('app.string.diagnostics_search_hint') })
-              .textFont({ size: 16, family: this.appStyle.fontFamily }).placeholderFont({ size: 16, family: this.appStyle.fontFamily })
-              .accessibilityText($r('app.string.diagnostics_search'))
-              .onChange((query: string): void => { this.store.setQuery(query); })
-          }
-          RecordFilterChips({ facets: this.store.facets,
-            onRemove: (field: string, option: string): void => { this.store.toggleFacet(field, option); } })
-          this.StatusContent()
-        }
-        .width('100%').alignItems(HorizontalAlign.Start)
-        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      pageShown: (_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); },
+      pageHidden: (_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); }
+    }) {
+      ScrollControls({ controls: (): void => this.FilterControls() }) {
         Stack() {
           DnsRecordList({ store: this.store, active: this.shown && this.foreground, reduceMotion: this.reduceMotion,
             onOpen: (id: string): void => { this.openDetails(id); } })
@@ -297,6 +325,7 @@ export struct DnsPage {
                 actionLabel: this.emptyAction, onAction: (): void => { this.store.retry(); } })
             }
             .width('100%').height('100%')
+            .clipContent(ContentClipMode.SAFE_AREA)
             .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.emptyTransition)
           }
         }
@@ -307,19 +336,18 @@ export struct DnsPage {
             .onClick((): void => { this.store.setFollowing(true); })
             .margin({ bottom: 8 })
         }
-        RecordActionMenu({ menuState: this.menuState })
+        Column().bindSheet($$this.filtersShown, this.FilterSheet, {
+          detents: [this.filterSheetHeight, SheetSize.LARGE],
+          preferType: SheetType.BOTTOM, showClose: false, systemMaterial: this.appStyle.sheetMaterial(),
+          onWillAppear: (): void => { this.filterOpen = true; },
+          onDisappear: (): void => { this.filterOpen = false; }
+        })
         Column().bindSheet($$this.detailsShown, this.DetailSheet, {
           height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
           onWillAppear: (): void => { this.detailOpen = true; },
           onDisappear: (): void => { this.detailOpen = false; this.store.select(''); }
         })
       }
-      .width('100%').height('100%')
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .menus(this.HeaderMenus)
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })
-    .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); })
   }
 }

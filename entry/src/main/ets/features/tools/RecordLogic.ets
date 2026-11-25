@@ -5,6 +5,15 @@ export type RecordGrouping = 'none' | 'host' | 'rule' | 'exit';
 export type RecordView = 'requests' | 'connections' | 'dns';
 export type RecordFacets = Record<string, string[]>;
 
+export function recordFacetsAfterToggle(facets: RecordFacets, field: string, option: string): RecordFacets {
+  const next: RecordFacets = {};
+  for (const key of Object.keys(facets)) { next[key] = facets[key].slice(); }
+  const selected = next[field] ?? [];
+  next[field] = selected.includes(option) ? selected.filter((item: string): boolean => item !== option) :
+    [...selected, option];
+  return next;
+}
+
 export interface RecordSort {
   column: string;
   direction: '' | 'asc' | 'desc';

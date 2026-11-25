@@ -1,7 +1,9 @@
+import { ScrollControls } from '../../components/ScrollControls';
 import { common } from '@kit.AbilityKit';
 import { decodeProxyLinks, encodeProxyLinks, validateProxyDefinitions } from '../../client/LocalProxyCore';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { ListSource } from '../../components/ListSource';
 import { CARD_RADIUS, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
@@ -52,6 +54,22 @@ struct LocalProxyRow {
       .backgroundColor(this.active ? this.appStyle.palette.selectionTonal : this.appStyle.palette.cardBackground)
       .borderRadius({ topLeft: this.first ? CARD_RADIUS : 4, topRight: this.first ? CARD_RADIUS : 4,
         bottomLeft: this.last ? CARD_RADIUS : 4, bottomRight: this.last ? CARD_RADIUS : 4 })
+  }
+}
+
+@ComponentV2
+struct LocalProxyHeaderButton {
+  @Local private appStyle: AppearanceState = appAppearance;
+  @Param @Require icon: Resource;
+  @Param @Require label: Resource;
+  @Param available: boolean = true;
+  @Event onPress: () => void = (): void => {};
+
+  build() {
+    Button({ type: ButtonType.Circle }) {
+      SymbolGlyph(this.icon).fontSize(HEADER_ICON_SIZE).fontColor([$r('sys.color.font_primary')])
+    }.attributeModifier(HEADER_ACTION).systemMaterial(this.appStyle.headerMaterial())
+      .accessibilityText(this.label).enabled(this.available).onClick((): void => this.onPress())
   }
 }
 
@@ -310,14 +328,6 @@ export struct LocalProxiesPage {
   Title() { DestinationTitle({ titleText: $r('app.string.local_proxy_title') }) }
 
   @Builder
-  HeaderButton(icon: Resource, label: Resource, active: boolean, action: () => void) {
-    Button({ type: ButtonType.Circle }) {
-      SymbolGlyph(icon).fontSize(HEADER_ICON_SIZE).fontColor([$r('sys.color.font_primary')])
-    }.attributeModifier(HEADER_ACTION).systemMaterial(this.appStyle.headerMaterial())
-      .accessibilityText(label).enabled(active).onClick((): void => action())
-  }
-
-  @Builder
   AddMenu() {
     Menu() {
       MenuItem({ content: $r('app.string.action_add') }).onClick((): void => this.openEditor())
@@ -328,20 +338,23 @@ export struct LocalProxiesPage {
   @Builder
   Header() {
     Row({ space: HEADER_GAP }) {
-      this.HeaderButton(this.search ? $r('sys.symbol.xmark') : $r('sys.symbol.magnifyingglass'),
-        this.search ? $r('app.string.proxy_search_close') : $r('app.string.proxy_search'),
-        !this.loading && !this.failed && !this.busy, (): void => {
+      LocalProxyHeaderButton({
+        icon: this.search ? $r('sys.symbol.xmark') : $r('sys.symbol.magnifyingglass'),
+        label: this.search ? $r('app.string.proxy_search_close') : $r('app.string.proxy_search'),
+        available: !this.loading && !this.failed && !this.busy,
+        onPress: (): void => {
           this.search = !this.search;
           if (!this.search) { this.query = ''; this.showRows(); }
-        })
+        }
+      })
       if (this.selected.length > 0) {
-        this.HeaderButton($r('sys.symbol.checkmark'), $r('app.string.added_rules_select_all'),
-          !this.busy && this.visible.length > 0, (): void => this.selectVisible())
-        this.HeaderButton($r('sys.symbol.trash'), $r('app.string.action_delete'),
-          !this.busy && this.selectedVisible().length > 0, (): void => {
+        LocalProxyHeaderButton({ icon: $r('sys.symbol.checkmark'), label: $r('app.string.added_rules_select_all'),
+          available: !this.busy && this.visible.length > 0, onPress: (): void => this.selectVisible() })
+        LocalProxyHeaderButton({ icon: $r('sys.symbol.trash'), label: $r('app.string.action_delete'),
+          available: !this.busy && this.selectedVisible().length > 0, onPress: (): void => {
             this.deleted = this.selectedVisible();
             this.deleteShown = true;
-          })
+          } })
       } else {
         Button({ type: ButtonType.Circle }) {
           if (this.busy) {
@@ -379,7 +392,8 @@ export struct LocalProxiesPage {
         }, (item: LocalProxy): string => `${item.id}:${item.revision}`)
       }
     }.width('100%').layoutWeight(1).padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
-      .contentStartOffset(12).contentEndOffset(24).cachedCount(2).scrollBar(BarState.Off)
+      .contentStartOffset(12).contentEndOffset(24).cachedCount(2, true).scrollBar(BarState.Off)
+      .clipContent(ContentClipMode.SAFE_AREA)
   }
 
   @Builder
@@ -443,15 +457,29 @@ export struct LocalProxiesPage {
       onSaved: (snapshot: LocalProxySnapshot, message: ResourceStr): void => this.editorSaved(snapshot, message) })
   }
 
+  @Builder
+  SearchControl() {
+    if (this.search) {
+      TextInput({ text: this.query, placeholder: $r('app.string.local_proxy_search') })
+        .height(40).margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
+        .onChange((text: string): void => { this.query = text; this.showRows(); })
+    }
+  }
+
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.Title(),
+      actions: (): void => this.Header(),
+      pageShown: (): void => { this.shown = true; this.refresh(); },
+      pageHidden: (): void => { this.shown = false; this.generation++; },
+      handleBack: (): boolean => {
+        if (this.selected.length > 0) { this.selected = []; return true; }
+        if (this.search) { this.search = false; this.query = ''; this.showRows(); return true; }
+        return this.busy;
+      }
+    }) {
       Stack() {
-        Column() {
-          if (this.search) {
-            TextInput({ text: this.query, placeholder: $r('app.string.local_proxy_search') })
-              .height(40).margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
-              .onChange((text: string): void => { this.query = text; this.showRows(); })
-          }
+        ScrollControls({ controls: (): void => this.SearchControl() }) {
           if (this.loading) {
             Column() { LoadingProgress().width(28).height(28).color(this.appStyle.palette.brand) }
               .width('100%').layoutWeight(1).justifyContent(FlexAlign.Center)
@@ -463,7 +491,7 @@ export struct LocalProxiesPage {
               onAction: (): void => { if (this.failed) { this.refresh(); } else { this.openEditor(); } } })
               .layoutWeight(1)
           } else { this.Rows() }
-        }.width('100%').height('100%')
+        }
         Column().bindSheet($$this.editShown, this.EditorSheet, {
           title: { title: this.editorProxy === undefined ? $r('app.string.local_proxy_add') :
             $r('app.string.local_proxy_edit') }, height: SheetSize.LARGE, showClose: true,
@@ -481,14 +509,6 @@ export struct LocalProxiesPage {
           onWillDismiss: (_action: DismissSheetAction): void => this.closeLinks()
         })
       }.width('100%').height('100%')
-    }.title(this.Title, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.Header)
-      .backgroundColor(this.appStyle.palette.pageBackground)
-      .onShown((): void => { this.shown = true; this.refresh(); })
-      .onHidden((): void => { this.shown = false; this.generation++; })
-      .onBackPressed((): boolean => {
-        if (this.selected.length > 0) { this.selected = []; return true; }
-        if (this.search) { this.search = false; this.query = ''; this.showRows(); return true; }
-        return this.busy;
-      })
+    }
   }
 }

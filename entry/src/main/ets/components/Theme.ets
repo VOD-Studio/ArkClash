@@ -1,9 +1,10 @@
-import { hdsMaterial, SystemMaterialParams } from '@kit.UIDesignKit';
+import { hdsMaterial, HdsTitleBarContentStyle, ScrollEffectType, SystemMaterialParams, TitleBarStyleOptions } from '@kit.UIDesignKit';
 import { AppearanceGlass } from './AppearanceState';
 
 // 页面左右留白；卡片之间、卡片内分组之间的间距。
 export const PAGE_GUTTER = 16;
 export const HEADER_GAP = 8;
+export const HEADER_ACTION_SIZE = 40;
 export const HEADER_ICON_SIZE = 24;
 export const TAB_HEADER_HEIGHT = 72;
 export const TAB_TITLE_SIZE = 24;
@@ -46,8 +47,8 @@ export class CardModifier implements AttributeModifier<ColumnAttribute> {
 export class HeaderActionModifier implements AttributeModifier<ButtonAttribute> {
   applyNormalAttribute(instance: ButtonAttribute): void {
     instance
-      .width(40)
-      .height(40)
+      .width(HEADER_ACTION_SIZE)
+      .height(HEADER_ACTION_SIZE)
       .padding(0)
       .borderRadius(20)
       .buttonStyle(ButtonStyleMode.NORMAL)
@@ -69,4 +70,23 @@ const HDS_ULTRA_GLASS: SystemMaterialParams = {
 export function hdsGlass(glass: AppearanceGlass): SystemMaterialParams {
   if (glass === 'none') { return HDS_NO_GLASS; }
   return glass === 'ultra' ? HDS_ULTRA_GLASS : HDS_STANDARD_GLASS;
+}
+
+const TITLE_CONTENT_STYLE: HdsTitleBarContentStyle = {
+  titleStyle: { mainTitleColor: $r('sys.color.font_primary') },
+  backIconStyle: { iconColor: $r('sys.color.icon_primary'), backgroundColor: $r('sys.color.comp_background_tertiary') },
+  menuStyle: { iconColor: $r('sys.color.icon_primary'), backgroundColor: $r('sys.color.comp_background_tertiary') }
+};
+
+export function immersiveTitleStyle(glass: AppearanceGlass): TitleBarStyleOptions {
+  return {
+    // HDS 的滚动过渡从透明开始，仅在关闭沉浸光感时保留。
+    scrollEffectOpts: {
+      enableScrollEffect: glass === 'none',
+      scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+    },
+    systemMaterialEffect: hdsGlass(glass),
+    originalStyle: { contentStyle: TITLE_CONTENT_STYLE },
+    scrollEffectStyle: { contentStyle: TITLE_CONTENT_STYLE }
+  };
 }

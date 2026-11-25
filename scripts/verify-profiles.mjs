@@ -1934,6 +1934,50 @@ test('custom validation blocks group and dialer cycles while reporting missing p
   assert.ok(groupCycle.issues.some(issue => issue.code === 'cycle' && issue.subject === 'B → A → B'));
 });
 
+test('renaming an imported Tailscale node follows exact DNS hosts, DNS dialers and routing targets', () => {
+  const source = [
+    'proxies: [{name: 港TS, type: tailscale, hostname: client, exit-node: before}]',
+    'proxy-groups: [{name: Select, type: select, proxies: [港TS], empty-fallback: 港TS}]',
+    'rules: ["MATCH,港TS"]',
+    'dns:',
+    '  nameserver: ["ts://港TS", "TS://港ts", "https://港TS/path", "ts://港TS-extra", "ts://%E6%B8%AFTS?q=1#h3=true"]',
+    '  fallback: ["https://dns.test/#%E6%B8%AFTS%26h3=true", "https://dns.test/#港TS&Other", "https://dns.test/#proxy=港TS"]',
+    '  nameserver-policy: {"+.example": "TailScale://%E6%B8%AFTS/path#flag=true"}',
+    '  proxy-server-nameserver-policy: {"+.example": ["ts://港TS#港TS"]}'
+  ].join('\n');
+  const rename = (text) => customYaml.editCustomProfile(source, { kind: 'rename-node', index: 0, text });
+  const renamed = testYaml.parse(rename('新%TS').source);
+  assert.deepEqual(renamed.proxies[0], { name: '新%TS', type: 'tailscale', hostname: 'client', 'exit-node': 'before' });
+  assert.deepEqual(renamed['proxy-groups'][0].proxies, ['新%TS']);
+  assert.equal(renamed['proxy-groups'][0]['empty-fallback'], '新%TS');
+  assert.deepEqual(renamed.rules, ['MATCH,新%TS']);
+  assert.deepEqual(renamed.dns.nameserver, [
+    'ts://新%25TS', 'TS://港ts', 'https://港TS/path', 'ts://港TS-extra', 'ts://新%25TS?q=1#h3=true'
+  ]);
+  assert.deepEqual(renamed.dns.fallback, [
+    'https://dns.test/#%E6%96%B0%25TS%26h3=true', 'https://dns.test/#港TS&Other', 'https://dns.test/#proxy=港TS'
+  ]);
+  assert.equal(renamed.dns['nameserver-policy']['+.example'], 'TailScale://新%25TS/path#flag=true');
+  assert.deepEqual(renamed.dns['proxy-server-nameserver-policy']['+.example'], ['ts://新%25TS#%E6%96%B0%25TS']);
+  assert.throws(() => rename('Select'), /custom_node_duplicate/);
+  assert.throws(() => rename('DIRECT'), /custom_node_name/);
+  assert.throws(() => rename('a/b'), /custom_dns_name/);
+  assert.throws(() => rename('a b'), /custom_dns_name/);
+  assert.throws(() => rename('a&b'), /custom_dns_name/);
+  const conflicts = 'proxies: [{name: TS, type: tailscale}, {name: TS, type: direct}]\ndns: {nameserver: ["ts://TS"]}';
+  const repaired = customYaml.editCustomProfile(conflicts, { kind: 'rename-node', index: 1, text: 'Local' });
+  assert.deepEqual(testYaml.parse(repaired.source).dns.nameserver, ['ts://TS']);
+  const inherited = 'proxies: [{name: TS, type: tailscale}]\n' +
+    'template: &policy {"+.inside": "ts://TS", "+.extra": "https://dns.test"}\n' +
+    'defaults: &dns {nameserver-policy: *policy, fallback: ["https://dns.test"]}\ndns: *dns\n';
+  const fromAlias = testYaml.parse(customYaml.editCustomProfile(inherited, {
+    kind: 'rename-node', index: 0, text: 'New'
+  }).source);
+  assert.deepEqual(fromAlias.dns['nameserver-policy'], { '+.inside': 'ts://New', '+.extra': 'https://dns.test' });
+  assert.deepEqual(fromAlias.dns.fallback, ['https://dns.test']);
+  assert.equal(fromAlias.template['+.inside'], 'ts://TS');
+});
+
 test('custom structure imports a rules-only profile and rejects unrelated or malformed YAML', () => {
   const source = 'rules: ["MATCH,DIRECT"]\n';
   assert.equal(customYaml.editCustomProfile(source).rules[0], 'MATCH,DIRECT');
@@ -1993,6 +2037,7 @@ test('YAML 语法错误仅保留脱敏行列位置，且未知字段与注释可
   assert.equal(bad.error.includes('secret-node-pass-123'), false);
   assert.equal(errors.errorString(new Error(bad.error)), bad.error);
   assert.equal(errors.errorString(new Error('invalid_yaml:secret-leak')), 'invalid_yaml');
+  assert.equal(errors.errorString(new Error('context deadline exceeded')), 'timeout');
   assert.equal(errors.errorString(new Error('preview_core_unavailable')), 'preview_core_unavailable');
   assert.equal(errors.errorString(new Error('preview_custom_tun')), 'preview_custom_tun');
 });

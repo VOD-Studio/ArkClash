@@ -261,6 +261,12 @@ export struct ProxiesPage {
 
   private noticeLabel(): Resource {
     switch (this.browser.notice) {
+      case 'tailscale-running': return $r('app.string.proxy_tailscale_running');
+      case 'tailscale-pending': return $r('app.string.proxy_tailscale_pending');
+      case 'tailscale-key-configured': return $r('app.string.proxy_tailscale_key_configured');
+      case 'tailscale-needs-approval': return $r('app.string.proxy_tailscale_needs_approval');
+      case 'tailscale-stale': return $r('app.string.proxy_save_err_stale');
+      case 'tailscale-failed': return $r('app.string.proxy_tailscale_failed');
       case 'offline': return $r('app.string.proxy_test_offline');
       case 'unresolved': return $r('app.string.proxy_leaf_unresolved');
       case 'unsupported': return $r('app.string.proxy_group_unselectable');

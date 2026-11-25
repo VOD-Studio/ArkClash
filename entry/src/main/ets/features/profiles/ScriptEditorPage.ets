@@ -5,10 +5,13 @@ import { i18n } from '@kit.LocalizationKit';
 import { webview } from '@kit.ArkWeb';
 import { applyConfigScript } from '../../shared/profiles/ScriptApply';
 import { appearanceHex } from '../../components/AppearancePalette';
+import { ScrollControls } from '../../components/ScrollControls';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { ConfigScript, readConfigScripts, saveConfigScript, SCRIPT_TEMPLATE } from '../../shared/profiles/Scripts';
+import { EditorViewport } from './EditorViewport';
 import { configScriptError } from './ScriptMessages';
 
 const EDITOR_TEXT_PREFIX = 'arkclash-editor:';
@@ -20,6 +23,7 @@ interface ScriptEditorAppearance {
   font: number;
   wrap: boolean;
   chinese: boolean;
+  topInset: number;
 }
 
 interface ScriptEditorAction {
@@ -31,9 +35,14 @@ interface ScriptEditorAction {
 
 class ScriptEditorStatusBridge {
   private notify: (dirty: boolean, undo: boolean, redo: boolean) => void;
+  private onPainted: () => void;
 
-  constructor(notify: (dirty: boolean, undo: boolean, redo: boolean) => void) { this.notify = notify; }
+  constructor(notify: (dirty: boolean, undo: boolean, redo: boolean) => void, onPainted: () => void) {
+    this.notify = notify;
+    this.onPainted = onPainted;
+  }
   changed(dirty: boolean, undo: boolean, redo: boolean): void { this.notify(dirty, undo, redo); }
+  painted(): void { this.onPainted(); }
 }
 
 @ComponentV2
@@ -47,6 +56,7 @@ export struct ScriptEditorPage {
   @Local private draftName: string = '';
   @Local private loaded: boolean = false;
   @Local private ready: boolean = false;
+  @Local private webPainted: boolean = false;
   @Local private loadFailed: boolean = false;
   @Local private editorFailed: boolean = false;
   @Local private saving: boolean = false;
@@ -60,6 +70,8 @@ export struct ScriptEditorPage {
   @Local private wrapLines: boolean = false;
   private fontSizes: number[] = [14, 17, 20];
   private initialSource: string = '';
+  private viewportInset: number = 0;
+  private revealTimer: number = -1;
   private mounted: boolean = false;
   private webGeneration: number = 0;
   private webStarted: boolean = false;
@@ -73,10 +85,21 @@ export struct ScriptEditorPage {
     this.dirty = dirty;
     this.undoEnabled = undo;
     this.redoEnabled = redo;
+  }, (): void => {
+    if (!this.mounted) { return; }
+    this.clearRevealTimer();
+    this.webPainted = true;
   });
 
   aboutToAppear(): void { this.mounted = true; this.load(); }
-  aboutToDisappear(): void { this.mounted = false; ++this.webGeneration; }
+  aboutToDisappear(): void { this.mounted = false; this.clearRevealTimer(); ++this.webGeneration; }
+
+  private clearRevealTimer(): void {
+    if (this.revealTimer !== -1) {
+      clearTimeout(this.revealTimer);
+      this.revealTimer = -1;
+    }
+  }
 
   private async load(): Promise<void> {
     this.loadFailed = false;
@@ -100,19 +123,29 @@ export struct ScriptEditorPage {
   }
 
   private editorAppearance(): ScriptEditorAppearance {
-    return { dark: this.appStyle.dark, surface: appearanceHex(this.appStyle.palette.pageBackground),
+    return { dark: this.appStyle.isDark, surface: appearanceHex(this.appStyle.palette.pageBackground),
       accent: appearanceHex(this.appStyle.palette.brand), font: this.fontSizes[this.fontIndex], wrap: this.wrapLines,
-      chinese: i18n.System.getSystemLanguage().startsWith('zh') };
+      chinese: i18n.System.getSystemLanguage().startsWith('zh'), topInset: this.viewportInset };
   }
 
   private async startEditor(): Promise<void> {
     if (!this.mounted || this.webStarted) { return; }
     this.webStarted = true;
+    this.webPainted = false;
+    this.clearRevealTimer();
     const generation = ++this.webGeneration;
     try {
       const result = await this.web.runJavaScriptExt(`window.arkScriptEditor.open(${JSON.stringify(this.initialSource)},` +
         `${JSON.stringify(this.editorAppearance())})`);
-      if (this.mounted && generation === this.webGeneration) { this.ready = result.getBoolean(); }
+      if (this.mounted && generation === this.webGeneration) {
+        this.ready = result.getBoolean();
+        if (this.ready && !this.webPainted) {
+          this.revealTimer = setTimeout((): void => {
+            this.revealTimer = -1;
+            if (this.mounted && generation === this.webGeneration) { this.webPainted = true; }
+          }, 350);
+        }
+      }
     } catch (error) {
       if (this.mounted && generation === this.webGeneration) { this.editorFailed = true; }
     }
@@ -212,9 +245,9 @@ export struct ScriptEditorPage {
 
   @Builder
   HeaderTitle() {
-    if (this.ready) {
+    if (this.scriptId === '' || this.loaded) {
       DestinationTitle({ titleText: this.scriptName || $r('app.string.script_unnamed'), selectable: true,
-        actionGlyph: 'edit', onSelect: (): void => { if (!this.saving) { this.editName(false); } } })
+        actionGlyph: 'edit', onSelect: (): void => { if (this.ready && !this.saving) { this.editName(false); } } })
     } else {
       DestinationTitle({ titleText: $r('app.string.script_title') })
     }
@@ -296,55 +329,73 @@ export struct ScriptEditorPage {
     }.width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 12, bottom: 24 })
   }
 
+  @Builder
+  EditorControls() {
+    this.EditorToolbar()
+    if (this.record?.url) {
+      Text($r('app.string.script_remote_edit_hint')).fontSize(13).fontColor($r('sys.color.font_secondary'))
+        .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
+    }
+    if (this.failure !== '') {
+      Text(this.failure).fontSize(13).fontColor($r('app.color.status_error'))
+        .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
+    }
+  }
+
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      handleBack: (): boolean => this.requestBack()
+    }) {
       Column() {
         Column() {
-        if (this.loaded && !this.editorFailed) {
-          this.EditorToolbar()
-          if (this.record?.url) {
-            Text($r('app.string.script_remote_edit_hint')).fontSize(13).fontColor($r('sys.color.font_secondary'))
-              .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
-          }
-          if (this.failure !== '') {
-            Text(this.failure).fontSize(13).fontColor($r('app.color.status_error'))
-              .width('100%').padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
-          }
-          Web({ src: $rawfile('script-editor/index.html'), controller: this.web })
-            .width('100%').layoutWeight(1).enabled(!this.saving).javaScriptAccess(true)
-            .fileAccess(false).domStorageAccess(false).blockNetwork(true).mixedMode(MixedMode.None)
-            .javaScriptProxy({ object: this.bridge, name: 'ArkEditorStatus', methodList: ['changed'], controller: this.web })
-            .onLoadIntercept((event: OnLoadInterceptEvent): boolean => event.data.isMainFrame() &&
-              !event.data.getRequestUrl().endsWith('/script-editor/index.html'))
-            .onPageEnd((): void => { this.startEditor(); })
-            .onErrorReceive((event: OnErrorReceiveEvent): void => {
-              if (event.request.isMainFrame()) { this.editorFailed = true; }
+          if (!this.editorFailed && !this.loadFailed) {
+            ScrollControls({ controls: (): void => this.EditorControls(), backdrop: 'none' }) {
+              EditorViewport({ controller: this.web, ready: this.ready, painted: this.webPainted,
+                onInsetChange: (inset: number): void => { this.viewportInset = inset; } }) {
+                if (this.loaded) {
+                  Web({ src: $rawfile('script-editor/index.html'), controller: this.web })
+                    .width('100%').height('100%').enabled(!this.saving)
+                    .backgroundColor(this.appStyle.palette.pageBackground)
+                    .darkMode(this.appStyle.isDark ? WebDarkMode.On : WebDarkMode.Off)
+                    .javaScriptAccess(true)
+                    .fileAccess(false).domStorageAccess(false).blockNetwork(true).mixedMode(MixedMode.None)
+                    .javaScriptProxy({ object: this.bridge, name: 'ArkEditorStatus', methodList: ['changed', 'painted'], controller: this.web })
+                    .onLoadIntercept((event: OnLoadInterceptEvent): boolean => event.data.isMainFrame() &&
+                      !event.data.getRequestUrl().endsWith('/script-editor/index.html'))
+                    .onPageEnd((): void => { this.startEditor(); })
+                    .onErrorReceive((event: OnErrorReceiveEvent): void => {
+                      if (event.request.isMainFrame()) { this.editorFailed = true; }
+                    })
+                }
+              }
+            }
+          } else {
+            Text(this.editorFailed ? $r('app.string.script_editor_failed') : this.failure).margin(16)
+            Button($r('app.string.action_retry')).onClick((): void => {
+              if (this.editorFailed) {
+                this.webStarted = false;
+                this.ready = false;
+                this.webPainted = false;
+                this.clearRevealTimer();
+                this.web = new webview.WebviewController();
+                this.editorFailed = false;
+              } else { this.load(); }
             })
-        } else if (this.editorFailed || this.loadFailed) {
-          Text(this.editorFailed ? $r('app.string.script_editor_failed') : this.failure).margin(16)
-          Button($r('app.string.action_retry')).onClick((): void => {
-            if (this.editorFailed) {
-              this.webStarted = false;
-              this.web = new webview.WebviewController();
-              this.editorFailed = false;
-            } else { this.load(); }
-          })
-        } else {
-          LoadingProgress().width(28).height(28).margin({ top: 20 })
-        }
-      }.width('100%').height('100%')
-      .bindSheet($$this.nameShown, this.NameSheet(), { height: SheetSize.FIT_CONTENT,
-        title: { title: $r('app.string.script_name_hint') }, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
-        onWillDismiss: (action: DismissSheetAction): void => { this.saveAfterName = false; action.dismiss(); },
-        onDisappear: (): void => {
-          if (this.saveAfterName && this.scriptName !== '') { this.saveAfterName = false; this.save(); }
-          else { this.saveAfterName = false; }
-        } })
+          }
+        }.width('100%').height('100%')
+        .bindSheet($$this.nameShown, this.NameSheet(), { height: SheetSize.FIT_CONTENT,
+          title: { title: $r('app.string.script_name_hint') }, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
+          onWillDismiss: (action: DismissSheetAction): void => { this.saveAfterName = false; action.dismiss(); },
+          onDisappear: (): void => {
+            if (this.saveAfterName && this.scriptName !== '') { this.saveAfterName = false; this.save(); }
+            else { this.saveAfterName = false; }
+          } })
       }.width('100%').height('100%')
       .bindSheet($$this.closeShown, this.CloseSheet(), { height: SheetSize.FIT_CONTENT,
         title: { title: $r('app.string.profile_unsaved_title') }, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
         onDisappear: (): void => { if (this.saveAfterName) { this.saveAfterName = false; this.save(); } } })
-    }.title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.HeaderMenus)
-      .backgroundColor(this.appStyle.palette.pageBackground).onBackPressed((): boolean => this.requestBack())
+    }
   }
 }

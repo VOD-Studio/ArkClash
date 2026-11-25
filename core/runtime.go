@@ -33,8 +33,17 @@ type statusResponse struct {
 	BootID                string `json:"bootId"`
 	Revision              uint64 `json:"revision"`
 	ConfigRevision        uint64 `json:"configRevision"`
+	forwardRevision       uint64
 	Version               string `json:"version"`
 	Mode                  string `json:"mode"`
+}
+
+func (start *statusResponse) subscriptionRouteCurrent() bool {
+	now := runtimeSnapshot.Load()
+	if now == nil || !now.Running || now.BootID != start.BootID || now.forwardRevision != start.forwardRevision {
+		return false
+	}
+	return start.Forward != "running" || now.Revision == start.Revision
 }
 
 var runtimeSnapshot atomic.Pointer[statusResponse]
@@ -106,6 +115,12 @@ func publishRuntime() {
 		runtimeStartedAt = 0
 	}
 	next.StartedAt = runtimeStartedAt
+	// 固定走 DIRECT 的请求不受自动选组变化影响；转发状态或配置切换仍使旧请求失效。
+	next.forwardRevision = next.Revision
+	if prev := runtimeSnapshot.Load(); prev != nil && prev.BootID == next.BootID &&
+		prev.ConfigRevision == next.ConfigRevision && prev.Forward == next.Forward {
+		next.forwardRevision = prev.forwardRevision
+	}
 	runtimeSnapshot.Store(next)
 	emit(struct {
 		Type   string          `json:"type"`

@@ -8,6 +8,7 @@ import { ConfigScript, readConfigScripts } from '../../shared/profiles/Scripts';
 import { formatUpdatedAgo } from '../../components/Format';
 import { connection, Connection } from '../../client/Connection';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import {
   COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE,
   PAGE_GUTTER
@@ -729,7 +730,12 @@ export struct ResourcesPage {
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      pageShown: (_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); },
+      pageHidden: (_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); }
+    }) {
       Column() {
         Scroll() {
           Column({ space: 16 }) {
@@ -820,6 +826,7 @@ export struct ResourcesPage {
         .layoutWeight(1)
         .width('100%')
         .align(Alignment.Top)
+        .clipContent(ContentClipMode.SAFE_AREA)
         .bindSheet($$this.editing, this.EditorSheet, {
           height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
           keyboardAvoidMode: SheetKeyboardAvoidMode.RESIZE_ONLY,
@@ -846,10 +853,5 @@ export struct ResourcesPage {
       .width('100%')
       .height('100%')
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .menus(this.HeaderMenus)
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })
-    .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); })
   }
 }

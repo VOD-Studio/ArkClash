@@ -142,32 +142,38 @@ export struct RecordFilterChips {
 
   build() {
     Column() {
-    if (this.chips.length > 0) {
-      Scroll() {
-        Row({ space: 8 }) {
-          ForEach(this.chips, (chip: RecordFilterChip) => {
-            Button({ type: ButtonType.Capsule }) {
-              Row({ space: 6 }) {
-                Text(chip.title).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
-                Text(chip.text).fontFamily(this.appStyle.fontFamily).fontSize(14).fontColor($r('sys.color.font_primary'))
-                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                AppGlyph({ name: 'close', iconSize: 12 })
+      if (this.chips.length > 0) {
+        Scroll() {
+          Row({ space: 8 }) {
+            ForEach(this.chips, (chip: RecordFilterChip) => {
+              Button({ type: ButtonType.Capsule }) {
+                Row({ space: 6 }) {
+                  Text(chip.title).fontFamily(this.appStyle.fontFamily).fontSize(12)
+                    .fontColor($r('sys.color.font_secondary')).flexShrink(0)
+                  Text(chip.text).fontFamily(this.appStyle.fontFamily).fontSize(13).fontWeight(FontWeight.Medium)
+                    .fontColor(this.appStyle.palette.brand)
+                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).flexShrink(1)
+                  AppGlyph({ name: 'close', iconSize: 12, iconColor: $r('sys.color.icon_secondary') })
+                    .flexShrink(0)
+                }
+                .padding({ left: 12, right: 10, top: 7, bottom: 7 })
               }
-              .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-            }
-            .constraintSize({ maxWidth: 320 })
-            .buttonStyle(ButtonStyleMode.NORMAL)
-            .backgroundColor(this.appStyle.palette.surfaceBlock)
-            .accessibilityText(uiResourceText(this.getUIContext(), chip.text))
-            .accessibilityDescription($r('app.string.diagnostics_filters'))
-            .onClick((): void => { this.onRemove(chip.field, chip.option); })
-          }, (chip: RecordFilterChip): string => chip.key)
+              .constraintSize({ maxWidth: 280 })
+              .buttonStyle(ButtonStyleMode.NORMAL)
+              .backgroundColor(this.appStyle.palette.cardBackground)
+              .border({ width: 0.5, color: this.appStyle.palette.divider })
+              .accessibilityText(uiResourceText(this.getUIContext(), chip.text))
+              .accessibilityDescription($r('app.string.diagnostics_filters'))
+              .onClick((): void => { this.onRemove(chip.field, chip.option); })
+            }, (chip: RecordFilterChip): string => chip.key)
+          }
+          .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 6, bottom: 8 })
         }
+        .width('100%')
+        .align(Alignment.Start)
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Off)
       }
-      .width('100%')
-      .scrollable(ScrollDirection.Horizontal)
-      .scrollBar(BarState.Off)
-    }
     }
     .width('100%')
   }

@@ -1,0 +1,26 @@
+--- a/adapter/outbound/tailscale.go
++++ b/adapter/outbound/tailscale.go
+@@ -413,6 +413,14 @@
+ 	return !ok
+ }
+ 
++func tailscaleTCPAddress(metadata *C.Metadata) string {
++	// 反查域名只用于规则匹配，切换 tailnet 后同一真实 IP 可能对应不同的名称。
++	if metadata.DNSMode == C.DNSMapping && metadata.DstIP.IsValid() {
++		return metadata.AddrPort().String()
++	}
++	return metadata.RemoteAddress()
++}
++
+ func (t *Tailscale) DialContext(ctx context.Context, metadata *C.Metadata) (_ C.Conn, err error) {
+ 	if err = t.ensureStarted(ctx); err != nil {
+ 		return nil, err
+@@ -443,7 +451,7 @@
+ 		return tcpConn, nil
+ 	})))
+ 	var conn net.Conn
+-	conn, err = dialer.NewDialer(options...).DialContext(ctx, "tcp", metadata.RemoteAddress())
++	conn, err = dialer.NewDialer(options...).DialContext(ctx, "tcp", tailscaleTCPAddress(metadata))
+ 	if err != nil {
+ 		return nil, err
+ 	}

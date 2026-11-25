@@ -1,10 +1,13 @@
+import { ScrollControls } from '../../components/ScrollControls';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { accessibility } from '@kit.AccessibilityKit';
 import { common } from '@kit.AbilityKit';
+import { UIUtils } from '@kit.ArkUI';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { connection, Connection } from '../../client/Connection';
 import { AppGlyph } from '../../components/AppGlyph';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { uiResourceText } from '../../components/ResourceText';
 import {
@@ -25,6 +28,14 @@ type ConnectionMenuLevel = 'root' | 'filters' | 'grouping';
 interface ConnectionFilterSection {
   field: string;
   options: string[];
+}
+
+function menuLevelTransition(offsetX: number): TransitionEffect {
+  return TransitionEffect.asymmetric(
+    TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: offsetX }))
+      .animation({ delay: 60, duration: 150, curve: Curve.EaseOut }),
+    TransitionEffect.opacity(0).animation({ duration: 60, curve: Curve.EaseOut })
+  );
 }
 
 @ComponentV2
@@ -57,6 +68,14 @@ export struct ConnectionsPage {
   private runtimeReady: boolean = false;
   private readonly reduceMotionChanged = (enabled: boolean): void => { this.reduceMotion = enabled; };
   private readonly emptyTransition: TransitionEffect = recordListTransition();
+  private readonly moreTransition: TransitionEffect = TransitionEffect.asymmetric(
+    TransitionEffect.scale({ x: 0.86, y: 0.86, centerX: '90%', centerY: 0 })
+      .combine(TransitionEffect.opacity(0)).animation({ duration: 210, curve: Curve.EaseOut }),
+    TransitionEffect.scale({ x: 0.94, y: 0.94, centerX: '90%', centerY: 0 })
+      .combine(TransitionEffect.opacity(0)).animation({ duration: 140, curve: Curve.EaseIn })
+  );
+  private readonly rootTransition: TransitionEffect = menuLevelTransition(-16);
+  private readonly submenuTransition: TransitionEffect = menuLevelTransition(16);
 
   aboutToAppear(): void {
     this.reduceMotion = accessibility.isAnimationReduceEnabledSync();
@@ -174,6 +193,11 @@ export struct ConnectionsPage {
       $r('app.string.diagnostics_retry') : '';
   }
 
+  @Computed
+  get hasActiveFilters(): boolean {
+    return Object.keys(this.store.facets).some((key: string): boolean => this.store.facets[key].length > 0);
+  }
+
   private menu(title: ResourceStr, options: RecordMenuOption[], onSelect: (choice: string) => void): void {
     if (!this.active || this.moreShown || this.actionOpen || this.detailsShown || this.confirmShown ||
       this.detailOpen || this.confirmationOpen) { return; }
@@ -206,6 +230,17 @@ export struct ConnectionsPage {
     this.moreShown = false;
   }
 
+  private changeMoreLevel(from: ConnectionMenuLevel, to: ConnectionMenuLevel): void {
+    if (!this.active || !this.moreShown || this.moreLevel !== from) { return; }
+    if (this.reduceMotion) {
+      this.moreLevel = to;
+      return;
+    }
+    this.getUIContext().animateTo({ duration: 210, curve: Curve.EaseOut }, (): void => {
+      UIUtils.applySync<void>((): void => { this.moreLevel = to; });
+    });
+  }
+
   @Monitor('store.version')
   syncMoreFilters(): void {
     if (!this.moreShown) { return; }
@@ -225,7 +260,7 @@ export struct ConnectionsPage {
   }
 
   private selectGrouping(grouping: RecordGrouping): void {
-    if (!this.active || !this.moreShown) { return; }
+    if (!this.active || !this.moreShown || this.moreLevel !== 'grouping') { return; }
     this.dismissMore();
     this.store.setGrouping(grouping);
   }
@@ -308,8 +343,9 @@ export struct ConnectionsPage {
         ConnectionMenuRow({
           title: recordFacetText($$.field, option),
           selected: this.store.facets[$$.field]?.includes(option) ?? false,
+          reduceMotion: this.reduceMotion,
           onPress: (): void => {
-            if (this.active && this.moreShown) { this.store.toggleFacet($$.field, option); }
+            if (this.active && this.moreShown && this.moreLevel === 'filters') { this.store.toggleFacet($$.field, option); }
           }
         })
       }, (option: string): string => option)
@@ -318,35 +354,43 @@ export struct ConnectionsPage {
 
   @Builder
   MorePopup() {
-    Column() {
+    Stack({ alignContent: Alignment.TopStart }) {
       if (this.moreLevel === 'root') {
-        if (this.networkOptions.length > 0 || this.ruleOptions.length > 0) {
-          ConnectionMenuRow({ title: $r('app.string.diagnostics_filters'), glyph: 'rules', endGlyph: 'chevronForward',
-            onPress: (): void => { this.moreLevel = 'filters'; } })
-        }
-        ConnectionMenuRow({ title: $r('app.string.diagnostics_grouping'), glyph: 'layers', endGlyph: 'chevronForward',
-          onPress: (): void => { this.moreLevel = 'grouping'; } })
-      } else if (this.moreLevel === 'filters') {
-        ConnectionMenuRow({ title: $r('app.string.diagnostics_filters'), glyph: 'rules', endGlyph: 'chevronUp',
-          onPress: (): void => { this.moreLevel = 'root'; } })
-        Scroll() {
-          Column() {
-            this.FilterSection({ field: 'network', options: this.networkOptions })
-            this.FilterSection({ field: 'rule', options: this.ruleOptions })
+        Column() {
+          if (this.networkOptions.length > 0 || this.ruleOptions.length > 0) {
+            ConnectionMenuRow({ title: $r('app.string.diagnostics_filters'), glyph: 'rules', endGlyph: 'chevronForward',
+              onPress: (): void => this.changeMoreLevel('root', 'filters') })
           }
-          .width('100%')
+          ConnectionMenuRow({ title: $r('app.string.diagnostics_grouping'), glyph: 'layers', endGlyph: 'chevronForward',
+            onPress: (): void => this.changeMoreLevel('root', 'grouping') })
         }
-        .width('100%').constraintSize({ maxHeight: 320 }).scrollBar(BarState.Auto)
+        .width('100%').transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.rootTransition)
       } else {
-        ConnectionMenuRow({ title: $r('app.string.diagnostics_grouping'), glyph: 'layers', endGlyph: 'chevronUp',
-          onPress: (): void => { this.moreLevel = 'root'; } })
-        ForEach(CONNECTION_GROUPINGS, (grouping: RecordGrouping) => {
-          ConnectionMenuRow({ title: recordGroupingText(grouping), selected: this.store.grouping === grouping,
-            onPress: (): void => { this.selectGrouping(grouping); } })
-        }, (grouping: RecordGrouping): string => grouping)
+        Column() {
+          if (this.moreLevel === 'filters') {
+            ConnectionMenuRow({ title: $r('app.string.diagnostics_filters'), glyph: 'rules', endGlyph: 'chevronUp',
+              onPress: (): void => this.changeMoreLevel('filters', 'root') })
+            Scroll() {
+              Column() {
+                this.FilterSection({ field: 'network', options: this.networkOptions })
+                this.FilterSection({ field: 'rule', options: this.ruleOptions })
+              }
+              .width('100%')
+            }
+            .width('100%').constraintSize({ maxHeight: 320 }).scrollBar(BarState.Auto)
+          } else {
+            ConnectionMenuRow({ title: $r('app.string.diagnostics_grouping'), glyph: 'layers', endGlyph: 'chevronUp',
+              onPress: (): void => this.changeMoreLevel('grouping', 'root') })
+            ForEach(CONNECTION_GROUPINGS, (grouping: RecordGrouping) => {
+              ConnectionMenuRow({ title: recordGroupingText(grouping), selected: this.store.grouping === grouping,
+                reduceMotion: this.reduceMotion, onPress: (): void => { this.selectGrouping(grouping); } })
+            }, (grouping: RecordGrouping): string => grouping)
+          }
+        }
+        .width('100%').transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.submenuTransition)
       }
     }
-    .width(MORE_MENU_WIDTH).padding(8)
+    .width(MORE_MENU_WIDTH).padding(8).clip(true)
   }
 
   @Builder
@@ -384,6 +428,7 @@ export struct ConnectionsPage {
         builder: this.MorePopup, placement: Placement.BottomRight, enableArrow: false, autoCancel: true,
         focusable: true, mask: true, targetSpace: 8, width: MORE_MENU_WIDTH, radius: 24,
         popupColor: this.appStyle.palette.cardBackground, systemMaterial: this.appStyle.sheetMaterial(),
+        transition: this.reduceMotion ? TransitionEffect.IDENTITY : this.moreTransition,
         onStateChange: (event: PopupStateChangeParam): void => { if (!event.isVisible) { this.dismissMore(); } }
       })
     }
@@ -431,20 +476,24 @@ export struct ConnectionsPage {
     if (this.store.visibleRecords > 0) {
       if (!this.store.ready) {
         Text($r('app.string.diagnostics_disconnected')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
+          .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
       } else if (this.store.error !== '' || this.store.streamState === 'failed') {
         Row({ space: 8 }) {
           Text(this.emptyTitle).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('app.color.status_error')).layoutWeight(1)
           Button($r('app.string.diagnostics_retry')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
             .onClick((): void => { this.store.retry(); })
         }
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
       } else if (!this.store.synced) {
         Text($r('app.string.diagnostics_connecting')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
+          .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
       }
     }
     if (this.store.interruptions > 0 || this.store.dropped > 0 || this.store.evicted > 0) {
       Text($r('app.string.diagnostics_gap', this.store.interruptions, this.store.dropped, this.store.evicted))
         .fontFamily(this.appStyle.fontFamily)
         .fontSize(12).fontColor($r('sys.color.font_secondary'))
+        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
     }
     if (this.store.preferenceError !== '') {
       Row({ space: 8 }) {
@@ -453,25 +502,37 @@ export struct ConnectionsPage {
         Button($r('app.string.diagnostics_retry_preferences')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
           .enabled(!this.preferencePending).onClick((): void => { this.retryPreferences(); })
       }
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
     }
   }
 
+  @Builder
+  FilterControls() {
+    Column() {
+      if (this.searchShown || this.store.query !== '') {
+        Search({ value: this.store.query, placeholder: $r('app.string.diagnostics_search_hint') })
+          .textFont({ size: 16, family: this.appStyle.fontFamily }).placeholderFont({ size: 16, family: this.appStyle.fontFamily })
+          .accessibilityText($r('app.string.diagnostics_search'))
+          .margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 6, bottom: 6 })
+          .onChange((query: string): void => { this.store.setQuery(query); })
+      }
+      if (this.hasActiveFilters) {
+        RecordFilterChips({ facets: this.store.facets,
+          onRemove: (field: string, option: string): void => { this.store.toggleFacet(field, option); } })
+      }
+      this.StatusContent()
+    }
+    .width('100%').alignItems(HorizontalAlign.Start)
+  }
+
   build() {
-    NavDestination() {
-      Column({ space: 8 }) {
-        Column({ space: 8 }) {
-          if (this.searchShown || this.store.query !== '') {
-            Search({ value: this.store.query, placeholder: $r('app.string.diagnostics_search_hint') })
-              .textFont({ size: 16, family: this.appStyle.fontFamily }).placeholderFont({ size: 16, family: this.appStyle.fontFamily })
-              .accessibilityText($r('app.string.diagnostics_search'))
-              .onChange((query: string): void => { this.store.setQuery(query); })
-          }
-          RecordFilterChips({ facets: this.store.facets,
-            onRemove: (field: string, option: string): void => { this.store.toggleFacet(field, option); } })
-          this.StatusContent()
-        }
-        .width('100%').alignItems(HorizontalAlign.Start)
-        .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+    ScrollDestination({
+      heading: (): void => this.FeedTitle(),
+      actions: (): void => this.HeaderMenus(),
+      pageShown: (_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); },
+      pageHidden: (_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); }
+    }) {
+      ScrollControls({ controls: (): void => this.FilterControls() }) {
         Stack() {
           ConnectionRecordList({ store: this.store, active: this.shown && this.foreground,
             reduceMotion: this.reduceMotion,
@@ -485,6 +546,7 @@ export struct ConnectionsPage {
                 actionLabel: this.emptyAction, onAction: (): void => { this.store.retry(); } })
             }
             .width('100%').height('100%')
+            .clipContent(ContentClipMode.SAFE_AREA)
             .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.emptyTransition)
           }
         }
@@ -512,13 +574,7 @@ export struct ConnectionsPage {
           }
         })
       }
-      .width('100%').height('100%')
     }
-    .title(this.FeedTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .menus(this.HeaderMenus)
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })
-    .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); })
   }
 }
 
@@ -529,6 +585,7 @@ struct ConnectionMenuRow {
   @Param glyph: string = '';
   @Param endGlyph: string = '';
   @Param selected: boolean = false;
+  @Param reduceMotion: boolean = true;
   @Event onPress: () => void = () => {};
 
   build() {
@@ -537,15 +594,21 @@ struct ConnectionMenuRow {
         if (this.glyph !== '') { AppGlyph({ name: this.glyph, iconSize: 20 }) }
         Text(this.title).fontFamily(this.appStyle.fontFamily).fontSize(15).fontColor($r('sys.color.font_primary'))
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
-        if (this.endGlyph !== '' || this.selected) {
-          AppGlyph({ name: this.endGlyph || 'check', iconSize: 16 })
+        if (this.endGlyph !== '') {
+          AppGlyph({ name: this.endGlyph, iconSize: 16 })
+        } else {
+          AppGlyph({ name: 'check', iconSize: 16, iconColor: this.appStyle.palette.brand })
+            .opacity(this.selected ? 1 : 0).scale({ x: this.selected ? 1 : 0.65, y: this.selected ? 1 : 0.65 })
+            .animation({ duration: this.reduceMotion ? 0 : 160, curve: Curve.EaseOut })
         }
       }
       .width('100%')
     }
     .width('100%').constraintSize({ minHeight: 44 })
     .padding({ left: 12, right: 12, top: 10, bottom: 10 }).borderRadius(16)
-    .buttonStyle(ButtonStyleMode.NORMAL).backgroundColor(Color.Transparent)
+    .buttonStyle(ButtonStyleMode.NORMAL)
+    .backgroundColor(this.selected ? this.appStyle.palette.selectionTonal : Color.Transparent)
+    .animation({ duration: this.reduceMotion ? 0 : 160, curve: Curve.EaseOut })
     .accessibilityText(uiResourceText(this.getUIContext(), this.title)).accessibilitySelected(this.selected)
     .onClick((): void => { this.onPress(); })
   }

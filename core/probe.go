@@ -48,17 +48,18 @@ var probeSlots = make(chan struct{}, 4)
 type ruleRequestKey struct{}
 
 type ruleRequestState struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	mu     sync.Mutex
-	closed bool
-	dials  sync.WaitGroup
+	ctx          context.Context
+	cancel       context.CancelFunc
+	subscription *statusResponse
+	mu           sync.Mutex
+	closed       bool
+	dials        sync.WaitGroup
 }
 
 // Transport 会剥离请求取消；值仍保留，因此真实规则解析和拨号使用请求拥有的上下文。
-func ruleRequestContext(ctx context.Context) (context.Context, func()) {
+func ruleRequestContext(ctx context.Context, subscription *statusResponse) (context.Context, func()) {
 	ctx, cancel := context.WithCancel(ctx)
-	state := &ruleRequestState{ctx: ctx, cancel: cancel}
+	state := &ruleRequestState{ctx: ctx, cancel: cancel, subscription: subscription}
 	return context.WithValue(ctx, ruleRequestKey{}, state), func() {
 		state.mu.Lock()
 		state.closed = true
@@ -87,6 +88,15 @@ func dialRuleRequest(ctx context.Context, network, address string) (net.Conn, er
 	metadata := &C.Metadata{NetWork: C.TCP, Type: C.INNER, DNSMode: C.DNSNormal, Process: C.MihomoName}
 	if err := metadata.SetRemoteAddress(address); err != nil {
 		return nil, err
+	}
+	if start := state.subscription; start != nil {
+		if !start.subscriptionRouteCurrent() {
+			return nil, errors.New("canceled")
+		}
+		if start.Forward == "stopped" || start.Forward == "paused" {
+			metadata.SpecialProxy = "DIRECT"
+		}
+		return tunnel.DialContextWithTimeout(state.ctx, metadata, 0)
 	}
 	return tunnel.DialContext(state.ctx, metadata)
 }
@@ -209,7 +219,7 @@ func postProbe(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(options.Timeout)*time.Millisecond)
 	defer cancel()
-	ctx, finishRuleRequest := ruleRequestContext(ctx)
+	ctx, finishRuleRequest := ruleRequestContext(ctx, nil)
 	defer finishRuleRequest()
 	var targetBody io.Reader
 	if options.Body != "" {

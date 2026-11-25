@@ -16,6 +16,7 @@ trap 'rm -rf "$WORK"' EXIT
 cd "$ROOT/core"
 cp go.mod go.sum "$WORK/"
 bash "$ROOT/scripts/prepare-mihomo.sh" "$WORK/mihomo"
+bash "$ROOT/scripts/prepare-tailscale.sh" "$WORK/tailscale" "$WORK/go.mod"
 go mod download github.com/metacubex/gvisor
 GVISOR_DIR="$(go list -m -f '{{.Dir}}' github.com/metacubex/gvisor)"
 cp -R "$GVISOR_DIR" "$WORK/gvisor"

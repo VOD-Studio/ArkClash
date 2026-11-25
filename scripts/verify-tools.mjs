@@ -582,6 +582,32 @@ test('DNS流独立、错误/无upstream保真，重复seq无重复，清缓存�
   assert.equal(store.visibleRecords, 1);
 }));
 
+test('DNS面板的多项选择只在应用时刷新一次，取消和重置保留查询关键词', async () => toolsCase(async h => {
+  const { store, socket } = await onlineTools(h, 'dns');
+  const { recordFacetsAfterToggle } = h.load('features/tools/RecordLogic.ets');
+  socket.emit(toolFrame('dns', 'delta', 2, { added: [
+    toolDns('a', { domain: 'fixture.example', type: 'A', cached: true }),
+    toolDns('b', { domain: 'fixture.example', type: 'AAAA', cached: false })
+  ] }));
+  store.setQuery('fixture.example');
+  const original = store.facets;
+  let draft = recordFacetsAfterToggle(original, 'type', 'A');
+  draft = recordFacetsAfterToggle(draft, 'type', 'AAAA');
+  draft = recordFacetsAfterToggle(draft, 'cache', 'true');
+  assert.deepEqual(original, {});
+  assert.equal(store.visibleRecords, 2);
+  const version = store.version;
+  store.setFacets(draft);
+  assert.equal(store.version, version + 1);
+  assert.deepEqual(dnsIds(store), ['a']);
+  recordFacetsAfterToggle(store.facets, 'type', 'A');
+  assert.deepEqual(store.facets.type, ['A', 'AAAA']);
+  store.setFacets({});
+  assert.equal(store.visibleRecords, 2);
+  assert.equal(store.query, 'fixture.example');
+  assert.equal(h.sockets.length, 1);
+}));
+
 test('DNS3000/暂停6000边界、reset保留暂停头，新流重建canonical与暂停窗口', async () => toolsCase(async h => {
   const { store, socket } = await onlineTools(h, 'dns');
   socket.emit(toolFrame('dns', 'delta', 2, { added: Array.from({ length: 3001 }, (_, i) => toolDns(`d${i}`)) }));

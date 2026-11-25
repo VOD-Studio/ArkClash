@@ -39,7 +39,7 @@ import { AddedRulesPage } from '../features/tools/AddedRulesPage';
 import { RuleSetsPage } from '../features/tools/RuleSetsPage';
 import { ProxyFiltersPage } from '../features/tools/ProxyFiltersPage';
 import { IconSetPreviewPage, IconSetsPage } from '../features/tools/IconSetsPage';
-import { WindowInsets } from './WindowInsets';
+import { WindowInsets, windowInsets } from '../components/WindowInsets';
 import { DashboardTab } from './DashboardTab';
 
 enum Tab {
@@ -92,7 +92,7 @@ struct Index {
   @Local homeEditing: boolean = false;
   @Local closeEditSignal: number = 0;
   @Local conn: Connection = connection;
-  @Local insets: WindowInsets = AppStorageV2.connect(WindowInsets, () => new WindowInsets())!;
+  @Local insets: WindowInsets = windowInsets();
   @Local miniBarExpanded: boolean = false;
   @Local reduceMotion: boolean = true;
   private reductionListener: (enabled: boolean) => void = (enabled: boolean): void => {
@@ -440,7 +440,6 @@ struct Index {
         .expandSafeArea([SafeAreaType.KEYBOARD])
         .height(LayoutPolicy.matchParent)
         .safeAreaPadding({ bottom: this.appStyle.floating ? 0 : this.getUIContext().px2vp(this.insets.bottom) })
-        // 仅首页页签铺满窗口；原生子页的标题栏仍由 Navigation 避让系统区域。
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], this.appStyle.floating ?
           [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM] : [LayoutSafeAreaEdge.TOP])
         .bindSheet($$this.profilePicker, this.ProfilePicker(), {
@@ -451,8 +450,8 @@ struct Index {
         })
       }
       .expandSafeArea([SafeAreaType.KEYBOARD])
-      .ignoreLayoutSafeArea([], [])
-      .safeAreaPadding({ top: this.topInset() })
+      // 转场蒙层跟随整页铺到状态栏背后，标题和按钮在各个 NavDestination 内避让。
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
       .backgroundColor(Color.Transparent)
       .mode(NavigationMode.Stack)
       .hideTitleBar(true)

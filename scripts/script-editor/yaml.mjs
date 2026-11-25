@@ -173,6 +173,12 @@ const BOOLEAN_KEYS = new Set([
   'fallback-lazy-query', 'direct-nameserver-follow-policy', 'write-to-system',
 ]);
 
+const TAILSCALE_KEYS = [
+  'name', 'type', 'udp', 'ip-version', 'interface-name', 'routing-mark', 'dialer-proxy',
+  'hostname', 'auth-key', 'control-url', 'state-dir', 'ephemeral', 'accept-routes',
+  'exit-node', 'exit-node-allow-lan-access',
+];
+
 const VALUE_ENUMS = {
   mode: ['rule', 'global', 'direct'],
   'log-level': ['silent', 'error', 'warning', 'info', 'debug'],
@@ -196,8 +202,11 @@ const VALUE_ENUMS = {
 const CONTEXT_VALUE_ENUMS = {
   'proxies.*.type': [
     'ss', 'ssr', 'vmess', 'vless', 'trojan', 'hysteria', 'hysteria2',
-    'tuic', 'anytls', 'wireguard', 'http', 'socks5', 'ssh', 'snell', 'mieru', 'direct',
+    'tuic', 'anytls', 'wireguard', 'http', 'socks5', 'ssh', 'snell', 'mieru', 'tailscale', 'direct',
   ],
+  'proxies.*.ephemeral': ['true', 'false'],
+  'proxies.*.accept-routes': ['true', 'false'],
+  'proxies.*.exit-node-allow-lan-access': ['true', 'false'],
   'proxy-groups.*.type': ['select', 'url-test', 'fallback', 'load-balance', 'relay'],
   'proxy-providers.*.type': ['http', 'file', 'inline'],
   'rule-providers.*.type': ['http', 'file', 'inline'],
@@ -229,6 +238,7 @@ function parseMappingKey(trimmed) {
 export function resolveYamlPath(lines, lineIndex, effectiveIndent) {
   const chain = [];
   let minIndent = effectiveIndent;
+  let lastItemIndent = -1;
   const stopAt = Math.max(0, lineIndex - 300);
   for (let i = lineIndex - 1; i >= stopAt && minIndent > 0; i--) {
     const raw = lines[i];
@@ -237,6 +247,7 @@ export function resolveYamlPath(lines, lineIndex, effectiveIndent) {
     const indent = leadingSpaces(raw);
     if (indent >= minIndent) continue;
     if (trimmed.startsWith('-')) {
+      if (indent === lastItemIndent) continue;
       const rest = trimmed.slice(1).trim();
       const dashKey = parseMappingKey(rest);
       const itemIndent = indent + 2;
@@ -244,7 +255,9 @@ export function resolveYamlPath(lines, lineIndex, effectiveIndent) {
         chain.push({ key: dashKey, isListItem: false });
       }
       chain.push({ key: '*', isListItem: true });
-      minIndent = indent;
+      // YAML 允许列表短横线与父键同列，回溯时要略过同列的兄弟项。
+      minIndent = indent + 1;
+      lastItemIndent = indent;
       continue;
     }
     const key = parseMappingKey(trimmed);
@@ -350,7 +363,7 @@ export function computeYamlCompletion(lines, lineIndex, column, explicit) {
     const itemKeyPath = path.length === 1 && (path[0] === 'proxies' || path[0] === 'proxy-groups')
       ? `${path[0]}.*` : keyPath;
     if (SECTION_KEYS[itemKeyPath]) {
-      return completeKey(itemKeyPath, content, after, column, explicit);
+      return completeKey(itemKeyPath, content, after, column, explicit, lines, lineIndex);
     }
     return null;
   }
@@ -365,13 +378,45 @@ export function computeYamlCompletion(lines, lineIndex, column, explicit) {
   // 键名位置
   if (/^[A-Za-z0-9_.-]*$/.test(trimmedBefore)) {
     const path = resolveYamlPath(lines, lineIndex, indent);
-    return completeKey(path.join('.'), trimmedBefore, after, column, explicit);
+    return completeKey(path.join('.'), trimmedBefore, after, column, explicit, lines, lineIndex);
   }
   return null;
 }
 
-function completeKey(pathKey, prefix, after, column, explicit) {
-  const keys = SECTION_KEYS[pathKey];
+function isTailscaleItem(lines, lineIndex) {
+  const indent = leadingSpaces(lines[lineIndex]);
+  const itemHead = /^( *)-( +|$)/;
+  let start = lineIndex;
+  if (!itemHead.test(lines[start])) {
+    const limit = Math.max(0, lineIndex - 300);
+    while (start >= limit) {
+      const line = lines[start];
+      if (line.trim() && !line.trimStart().startsWith('#') && leadingSpaces(line) < indent) break;
+      start--;
+    }
+    if (start < limit) return false;
+  }
+  const head = itemHead.exec(lines[start]);
+  if (!head) return false;
+  const isType = /^(?:type|'type'|"type")\s*:\s*(?:tailscale|'tailscale'|"tailscale")(?:\s+#.*)?\s*$/;
+  const firstField = lines[start].slice(head[0].length);
+  if (isType.test(firstField)) return true;
+  let fieldIndent = firstField && !firstField.startsWith('#') ? head[0].length : undefined;
+  const end = Math.min(lines.length, start + 301);
+  for (let i = start + 1; i < end; i++) {
+    const content = lines[i].trimStart();
+    if (!content || content.startsWith('#')) continue;
+    const spaces = leadingSpaces(lines[i]);
+    if (spaces <= head[1].length) break;
+    fieldIndent ??= spaces;
+    if (spaces === fieldIndent && isType.test(content)) return true;
+  }
+  return false;
+}
+
+function completeKey(pathKey, prefix, after, column, explicit, lines, lineIndex) {
+  const keys = pathKey === 'proxies.*' && isTailscaleItem(lines, lineIndex)
+    ? TAILSCALE_KEYS : SECTION_KEYS[pathKey];
   if (!keys || (!prefix && !explicit)) return null;
   const hasColon = /^\s*:/.test(after);
   return {

@@ -1,0 +1,115 @@
+--- a/net/netmon/state.go
++++ b/net/netmon/state.go
+@@ -593,7 +593,12 @@
+ 		InterfaceIPs: make(map[string][]netip.Prefix),
+ 		Interface:    make(map[string]Interface),
+ 	}
++	var dr DefaultRouteDetails
+ 	if err := ForeachInterface(func(ni Interface, pfxs []netip.Prefix) {
++		if arkClashSubscribe != nil {
++			// 鸿蒙只返回已绑定的默认网络。地址和路由必须来自同一份快照。
++			dr.InterfaceName = ni.Name
++		}
+ 		isTSInterfaceName := optTSInterfaceName != "" && ni.Name == optTSInterfaceName
+ 		ifUp := ni.IsUp()
+ 		s.Interface[ni.Name] = ni
+@@ -619,7 +624,9 @@
+ 		return nil, err
+ 	}
+ 
+-	dr, _ := DefaultRoute()
++	if arkClashSubscribe == nil {
++		dr, _ = DefaultRoute()
++	}
+ 	s.DefaultRouteInterface = dr.InterfaceName
+ 
+ 	// Populate description (for Windows, primarily) if present.
+@@ -819,6 +826,14 @@
+ }
+ 
+ var altNetInterfaces func() ([]Interface, error)
++var arkClashSubscribe func(func()) (func() error, error)
++
++// SetArkClashNetwork 在 VPN 进程初始化时安装默认物理网络的查询及订阅。
++func SetArkClashNetwork(defaultInterfaces func() ([]Interface, error), subscribe func(func()) (func() error, error)) {
++	RegisterInterfaceGetter(defaultInterfaces)
++	arkClashSubscribe = subscribe
++	shouldMonitorTimeJump = false
++}
+ 
+ // RegisterInterfaceGetter sets the function that's used to query
+ // the system network interfaces.
+@@ -885,6 +900,13 @@
+ // DefaultRoute returns details of the network interface that owns
+ // the default route, not including any tailscale interfaces.
+ func DefaultRoute() (DefaultRouteDetails, error) {
++	if arkClashSubscribe != nil {
++		interfaces, err := GetInterfaceList()
++		if err != nil || len(interfaces) == 0 {
++			return DefaultRouteDetails{}, err
++		}
++		return DefaultRouteDetails{InterfaceName: interfaces[0].Name, InterfaceIndex: interfaces[0].Index}, nil
++	}
+ 	return defaultRoute()
+ }
+ 
+--- a/net/netmon/netmon.go
++++ b/net/netmon/netmon.go
+@@ -76,6 +76,8 @@
+ 	logf    logger.Logf
+ 	b       *eventbus.Client
+ 	changed *eventbus.Publisher[ChangeDelta]
++
++	arkClashUnsubscribe func() error
+ 
+ 	om     osMon         // nil means not supported on this platform
+ 	change chan bool     // send false to wake poller, true to also force ChangeDeltas be sent
+@@ -394,6 +396,17 @@
+ 	m.ifState = st
+ 	m.lastReconcile = time.Now()
+ 
++	if arkClashSubscribe != nil {
++		m.arkClashUnsubscribe, err = arkClashSubscribe(m.Poll)
++		if err != nil {
++			m.b.Close()
++			return nil, err
++		}
++		// 弥补初始快照与订阅注册之间的网络切换。
++		m.Poll()
++		return m, nil
++	}
++
+ 	m.om, err = newOSMon(bus, logf, m)
+ 	if err != nil {
+ 		return nil, err
+@@ -501,6 +514,11 @@
+ 		m.wallTimer = time.AfterFunc(pollWallTimeInterval, m.pollWallTime)
+ 	}
+ 
++	if m.arkClashUnsubscribe != nil {
++		m.goroutines.Add(1)
++		go m.debounce()
++		return
++	}
+ 	if m.om == nil {
+ 		return
+ 	}
+@@ -527,6 +545,9 @@
+ 	}
+ 
+ 	var err error
++	if m.arkClashUnsubscribe != nil {
++		err = m.arkClashUnsubscribe()
++	}
+ 	if m.om != nil {
+ 		err = m.om.Close()
+ 	}
+@@ -730,7 +751,7 @@
+ //
+ // We don't do this on mobile platforms for battery reasons, and because these
+ // platforms don't really sleep in the same way.
+-const shouldMonitorTimeJump = runtime.GOOS != "android" && runtime.GOOS != "ios" && runtime.GOOS != "plan9"
++var shouldMonitorTimeJump = runtime.GOOS != "android" && runtime.GOOS != "ios" && runtime.GOOS != "plan9"
+ 
+ // checkWallTimeAdvanceLocked reports whether wall time jumped more than 150% of
+ // pollWallTimeInterval, indicating we probably just came out of sleep. Once a

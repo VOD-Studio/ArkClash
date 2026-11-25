@@ -8,6 +8,7 @@ export struct ListRow {
   @Param value: ResourceStr = '';
   @Param trailingIcon: Resource | undefined = undefined;
   @Param chevron: boolean = true;
+  @Param busy: boolean = false;
   @Event onTap: () => void = () => {};
 
   build() {
@@ -31,15 +32,22 @@ export struct ListRow {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .constraintSize({ maxWidth: '55%' })
       }
-      if (this.trailingIcon !== undefined) {
-        SymbolGlyph(this.trailingIcon)
-          .fontSize(22)
-          .fontColor([$r('sys.color.font_primary')])
-      }
-      if (this.chevron) {
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(16)
-          .fontColor([$r('sys.color.font_tertiary')])
+      if (this.busy) {
+        LoadingProgress()
+          .width(20)
+          .height(20)
+          .color(this.appStyle.palette.brand)
+      } else {
+        if (this.trailingIcon !== undefined) {
+          SymbolGlyph(this.trailingIcon)
+            .fontSize(22)
+            .fontColor([$r('sys.color.font_primary')])
+        }
+        if (this.chevron) {
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(16)
+            .fontColor([$r('sys.color.font_tertiary')])
+        }
       }
     }
     .width('100%')

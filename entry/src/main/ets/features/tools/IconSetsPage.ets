@@ -1,8 +1,10 @@
+import { ScrollControls } from '../../components/ScrollControls';
 import { common } from '@kit.AbilityKit';
 import { documentFileName, pickDocumentFile } from '../../client/DocumentPicker';
 import { fetchIconSet } from '../../client/IconSetDownloads';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { IconSetGrid, IconSetThumbnail } from '../../components/IconSetGrid';
 import { KeyedListSource } from '../../components/KeyedListSource';
@@ -231,7 +233,8 @@ export struct IconSetsPage {
       }, (row: IconSetRowItem): string => row.key)
         .onMove(this.sorting && !this.busy ? (from: number, to: number): void => this.move(from, to) : undefined)
     }.width('100%').height('100%').enabled(!this.busy).scrollBar(BarState.Off)
-      .cachedCount(2).contentStartOffset(12).contentEndOffset(24)
+      .cachedCount(2, true).contentStartOffset(12).contentEndOffset(24)
+      .clipContent(ContentClipMode.SAFE_AREA)
       .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
   }
 
@@ -279,7 +282,13 @@ export struct IconSetsPage {
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      pageShown: (): void => { this.shown = true; this.load(); },
+      pageHidden: (): void => { this.shown = false; },
+      handleBack: (): boolean => this.back()
+    }) {
       Stack() {
         if (this.loading) {
           LoadingProgress().width(30).height(30).color(this.appStyle.palette.brand)
@@ -299,10 +308,6 @@ export struct IconSetsPage {
         })
       }.width('100%').height('100%')
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.HeaderMenus)
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((): void => { this.shown = true; this.load(); })
-    .onHidden((): void => { this.shown = false; }).onBackPressed((): boolean => this.back())
   }
 }
 
@@ -393,9 +398,21 @@ export struct IconSetPreviewPage {
     DestinationTitle({ titleText: this.set?.name ?? $r('app.string.icon_sets_title') })
   }
 
+  @Builder
+  SearchControl() {
+    if (!this.loading && this.set !== undefined) {
+      TextInput({ text: this.query, placeholder: $r('app.string.icon_set_search') })
+        .height(40).margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
+        .onChange((text: string): void => { this.query = text; })
+    }
+  }
+
   build() {
-    NavDestination() {
-      Column() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      pageShown: (): void => { this.load(); }
+    }) {
+      ScrollControls({ controls: (): void => this.SearchControl() }) {
         if (this.loading) {
           Column() { LoadingProgress().width(30).height(30).color(this.appStyle.palette.brand) }
             .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
@@ -403,15 +420,9 @@ export struct IconSetPreviewPage {
           EmptyState({ icon: $r('sys.symbol.picture'), title: $r('app.string.icon_set_error'),
             actionLabel: $r('app.string.action_retry'), onAction: (): void => { this.load(); } }).layoutWeight(1)
         } else {
-          TextInput({ text: this.query, placeholder: $r('app.string.icon_set_search') })
-            .height(40).margin({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8 })
-            .onChange((text: string): void => { this.query = text; })
           IconSetGrid({ icons: this.set.icons, query: this.query }).layoutWeight(1)
         }
-      }.height('100%').width('100%')
+      }
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((): void => { this.load(); })
   }
 }

@@ -5,6 +5,7 @@ import {
 } from '../../client/RuleSets';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
+import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { formatUpdatedAgo } from '../../components/Format';
 import { KeyedListSource } from '../../components/KeyedListSource';
@@ -466,11 +467,31 @@ export struct RuleSetsPage {
       }
       .width('100%').alignItems(HorizontalAlign.Start).enabled(!this.busy)
       .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
-    }.width('100%').align(Alignment.Top)
+    }
+    .width('100%')
+    .height(this.sheetMode === 'delete' ? 'auto' : '100%')
+    .align(Alignment.Top)
+    .nestedScroll({ scrollForward: NestedScrollMode.PARENT_FIRST, scrollBackward: NestedScrollMode.SELF_FIRST })
   }
 
   build() {
-    NavDestination() {
+    ScrollDestination({
+      heading: (): void => this.HeaderTitle(),
+      actions: (): void => this.HeaderMenus(),
+      pageShown: (): void => { this.shown = true; if (!this.busy) { this.load(); } },
+      pageHidden: (): void => { this.shown = false; },
+      handleBack: (): boolean => {
+        if (this.sheetShown) {
+          this.closeSheet((): void => { this.sheetShown = false; });
+          return true;
+        }
+        if (this.sorting) {
+          this.sorting = false;
+          return true;
+        }
+        return false;
+      }
+    }) {
       Stack() {
         if (this.loading) {
           LoadingProgress().width(30).height(30)
@@ -489,7 +510,8 @@ export struct RuleSetsPage {
               .onMove(this.sorting && !this.busy ? (from: number, to: number): void => this.move(from, to) : undefined)
           }
           .width('100%').height('100%').enabled(!this.busy)
-          .scrollBar(BarState.Off).cachedCount(2).contentStartOffset(12).contentEndOffset(24)
+          .scrollBar(BarState.Off).cachedCount(2, true).contentStartOffset(12).contentEndOffset(24)
+          .clipContent(ContentClipMode.SAFE_AREA)
           .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
         }
         Column().bindSheet($$this.sheetShown, this.SheetBody, {
@@ -499,21 +521,5 @@ export struct RuleSetsPage {
         })
       }.width('100%').height('100%')
     }
-    .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
-    .menus(this.HeaderMenus)
-    .backgroundColor(this.appStyle.palette.pageBackground)
-    .onShown((): void => { this.shown = true; if (!this.busy) { this.load(); } })
-    .onHidden((): void => { this.shown = false; })
-    .onBackPressed((): boolean => {
-      if (this.sheetShown) {
-        this.closeSheet((): void => { this.sheetShown = false; });
-        return true;
-      }
-      if (this.sorting) {
-        this.sorting = false;
-        return true;
-      }
-      return false;
-    })
   }
 }

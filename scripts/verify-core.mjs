@@ -14,7 +14,7 @@ const sandbox = await mkdtemp(join(tmpdir(), 'arkclash-core-host-'));
 const executable = join(sandbox, 'core.test');
 const linuxFdEnabled = process.platform === 'linux' || process.env.CORE_LINUX_FD === '1';
 const linuxFdExecutable = join(sandbox, 'tun-fd.test');
-const mihomoExecutables = ['dns', 'tunnel/statistic', 'adapter/inbound', 'listener/auth', 'log'].map((pkg, index) => ({
+const mihomoExecutables = ['dns', 'tunnel/statistic', 'adapter/inbound', 'listener/auth', 'log', 'adapter/outbound'].map((pkg, index) => ({
   pkg, executable: join(sandbox, `mihomo-${index}.test`)
 }));
 after(() => rm(sandbox, { recursive: true, force: true }));
@@ -25,7 +25,8 @@ before(async () => {
     'providers.go', 'geo_settings.go', 'geo.go', 'geo_download.go', 'geo_events.go', 'diagnostics.go', 'dns_overrides.go',
     'added_rules.go', 'rule_set_data.go', 'rule_sets.go', 'profile_settings.go', 'profile_scripts.go', 'profile_preview.go', 'local_proxies.go', 'local_proxy_links.go',
     'proxy_filters.go', 'diagnostics_connections.go', 'diagnostics_dns.go', 'diagnostics_stream.go',
-    'diagnostics_stats.go', 'diagnostics_logs.go', 'general_settings.go', 'panel_controller.go', 'backup.go', 'profile_subscription_age.go']) {
+    'diagnostics_stats.go', 'diagnostics_logs.go', 'general_settings.go', 'panel_controller.go', 'backup.go', 'profile_subscription_age.go',
+    'tailscale_watch.go', 'tailscale_login.go']) {
     await copyFile(join(root, 'core', file), join(sandbox, file));
   }
   for (const file of ['contracts-host_test.go', 'backup-live-host_test.go', 'core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go',
@@ -34,7 +35,8 @@ before(async () => {
     'lifecycle-host_test.go', 'runtime-lifecycle-host_test.go', 'disconnected-delay-host_test.go', 'inbound-host_test.go',
     'controller-lifecycle-host_test.go', 'forwarding-lifecycle-host_test.go', 'dns-overrides-host_test.go',
     'added-rules-host_test.go', 'proxy-filters-host_test.go', 'rule-sets-host_test.go', 'profile-scripts-host_test.go',
-    'profile-preview-host_test.go', 'local-proxies-host_test.go', 'general-settings-host_test.go', 'subscription-age-host_test.go']) {
+    'profile-preview-host_test.go', 'local-proxies-host_test.go', 'general-settings-host_test.go', 'subscription-age-host_test.go',
+    'tailscale-network-host_test.go']) {
     await copyFile(new URL(`./${file}`, import.meta.url), join(sandbox, file));
   }
   await cp(join(root, 'core/internal'), join(sandbox, 'internal'), { recursive: true });
@@ -50,12 +52,16 @@ before(async () => {
     ['observation-dns-host_test.go', 'dns/arkclash_observation_test.go'],
     ['observation-clear-host_test.go', 'dns/arkclash_observation_clear_test.go'],
     ['observation-statistic-host_test.go', 'tunnel/statistic/arkclash_observation_test.go'],
-    ['tun-fd-linux-host_test.go', 'listener/sing_tun/arkclash_fd_linux_test.go']
+    ['tun-fd-linux-host_test.go', 'listener/sing_tun/arkclash_fd_linux_test.go'],
+    ['tailscale-address-host_test.go', 'adapter/outbound/arkclash_tailscale_address_test.go']
   ]) {
     await copyFile(join(root, 'scripts', source), join(sandbox, 'mihomo', destination));
   }
   await writeFile(join(sandbox, 'go.mod'), await readFile(join(sandbox, 'go.mod'), 'utf8') +
     `\nreplace github.com/metacubex/mihomo => ${JSON.stringify(join(sandbox, 'mihomo'))}\n`);
+  const tailscale = spawnSync('bash', [join(root, 'scripts/prepare-tailscale.sh'), join(sandbox, 'tailscale'),
+    join(sandbox, 'go.mod')], { encoding: 'utf8', timeout: 300000, env: goEnv });
+  assert.equal(tailscale.status, 0, `${tailscale.error ?? ''}\n${tailscale.stderr}`);
   const apiSource = await readFile(join(root, 'core/api.go'), 'utf8');
   const fetchDeclarations = ['fetchRequest', 'fetchResult'].map(name => {
     const declaration = apiSource.match(new RegExp(`^type ${name} struct \\{[\\s\\S]*?^\\}`, 'm'))?.[0];
@@ -87,6 +93,7 @@ before(async () => {
   assert.equal(build.status, 0, `${build.error ?? ''}\n${build.stdout}\n${build.stderr}`);
   for (const target of mihomoExecutables) {
     const compiled = spawnSync('go', ['test', '-mod=readonly', ...(race ? ['-race'] : []),
+      ...(target.pkg === 'adapter/outbound' ? ['-tags', 'with_gvisor'] : []),
       '-c', '-o', target.executable, `github.com/metacubex/mihomo/${target.pkg}`], {
       cwd: sandbox, encoding: 'utf8', timeout: 600000, env: goEnv
     });
@@ -128,7 +135,7 @@ test('核心选择持久化、回滚、规则探测与实际请求取消', { tim
   console.log(result.stdout.trim());
 });
 
-test('mihomo 诊断、DNS 缓存与监听所有权回归', { timeout: 300000 }, () => {
+test('mihomo 诊断、DNS 缓存、监听所有权与 Tailscale 拨号回归', { timeout: 300000 }, () => {
   for (const target of mihomoExecutables) {
     const result = spawnSync(target.executable, ['-test.run=^TestArkClash', '-test.count=1',
       '-test.timeout=45s', '-test.v'], {
