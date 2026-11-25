@@ -30,6 +30,9 @@ export struct ProfileCard {
   @Event onDetails: () => void = (): void => {};
   private editIcon: SymbolGlyphModifier = new SymbolGlyphModifier($r('sys.symbol.pencil_line'));
   private updateIcon: SymbolGlyphModifier = new SymbolGlyphModifier($r('sys.symbol.arrow_clockwise'));
+  private moreIcon: SymbolGlyphModifier = new SymbolGlyphModifier($r('sys.symbol.ellipsis_circle'));
+  private removeIcon: SymbolGlyphModifier = new SymbolGlyphModifier($r('sys.symbol.trash'))
+    .fontColor([$r('app.color.status_error')]);
   private contextMenuOpen: boolean = false;
 
   private used(): number { return (this.item.state.usage?.upload ?? 0) + (this.item.state.usage?.download ?? 0); }
@@ -109,8 +112,8 @@ export struct ProfileCard {
           .enabled(!this.item.updating)
           .onClick((): void => this.onUpdate())
       }
-      MenuItem({ content: $r('app.string.action_more'), builder: this.DetailsMenu })
-      MenuItem({ content: $r('app.string.action_delete') })
+      MenuItem({ content: $r('app.string.action_more'), symbolStartIcon: this.moreIcon, builder: this.DetailsMenu })
+      MenuItem({ content: $r('app.string.action_delete'), symbolStartIcon: this.removeIcon })
         .contentFontColor($r('app.color.status_error'))
         .enabled(this.removable && !this.item.updating)
         .onClick((): void => this.onRemove())
