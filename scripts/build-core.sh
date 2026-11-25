@@ -78,6 +78,7 @@ cp go.sum "$PATCHED_DIR/go.sum"
 echo "replace github.com/metacubex/gvisor => $PATCHED_DIR/gvisor" >> "$PATCHED_DIR/go.mod"
 bash "$ROOT/scripts/prepare-mihomo.sh" "$PATCHED_DIR/mihomo"
 "$GO" mod edit -modfile "$PATCHED_DIR/go.mod" "-replace=github.com/metacubex/mihomo=$PATCHED_DIR/mihomo"
+bash "$ROOT/scripts/prepare-tailscale.sh" "$PATCHED_DIR/tailscale" "$PATCHED_DIR/go.mod"
 
 quickjs_dir="$(bash "$ROOT/scripts/prepare-quickjs.sh")"
 export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$quickjs_dir\""

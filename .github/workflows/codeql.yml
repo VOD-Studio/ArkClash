@@ -11,6 +11,7 @@ on:
       - scripts/build-core.sh
       - scripts/ci/build-codeql.sh
       - scripts/prepare-mihomo.sh
+      - scripts/prepare-tailscale.sh
       - scripts/env.sh
       - Makefile
       - scripts/*.patch
