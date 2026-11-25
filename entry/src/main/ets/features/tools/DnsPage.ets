@@ -7,10 +7,12 @@ import { AppGlyph } from '../../components/AppGlyph';
 import { DestinationTitle } from '../../components/DestinationTitle';
 import { EmptyState } from '../../components/EmptyState';
 import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
+import { DnsFilterSheet } from './DnsFilterSheet';
 import { DnsRecordDetails } from './RecordDetails';
-import { RecordActionMenu, RecordFilterChips, RecordMenuOption, RecordMenuState } from './RecordFilters';
-import { recordColumnTitle, recordErrorText, recordFacetText } from './RecordLabels';
+import { RecordFilterChips } from './RecordFilters';
+import { recordErrorText } from './RecordLabels';
 import { DnsRecordList, RECORD_LIST_ANIMATION, recordListTransition } from './RecordList';
+import { RecordFacets } from './RecordLogic';
 import { dnsRecords, DnsRecordsStore } from './RecordStores';
 
 @ComponentV2
@@ -24,12 +26,12 @@ export struct DnsPage {
   @Local searchShown: boolean = false;
   @Local detailsShown: boolean = false;
   @Local preferencePending: boolean = false;
-  @Local menuState: RecordMenuState = new RecordMenuState();
+  @Local filtersShown: boolean = false;
   @Local reduceMotion: boolean = true;
   private active: boolean = false;
   private generation: number = 0;
   private consumedNotice: number = 0;
-  private actionOpen: boolean = false;
+  private filterOpen: boolean = false;
   private detailOpen: boolean = false;
   private runtimeBoot: string = '';
   private runtimeRevision: number = 0;
@@ -56,7 +58,10 @@ export struct DnsPage {
     const forwardingReady = this.conn.connected && !this.conn.busy;
     const changed = this.runtimeBoot !== this.conn.bootId || this.runtimeRevision !== this.conn.configRevision;
     const entering = visible && !this.active;
-    if (visible !== this.active || changed || ready !== this.runtimeReady) { ++this.generation; }
+    if (visible !== this.active || changed || ready !== this.runtimeReady) {
+      ++this.generation;
+      this.filtersShown = false;
+    }
     this.active = visible;
     this.runtimeReady = ready;
     if (changed) { this.runtimeBoot = this.conn.bootId; this.runtimeRevision = this.conn.configRevision; }
@@ -140,30 +145,23 @@ export struct DnsPage {
       $r('app.string.diagnostics_retry') : '';
   }
 
-  private menu(title: ResourceStr, options: RecordMenuOption[], onSelect: (choice: string) => void): void {
-    if (!this.active || this.actionOpen || this.detailsShown || this.detailOpen) { return; }
-    const generation = this.generation;
-    this.actionOpen = true;
-    this.menuState.open(title, options, (choice: string): void => {
-      this.actionOpen = false;
-      if (choice !== '' && this.isCurrent(generation)) { onSelect(choice); }
-    });
+  @Computed
+  get hasActiveFilters(): boolean {
+    return Object.keys(this.store.facets).some((key: string): boolean => this.store.facets[key].length > 0);
   }
 
-  private filtersMenu(): void {
-    const fields: string[] = ['type', 'initiator', 'cache', 'rcode'];
-    const choices: RecordMenuOption[] = fields.map<RecordMenuOption>((field: string): RecordMenuOption => {
-      return { key: field, title: recordColumnTitle(field) };
-    });
-    this.menu($r('app.string.diagnostics_filters'), choices, (field: string): void => {
-      const options: RecordMenuOption[] = this.store.facetOptions(field).map<RecordMenuOption>(
-        (option: string): RecordMenuOption => { return { key: option, title: recordFacetText(field, option) }; });
-      this.menu(recordColumnTitle(field), options, (option: string): void => { this.store.toggleFacet(field, option); });
-    });
+  @Computed
+  get filterSheetHeight(): Length {
+    return this.store.totalRecords > 0 || this.hasActiveFilters ? '70%' : 228;
+  }
+
+  private openFilters(): void {
+    if (!this.active || this.filtersShown || this.filterOpen || this.detailsShown || this.detailOpen) { return; }
+    this.filtersShown = true;
   }
 
   private openDetails(id: string): void {
-    if (!this.active || this.actionOpen || this.detailsShown || this.detailOpen) { return; }
+    if (!this.active || this.filtersShown || this.filterOpen || this.detailsShown || this.detailOpen) { return; }
     this.store.select(id);
     this.detailsShown = this.store.selected !== undefined;
   }
@@ -180,7 +178,7 @@ export struct DnsPage {
   }
 
   private async clearCache(): Promise<void> {
-    if (!this.active || !this.store.canAct || this.actionOpen || this.detailsShown || this.detailOpen) { return; }
+    if (!this.active || !this.store.canAct || this.filtersShown || this.filterOpen || this.detailsShown || this.detailOpen) { return; }
     await this.store.clearCache();
   }
 
@@ -223,16 +221,28 @@ export struct DnsPage {
       .onClick((): void => { this.searchShown = !this.searchShown; })
       Button({ type: ButtonType.Circle }) {
         SymbolGlyph($r('sys.symbol.slider_horizontal_2')).fontSize(HEADER_ICON_SIZE)
-          .fontColor([$r('sys.color.font_primary')])
+          .fontColor([this.hasActiveFilters ? this.appStyle.palette.brand : $r('sys.color.font_primary')])
       }
       .attributeModifier(HEADER_ACTION)
       .systemMaterial(this.appStyle.headerMaterial())
       .accessibilityText($r('app.string.diagnostics_filters'))
-      .onClick((): void => { this.filtersMenu(); })
+      .onClick((): void => { this.openFilters(); })
     }
     .height('100%')
     .alignItems(VerticalAlign.Center)
     .padding({ right: PAGE_GUTTER })
+  }
+
+  @Builder
+  FilterSheet() {
+    DnsFilterSheet({ store: this.store, reduceMotion: this.reduceMotion,
+      onClose: (): void => { this.filtersShown = false; },
+      onApply: (facets: RecordFacets): void => {
+        if (this.active && this.filtersShown) {
+          this.store.setFacets(facets);
+          this.filtersShown = false;
+        }
+      } })
   }
 
   @Builder
@@ -308,7 +318,12 @@ export struct DnsPage {
             .onClick((): void => { this.store.setFollowing(true); })
             .margin({ bottom: 8 })
         }
-        RecordActionMenu({ menuState: this.menuState })
+        Column().bindSheet($$this.filtersShown, this.FilterSheet, {
+          detents: [this.filterSheetHeight, SheetSize.LARGE],
+          preferType: SheetType.BOTTOM, showClose: false, systemMaterial: this.appStyle.sheetMaterial(),
+          onWillAppear: (): void => { this.filterOpen = true; },
+          onDisappear: (): void => { this.filterOpen = false; }
+        })
         Column().bindSheet($$this.detailsShown, this.DetailSheet, {
           height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
           onWillAppear: (): void => { this.detailOpen = true; },

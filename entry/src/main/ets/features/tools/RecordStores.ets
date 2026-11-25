@@ -9,7 +9,7 @@ import { KeyedListSource } from '../../components/KeyedListSource';
 import {
   RequestFeed, RecordGrouping, RecordView, RecordFacets, RecordSort, ConnectionRecordView,
   RecordGroup, TrackerSpeedRanker, filterConnections, filterDns, groupConnections,
-  sortConnections, sortDns, connectionFacetOptions, dnsFacetOptions
+  sortConnections, sortDns, connectionFacetOptions, dnsFacetOptions, recordFacetsAfterToggle
 } from './RecordLogic';
 import {
   RecordPreferenceSnapshot, loadRecordPreferences, saveRecordFeed, saveRecordGrouping,
@@ -208,15 +208,6 @@ class RecordStreamSession {
   }
 
   invalid(): void { this.socket?.fail('diagnostics_invalid_data'); }
-}
-
-function recordFacetsAfterToggle(facets: RecordFacets, field: string, option: string): RecordFacets {
-  const next: RecordFacets = {};
-  for (const key of Object.keys(facets)) { next[key] = facets[key].slice(); }
-  const selected = next[field] ?? [];
-  next[field] = selected.includes(option) ? selected.filter((item: string): boolean => item !== option) :
-    [...selected, option];
-  return next;
 }
 
 function recordWidthsCopy(widths: Record<string, number>): Record<string, number> {
@@ -811,7 +802,12 @@ export class DnsRecordsStore {
   retry(): void { this.stopStream(); this.error = ''; this.syncStream(); }
   setQuery(query: string): void { this.query = query; this.refresh(); }
   toggleFacet(field: string, option: string): void {
-    this.facets = recordFacetsAfterToggle(this.facets, field, option); this.refresh();
+    this.setFacets(recordFacetsAfterToggle(this.facets, field, option));
+  }
+  setFacets(facets: RecordFacets): void {
+    if (this.facets === facets) { return; }
+    this.facets = facets;
+    this.refresh();
   }
   setSort(sort: RecordSort): void { this.tableSort = { column: sort.column, direction: sort.direction }; this.refresh(); }
   setFollowing(following: boolean): void {

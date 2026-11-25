@@ -2053,6 +2053,26 @@
       "value": "Filters"
     },
     {
+      "name": "diagnostics_dns_filters",
+      "value": "Filter DNS queries"
+    },
+    {
+      "name": "diagnostics_filter_any",
+      "value": "Any"
+    },
+    {
+      "name": "diagnostics_filter_count",
+      "value": "%d selected"
+    },
+    {
+      "name": "diagnostics_apply_filters",
+      "value": "Apply filters"
+    },
+    {
+      "name": "diagnostics_no_filter_options",
+      "value": "No DNS queries to filter yet"
+    },
+    {
       "name": "diagnostics_grouping",
       "value": "Group by"
     },
