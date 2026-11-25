@@ -441,6 +441,14 @@
       "value": "字体"
     },
     {
+      "name": "theme_installed_fonts",
+      "value": "已安装字体"
+    },
+    {
+      "name": "theme_font_sample",
+      "value": "山水 Aa 0123"
+    },
+    {
       "name": "theme_font_retry",
       "value": "字体加载失败，重试"
     },

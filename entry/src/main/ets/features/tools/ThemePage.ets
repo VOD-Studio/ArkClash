@@ -334,13 +334,17 @@ export struct ThemePage {
       Button() {
         Row({ space: 12 }) {
           Text('Aa').fontFamily(this.appStyle.fontFamily).fontSize(22).fontWeight(600)
-          Text(this.appStyle.fontFamily || $r('app.string.theme_default')).fontFamily(this.appStyle.fontFamily)
-            .fontSize(16).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            .fontColor($r('sys.color.font_primary')).accessibilityLevel('no')
+          Text(this.appStyle.fontFamily || $r('app.string.theme_default'))
+            .fontSize(16).fontColor($r('sys.color.font_secondary'))
+            .layoutWeight(1).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
           SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(16).fontColor([$r('sys.color.icon_secondary')])
         }
         .width('100%')
       }
-      .width('100%').constraintSize({ minHeight: 56 }).buttonStyle(ButtonStyleMode.NORMAL).borderRadius(CARD_RADIUS)
+      .width('100%').constraintSize({ minHeight: 56 })
+      .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 10, bottom: 10 })
+      .buttonStyle(ButtonStyleMode.NORMAL).borderRadius(CARD_RADIUS)
       .backgroundColor(this.appStyle.palette.cardBackground).id('theme-font-open')
       .onClick(() => this.openSheet('fonts'))
       this.Heading({ label: $r('app.string.theme_text_scale'), action:
@@ -491,8 +495,10 @@ export struct ThemePage {
       .bindSheet($$this.sheetOpen, this.SheetBody, {
         height: this.sheet === 'color' || this.sheet === 'fonts' ? SheetSize.LARGE : SheetSize.FIT_CONTENT,
         preferType: SheetType.BOTTOM, showClose: this.sheet === 'fonts',
+        title: this.sheet === 'fonts' ? { title: $r('app.string.theme_font') } : undefined,
         keyboardAvoidMode: SheetKeyboardAvoidMode.RESIZE_ONLY, systemMaterial: this.appStyle.sheetMaterial(),
-        backgroundColor: this.appStyle.palette.cardBackground, onDisappear: () => this.finishSheet()
+        backgroundColor: this.sheet === 'fonts' ? this.appStyle.palette.pageBackground : this.appStyle.palette.cardBackground,
+        onDisappear: () => this.finishSheet()
       })
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })

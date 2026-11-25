@@ -461,6 +461,14 @@
       "value": "Font family"
     },
     {
+      "name": "theme_installed_fonts",
+      "value": "Installed fonts"
+    },
+    {
+      "name": "theme_font_sample",
+      "value": "Aa Bb 0123"
+    },
+    {
       "name": "theme_font_retry",
       "value": "Could not load fonts. Retry"
     },
