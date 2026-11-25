@@ -44,6 +44,7 @@ struct ExtensionScriptOption {
 
 @ComponentV2
 export struct ProfileExtensionPage {
+  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require profileId: string;
   @Param currentProfile: string = '';
@@ -222,6 +223,7 @@ export struct ProfileExtensionPage {
         }
       }.width('100%').height('100%')
     }.title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.HeaderMenus)
+      .padding({ top: this.topInset })
       .backgroundColor(this.appStyle.palette.pageBackground)
       .onBackPressed((): boolean => this.saving || this.applying)
       .onShown((): void => { this.shown = true; this.refresh(); })

@@ -19,6 +19,7 @@ type BackupLinkState = 'idle' | 'checking' | 'ready' | 'failed';
 
 @ComponentV2
 export struct BackupPage {
+  @Param @Require topInset: number;
   @Event onChanged: () => void = (): void => {};
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private settings: BackupSettings = { policy: 'merge' };
@@ -415,6 +416,7 @@ export struct BackupPage {
         onDisappear: (): void => this.sheetClosed() })
     }
     .title(this.Header, { systemMaterial: this.appStyle.regularMaterial() })
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((): void => { this.visible = true; this.load(true); })
     .onHidden((): void => { this.visible = false; ++this.probeGeneration; })

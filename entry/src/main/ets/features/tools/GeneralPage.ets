@@ -68,6 +68,7 @@ function geodataLoaderLabel(loader: string): Resource {
 
 @ComponentV2
 export struct GeneralPage {
+  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private settings: GeneralSettingsState = generalSettingsState;
   @Local private updates: AppUpdateState = appUpdateState;
@@ -853,6 +854,7 @@ export struct GeneralPage {
       }.width('100%').height('100%')
     }
     .title(this.Header, { systemMaterial: this.appStyle.regularMaterial() })
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
   }
 }

@@ -52,6 +52,7 @@ type ThemeSheet = 'color' | 'delete' | 'reset' | 'fonts';
 
 @ComponentV2
 export struct ThemePage {
+  @Param @Require topInset: number;
   @Param reduceMotion: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private previewTab: number = 0;
@@ -502,6 +503,7 @@ export struct ThemePage {
       })
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((): void => { this.shown = true; })
     .onHidden((): void => { this.shown = false; })

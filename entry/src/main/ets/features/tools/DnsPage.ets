@@ -15,6 +15,7 @@ import { dnsRecords, DnsRecordsStore } from './RecordStores';
 
 @ComponentV2
 export struct DnsPage {
+  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Local store: DnsRecordsStore = dnsRecords;
@@ -318,6 +319,7 @@ export struct DnsPage {
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
     .menus(this.HeaderMenus)
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })
     .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); })

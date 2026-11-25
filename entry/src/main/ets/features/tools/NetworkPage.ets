@@ -22,6 +22,7 @@ enum NetworkEditor {
 
 @ComponentV2
 export struct NetworkPage {
+  @Param @Require topInset: number;
   @Param foreground: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private conn: Connection = connection;
@@ -369,6 +370,7 @@ export struct NetworkPage {
       })
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((): void => { this.active = true; this.load(); })
     .onHidden((): void => { this.active = false; })

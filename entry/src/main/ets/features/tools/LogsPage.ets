@@ -18,6 +18,7 @@ interface LogListRow {
 
 @ComponentV2
 export struct LogsPage {
+  @Param @Require topInset: number;
   @Param foreground: boolean = false;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private conn: Connection = connection;
@@ -243,6 +244,7 @@ export struct LogsPage {
     }
     .title(this.Header, { systemMaterial: this.appStyle.regularMaterial() })
     .menus(this.Actions)
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.sync(); })
     .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.sync(); })

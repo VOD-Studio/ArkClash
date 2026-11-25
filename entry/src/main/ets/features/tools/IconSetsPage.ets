@@ -22,6 +22,7 @@ class IconSetRowItem {
 
 @ComponentV2
 export struct IconSetsPage {
+  @Param @Require topInset: number;
   @Param foreground: boolean = true;
   @Event onPreview: (id: string) => void = (_id: string): void => {};
   @Local private appStyle: AppearanceState = appAppearance;
@@ -300,6 +301,7 @@ export struct IconSetsPage {
       }.width('100%').height('100%')
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.HeaderMenus)
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((): void => { this.shown = true; this.load(); })
     .onHidden((): void => { this.shown = false; }).onBackPressed((): boolean => this.back())
@@ -372,6 +374,7 @@ struct IconSetRow {
 
 @ComponentV2
 export struct IconSetPreviewPage {
+  @Param @Require topInset: number;
   @Param setId: string = '';
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private set?: ProfileIconSet;
@@ -411,6 +414,7 @@ export struct IconSetPreviewPage {
       }.height('100%').width('100%')
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((): void => { this.load(); })
   }

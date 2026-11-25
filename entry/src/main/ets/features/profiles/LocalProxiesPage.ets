@@ -57,6 +57,7 @@ struct LocalProxyRow {
 
 @ComponentV2
 export struct LocalProxiesPage {
+  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Local private snapshot: LocalProxySnapshot = emptyLocalProxies();
@@ -482,6 +483,7 @@ export struct LocalProxiesPage {
         })
       }.width('100%').height('100%')
     }.title(this.Title, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.Header)
+      .padding({ top: this.topInset })
       .backgroundColor(this.appStyle.palette.pageBackground)
       .onShown((): void => { this.shown = true; this.refresh(); })
       .onHidden((): void => { this.shown = false; this.generation++; })

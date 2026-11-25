@@ -293,56 +293,62 @@ struct Index {
   @Builder
   Routes(name: string, param: Object) {
     if (name === ToolRoute.Theme) {
-      ThemePage({ reduceMotion: this.reduceMotion })
+      ThemePage({ topInset: this.topInset(), reduceMotion: this.reduceMotion })
     } else if (name === ToolRoute.General) {
-      GeneralPage()
+      GeneralPage({ topInset: this.topInset() })
     } else if (name === ToolRoute.Logs) {
-      LogsPage({ foreground: this.foreground })
+      LogsPage({ topInset: this.topInset(), foreground: this.foreground })
     } else if (name === ToolRoute.AdvancedConfig) {
-      AdvancedConfigPage({ onOpen: (route: ToolRoute): void => { this.stack.pushPath({ name: route }); } })
+      AdvancedConfigPage({ topInset: this.topInset(),
+        onOpen: (route: ToolRoute): void => { this.stack.pushPath({ name: route }); } })
     } else if (name === ToolRoute.Network) {
-      NetworkPage({ foreground: this.foreground })
+      NetworkPage({ topInset: this.topInset(), foreground: this.foreground })
     } else if (name === ToolRoute.DnsOverrides) {
-      DnsOverridesPage({ foreground: this.foreground, reduceMotion: this.reduceMotion })
+      DnsOverridesPage({ topInset: this.topInset(), foreground: this.foreground, reduceMotion: this.reduceMotion })
     } else if (name === ToolRoute.AddedRules) {
-      AddedRulesPage({ foreground: this.foreground, reduceMotion: this.reduceMotion })
+      AddedRulesPage({ topInset: this.topInset(), foreground: this.foreground, reduceMotion: this.reduceMotion })
     } else if (name === ToolRoute.LocalProxies) {
-      LocalProxiesPage({ foreground: this.foreground })
+      LocalProxiesPage({ topInset: this.topInset(), foreground: this.foreground })
     } else if (name === ToolRoute.RuleSets) {
-      RuleSetsPage({ foreground: this.foreground })
+      RuleSetsPage({ topInset: this.topInset(), foreground: this.foreground })
     } else if (name === ToolRoute.ProxyFilters) {
-      ProxyFiltersPage({ foreground: this.foreground })
+      ProxyFiltersPage({ topInset: this.topInset(), foreground: this.foreground })
     } else if (name === ToolRoute.IconSets) {
-      IconSetsPage({ foreground: this.foreground, onPreview: (id: string): void => this.openIconSet(id) })
+      IconSetsPage({ topInset: this.topInset(),
+        foreground: this.foreground, onPreview: (id: string): void => this.openIconSet(id) })
     } else if (name === ToolRoute.IconSetPreview) {
-      IconSetPreviewPage({ setId: (param as IconSetRouteArgument).id })
+      IconSetPreviewPage({ topInset: this.topInset(), setId: (param as IconSetRouteArgument).id })
     } else if (name === ToolRoute.Scripts) {
-      ScriptsPage({ foreground: this.foreground, onEdit: (id: string): void => this.openScriptEditor(id) })
+      ScriptsPage({ topInset: this.topInset(),
+        foreground: this.foreground, onEdit: (id: string): void => this.openScriptEditor(id) })
     } else if (name === ToolRoute.ScriptEditor) {
-      ScriptEditorPage({ scriptId: (param as ScriptRouteArgument).id, foreground: this.foreground,
+      ScriptEditorPage({ topInset: this.topInset(),
+        scriptId: (param as ScriptRouteArgument).id, foreground: this.foreground,
         onClose: (): void => { this.stack.pop(); } })
     } else if (name === ToolRoute.ProfileExtension) {
-      ProfileExtensionPage({ profileId: (param as ScriptRouteArgument).id, currentProfile: this.profiles.current,
+      ProfileExtensionPage({ topInset: this.topInset(),
+        profileId: (param as ScriptRouteArgument).id, currentProfile: this.profiles.current,
         foreground: this.foreground, onScripts: (): void => { this.stack.pushPath({ name: ToolRoute.Scripts }); },
         onStandardRules: (): void => { this.stack.pushPath({ name: ToolRoute.ProfileRules, param: param }); } })
     } else if (name === ToolRoute.ProfileRuntimePreview) {
-      ProfileRuntimePreviewPage({ profileId: (param as ProfilePreviewRouteArgument).id,
+      ProfileRuntimePreviewPage({ topInset: this.topInset(), profileId: (param as ProfilePreviewRouteArgument).id,
         profileName: (param as ProfilePreviewRouteArgument).name, foreground: this.foreground })
     } else if (name === ToolRoute.ProfileRules) {
-      AddedRulesPage({ profileId: (param as ScriptRouteArgument).id,
+      AddedRulesPage({ topInset: this.topInset(), profileId: (param as ScriptRouteArgument).id,
         foreground: this.foreground, reduceMotion: this.reduceMotion,
         onGlobalRules: (): void => { this.stack.pushPath({ name: ToolRoute.AddedRules }); } })
     } else if (name === ToolRoute.Resources) {
-      ResourcesPage({ foreground: this.foreground, onScript: (id: string): void => this.openScriptEditor(id) })
+      ResourcesPage({ topInset: this.topInset(),
+        foreground: this.foreground, onScript: (id: string): void => this.openScriptEditor(id) })
     } else if (name === ToolRoute.Connections) {
-      ConnectionsPage({ foreground: this.foreground,
+      ConnectionsPage({ topInset: this.topInset(), foreground: this.foreground,
         initialFeed: param !== undefined ? (param as ConnectionsRouteArgument).feed : undefined })
     } else if (name === ToolRoute.Dns) {
-      DnsPage({ foreground: this.foreground })
+      DnsPage({ topInset: this.topInset(), foreground: this.foreground })
     } else if (name === ToolRoute.Backup) {
-      BackupPage({ onChanged: (): void => this.backupChanged() })
+      BackupPage({ topInset: this.topInset(), onChanged: (): void => this.backupChanged() })
     } else if (name === ToolRoute.About) {
-      AboutPage()
+      AboutPage({ topInset: this.topInset() })
     }
   }
 
@@ -440,7 +446,6 @@ struct Index {
         .expandSafeArea([SafeAreaType.KEYBOARD])
         .height(LayoutPolicy.matchParent)
         .safeAreaPadding({ bottom: this.appStyle.floating ? 0 : this.getUIContext().px2vp(this.insets.bottom) })
-        // 仅首页页签铺满窗口；原生子页的标题栏仍由 Navigation 避让系统区域。
         .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], this.appStyle.floating ?
           [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM] : [LayoutSafeAreaEdge.TOP])
         .bindSheet($$this.profilePicker, this.ProfilePicker(), {
@@ -451,8 +456,8 @@ struct Index {
         })
       }
       .expandSafeArea([SafeAreaType.KEYBOARD])
-      .ignoreLayoutSafeArea([], [])
-      .safeAreaPadding({ top: this.topInset() })
+      // 转场蒙层跟随整页铺到状态栏背后，标题和按钮在各个 NavDestination 内避让。
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP])
       .backgroundColor(Color.Transparent)
       .mode(NavigationMode.Stack)
       .hideTitleBar(true)

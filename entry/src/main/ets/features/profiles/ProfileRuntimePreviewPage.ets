@@ -10,6 +10,7 @@ import { YamlCodeEditor, YamlCodeEditorController } from './YamlCodeEditor';
 
 @ComponentV2
 export struct ProfileRuntimePreviewPage {
+  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require profileId: string;
   @Param profileName: string = '';
@@ -164,6 +165,7 @@ export struct ProfileRuntimePreviewPage {
         }
       }.width('100%').height('100%')
     }.title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.HeaderMenus)
+      .padding({ top: this.topInset })
       .backgroundColor(this.appStyle.palette.pageBackground)
       .onShown((): void => { this.shown = true; })
       .onHidden((): void => { this.shown = false; })

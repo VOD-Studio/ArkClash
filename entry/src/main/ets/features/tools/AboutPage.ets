@@ -9,6 +9,7 @@ const SOURCE_URL = 'https://github.com/VOD-Studio/ArkClash';
 
 @ComponentV2
 export struct AboutPage {
+  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
 
   @Builder
@@ -21,6 +22,7 @@ export struct AboutPage {
       AboutContent()
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
   }
 }

@@ -29,6 +29,7 @@ interface ConnectionFilterSection {
 
 @ComponentV2
 export struct ConnectionsPage {
+  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Param initialFeed: RequestFeed | undefined = undefined;
@@ -516,6 +517,7 @@ export struct ConnectionsPage {
     }
     .title(this.FeedTitle, { systemMaterial: this.appStyle.regularMaterial() })
     .menus(this.HeaderMenus)
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })
     .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); })

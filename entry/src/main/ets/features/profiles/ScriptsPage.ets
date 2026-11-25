@@ -96,6 +96,7 @@ struct ConfigScriptRow {
 
 @ComponentV2
 export struct ScriptsPage {
+  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Event onEdit: (id: string) => void = (_id: string): void => {};
@@ -331,6 +332,7 @@ export struct ScriptsPage {
         onWillDismiss: (action: DismissSheetAction): void => { if (!this.busy) { action.dismiss(); } } })
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.HeaderMenus)
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((): void => { this.shown = true; this.refresh(); })
     .onHidden((): void => { this.shown = false; })

@@ -25,6 +25,7 @@ class AddedRuleListItem {
 
 @ComponentV2
 export struct AddedRulesPage {
+  @Param @Require topInset: number;
   @Param foreground: boolean = true;
   @Param reduceMotion: boolean = true;
   @Param profileId: string = '';
@@ -477,6 +478,7 @@ export struct AddedRulesPage {
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
     .menus(this.HeaderMenus)
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((): void => { this.shown = true; if (!this.saving) { this.load(); } })
     .onHidden((): void => { this.shown = false; })

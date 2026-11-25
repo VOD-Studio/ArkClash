@@ -38,6 +38,7 @@ class ScriptEditorStatusBridge {
 
 @ComponentV2
 export struct ScriptEditorPage {
+  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Param scriptId: string = '';
   @Param foreground: boolean = true;
@@ -345,6 +346,7 @@ export struct ScriptEditorPage {
         title: { title: $r('app.string.profile_unsaved_title') }, showClose: true, systemMaterial: this.appStyle.sheetMaterial(),
         onDisappear: (): void => { if (this.saveAfterName) { this.saveAfterName = false; this.save(); } } })
     }.title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() }).menus(this.HeaderMenus)
+      .padding({ top: this.topInset })
       .backgroundColor(this.appStyle.palette.pageBackground).onBackPressed((): boolean => this.requestBack())
   }
 }

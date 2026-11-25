@@ -22,6 +22,7 @@ class ProxyFilterRowItem {
 
 @ComponentV2
 export struct ProxyFiltersPage {
+  @Param @Require topInset: number;
   @Param foreground: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private loading: boolean = true;
@@ -377,6 +378,7 @@ export struct ProxyFiltersPage {
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
     .menus(this.HeaderMenus)
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .bindSheet($$this.sheetShown, this.SheetBody, {
       title: { title: this.deleting ? $r('app.string.action_delete') :

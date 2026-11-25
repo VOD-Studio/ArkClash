@@ -14,6 +14,7 @@ import { SettingsSection } from './SettingsSection';
 
 @ComponentV2
 export struct DnsOverridesPage {
+  @Param @Require topInset: number;
   @Param foreground: boolean = true;
   @Param reduceMotion: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
@@ -403,6 +404,7 @@ export struct DnsOverridesPage {
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
     .menus(this.HeaderMenus)
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((): void => { this.shown = true; if (!this.saving) { this.load(); } })
     .onHidden((): void => { this.shown = false; })

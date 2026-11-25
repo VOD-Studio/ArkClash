@@ -7,6 +7,7 @@ import { ToolRoute } from './ToolRoutes';
 
 @ComponentV2
 export struct AdvancedConfigPage {
+  @Param @Require topInset: number;
   @Local private appStyle: AppearanceState = appAppearance;
   @Event onOpen: (route: ToolRoute) => void = () => {};
 
@@ -84,6 +85,7 @@ export struct AdvancedConfigPage {
       .scrollBar(BarState.Off)
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
   }
 }

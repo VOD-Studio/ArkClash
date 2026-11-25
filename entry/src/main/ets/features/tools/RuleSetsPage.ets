@@ -36,6 +36,7 @@ class RuleSetRowItem {
 
 @ComponentV2
 export struct RuleSetsPage {
+  @Param @Require topInset: number;
   @Param foreground: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private loading: boolean = true;
@@ -501,6 +502,7 @@ export struct RuleSetsPage {
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
     .menus(this.HeaderMenus)
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((): void => { this.shown = true; if (!this.busy) { this.load(); } })
     .onHidden((): void => { this.shown = false; })

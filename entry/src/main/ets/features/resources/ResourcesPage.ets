@@ -21,6 +21,7 @@ import { providerErrorText, RuntimeProviderRowModel, RuntimeProvidersStore } fro
 
 @ComponentV2
 export struct ResourcesPage {
+  @Param @Require topInset: number;
   @Event onScript: (id: string) => void = (_id: string): void => {};
   @Local private remoteScripts: ConfigScript[] = [];
   @Local private syncingScript: string = '';
@@ -848,6 +849,7 @@ export struct ResourcesPage {
     }
     .title(this.HeaderTitle, { systemMaterial: this.appStyle.regularMaterial() })
     .menus(this.HeaderMenus)
+    .padding({ top: this.topInset })
     .backgroundColor(this.appStyle.palette.pageBackground)
     .onShown((_reason: VisibilityChangeReason): void => { this.shown = true; this.syncLifecycle(); })
     .onHidden((_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); })
