@@ -14,7 +14,7 @@ const sandbox = await mkdtemp(join(tmpdir(), 'arkclash-core-host-'));
 const executable = join(sandbox, 'core.test');
 const linuxFdEnabled = process.platform === 'linux' || process.env.CORE_LINUX_FD === '1';
 const linuxFdExecutable = join(sandbox, 'tun-fd.test');
-const mihomoExecutables = ['dns', 'tunnel/statistic', 'adapter/inbound', 'listener/auth', 'log'].map((pkg, index) => ({
+const mihomoExecutables = ['dns', 'tunnel/statistic', 'adapter/inbound', 'listener/auth', 'log', 'adapter/outbound'].map((pkg, index) => ({
   pkg, executable: join(sandbox, `mihomo-${index}.test`)
 }));
 after(() => rm(sandbox, { recursive: true, force: true }));
@@ -52,7 +52,8 @@ before(async () => {
     ['observation-dns-host_test.go', 'dns/arkclash_observation_test.go'],
     ['observation-clear-host_test.go', 'dns/arkclash_observation_clear_test.go'],
     ['observation-statistic-host_test.go', 'tunnel/statistic/arkclash_observation_test.go'],
-    ['tun-fd-linux-host_test.go', 'listener/sing_tun/arkclash_fd_linux_test.go']
+    ['tun-fd-linux-host_test.go', 'listener/sing_tun/arkclash_fd_linux_test.go'],
+    ['tailscale-address-host_test.go', 'adapter/outbound/arkclash_tailscale_address_test.go']
   ]) {
     await copyFile(join(root, 'scripts', source), join(sandbox, 'mihomo', destination));
   }
@@ -92,6 +93,7 @@ before(async () => {
   assert.equal(build.status, 0, `${build.error ?? ''}\n${build.stdout}\n${build.stderr}`);
   for (const target of mihomoExecutables) {
     const compiled = spawnSync('go', ['test', '-mod=readonly', ...(race ? ['-race'] : []),
+      ...(target.pkg === 'adapter/outbound' ? ['-tags', 'with_gvisor'] : []),
       '-c', '-o', target.executable, `github.com/metacubex/mihomo/${target.pkg}`], {
       cwd: sandbox, encoding: 'utf8', timeout: 600000, env: goEnv
     });
@@ -133,7 +135,7 @@ test('核心选择持久化、回滚、规则探测与实际请求取消', { tim
   console.log(result.stdout.trim());
 });
 
-test('mihomo 诊断、DNS 缓存与监听所有权回归', { timeout: 300000 }, () => {
+test('mihomo 诊断、DNS 缓存、监听所有权与 Tailscale 拨号回归', { timeout: 300000 }, () => {
   for (const target of mihomoExecutables) {
     const result = spawnSync(target.executable, ['-test.run=^TestArkClash', '-test.count=1',
       '-test.timeout=45s', '-test.v'], {
