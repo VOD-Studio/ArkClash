@@ -105,7 +105,7 @@ Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/
 
 全局 DNS 由 `applyOverrides` 在解析配置时逐项合并，再按常规设置补入 `system://`。在线保存使用 `/arkclash/dns/settings`，在原有控制器和 TUN 上应用配置。设置页读取本地设置文件，DNS 记录页通过诊断接口读取数据。见 [ADR-0021](adr/0021-global-dns-overrides.md) 和 [ADR-0034](adr/0034-harmonyos-system-dns.md)。
 
-常规设置通过 `/arkclash/general/settings` 提交。用户启用的面板单独使用 `127.0.0.1:9090`，密钥与内部通道独立。日志页可见且打开捕获时订阅 `/arkclash/diagnostics/logs`，关联当前内核代次，最近 5000 项留在内存。见 [ADR-0029](adr/0029-general-settings-and-log-capture.md)。
+常规设置通过 `/arkclash/general/settings` 提交。用户启用的面板单独使用 `127.0.0.1:9090`，密钥与内部通道独立。开启日志捕获后，内核按 boot 生命周期持续将最近 5000 条结构化脱敏日志留在内存，热切换和离页不丢失；日志页可见时订阅 `/arkclash/diagnostics/logs`（按 `expectedBootId` 校验），可通过 `POST /arkclash/diagnostics/logs/clear` 清空。见 [ADR-0029](adr/0029-general-settings-and-log-capture.md) 与 [ADR-0039](adr/0039-boot-scoped-structured-logs.md)。
 
 附加规则在线保存使用 `/arkclash/rules/settings`。按配置级规则、启用的全局规则、脚本输出中的规则顺序合并，未选脚本时最后一层来自源配置。配置级规则和命名出口保存后在覆写页应用，或随下次配置加载生效。全局规则变更只有影响当前已应用的规则时才热应用。仪表盘可见时订阅 Geo 下载进度。应用版本检查在首次前台显示后异步触发，也可从仪表盘手动发起。应用更新使用 UI 进程的系统接口。见 [ADR-0030](adr/0030-composed-overrides-and-live-status.md)。
 
@@ -189,5 +189,5 @@ entry/ ── hvigor（CMake 编 NAPI 桥 + ArkTS）──► HAP
 - **VpnConfig 级设置**（协议栈、IPv6、分应用代理、VpnConfig 里的 DNS 地址和 MTU）不能热切换，改了只能断开重连（ADR-0010）。
 - **网络设置**保存在 UI preferences，连接时随操作 token 写入 `runtime.json`。系统 VPN 和内核 TUN 使用同一份快照（[ADR-0020](adr/0020-vpn-network-settings.md)）。
 - **分应用绕过**：当前使用 `VpnConfig.blockedApplications`，将用户填写的包名与 ArkClash 自身包名去重合并。[ADR-0020](adr/0020-vpn-network-settings.md)
-- **流量与诊断**：流量使用 `/traffic`，应用的连接、DNS 和日志使用独立的 `/arkclash/diagnostics/` 数据流。[ADR-0019](adr/0019-app-diagnostics-capture.md) · [ADR-0029](adr/0029-general-settings-and-log-capture.md)
+- **流量与诊断**：流量使用 `/traffic`，应用的连接、DNS 和日志使用独立的 `/arkclash/diagnostics/` 数据流。[ADR-0019](adr/0019-app-diagnostics-capture.md) · [ADR-0029](adr/0029-general-settings-and-log-capture.md) · [ADR-0039](adr/0039-boot-scoped-structured-logs.md)
 - **IPv6**：`VpnConfig` 和 `core/tun.go` 使用同一份网络设置快照，地址族和路由需同时生效。开启 IPv6 时，最小 MTU 为 1280。[ADR-0020](adr/0020-vpn-network-settings.md)
