@@ -1317,13 +1317,56 @@ test('日志中文搜索、详情快照和单条复制独立于完整实时导�
   } finally { h.cleanup(); }
 });
 
+test('日志结构化搜索、多等级筛选、24小时时钟与清空接口', async () => {
+  const h = createToolsHarness({ '@kit.ArkTS': {}, '@kit.CoreFileKit': {} });
+  try {
+    const { LogHistory } = h.load('features/tools/LogHistory.ets');
+    const { logClock, logHasRoute, logHasDns, logSummaryLabel } = h.load('features/tools/LogLabels.ets');
+    const { clearDiagnosticLogs } = h.load('client/Logs.ets');
+    const history = new LogHistory(5000, record => {
+      const label = logSummaryLabel(record);
+      return typeof label === 'string' ? label : label.name;
+    });
+    const route = {
+      id: 'r1', time: new Date(2026, 10, 26, 19, 5, 9).getTime(), level: 'info', event: 'route_selected',
+      tag: 'TCP', target: 'www.example.com:443', rule: 'DOMAIN-SUFFIX(example.com)', proxy: 'Proxy[HK-01]',
+      source: '198.18.0.1:54321', message: '[TCP] 198.18.0.1:54321 --> www.example.com:443 match DOMAIN-SUFFIX(example.com) using Proxy[HK-01]'
+    };
+    const dns = {
+      id: 'd1', time: new Date(2026, 10, 26, 7, 4, 3).getTime(), level: 'debug', event: 'dns_answer',
+      tag: 'DNS', target: 'api.example.com', detail: '[93.184.216.34] · 1.1.1.1:53',
+      message: '[DNS] api.example.com --> [93.184.216.34] from 1.1.1.1:53'
+    };
+    const warn = {
+      id: 'w1', time: new Date(2026, 10, 26, 20, 0, 1).getTime(), level: 'warning', event: 'component',
+      tag: 'TUN', message: 'disabled TUN TCP & UDP GRO'
+    };
+    history.receive([route, dns, warn], 'snapshot', true);
+    assert.equal(logClock(route.time), '19:05:09');
+    assert.equal(logClock(dns.time), '07:04:03');
+    assert.equal(logHasRoute(route), true);
+    assert.equal(logHasDns(dns), true);
+    assert.equal(logHasRoute(warn), false);
+    assert.equal(history.filter('hk-01 domain-suffix', []).length, 1);
+    assert.equal(history.filter('', ['info', 'warning']).length, 2);
+    assert.deepEqual(history.levelCounts(), { info: 1, debug: 1, warning: 1 });
+    assert.equal(history.filter('gro', ['warning'])[0].summary, 'disabled TUN TCP & UDP GRO');
+    h.controls.http = async (url, options) => {
+      assert.match(url, /\/arkclash\/diagnostics\/logs\/clear$/);
+      assert.deepEqual(JSON.parse(options.extraData), { expectedBootId: 'boot-a' });
+      return { responseCode: 204, result: '' };
+    };
+    await clearDiagnosticLogs(h.context.filesDir, 'boot-a');
+  } finally { h.cleanup(); }
+});
+
 test('日志流损坏时保留已有记录，显式重连后接受新的快照', async () => {
   const h = createToolsHarness({ '@kit.ArkTS': {}, '@kit.CoreFileKit': {} });
   const { logStream } = h.load('client/Logs.ets');
   const { LogHistory } = h.load('features/tools/LogHistory.ets');
   const history = new LogHistory(5000, record => record.message);
   let state;
-  const socket = logStream('boot-a', 1, frame => history.receive(frame.logs, frame.kind, frame.kind === 'snapshot'),
+  const socket = logStream('boot-a', frame => history.receive(frame.logs, frame.kind, frame.kind === 'snapshot'),
     next => { state = next; });
   const record = { id: 'before', time: 10, level: 'info', message: 'safe' };
   try {

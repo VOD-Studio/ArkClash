@@ -1,4 +1,5 @@
 import { LogRecord } from '../../client/Logs';
+import { logClock } from './LogLabels';
 import { RecordHistory } from './RecordStores';
 
 export class LogListRow {
@@ -6,6 +7,7 @@ export class LogListRow {
   readonly order: number;
   readonly batch: number;
   readonly summary: string;
+  readonly clock: string;
   private searchText?: string;
 
   constructor(record: LogRecord, order: number, batch: number, summary: string) {
@@ -13,6 +15,7 @@ export class LogListRow {
     this.order = order;
     this.batch = batch;
     this.summary = summary;
+    this.clock = logClock(record.time);
   }
 
   get id(): string { return this.record.id; }
@@ -21,8 +24,16 @@ export class LogListRow {
   matches(terms: string[]): boolean {
     if (terms.length === 0) { return true; }
     if (this.searchText === undefined) {
-      this.searchText = (this.record.level + ' ' + this.record.message +
-        (this.summary === this.record.message ? '' : ' ' + this.summary)).toLowerCase();
+      const parts: string[] = [this.record.level, this.record.message];
+      if (this.record.tag !== undefined && this.record.tag !== '') { parts.push(this.record.tag); }
+      if (this.record.target !== undefined && this.record.target !== '') { parts.push(this.record.target); }
+      if (this.record.rule !== undefined && this.record.rule !== '') { parts.push(this.record.rule); }
+      if (this.record.proxy !== undefined && this.record.proxy !== '') { parts.push(this.record.proxy); }
+      if (this.record.source !== undefined && this.record.source !== '') { parts.push(this.record.source); }
+      if (this.record.reason !== undefined && this.record.reason !== '') { parts.push(this.record.reason); }
+      if (this.record.detail !== undefined && this.record.detail !== '') { parts.push(this.record.detail); }
+      if (this.summary !== this.record.message) { parts.push(this.summary); }
+      this.searchText = parts.join(' ').toLowerCase();
     }
     for (const term of terms) {
       if (!this.searchText.includes(term)) { return false; }
@@ -73,16 +84,26 @@ export class LogHistory {
     }
   }
 
-  filter(query: string, level: string): LogListRow[] {
+  levelCounts(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const row of this.window.values()) {
+      const level = row.record.level;
+      counts[level] = (counts[level] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  filter(query: string, level: string | string[]): LogListRow[] {
     if (query !== this.query) {
       this.query = query;
       const trimmed = query.toLowerCase().trim();
       this.terms = trimmed === '' ? [] : trimmed.split(new RegExp('\\s+'));
     }
+    const levels: string[] = Array.isArray(level) ? level : (level === '' ? [] : [level]);
     let rows = this.window.values().reverse();
-    if (level !== '' || this.terms.length > 0) {
+    if (levels.length > 0 || this.terms.length > 0) {
       rows = rows.filter((row: LogListRow): boolean =>
-        (level === '' || row.record.level === level) && row.matches(this.terms));
+        (levels.length === 0 || levels.includes(row.record.level)) && row.matches(this.terms));
     }
     this.pending = 0;
     if (!this.window.following) {

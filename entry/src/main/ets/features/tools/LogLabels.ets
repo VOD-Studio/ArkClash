@@ -1,15 +1,34 @@
 import { LogRecord } from '../../client/Logs';
 
+function pad2(value: number): string {
+  return value < 10 ? `0${value}` : `${value}`;
+}
+
+export function logClock(time: number): string {
+  const date = new Date(time);
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+}
+
 export function logTimestamp(time: number): string {
   const date = new Date(time);
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${date.getFullYear()}-${month}-${day} ${date.toTimeString().slice(0, 8)}.${String(date.getMilliseconds()).padStart(3, '0')}`;
+  const month = pad2(date.getMonth() + 1);
+  const day = pad2(date.getDate());
+  const ms = String(date.getMilliseconds()).padStart(3, '0');
+  return `${date.getFullYear()}-${month}-${day} ${logClock(time)}.${ms}`;
 }
 
 export function logCopyText(record: LogRecord, summary: string): string {
   const body = summary === record.message ? record.message : summary + '\n' + record.message;
   return `${logTimestamp(record.time)} [${record.level}] ${body}`;
+}
+
+export function logHasRoute(record: LogRecord): boolean {
+  return (record.target ?? '') !== '' && ((record.proxy ?? '') !== '' || record.event === 'dial_failed');
+}
+
+export function logHasDns(record: LogRecord): boolean {
+  const event = record.event ?? '';
+  return (record.target ?? '') !== '' && (event.startsWith('dns_') || event === 'sniffer');
 }
 
 export function logLevelLabel(level: string): Resource {
@@ -22,7 +41,7 @@ export function logLevelLabel(level: string): Resource {
   }
 }
 
-function dialFailureLabel(reason: string): Resource {
+export function logDialReasonLabel(reason: string): Resource {
   switch (reason) {
     case 'timeout': return $r('app.string.log_dial_timeout');
     case 'certificate': return $r('app.string.log_dial_certificate');
@@ -51,7 +70,12 @@ export function logSummaryLabel(record: LogRecord): ResourceStr {
     case 'controller_unavailable': return $r('app.string.log_controller_unavailable');
     case 'vpn_cleanup': return $r('app.string.log_vpn_cleanup');
     case 'profile_reloaded': return $r('app.string.log_profile_reloaded');
-    case 'dial_failed': return dialFailureLabel(record.reason ?? '');
+    case 'dial_failed': return logDialReasonLabel(record.reason ?? '');
+    case 'sniffer': return $r('app.string.log_sniffer_ok');
+    case 'port_hop': return $r('app.string.log_port_hop');
+    case 'component':
+    case 'template':
+      return record.message;
     case 'other': return $r('app.string.log_other');
     default: return record.message === 'Core event' ? $r('app.string.log_other') : record.message;
   }

@@ -4177,6 +4177,86 @@
       "value": "已淘汰 %d 条较早日志。"
     },
     {
+      "name": "logs_clear",
+      "value": "清空日志"
+    },
+    {
+      "name": "logs_cleared",
+      "value": "日志已清空"
+    },
+    {
+      "name": "logs_clear_failed",
+      "value": "无法清空日志。"
+    },
+    {
+      "name": "logs_enable_capture",
+      "value": "开启日志捕获"
+    },
+    {
+      "name": "logs_disable_capture",
+      "value": "关闭日志捕获"
+    },
+    {
+      "name": "logs_capture_off_hint",
+      "value": "开启后内核持续保留最近 5,000 条日志，切换页面或配置不丢失。"
+    },
+    {
+      "name": "logs_silent_hint",
+      "value": "静默等级下内核不会输出任何日志。"
+    },
+    {
+      "name": "logs_set_info_level",
+      "value": "切换为信息等级"
+    },
+    {
+      "name": "logs_empty_hint",
+      "value": "当前日志等级为「%s」，可在右上角菜单调整等级。"
+    },
+    {
+      "name": "logs_disconnected_hint",
+      "value": "内核就绪后会自动连接日志流。"
+    },
+    {
+      "name": "logs_clear_filters",
+      "value": "清除筛选"
+    },
+    {
+      "name": "logs_latest",
+      "value": "回到最新"
+    },
+    {
+      "name": "logs_raw_message",
+      "value": "日志原文"
+    },
+    {
+      "name": "logs_field_event",
+      "value": "事件"
+    },
+    {
+      "name": "logs_field_tag",
+      "value": "分类"
+    },
+    {
+      "name": "logs_field_detail",
+      "value": "详情"
+    },
+    {
+      "name": "logs_level_filter_title",
+      "value": "按等级筛选"
+    },
+    {
+      "name": "logs_level_menu",
+      "value": "日志等级"
+    },
+    {
+      "name": "log_sniffer_ok",
+      "value": "嗅探到域名"
+    },
+    {
+      "name": "log_port_hop",
+      "value": "端口跳跃已切换"
+    },
+    {
       "name": "general_unavailable",
       "value": "尚未确认代理状态，请在内核就绪后重试。"
     },

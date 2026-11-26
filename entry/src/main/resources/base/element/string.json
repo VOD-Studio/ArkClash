@@ -4197,6 +4197,86 @@
       "value": "%d older logs removed."
     },
     {
+      "name": "logs_clear",
+      "value": "Clear logs"
+    },
+    {
+      "name": "logs_cleared",
+      "value": "Logs cleared"
+    },
+    {
+      "name": "logs_clear_failed",
+      "value": "Could not clear logs."
+    },
+    {
+      "name": "logs_enable_capture",
+      "value": "Enable log capture"
+    },
+    {
+      "name": "logs_disable_capture",
+      "value": "Disable log capture"
+    },
+    {
+      "name": "logs_capture_off_hint",
+      "value": "When enabled, the core keeps the latest 5,000 logs across page and profile switches."
+    },
+    {
+      "name": "logs_silent_hint",
+      "value": "The core does not emit logs while log level is Silent."
+    },
+    {
+      "name": "logs_set_info_level",
+      "value": "Switch to Info"
+    },
+    {
+      "name": "logs_empty_hint",
+      "value": "Current level: %s. Change log level in the menu to capture more details."
+    },
+    {
+      "name": "logs_disconnected_hint",
+      "value": "The log stream will reconnect once the core is ready."
+    },
+    {
+      "name": "logs_clear_filters",
+      "value": "Clear filters"
+    },
+    {
+      "name": "logs_latest",
+      "value": "Back to latest"
+    },
+    {
+      "name": "logs_raw_message",
+      "value": "Raw message"
+    },
+    {
+      "name": "logs_field_event",
+      "value": "Event"
+    },
+    {
+      "name": "logs_field_tag",
+      "value": "Category"
+    },
+    {
+      "name": "logs_field_detail",
+      "value": "Detail"
+    },
+    {
+      "name": "logs_level_filter_title",
+      "value": "Filter by level"
+    },
+    {
+      "name": "logs_level_menu",
+      "value": "Log level"
+    },
+    {
+      "name": "log_sniffer_ok",
+      "value": "Domain sniffed"
+    },
+    {
+      "name": "log_port_hop",
+      "value": "Switched hopping port"
+    },
+    {
       "name": "general_unavailable",
       "value": "Proxy status is unconfirmed. Retry after the core is ready."
     },
