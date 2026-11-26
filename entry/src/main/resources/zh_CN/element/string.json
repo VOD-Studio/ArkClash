@@ -4170,7 +4170,7 @@
     },
     {
       "name": "logs_gap",
-      "value": "日志采集出现断档。"
+      "value": "部分日志记录已跳过"
     },
     {
       "name": "logs_evicted",

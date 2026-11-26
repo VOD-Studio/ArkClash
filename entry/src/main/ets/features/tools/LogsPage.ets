@@ -25,6 +25,7 @@ import { RECORD_LIST_ANIMATION, recordListTransition, RecordListViewport } from 
 
 const LOG_FILTER_LEVELS: string[] = ['error', 'warning', 'info', 'debug'];
 const LOG_MORE_MENU_WIDTH = 240;
+const LOG_GAP_TOAST_COOLDOWN_MS = 15000;
 type LogMenuLevel = 'root' | 'level';
 
 function logMenuLevelTransition(offsetX: number): TransitionEffect {
@@ -80,11 +81,12 @@ export struct LogsPage {
   @Local private selected?: LogListRow;
   @Local private shownCount: number = 0;
   @Local private recordCount: number = 0;
-  @Local private gaps: boolean = false;
   private socket?: ControllerSocket;
   private boot: string = '';
   private session: string = '';
   private seq: number = 0;
+  private seenDropped: number = -1;
+  private gapToastAt: number = 0;
   private readonly labels: Map<number, string> = new Map<number, string>();
   private readonly history: LogHistory = new LogHistory(LOG_LIMIT, (record: LogRecord): string => this.summary(record));
   private readonly viewport: RecordListViewport = new RecordListViewport();
@@ -175,7 +177,6 @@ export struct LogsPage {
   @Monitor('foreground', 'conn.coreReady', 'conn.bootId', 'settings.saved')
   sync(): void {
     if (!this.settings.saved.captureLogs) {
-      this.gaps = false;
       this.viewport.activate(false);
       this.dismissOverlays();
       this.stop();
@@ -197,7 +198,6 @@ export struct LogsPage {
     if (this.boot !== this.conn.bootId) {
       this.stop();
       this.clear();
-      this.gaps = false;
       this.boot = this.conn.bootId;
     }
     if (this.socket === undefined) {
@@ -205,7 +205,6 @@ export struct LogsPage {
         (frame: LogFrame): void => this.receive(frame),
         (state: ControllerSocketState): void => {
           this.streamState = state;
-          if (state === 'failed') { this.gaps = true; }
         });
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
       this.socket.start(context.filesDir);
@@ -232,9 +231,18 @@ export struct LogsPage {
     this.selected = undefined;
     this.detailsShown = false;
     this.history.clear();
+    this.seenDropped = -1;
+    this.gapToastAt = 0;
     this.recordCount = 0;
     this.paused = false;
     this.refreshRows();
+  }
+
+  private notifyGap(): void {
+    const now = Date.now();
+    if (now - this.gapToastAt < LOG_GAP_TOAST_COOLDOWN_MS) { return; }
+    this.gapToastAt = now;
+    this.toast($r('app.string.logs_gap'));
   }
 
   private summary(record: LogRecord): string {
@@ -250,16 +258,24 @@ export struct LogsPage {
   private receive(frame: LogFrame): void {
     const newSession = frame.kind === 'snapshot' && frame.seq === 1 && frame.sessionId !== this.session;
     if (frame.kind === 'snapshot' && frame.seq === 1) {
+      const previousDropped = this.seenDropped;
       this.session = frame.sessionId;
-      this.gaps = frame.dropped > 0;
+      this.seenDropped = frame.dropped;
+      if (previousDropped >= 0 && frame.dropped > previousDropped) {
+        this.notifyGap();
+      }
     } else if (frame.sessionId !== this.session || frame.seq !== this.seq + 1) {
-      this.gaps = true;
+      this.notifyGap();
       this.socket?.fail('log_sequence');
       return;
-    } else if (frame.dropped > 0) {
-      this.gaps = true;
     } else if (frame.kind === 'reset' && frame.logs.length === 0) {
-      this.gaps = false;
+      this.seenDropped = frame.dropped;
+    } else if (frame.dropped > this.seenDropped) {
+      const hadBaseline = this.seenDropped >= 0;
+      this.seenDropped = frame.dropped;
+      if (hadBaseline) {
+        this.notifyGap();
+      }
     }
     this.seq = frame.seq;
     this.history.receive(frame.logs, frame.kind, newSession);
@@ -753,12 +769,6 @@ export struct LogsPage {
         }
         .width('100%')
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 4, bottom: 6 })
-      } else if (this.gaps) {
-        Text($r('app.string.logs_gap'))
-          .fontFamily(this.appStyle.fontFamily)
-          .fontSize(12)
-          .fontColor($r('sys.color.font_secondary'))
-          .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 4, bottom: 6 })
       }
     }
     .width('100%')

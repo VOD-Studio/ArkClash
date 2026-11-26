@@ -4190,7 +4190,7 @@
     },
     {
       "name": "logs_gap",
-      "value": "Some logs were missed during capture."
+      "value": "Some log entries were skipped"
     },
     {
       "name": "logs_evicted",
