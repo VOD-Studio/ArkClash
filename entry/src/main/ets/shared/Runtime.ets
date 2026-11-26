@@ -8,6 +8,8 @@ import { readText, writeText, writeTextAsync } from './Files';
 import { VpnNetworkSettings } from './VpnNetwork';
 
 export const CONTROLLER_ADDRESS = '127.0.0.1:19090';
+// 界面绑定扩展时携带的 Want 参数。扩展若因绑定被系统拉起，不能当作一次启动（ADR-0038）。
+export const HOST_BINDING_PARAM = 'arkclashHostBinding';
 
 /** 启动设置与转发意图在短锁内提交；扩展新实例复位意图，当前配置仍以配置列表为准。 */
 export interface RuntimeConfig {

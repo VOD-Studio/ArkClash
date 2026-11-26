@@ -20,6 +20,10 @@ const ready = {
   tunAttached: true, vpnCreated: true, listenersOpen: true, startedAt: 1, bootId: 'fixture.boot', revision: 1, configRevision: 1,
   mode: 'rule', version: 'fixture'
 };
+// 绑定宿主只记录每个宿主的首次绑定，与真实模块一致；断开回调由测试直接触发。
+const hostBinding = { binds: [], releases: 0, listener: undefined,
+  setListener(listener) { this.listener = listener; }, bind(_context, bootId) { if (this.binds.at(-1) !== bootId) this.binds.push(bootId); },
+  async release() { this.releases++; } };
 const kits = {
   '@kit.AbilityKit': {},
   '@kit.CryptoArchitectureKit': { cryptoFramework: {
@@ -83,6 +87,7 @@ const kits = {
     async withProfileStorage(_filesDir, operation) { await state.storageGate; return operation(); }
   },
   './VpnNetworkSettings': { async readVpnNetworkSettings() { return state.networkSettings; } },
+  './VpnHostBinding': { vpnHostBinding: hostBinding },
   './Controller': {}
 };
 const module = { exports: {} };
@@ -152,7 +157,7 @@ const geoSettings = loadConsumer('../entry/src/main/ets/shared/GeoResources.ets'
 const connectionBindings = {
   '@kit.AbilityKit': {}, '@kit.BasicServicesKit': {}, '@kit.NetworkKit': {},
   '@kit.ArkData': { preferences: { getPreferencesSync: () => prefs } },
-  './Controller': {},
+  './Controller': {}, './VpnHostBinding': { vpnHostBinding: hostBinding },
   './CoreClient': core, './Proxies': { flushProxySelections: async () => {} },
   './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': {
     CONTROLLER_ADDRESS: '127.0.0.1:19090', readRuntime: async () => state.runtime,
@@ -671,6 +676,7 @@ function runtimeConsumers() {
     './Controller': {}, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } },
     './CoreClient': client, './Proxies': { flushProxySelections: async () => {} },
     './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': runtime,
+    './VpnHostBinding': { vpnHostBinding: hostBinding },
     '../shared/GeoResources': geoSettings
   });
   const connection = new ConsumerConnection();
@@ -778,6 +784,81 @@ test('诊断配置身份不随普通运行revision变化，旧快照不得回退
   assert.equal(connection.configRevision, 1);
   connection.applyStopped();
   assert.equal(connection.configRevision, 0);
+});
+
+const warmStatus = (bootId) => ({ ...ready, bootId, intent: 'stopped', forward: 'stopped',
+  vpnCreated: false, tunAttached: false, listenersOpen: false, startedAt: 0 });
+
+async function settle(done) {
+  for (let i = 0; i < 2000 && !done(); ++i) {
+    await new Promise(resolve => setImmediate(resolve));
+  }
+}
+
+// 系统直接结束宿主进程：只剩界面进程，不写停止回执；下一次启动换新的 bootId。
+function reclaimHost(fixture, bootId) {
+  fixture.processes = [{ pid: 41 }];
+  state.status = warmStatus(bootId);
+}
+
+async function connectedConsumers() {
+  const consumers = runtimeConsumers();
+  hostBinding.binds = [];
+  state.status = warmStatus('boot.1');
+  consumers.connection.foreground = true;
+  await consumers.connection.connect(consumers.context);
+  assert.equal(consumers.connection.connected, true);
+  return consumers;
+}
+
+test('绑定断开且宿主没有停止回执时，前台立即恢复连接并重新绑定新宿主', async () => {
+  const { fixture, connection } = await connectedConsumers();
+  assert.deepEqual(hostBinding.binds, ['boot.1']);
+  reclaimHost(fixture, 'boot.2');
+  hostBinding.listener('boot.1');
+  await settle(() => connection.connected && connection.bootId === 'boot.2');
+  assert.equal(fixture.starts, 2);
+  assert.equal(connection.connected, true);
+  assert.deepEqual(hostBinding.binds, ['boot.1', 'boot.2']);
+});
+
+test('宿主留下停止回执、用户已断开或界面在后台时，绑定断开不重新拉起宿主', async () => {
+  const receipt = await connectedConsumers();
+  const instance = await receipt.runtime.readRuntimeInstance('/fixture');
+  await receipt.runtime.writeRuntimeStopped('/fixture', instance.secret, instance.instance);
+  receipt.fixture.processes = [{ pid: 41 }];
+  hostBinding.listener('boot.1');
+  await settle(() => !receipt.connection.connected);
+  assert.equal(receipt.fixture.starts, 1);
+  assert.equal(receipt.connection.intent, 'stopped');
+
+  const disconnected = await connectedConsumers();
+  await disconnected.connection.disconnect(disconnected.context);
+  reclaimHost(disconnected.fixture, 'boot.2');
+  hostBinding.listener('boot.1');
+  await settle(() => disconnected.connection.hostState === 'stopped');
+  assert.equal(disconnected.fixture.starts, 1);
+
+  const background = await connectedConsumers();
+  background.connection.foreground = false;
+  reclaimHost(background.fixture, 'boot.2');
+  hostBinding.listener('boot.1');
+  await settle(() => false);
+  assert.equal(background.fixture.starts, 1);
+});
+
+test('30 分钟内宿主反复退出时最多恢复 4 次，间隔逐次拉长', async () => {
+  const { fixture, connection } = await connectedConsumers();
+  const begin = state.now;
+  for (let i = 2; i <= 6; ++i) {
+    const lost = connection.bootId;
+    reclaimHost(fixture, `boot.${i}`);
+    hostBinding.listener(lost);
+    await settle(() => connection.bootId === `boot.${i}` && connection.connected);
+  }
+  assert.equal(fixture.starts, 5);
+  assert.ok(state.now - begin >= 2000 + 15000 + 60000 + 300000);
+  assert.equal(connection.bootId, 'boot.5');
 });
 
 test('旧运行文件不恢复历史连接意图', async () => {

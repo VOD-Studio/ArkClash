@@ -5,15 +5,30 @@ import { connection as networkConnection } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { OutboundMode, RuntimeStatus, setAllowLan, setMode } from './Controller';
 import { ControllerSocket } from './ControllerSocket';
-import { CoreHostState, connectVpn, disconnectVpn, readCoreHostStatus, startCore, stopCore, updateRuntimeOptions } from './CoreClient';
+import {
+  CoreHostState, connectVpn, disconnectVpn, hostInterrupted, readCoreHostStatus, startCore, stopCore,
+  updateRuntimeOptions
+} from './CoreClient';
 import { flushProxySelections } from './Proxies';
 import { traffic } from './Traffic';
+import { vpnHostBinding } from './VpnHostBinding';
 import { runtimeMayBeActive } from '../shared/Runtime';
 import { flushGeoSettings } from '../shared/GeoResources';
 
 const PREF_CONNECT_DURATION = 'lastConnectDuration';
 const PREF_MODE = 'outboundMode';
 const PREF_ALLOW_LAN = 'allowLan';
+// 宿主退出后的恢复间隔。内存不足时刚拉起的宿主可能再次被回收，按次数逐步拉长，
+// 30 分钟内最多恢复 4 次，之后等用户回到前台（ADR-0037）。
+const RECOVERY_DELAYS_MS: number[] = [2000, 15000, 60000, 300000];
+const RECOVERY_WINDOW_MS = 30 * 60 * 1000;
+// 系统登记进程退出需要一点时间，宿主状态未确认前不改写 runtime。
+const HOST_EXIT_CHECKS = 10;
+const HOST_EXIT_CHECK_MS = 300;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
 
 export enum ConnectionState {
   Disconnected,
@@ -47,6 +62,11 @@ export class Connection {
   @Trace coreStarting: boolean = false;
   private automaticFailed: boolean = false;
   private resumeVpn: boolean = false;
+  private context?: common.UIAbilityContext;
+  // 用户希望保持连接：连接时置位，断开时清除。宿主退出后据此决定是否恢复。
+  private wantConnected: boolean = false;
+  private recovering: boolean = false;
+  private recoveryTimes: number[] = [];
   private readyPending?: Promise<void>;
   @Trace modePending: boolean = false;
   @Trace modeError: string = '';
@@ -94,6 +114,8 @@ export class Connection {
   }
 
   restore(context: common.UIAbilityContext): void {
+    this.context = context;
+    vpnHostBinding.setListener((bootId: string): void => { this.hostLost(bootId); });
     this.filesDir = context.filesDir;
     this.prefs = preferences.getPreferencesSync(context, { name: 'settings' });
     const saved = this.prefs.getSync(PREF_MODE, '') as string;
@@ -175,6 +197,99 @@ export class Connection {
     });
   }
 
+  // 后台是否允许恢复。界面进程在后台会被冻结，只有持有长时任务时回调才能及时执行。
+  private backgroundRecovery(): boolean {
+    return false;
+  }
+
+  // 绑定断开即宿主进程已退出（ADR-0038）。用户希望保持连接时立即恢复，不必等回到前台。
+  private hostLost(bootId: string): void {
+    const context = this.context;
+    if (context === undefined || bootId !== this.bootId) {
+      return;
+    }
+    hilog.info(0x0A11, 'ArkClashBench', 'vpn_host_lost');
+    if (!this.foreground && !this.backgroundRecovery()) {
+      return;
+    }
+    if (!this.wantConnected) {
+      if (this.foreground) {
+        this.recheck(context).catch((): void => {});
+      }
+      return;
+    }
+    this.recoverHost(context).catch((): void => {});
+  }
+
+  private async recoverHost(context: common.UIAbilityContext): Promise<void> {
+    if (this.recovering) {
+      return;
+    }
+    const now = Date.now();
+    this.recoveryTimes = this.recoveryTimes.filter((at: number): boolean => now - at < RECOVERY_WINDOW_MS);
+    if (this.recoveryTimes.length >= RECOVERY_DELAYS_MS.length) {
+      hilog.info(0x0A11, 'ArkClashBench', 'vpn_recover_limited');
+      return;
+    }
+    const delay = RECOVERY_DELAYS_MS[this.recoveryTimes.length];
+    this.recoveryTimes.push(now);
+    this.recovering = true;
+    const generation = this.generation;
+    const current = (): boolean => generation === this.generation && this.wantConnected &&
+      (this.foreground || this.backgroundRecovery());
+    let attempt = -1;
+    try {
+      await sleep(delay);
+      let host = await readCoreHostStatus(context);
+      for (let i = 0; i < HOST_EXIT_CHECKS && host.state === 'unknown' && current(); ++i) {
+        await sleep(HOST_EXIT_CHECK_MS);
+        host = await readCoreHostStatus(context);
+      }
+      if (!current() || this.busy) {
+        return;
+      }
+      if (host.state === 'running' && host.status !== undefined) {
+        // 其他路径已经拉起了新宿主。
+        this.applyStatus(host.status);
+        if (this.connected) {
+          return;
+        }
+      } else if (host.state !== 'stopped') {
+        return;
+      } else {
+        const interrupted = await hostInterrupted(context.filesDir);
+        if (!current() || this.busy) {
+          return;
+        }
+        if (!interrupted) {
+          // 留下了停止回执：用户在系统设置里断开，或被其他 VPN 接管。
+          this.wantConnected = false;
+          this.applyStopped();
+          return;
+        }
+        this.applyStopped();
+      }
+      hilog.info(0x0A11, 'ArkClashBench', 'vpn_recover_start');
+      await this.ensureReady(context);
+      if (!current() || this.busy || this.connected) {
+        return;
+      }
+      attempt = this.generation + 1;
+      await this.connect(context);
+      if (this.connected) {
+        hilog.info(0x0A11, 'ArkClashBench', 'vpn_recover_done');
+      }
+    } catch (_error) {
+      hilog.info(0x0A11, 'ArkClashBench', 'vpn_recover_failed');
+      if (attempt === this.generation && !this.busy) {
+        // 与回前台恢复一致：失败时不提示，用户手动连接时照常显示原因。
+        this.error = '';
+      }
+    } finally {
+      this.recovering = false;
+    }
+  }
+
   private async prepareCore(context: common.UIAbilityContext, generation: number, automatic: boolean): Promise<void> {
     try {
       await this.settingsPending;
@@ -218,6 +333,7 @@ export class Connection {
       }
     }
     const generation = ++this.generation;
+    this.wantConnected = true;
     this.intent = 'started';
     this.error = '';
     this.forward = 'preparing';
@@ -290,6 +406,7 @@ export class Connection {
       throw new Error('代理正在停止，请稍后重试');
     }
     const generation = ++this.generation;
+    this.wantConnected = false;
     this.intent = 'stopped';
     this.error = '';
     this.state = ConnectionState.Disconnecting;
@@ -437,6 +554,12 @@ export class Connection {
     this.state = status.running && status.forward === 'running' && status.vpnCreated &&
       status.tunAttached && status.listenersOpen ? ConnectionState.Connected : ConnectionState.Disconnected;
     this.routeRevision = `${this.bootId}/${this.revision}/${this.routeEpoch}`;
+    if (status.running && !this.busy && !this.recovering) {
+      this.wantConnected = status.intent === 'started';
+    }
+    if (status.running && this.context !== undefined) {
+      vpnHostBinding.bind(this.context, status.bootId);
+    }
     this.syncEvents();
     this.syncDiagnosticsCapture();
   }

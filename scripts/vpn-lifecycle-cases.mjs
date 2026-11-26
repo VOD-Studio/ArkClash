@@ -183,6 +183,7 @@ function fixture(t, { empty = false, historicalIntent = 'stopped' } = {}) {
       MEMORY_LEVEL_LOW: 1, MEMORY_LEVEL_CRITICAL: 2, MEMORY_LEVEL_BACKGROUND_LOW: 5, MEMORY_LEVEL_BACKGROUND_CRITICAL: 6
     } } }],
     ['@kit.BasicServicesKit', {}],
+    ['@kit.IPCKit', { rpc: { RemoteObject: class { constructor(descriptor) { this.descriptor = descriptor; } } } }],
     ['@kit.ArkTS', { process: { pid: 20 },
       util: { TextEncoder: class { encodeInto(value) { return new TextEncoder().encode(value); } } }, url: { URL },
       taskpool: { execute: async (operation, ...args) => operation(...args) } }],

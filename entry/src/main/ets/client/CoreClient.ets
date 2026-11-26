@@ -10,6 +10,7 @@ import {
 import { RuntimeStatus } from './Controller';
 import { readVpnNetworkSettings } from './VpnNetworkSettings';
 import { withProfileStorage } from '../shared/profiles/Store';
+import { vpnHostBinding } from './VpnHostBinding';
 
 // Generous until Geo data is bundled: the first start may download it.
 const READY_TIMEOUT_MS = 30000;
@@ -129,6 +130,16 @@ async function interruptedWhileConnected(filesDir: string): Promise<boolean> {
     const previous = await readRuntime(filesDir);
     // 用户断开会先写 stopped；扩展正常销毁会留下停止回执。两者都没有，宿主只能是被杀或崩溃。
     return previous?.vpnIntent === 'started' && !await wasRuntimeStopped(filesDir, previous.secret);
+  } catch (_error) {
+    return false;
+  }
+}
+
+/** 最近一个宿主没有留下停止回执：它被系统回收或崩溃，而不是被用户、系统设置或其他 VPN 正常停止。 */
+export async function hostInterrupted(filesDir: string): Promise<boolean> {
+  try {
+    const runtime = await readRuntime(filesDir);
+    return runtime !== undefined && !await wasRuntimeStopped(filesDir, runtime.secret);
   } catch (_error) {
     return false;
   }
@@ -390,6 +401,7 @@ export async function stopCore(context: common.UIAbilityContext): Promise<void> 
 
 async function stopRuntimeResources(context: common.UIAbilityContext): Promise<void> {
   let stopError: Error | undefined = undefined;
+  await vpnHostBinding.release();
   try {
     await vpnExtension.stopVpnExtensionAbility(vpnWant(context));
   } catch (error) {

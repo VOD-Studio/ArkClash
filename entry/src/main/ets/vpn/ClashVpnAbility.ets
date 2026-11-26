@@ -8,7 +8,8 @@ import { hasFile } from '../shared/Files';
 import { newId, ProfileRecord, readList, readListAsync, validProfileId, withProfileStorage,
   yamlPath } from '../shared/profiles/Store';
 import { UpdateEnv, UpdateScheduler } from '../shared/profiles/Updater';
-import { beginRuntimeInstance, CONTROLLER_ADDRESS, readRuntime, RuntimeConfig, writeCoreError,
+import { rpc } from '@kit.IPCKit';
+import { beginRuntimeInstance, CONTROLLER_ADDRESS, HOST_BINDING_PARAM, readRuntime, RuntimeConfig, writeCoreError,
   writeRuntime, writeRuntimeStopped } from '../shared/Runtime';
 import {
   TUN_IPV4, TUN_IPV4_DNS, TUN_IPV6, TUN_IPV6_DNS, vpnExcludedApplications, VpnNetworkSettings, VpnRoutePrefix, vpnRoutePrefixes
@@ -69,6 +70,12 @@ interface VpnQueuedOperation {
 
 type VpnIntent = 'started' | 'stopped';
 
+class HostBinding extends rpc.RemoteObject {
+  constructor() {
+    super('arkclash.vpn.host');
+  }
+}
+
 interface VpnCleanupResult {
   errors: string[];
   canceled?: VpnCommandError;
@@ -95,7 +102,18 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
   private environmentCallbackId?: number;
   private reclaimingMemory: boolean = false;
 
-  onCreate(_want: Want): void {
+  onCreate(want: Want): void {
+    if (want.parameters?.[HOST_BINDING_PARAM] === true) {
+      // 绑定只用于已在运行的宿主；宿主恰好退出时系统可能借绑定重新拉起扩展，这里直接退出，不写实例和回执。
+      hilog.warn(DOMAIN, TAG, 'created by host binding, stopping');
+      this.invalidateHost();
+      vpnExtension.stopVpnExtensionAbility({
+        bundleName: this.context.applicationInfo.name, abilityName: 'ClashVpnAbility'
+      }).catch((): void => {
+        hilog.error(DOMAIN, TAG, 'binding-created host stop failed');
+      });
+      return;
+    }
     const generation = this.generation;
     this.startup = this.start(generation);
     this.startup.catch((error: Error): void => {
@@ -114,6 +132,14 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       });
     });
   }
+
+  // 系统按绑定方中最好的回收优先级加 100 计算本进程的优先级，没有绑定时固定为 500，
+  // 先于普通后台应用被回收。绑定不承载业务调用，业务仍走 controller（ADR-0038）。
+  onConnect(_want: Want): rpc.RemoteObject {
+    return new HostBinding();
+  }
+
+  onDisconnect(_want: Want): void {}
 
   onDestroy(): void {
     this.invalidateHost();
