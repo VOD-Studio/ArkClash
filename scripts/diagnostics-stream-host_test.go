@@ -70,6 +70,8 @@ func newDiagnosticStreamServer(t *testing.T, wrap func(net.Conn, *bufio.ReadWrit
 			getDiagnosticDns(w, r.WithContext(ctx))
 		case "/logs":
 			getDiagnosticLogs(w, r.WithContext(ctx))
+		case "/logs/clear":
+			postDiagnosticLogsClear(w, r.WithContext(ctx))
 		default:
 			getDiagnosticConnections(w, r.WithContext(ctx))
 		}
@@ -80,7 +82,7 @@ func newDiagnosticStreamServer(t *testing.T, wrap func(net.Conn, *bufio.ReadWrit
 
 func diagnosticStreamTarget(feed string) string {
 	query := url.Values{"expectedBootId": {runtimeBootID}}
-	if feed != "capture" {
+	if feed != "capture" && feed != "logs" {
 		query.Set("expectedConfigRevision", strconv.FormatUint(runtimeConfigRevision, 10))
 	}
 	return "/" + feed + "?" + query.Encode()

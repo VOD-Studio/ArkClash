@@ -85,6 +85,7 @@ func init() {
 			r.Get("/diagnostics/connections", getDiagnosticConnections)
 			r.Get("/diagnostics/dns", getDiagnosticDns)
 			r.Get("/diagnostics/logs", getDiagnosticLogs)
+			r.Post("/diagnostics/logs/clear", postDiagnosticLogsClear)
 			r.Post("/diagnostics/connections/close", postDiagnosticConnectionsClose)
 			r.Post("/diagnostics/dns/clear-cache", postDiagnosticDnsClearCache)
 			r.Post("/profiles/{name}", forwardCommand)

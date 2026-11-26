@@ -135,8 +135,10 @@ func start(opts startOptions) error {
 	current = opts
 	runningID.Store(&opts.Profile)
 	waitDiagnostics = beginRuntime()
+	ensureDiagnosticLogsLocked()
 	manager, err := newGeoManager(opts.HomeDir, runtimeBootID, opts.Geo)
 	if err != nil {
+		waitDiagnostics = together(waitDiagnostics, stopDiagnosticsLocked())
 		closeCoreListeners()
 		executor.Shutdown()
 		cleanupFailure = errors.Join(cleanupFailure, route.ArkClashCloseServer())
