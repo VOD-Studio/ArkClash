@@ -90,6 +90,44 @@
 
 * **ui:** 使用系统异步接口采集界面进程内存，避免在 ArkTS 主线程同步读取 smaps。
 
+## [0.6.3](https://github.com/VOD-Studio/ArkClash/compare/v0.6.2...v0.6.3) (2026-11-26)
+
+
+### 新增
+
+* **bridge:** 支持异步归还内核空闲堆页 ([3403a71](https://github.com/VOD-Studio/ArkClash/commit/3403a71e4c3af290e22ac881d062abe210e57b61))
+* **client:** VPN 进程被回收后回到前台自动恢复连接 ([8da901c](https://github.com/VOD-Studio/ArkClash/commit/8da901c2a1267d73bf3b14b88389f2166a1aace1))
+* **client:** 支持后台保持连接并在后台恢复被回收的 VPN ([dcafcae](https://github.com/VOD-Studio/ArkClash/commit/dcafcaea542a98a8a80e292e9f4da23645547050))
+* **core:** 按内核代次持续采集结构化脱敏日志 ([89184bb](https://github.com/VOD-Studio/ArkClash/commit/89184bb336906f7b593ebda0ef714d5b35de1e9c))
+* **core:** 提供可本地化的脱敏日志事件 ([63c707e](https://github.com/VOD-Studio/ArkClash/commit/63c707e99c630ed46768094d89e8c014fa40418f))
+* **tools:** 支持在后台掉线后查询 VPN 退出记录 ([5275c6e](https://github.com/VOD-Studio/ArkClash/commit/5275c6e85fc72103ec5dbc5d679f232824ce1d35))
+* **ui:** 支持查看日志详情与复制单条记录 ([00e3566](https://github.com/VOD-Studio/ArkClash/commit/00e3566fd0f9032d39576983b13b57f7362a62d5))
+* **ui:** 日志增量入场并在浏览历史时保持位置 ([9265221](https://github.com/VOD-Studio/ArkClash/commit/92652217ab2d6a6d3e2102d1057dea8a7a64536e))
+* **ui:** 重构日志页支持按内核代次浏览结构化日志 ([9e3930d](https://github.com/VOD-Studio/ArkClash/commit/9e3930d6cf8ae8453daf400d30ce0e7b1ce6e116))
+* **vpn:** 界面绑定 VPN 扩展以降低回收优先级 ([0724d4f](https://github.com/VOD-Studio/ArkClash/commit/0724d4fa4facae6d85333d8ac8b50657a8cb1122))
+* 增强 VPN 后台保活恢复、结构化日志并优化仪表盘体验 ([8097d3e](https://github.com/VOD-Studio/ArkClash/commit/8097d3e3c423ffa5f9dd1c5f81aaabd024de7529))
+
+
+### 修复
+
+* **client:** 回前台不再误清路由缓存并消除流量与内存闪断 ([1456b84](https://github.com/VOD-Studio/ArkClash/commit/1456b8486ba9deac628989100bb94209e5695b87))
+* **client:** 消除回前台预热竞态与多网回调误清路由缓存 ([de162b6](https://github.com/VOD-Studio/ArkClash/commit/de162b69bcb6e32538048fdf49d3a7225c9d5d83))
+* **client:** 短暂离开首页恢复订阅时无缝续接测速曲线 ([73839af](https://github.com/VOD-Studio/ArkClash/commit/73839af2b96b99abc7f0320bf17b34dfd44d1ede))
+* **client:** 连接途中不误释放后台保持的长时任务 ([770b50e](https://github.com/VOD-Studio/ArkClash/commit/770b50e794c57313b16e13498711846fef21b674))
+* **core:** 防止已结束连接的关闭错误阻断配置重载 ([d1fd8ed](https://github.com/VOD-Studio/ArkClash/commit/d1fd8eda6f3ebe51c7090652ecfe58dda4fe7242))
+* **scripts:** 构建内核时优先使用补丁 Go 工具链 ([17b7201](https://github.com/VOD-Studio/ArkClash/commit/17b7201c6d118f5d9a1e25344ab212207f416d0c))
+* **ui:** 修复网络速度曲线抖动假断档与底边裁切问题 ([6b96cb0](https://github.com/VOD-Studio/ArkClash/commit/6b96cb0fb8d9ce1f9aa368a02502939b76c98966))
+* **ui:** 将日志跳帧提示改为轻提示并移除顶部常驻文案 ([78ff855](https://github.com/VOD-Studio/ArkClash/commit/78ff855967306006c31e30bba4648c3dc93ac323))
+* **ui:** 暂停浏览时清空日志同步清掉暂停窗口 ([577efdb](https://github.com/VOD-Studio/ArkClash/commit/577efdb612d0be91d75f506e2f8ffed1ff5a9ea0))
+* **ui:** 统一四个一级页签列表顶部起始间距 ([cfb4528](https://github.com/VOD-Studio/ArkClash/commit/cfb452833e133e14c7d20c3f522019f1fa91a3f2))
+* **vpn:** 降低预热后及内存紧张时的驻留内存 ([95c0c66](https://github.com/VOD-Studio/ArkClash/commit/95c0c6692496061e976b4d047150a8b28af8abbb))
+
+
+### 性能
+
+* **ui:** 为二级设置与诊断页面补充内存缓存实现秒开 ([218e5cf](https://github.com/VOD-Studio/ArkClash/commit/218e5cfa40fd72f504f78f8853425ab5223676c8))
+* **ui:** 减少满载日志刷新时的整表计算 ([261663b](https://github.com/VOD-Studio/ArkClash/commit/261663b9ba1e6aa132ed201360bd68aedab57d2b))
+
 ## [0.6.2](https://github.com/VOD-Studio/ArkClash/compare/v0.6.1...v0.6.2) (2026-11-25)
 
 
