@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 真机操作。用法：ABI=arm64-v8a|x86_64 device.sh install [debug|release]|start|log
+# 真机操作。用法：ABI=arm64-v8a|x86_64 device.sh install [debug|release]|start|log|vpn-exits
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -33,8 +33,22 @@ case "${1:-}" in
   log)
     "$HDC" hilog | grep --line-buffered -E "ArkClashCore|ClashVpnAbility"
     ;;
+  vpn-exits)
+    hdc_command=("$HDC")
+    if [[ -n "${HDC_TARGET:-}" ]]; then
+      hdc_command+=(-t "$HDC_TARGET")
+    fi
+    # 部分 HDC 版本在设备断开时也返回 0，只有设备端执行完查询才输出记录。
+    report="$("${hdc_command[@]}" shell "hidumper -e --list '${BUNDLE}:vpn' -n 50 && echo ARKCLASH_QUERY_DONE")"
+    report="${report//$'\r'/}"
+    if [[ "$report" != *$'\nARKCLASH_QUERY_DONE' ]]; then
+      echo "无法读取 VPN 退出记录，请检查 HDC 连接，多台设备时指定 HDC_TARGET。" >&2
+      exit 1
+    fi
+    printf '%s\n' "${report%$'\nARKCLASH_QUERY_DONE'}"
+    ;;
   *)
-    echo "用法：$0 install [debug|release]|start|log" >&2
+    echo "用法：$0 install [debug|release]|start|log|vpn-exits" >&2
     exit 1
     ;;
 esac

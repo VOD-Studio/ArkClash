@@ -40,3 +40,11 @@ VPN 扩展在自己的进程中订阅 `ApplicationContext` 的环境事件。收
 修复版退后台后，设备从 11:12:10 到 11:15:10 息屏，结束时系统仍处于 SLEEP。唤醒前后 VPN PID 相同，TUN 保持连接。唤醒后新建 HTTPS 连接，379 ms 收到 204。系统退出记录未新增。
 
 两组冷启动均超过 500 ms 目标。8 小时待机耗电需在同机同网络、不充电的条件下锁屏对照，24 小时稳定性需核对 VPN 的 PID、bootId 与退出记录。本次短时实验未覆盖这两项和同类客户端对照。
+
+## 后台掉线后取证
+
+掉线后连接手机，在仓库根目录运行 `make vpn-exits`。它按 VPN 进程名向系统查询最近保留的最多 50 条退出记录，包括设备时间、前后台状态、原因和记录 ID。掉线当时可以不接电脑。用 `make -s vpn-exits > ~/arkclash-vpn-exits.log` 可保存结果，多台设备时用 `HDC_TARGET` 选择手机。
+
+2026-11-26 下午在同一台 HBP-AL00 上复现。15:11:09 确认 ArkClash 已退到后台，系统隧道仍在，VPN 进程 PSS 为 138.0 MiB，`oom_score_adj` 为 500，界面进程为 300。15:11:23 隧道仍在。15:11:34 系统给 VPN 进程记了一条 `SwapFull`，15:11:38 采样时只剩界面进程，隧道已消失。设备当时保留的 17 条 VPN 进程退出记录全部发生在后台，其中 14 条 `SwapFull`、3 条 `LowMemoryKill`。定位具体内存分配还需要进程退出前的堆数据。[华为应用终止原因说明](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/appkilled-guidelines/)
+
+回到 ArkClash 后，新 VPN 进程完成预热。点击首页连接后隧道重新建立，系统浏览器请求 Google Public DNS 返回 HTTP 200。
