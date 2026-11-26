@@ -48,3 +48,28 @@ VPN 扩展在自己的进程中订阅 `ApplicationContext` 的环境事件。收
 2026-11-26 下午在同一台 HBP-AL00 上复现。15:11:09 确认 ArkClash 已退到后台，系统隧道仍在，VPN 进程 PSS 为 138.0 MiB，`oom_score_adj` 为 500，界面进程为 300。15:11:23 隧道仍在。15:11:34 系统给 VPN 进程记了一条 `SwapFull`，15:11:38 采样时只剩界面进程，隧道已消失。设备当时保留的 17 条 VPN 进程退出记录全部发生在后台，其中 14 条 `SwapFull`、3 条 `LowMemoryKill`。定位具体内存分配还需要进程退出前的堆数据。[华为应用终止原因说明](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/appkilled-guidelines/)
 
 回到 ArkClash 后，新 VPN 进程完成预热。点击首页连接后隧道重新建立，系统浏览器请求 Google Public DNS 返回 HTTP 200。
+
+## 内存构成与 Go 堆软上限对照
+
+2026-11-26 在同一台 HBP-AL00 上，用 ARM64 Release 包和临时调试构建（不提交）测量。临时构建在回环地址导出 MemStats 和堆快照。VPN 进程的 `oom_score_adj` 一直是 500，界面在前台时也一样，原因和处理见 [ADR-0037](0037-resume-after-vpn-reclaim.md)。
+
+预热完成、未连接时，VPN 进程 PSS 102.8 MiB，另有 63.4 MiB 已换出，换出部分绝大多数不属于 Go 堆：
+
+| 类别 | PSS | 已换出 |
+|---|---:|---:|
+| AnonPage other（Go 堆、栈与运行时元数据） | 53.9 MiB | 6.1 MiB |
+| `.so`（主要是 `libclash.so` 重定位后的私有脏页） | 27.1 MiB | 22.1 MiB |
+| native heap（jemalloc，已分配约 45 MiB） | 12.9 MiB | 30.0 MiB |
+| ark ts heap | 5.5 MiB | 0.6 MiB |
+
+此时 Go 的 `HeapInuse` 为 37.9 MiB，`HeapAlloc` 为 26.3 MiB。堆快照里在用的 27.3 MiB 中，配置解析的反射对象约 9.5 MiB，域名规则集的 trie 约 7.0 MiB。同一时刻界面进程的 native heap 约 49 MiB，VPN 进程的 native heap 与之接近，更像 ArkTS 运行时的固定开销，且多半已换出。来源要在可调试包上做原生内存采样才能确认。
+
+冷启动后 Go 堆先冲高再回落：第 3 秒解析配置时在用堆 75 MiB，VmRSS 达到峰值；内核约 5 秒就绪；预取收尾的主动回收之后，稳态 RSS 在 122–126 MiB。`debug.SetMemoryLimit` 对照如下，每组冷启动后采样 40 秒：
+
+| Go 软上限 | VmRSS 峰值 | 内核就绪 | 稳态 VmRSS | GC 次数 / GC CPU 占比 |
+|---|---:|---:|---:|---:|
+| 不设 | 190 MiB | 5.2 s | 122–126 MiB | 73 / 1.6% |
+| 96 MiB（2 次） | 163–171 MiB | 6.2–6.4 s | 134–139 MiB | 约 125 / 2.6% |
+| 64 MiB（2 次） | 143–146 MiB | 12.3 s | 121 MiB | 约 845 / 10% |
+
+固定上限只压低启动后几秒的峰值，稳态没有下降，反而推迟内核就绪、增加 GC 耗电；64 MiB 时 GC 接近空转。因此不设固定上限，维持本文的按压力回收。
