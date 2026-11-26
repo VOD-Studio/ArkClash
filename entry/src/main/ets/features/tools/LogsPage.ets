@@ -12,15 +12,13 @@ import { KeyedListSource } from '../../components/KeyedListSource';
 import { HEADER_ACTION, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { GENERAL_LEVELS } from '../../shared/GeneralSettings';
 import { logLevelLabel } from './LogLabels';
-
-interface LogListRow {
-  key: string;
-  record: LogRecord;
-}
+import { LogHistory, LogListRow } from './LogHistory';
+import { RECORD_LIST_ANIMATION, recordListTransition, RecordListViewport } from './RecordList';
 
 @ComponentV2
 export struct LogsPage {
   @Param foreground: boolean = false;
+  @Param reduceMotion: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private conn: Connection = connection;
   @Local private settings: GeneralSettingsState = generalSettingsState;
@@ -30,6 +28,8 @@ export struct LogsPage {
   @Local private levelFilter: string = '';
   @Local private filtering: boolean = false;
   @Local private paused: boolean = false;
+  @Local private pending: number = 0;
+  @Local private animatedBatch: number = 0;
   @Local private isExporting: boolean = false;
   @Local private shownCount: number = 0;
   @Local private recordCount: number = 0;
@@ -41,8 +41,9 @@ export struct LogsPage {
   private revision: number = 0;
   private session: string = '';
   private seq: number = 0;
-  private records: LogListRow[] = [];
-  private frozen: LogListRow[] = [];
+  private readonly history: LogHistory = new LogHistory(LOG_LIMIT);
+  private readonly viewport: RecordListViewport = new RecordListViewport();
+  private readonly arrivalTransition: TransitionEffect = recordListTransition(-8);
   private readonly rows: KeyedListSource<LogListRow> = new KeyedListSource<LogListRow>();
 
   aboutToAppear(): void {
@@ -56,10 +57,13 @@ export struct LogsPage {
   sync(): void {
     if (!this.shown || !this.foreground || !this.settings.saved.captureLogs) {
       if (this.socket !== undefined && this.settings.saved.captureLogs) { this.gaps = true; }
+      if (!this.settings.saved.captureLogs) { this.gaps = false; }
+      this.viewport.activate(false);
       this.stop();
       this.clear();
       return;
     }
+    this.viewport.activate(true);
     if (!this.conn.coreReady || this.conn.bootId === '' || this.conn.configRevision === 0) {
       if (this.socket !== undefined) { this.gaps = true; }
       this.stop();
@@ -97,8 +101,7 @@ export struct LogsPage {
   }
 
   private clear(): void {
-    this.records = [];
-    this.frozen = [];
+    this.history.clear();
     this.evicted = 0;
     this.recordCount = 0;
     this.paused = false;
@@ -106,6 +109,7 @@ export struct LogsPage {
   }
 
   private receive(frame: LogFrame): void {
+    const newSession = frame.kind === 'snapshot' && frame.seq === 1 && frame.sessionId !== this.session;
     if (frame.kind === 'snapshot' && frame.seq === 1) {
       if (this.session !== '' && this.session !== frame.sessionId) { this.gaps = true; }
       this.session = frame.sessionId;
@@ -117,41 +121,39 @@ export struct LogsPage {
     this.seq = frame.seq;
     this.evicted = frame.evicted;
     if (frame.dropped > 0) { this.gaps = true; }
-    const incoming = frame.logs.map((record: LogRecord): LogListRow => ({ key: record.id, record: record }));
-    this.records = frame.kind === 'delta' ? this.records.concat(incoming).slice(-LOG_LIMIT) : incoming;
-    this.recordCount = this.records.length;
-    if (!this.paused) { this.refreshRows(); }
+    this.history.receive(frame.logs, frame.kind, newSession);
+    this.recordCount = this.history.window.latestCount;
+    this.refreshRows(frame.kind === 'delta', newSession);
   }
 
-  private refreshRows(): void {
-    const source = this.paused ? this.frozen : this.records;
-    const words = this.query.toLowerCase().trim().split(new RegExp('\\s+'));
-    const filtered = source.filter((row: LogListRow): boolean => {
-      const record = row.record;
-      if (this.levelFilter !== '' && record.level !== this.levelFilter) { return false; }
-      const text = `${record.level} ${record.message}`.toLowerCase();
-      return words.every((word: string): boolean => text.includes(word));
-    }).reverse();
-    this.rows.replace(filtered);
+  private refreshRows(delta: boolean = false, forceTop: boolean = false): void {
+    const filtered = this.history.filter(this.query, this.levelFilter);
+    const animate = delta && this.shown && this.foreground && !this.reduceMotion && !this.paused;
+    this.animatedBatch = animate ? this.history.batch : 0;
+    this.rows.replace(filtered, animate ? (apply: () => void): void => {
+      this.getUIContext().animateTo(RECORD_LIST_ANIMATION, apply);
+    } : undefined);
     this.shownCount = filtered.length;
+    this.pending = this.history.pending;
+    this.viewport.reconcile<LogListRow>(this.getUIContext(), this.rows, !this.paused, this.history.window.anchor, forceTop);
   }
 
   private pauseOrResume(): void {
     this.paused = !this.paused;
-    this.frozen = this.paused ? this.records.slice() : [];
-    this.refreshRows();
+    this.history.setFollowing(!this.paused);
+    this.refreshRows(false, !this.paused);
   }
 
   private selectFilter(level: string): void {
     this.levelFilter = level;
     this.filtering = false;
-    this.refreshRows();
+    this.refreshRows(false, true);
   }
 
   private async saveFile(): Promise<void> {
-    if (this.isExporting || this.records.length === 0) { return; }
+    if (this.isExporting || this.recordCount === 0) { return; }
     this.isExporting = true;
-    const snapshot = this.records.map((row: LogListRow): LogRecord => row.record);
+    const snapshot = this.history.window.latest().map((row: LogListRow): LogRecord => row.record);
     try {
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
       if (await exportLogs(context, snapshot) && this.shown) {
@@ -205,12 +207,14 @@ export struct LogsPage {
       TextInput({ text: this.query, placeholder: $r('app.string.logs_search') })
         .layoutWeight(1).height(40).maxLength(256).onChange((text: string): void => {
           this.query = text;
-          this.refreshRows();
+          this.refreshRows(false, true);
         })
       Button(this.levelFilter === '' ? $r('app.string.logs_filter') : logLevelLabel(this.levelFilter))
         .buttonStyle(ButtonStyleMode.TEXTUAL).onClick((): void => { this.filtering = true; })
-      Button(this.paused ? $r('app.string.logs_resume') : $r('app.string.logs_pause'))
+      Button(this.paused && this.pending > 0 ? $r('app.string.logs_view_new', this.pending) :
+        this.paused ? $r('app.string.logs_resume') : $r('app.string.logs_pause'))
         .buttonStyle(ButtonStyleMode.TEXTUAL).enabled(this.recordCount > 0 || this.paused)
+        .id('logs-follow')
         .onClick((): void => this.pauseOrResume())
     }.padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 12, bottom: 8 })
   }
@@ -218,7 +222,16 @@ export struct LogsPage {
   @Builder
   LogControls() {
     if (this.settings.saved.captureLogs) { this.Controls() }
-    if (this.gaps || this.evicted > 0) {
+    if (this.settings.saved.captureLogs && this.recordCount > 0 &&
+      (!this.conn.coreReady || this.streamState === 'failed' || this.streamState === 'retrying' || this.streamState === 'closed')) {
+      Row({ space: 8 }) {
+        Text($r('app.string.logs_disconnected')).fontSize(13).fontColor($r('sys.color.font_secondary'))
+        if (this.conn.coreReady && (this.streamState === 'failed' || this.streamState === 'closed')) {
+          Button($r('app.string.action_retry')).buttonStyle(ButtonStyleMode.TEXTUAL)
+            .onClick((): void => { this.stop(); this.sync(); })
+        }
+      }.padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
+    } else if (this.gaps || this.evicted > 0) {
       Text(this.gaps ? $r('app.string.logs_gap') : $r('app.string.logs_evicted', this.evicted))
         .fontSize(13).fontColor($r('sys.color.font_secondary'))
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 8 })
@@ -233,22 +246,40 @@ export struct LogsPage {
       pageHidden: (_reason: VisibilityChangeReason): void => { this.shown = false; this.sync(); }
     }) {
       ScrollControls({ controls: (): void => this.LogControls() }) {
-        if (this.shownCount > 0) {
-          List({ space: 6 }) {
+        Stack() {
+          List({ scroller: this.viewport.scroller, space: 6 }) {
             LazyForEach(this.rows, (row: LogListRow) => {
               ListItem() { LogRecordItem({ record: row.record }) }
+                .transition(this.animatedBatch === row.batch && !this.reduceMotion ?
+                  this.arrivalTransition : TransitionEffect.IDENTITY)
             }, (row: LogListRow): string => row.key)
-          }.layoutWeight(1).width('100%').cachedCount(3, true)
+          }.height('100%').width('100%').cachedCount(3, true)
             .clipContent(ContentClipMode.SAFE_AREA)
             .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 16 })
-        } else {
-          Column({ space: 12 }) {
-            Text(this.emptyLabel()).fontSize(15).fontColor($r('sys.color.font_secondary'))
-            if (this.streamState === 'failed') {
-              Button($r('app.string.action_retry')).onClick((): void => { this.stop(); this.sync(); })
-            }
-          }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
-        }
+            .maintainVisibleContentPosition(this.paused)
+            .onAppear((): void => { this.viewport.bind(this.shown && this.foreground); })
+            .onDisAppear((): void => this.viewport.release())
+            .onScrollIndex((first: number, last: number): void => {
+              this.viewport.capture<LogListRow>(this.rows, first, last, (key: string): void => { this.history.window.anchor = key; });
+            })
+            .onDidScroll((): void => {
+              this.viewport.captureCurrent<LogListRow>(this.rows, (key: string): void => { this.history.window.anchor = key; });
+            })
+            .onWillScroll((offset: number, _state: ScrollState, source: ScrollSource): void => {
+              if (this.viewport.isUserAway(offset, source) && !this.paused) {
+                this.viewport.pauseForUser();
+                this.pauseOrResume();
+              }
+            })
+          if (this.shownCount === 0) {
+            Column({ space: 12 }) {
+              Text(this.emptyLabel()).fontSize(15).fontColor($r('sys.color.font_secondary'))
+              if (this.streamState === 'failed' && this.recordCount === 0) {
+                Button($r('app.string.action_retry')).onClick((): void => { this.stop(); this.sync(); })
+              }
+            }.width('100%').justifyContent(FlexAlign.Center)
+          }
+        }.layoutWeight(1).width('100%')
         Column().bindSheet($$this.filtering, this.FilterSheet, { title: { title: $r('app.string.logs_filter') },
           height: SheetSize.MEDIUM, systemMaterial: this.appStyle.sheetMaterial(), showClose: true })
       }

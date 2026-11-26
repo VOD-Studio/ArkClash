@@ -236,7 +236,7 @@ class RecordAfterLayout extends FrameCallback {
   onIdle(_timeLeftInNano: number): void { this.action(); }
 }
 
-class RecordListViewport {
+export class RecordListViewport {
   readonly scroller: Scroller = new Scroller();
   private bound: boolean = false;
   private active: boolean = false;

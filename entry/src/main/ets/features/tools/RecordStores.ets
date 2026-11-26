@@ -37,7 +37,7 @@ interface RecordHistoryItem {
 }
 
 // canonical 按内核顺序保存；暂停时保留独立、有界的滚动窗口。
-class RecordHistory<T extends RecordHistoryItem> {
+export class RecordHistory<T extends RecordHistoryItem> {
   private canonical: Map<string, T> = new Map<string, T>();
   private paused: T[] = [];
   private pausedIndices: Map<string, number> = new Map<string, number>();
@@ -60,8 +60,12 @@ class RecordHistory<T extends RecordHistoryItem> {
   }
 
   values(): T[] {
-    return this.following ? Array.from<T>(this.canonical.values()) : this.paused;
+    return this.following ? this.latest() : this.paused;
   }
+
+  latest(): T[] { return Array.from<T>(this.canonical.values()); }
+  hasLatest(id: string): boolean { return this.canonical.has(id); }
+  get latestCount(): number { return this.canonical.size; }
 
   get count(): number { return this.following ? this.canonical.size : this.paused.length; }
 

@@ -3997,6 +3997,10 @@
       "value": "继续"
     },
     {
+      "name": "logs_view_new",
+      "value": "查看 %d 条新日志"
+    },
+    {
       "name": "logs_capture_off",
       "value": "日志捕获已关闭。"
     },

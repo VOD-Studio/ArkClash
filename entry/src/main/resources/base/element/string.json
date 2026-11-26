@@ -4017,6 +4017,10 @@
       "value": "Resume"
     },
     {
+      "name": "logs_view_new",
+      "value": "View new (%d)"
+    },
+    {
       "name": "logs_capture_off",
       "value": "Log capture is off."
     },

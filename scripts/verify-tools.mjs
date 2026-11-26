@@ -1219,6 +1219,39 @@ function registerToolsLogicTests(createHarness) {
 
 registerToolsLogicTests(createToolsHarness);
 
+test('log history keeps an anchored reading window, counts matching arrivals and exports only the live window', () => {
+  const h = createToolsHarness();
+  try {
+    const { LogHistory } = h.load('features/tools/LogHistory.ets');
+    const history = new LogHistory(5000);
+    const batch = (start, count) => Array.from({ length: count }, (_, index) => {
+      const id = start + index;
+      return { id: String(id), time: id, level: id % 2 ? 'debug' : 'info', message: 'Fixture event' };
+    });
+    history.receive(batch(0, 5000), 'snapshot', true);
+    history.setFollowing(false);
+    history.window.anchor = '125';
+    history.receive(batch(5000, 5000), 'delta', false);
+    assert.equal(history.filter('EVENT fixt', 'info').length, 5000);
+    assert.equal(history.pending, 2500);
+    assert.equal(history.window.anchor, '125');
+    assert.equal(history.window.latest()[0].id, '5000');
+    history.receive(batch(10000, 256), 'delta', false);
+    assert.equal(history.window.count, 10000);
+    assert.equal(history.window.anchor, '256');
+    const latest = history.filter('', '')[0];
+    history.receive(batch(5256, 5000), 'reset', false);
+    assert.equal(history.filter('', '')[0], latest);
+    assert.equal(history.pending, 5000);
+    history.receive(batch(0, 2), 'snapshot', true);
+    assert.equal(history.filter('', '').length, 2);
+    assert.equal(history.pending, 0);
+    assert.equal(history.window.following, false);
+    history.setFollowing(true);
+    assert.equal(history.window.anchor, '');
+  } finally { h.cleanup(); }
+});
+
 test('store速度只用sampledAt，空delta归零，重连同ID的大累计量不得跨断流计算', async () => toolsCase(async h => {
   const { store, socket } = await onlineTools(h, 'connections', { live: [toolConnection('active')] });
   store.select('active');
