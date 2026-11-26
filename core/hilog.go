@@ -28,14 +28,14 @@ func init() {
 			case "[ArkClash] core started", "[ArkClash] reloaded profile %s",
 				"[ArkClash] core stopped with pending VPN resources: %s",
 				"[ArkClash] external controller port unavailable":
-				message = diagnosticLogMessage(event)
+				message = describeDiagnosticLog(event).Message
 			case "[%s] %s --> %s using DIRECT", "[%s] %s --> %s using GLOBAL",
 				"[%s] %s --> %s using %s", "[%s] %s --> %s match %s using %s",
 				"[%s] %s --> %s doesn't match any rule using %s":
 				if log.Level() > log.INFO {
 					continue
 				}
-				message = diagnosticLogMessage(event)
+				message = describeDiagnosticLog(event).Message
 			default:
 				continue
 			}

@@ -4001,6 +4001,98 @@
       "value": "Log details"
     },
     {
+      "name": "log_route_selected",
+      "value": "Connected via selected route"
+    },
+    {
+      "name": "log_route_direct",
+      "value": "Direct connection established"
+    },
+    {
+      "name": "log_dns_udp",
+      "value": "Intercepted UDP DNS query"
+    },
+    {
+      "name": "log_dns_tcp",
+      "value": "Intercepted TCP DNS query"
+    },
+    {
+      "name": "log_dns_cache",
+      "value": "DNS cache hit"
+    },
+    {
+      "name": "log_dns_query",
+      "value": "Sent DNS query to upstream"
+    },
+    {
+      "name": "log_dns_answer",
+      "value": "Received DNS answer"
+    },
+    {
+      "name": "log_dns_failed",
+      "value": "DNS lookup failed"
+    },
+    {
+      "name": "log_default_rules",
+      "value": "Matching connection against default rules"
+    },
+    {
+      "name": "log_named_rules",
+      "value": "Matching connection against named rules"
+    },
+    {
+      "name": "log_vision_direct",
+      "value": "XTLS Vision started direct transfer"
+    },
+    {
+      "name": "log_core_started",
+      "value": "Core started"
+    },
+    {
+      "name": "log_controller_unavailable",
+      "value": "External controller port unavailable"
+    },
+    {
+      "name": "log_vpn_cleanup",
+      "value": "Core stopped with VPN resources pending"
+    },
+    {
+      "name": "log_profile_reloaded",
+      "value": "Profile reloaded"
+    },
+    {
+      "name": "log_dial_timeout",
+      "value": "Connection failed · Timeout"
+    },
+    {
+      "name": "log_dial_certificate",
+      "value": "Connection failed · Certificate error"
+    },
+    {
+      "name": "log_dial_refused",
+      "value": "Connection failed · Connection refused"
+    },
+    {
+      "name": "log_dial_host",
+      "value": "Connection failed · Host not found"
+    },
+    {
+      "name": "log_dial_network",
+      "value": "Connection failed · Network unreachable"
+    },
+    {
+      "name": "log_dial_auth",
+      "value": "Connection failed · Authentication error"
+    },
+    {
+      "name": "log_dial_failed",
+      "value": "Dial failed"
+    },
+    {
+      "name": "log_other",
+      "value": "Unclassified core event"
+    },
+    {
       "name": "logs_copy_record",
       "value": "Copy this log"
     },

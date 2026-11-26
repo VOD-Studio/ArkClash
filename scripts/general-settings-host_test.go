@@ -234,10 +234,10 @@ func TestLogPageCaptureThresholdRedactionAndRetirement(t *testing.T) {
 		t.Fatal("missing initial log snapshot")
 	}
 	log.Infoln("ignored level: %s", "unneeded")
-	log.Errorln("download failed: %s", "https://secret.example/subscription?token=private")
+	log.Errorln("[DNS] resolve %s error: %s", "private.example", "https://secret.example/subscription?token=private")
 	if err := json.Unmarshal(readDiagnosticWSFrame(t, conn, reader).Payload, &frame); err != nil ||
 		frame.Kind != "delta" || len(frame.Logs) != 1 || frame.Logs[0].Level != "error" ||
-		!strings.Contains(frame.Logs[0].Message, "download failed") || strings.Contains(frame.Logs[0].Message, "secret") {
+		frame.Logs[0].Event != "dns_failed" || frame.Logs[0].Message != "[DNS] resolve failed" {
 		t.Fatal("log threshold or redaction failed")
 	}
 	closeDiagnosticClient(t, conn, reader)
@@ -247,6 +247,27 @@ func TestLogPageCaptureThresholdRedactionAndRetirement(t *testing.T) {
 	mu.Unlock()
 	if collector != nil {
 		t.Fatal("last log subscriber did not retire capture")
+	}
+}
+
+func TestDiagnosticLogDescriptionsOnlyUseKnownTemplatesAndCauses(t *testing.T) {
+	const dialTemplate = "[%s] dial %s %s --> %s error: %s"
+	for _, item := range []struct{ template, payload, event, reason string }{
+		{"[%s] %s --> %s match %s using %s", "private node and endpoint", "route_selected", ""},
+		{"[DNS] hijack udp:%s from %s", "private endpoints", "dns_udp", ""},
+		{"[Rule] use default rules", "", "default_rules", ""},
+		{"[Rule] rematch proxy %s update metadata to rematch-name=%q sub-rule=%q", "private settings", "template", ""},
+		{dialTemplate, "[TCP] dial timeout-node private error: connect: connection refused", "dial_failed", "connection refused"},
+		{dialTemplate, "[TCP] dial private error: context deadline exceeded", "dial_failed", "timeout"},
+		{dialTemplate, "[TCP] dial private error: x509: certificate has expired", "dial_failed", "certificate"},
+		{dialTemplate, "[TCP] dial timeout-node private error: EOF", "dial_failed", "dial error"},
+		{"dynamic private node %s at https://private.example", "private", "other", ""},
+	} {
+		got := describeDiagnosticLog(log.Event{Template: item.template, Payload: item.payload})
+		if got.Event != item.event || got.Reason != item.reason ||
+			strings.Contains(got.Message, "private") || strings.Contains(got.Message, "timeout-node") {
+			t.Fatalf("unexpected classification for %s: %+v", item.event, got)
+		}
 	}
 }
 

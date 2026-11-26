@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"regexp"
 	"strings"
 	"time"
 
@@ -13,14 +12,18 @@ const diagnosticLogLimit = 5000
 
 var errDiagnosticLogsDisabled = errors.New("diagnostic_logs_disabled")
 var diagnosticLogs *diagnosticCollector
-var logFormatVerb = regexp.MustCompile(`%(?:\[[0-9]+\])?[-+#0 .0-9]*[a-zA-Z%]`)
-var logTemplateURL = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s]+`)
 
 type diagnosticLogRecord struct {
-	ID      string `json:"id"`
-	Time    int64  `json:"time"`
-	Level   string `json:"level"`
+	ID    string `json:"id"`
+	Time  int64  `json:"time"`
+	Level string `json:"level"`
+	diagnosticLogText
+}
+
+type diagnosticLogText struct {
+	Event   string `json:"event"`
 	Message string `json:"message"`
+	Reason  string `json:"reason,omitempty"`
 }
 
 type diagnosticLogsFrame struct {
@@ -29,40 +32,63 @@ type diagnosticLogsFrame struct {
 }
 
 // 变量参数可能有订阅、节点和凭据。动态拼接后作为 format 传入的正文也不能直接输出。
-func diagnosticLogMessage(event log.Event) string {
+func describeDiagnosticLog(event log.Event) diagnosticLogText {
 	switch event.Template {
-	case "[ArkClash] core started", "[ArkClash] external controller port unavailable":
-		return event.Template
+	case "[ArkClash] core started":
+		return diagnosticLogText{Event: "core_started", Message: event.Template}
+	case "[ArkClash] external controller port unavailable":
+		return diagnosticLogText{Event: "controller_unavailable", Message: event.Template}
 	case "[ArkClash] core stopped with pending VPN resources: %s":
-		return "[ArkClash] core stopped with pending VPN resources"
+		return diagnosticLogText{Event: "vpn_cleanup", Message: "[ArkClash] core stopped with pending VPN resources"}
 	case "[ArkClash] reloaded profile %s":
-		return "[ArkClash] profile reloaded"
+		return diagnosticLogText{Event: "profile_reloaded", Message: "[ArkClash] profile reloaded"}
 	case "[%s] %s --> %s using DIRECT":
-		return "Connection established via DIRECT"
+		return diagnosticLogText{Event: "route_direct", Message: "Connection established via DIRECT"}
 	case "[%s] %s --> %s using GLOBAL", "[%s] %s --> %s using %s", "[%s] %s --> %s match %s using %s",
 		"[%s] %s --> %s doesn't match any rule using %s":
-		return "Connection established through selected route"
+		return diagnosticLogText{Event: "route_selected", Message: "Connection established through selected route"}
 	case "[%s] dial %s %s --> %s error: %s", "[%s] dial %s (match %s/%s) %s --> %s error: %s":
-		return "Connection failed: " + diagnosticLogCause(event.Payload)
+		reason := diagnosticLogCause(event.Payload)
+		return diagnosticLogText{Event: "dial_failed", Message: "Connection failed: " + reason, Reason: reason}
+	case "[DNS] hijack udp:%s from %s":
+		return diagnosticLogText{Event: "dns_udp", Message: "[DNS] hijack udp:… from …"}
+	case "[DNS] hijack tcp:%s":
+		return diagnosticLogText{Event: "dns_tcp", Message: "[DNS] hijack tcp:…"}
+	case "[DNS] cache hit %s --> %s, expire at %s":
+		return diagnosticLogText{Event: "dns_cache", Message: "[DNS] cache hit …"}
+	case "[DNS] resolve %s %s from %s":
+		return diagnosticLogText{Event: "dns_query", Message: "[DNS] resolve … from …"}
+	case "[DNS] %s --> %s", "[DNS] %s --> %s from %s":
+		return diagnosticLogText{Event: "dns_answer", Message: "[DNS] query answered"}
+	case "[DNS] resolve %s error: %s":
+		return diagnosticLogText{Event: "dns_failed", Message: "[DNS] resolve failed"}
+	case "[Rule] use default rules":
+		return diagnosticLogText{Event: "default_rules", Message: event.Template}
+	case "[Rule] use %s rules":
+		return diagnosticLogText{Event: "named_rules", Message: "[Rule] use named rules"}
+	case "XTLS Vision direct read start", "XTLS Vision direct write start":
+		return diagnosticLogText{Event: "vision_direct", Message: event.Template}
+	default:
+		if text := log.ArkClashStaticLogMessage(event.Template); text != "" {
+			return diagnosticLogText{Event: "template", Message: text}
+		}
+		return diagnosticLogText{Event: "other", Message: "Core event"}
 	}
-	if !logFormatVerb.MatchString(event.Template) {
-		return "Core event"
-	}
-	body := logFormatVerb.ReplaceAllString(event.Template, "…")
-	body = logTemplateURL.ReplaceAllString(body, "…")
-	body = strings.Join(strings.Fields(body), " ")
-	if len(body) > 256 {
-		return "Core event"
-	}
-	return body
 }
 
 func diagnosticLogCause(payload string) string {
-	payload = strings.ToLower(payload)
+	i := strings.LastIndex(payload, " error: ")
+	if i < 0 {
+		return "dial error"
+	}
+	payload = strings.ToLower(payload[i+len(" error: "):])
 	for _, cause := range []string{"certificate", "connection refused", "timeout", "no such host", "network is unreachable", "authentication"} {
 		if strings.Contains(payload, cause) {
 			return cause
 		}
+	}
+	if strings.Contains(payload, "deadline exceeded") || strings.Contains(payload, "timed out") {
+		return "timeout"
 	}
 	return "dial error"
 }
@@ -91,7 +117,7 @@ func (c *diagnosticCollector) collectLogs() {
 				return
 			case event := <-input:
 				c.appendLog(diagnosticLogRecord{ID: diagnosticID(), Time: time.Now().UnixMilli(),
-					Level: event.Type(), Message: diagnosticLogMessage(event)})
+					Level: event.Type(), diagnosticLogText: describeDiagnosticLog(event)})
 			}
 		}
 	}()

@@ -3981,6 +3981,98 @@
       "value": "日志详情"
     },
     {
+      "name": "log_route_selected",
+      "value": "已按选定路由建立连接"
+    },
+    {
+      "name": "log_route_direct",
+      "value": "已建立直连"
+    },
+    {
+      "name": "log_dns_udp",
+      "value": "已接管 UDP DNS 查询"
+    },
+    {
+      "name": "log_dns_tcp",
+      "value": "已接管 TCP DNS 查询"
+    },
+    {
+      "name": "log_dns_cache",
+      "value": "DNS 查询命中缓存"
+    },
+    {
+      "name": "log_dns_query",
+      "value": "已向上游发起 DNS 查询"
+    },
+    {
+      "name": "log_dns_answer",
+      "value": "已收到 DNS 应答"
+    },
+    {
+      "name": "log_dns_failed",
+      "value": "DNS 解析失败"
+    },
+    {
+      "name": "log_default_rules",
+      "value": "使用默认规则匹配连接"
+    },
+    {
+      "name": "log_named_rules",
+      "value": "使用指定规则匹配连接"
+    },
+    {
+      "name": "log_vision_direct",
+      "value": "XTLS Vision 开始直接传输"
+    },
+    {
+      "name": "log_core_started",
+      "value": "内核已启动"
+    },
+    {
+      "name": "log_controller_unavailable",
+      "value": "外部控制器端口不可用"
+    },
+    {
+      "name": "log_vpn_cleanup",
+      "value": "内核已停止，VPN 资源待释放"
+    },
+    {
+      "name": "log_profile_reloaded",
+      "value": "已重新加载配置"
+    },
+    {
+      "name": "log_dial_timeout",
+      "value": "连接失败 · 超时"
+    },
+    {
+      "name": "log_dial_certificate",
+      "value": "连接失败 · 证书错误"
+    },
+    {
+      "name": "log_dial_refused",
+      "value": "连接失败 · 连接被拒绝"
+    },
+    {
+      "name": "log_dial_host",
+      "value": "连接失败 · 找不到主机"
+    },
+    {
+      "name": "log_dial_network",
+      "value": "连接失败 · 网络不可达"
+    },
+    {
+      "name": "log_dial_auth",
+      "value": "连接失败 · 认证错误"
+    },
+    {
+      "name": "log_dial_failed",
+      "value": "拨号连接失败"
+    },
+    {
+      "name": "log_other",
+      "value": "未分类内核事件"
+    },
+    {
       "name": "logs_copy_record",
       "value": "复制这条日志"
     },

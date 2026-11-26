@@ -9,13 +9,14 @@ import { AppearanceState, appAppearance } from '../../components/AppearanceState
 import { DestinationTitle } from '../../components/DestinationTitle';
 import { ScrollDestination } from '../../components/ScrollDestination';
 import { ListRow } from '../../components/ListRow';
+import { uiResourceText } from '../../components/ResourceText';
 import { KeyedListSource } from '../../components/KeyedListSource';
 import { HEADER_ACTION, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { GENERAL_LEVELS } from '../../shared/GeneralSettings';
-import { logLevelLabel } from './LogLabels';
+import { logCopyText, logLevelLabel, logSummaryLabel } from './LogLabels';
 import { LogHistory, LogListRow } from './LogHistory';
 import { RECORD_LIST_ANIMATION, recordListTransition, RecordListViewport } from './RecordList';
-import { LogRecordDetails, LogRecordItem, logCopyText } from './LogRecordView';
+import { LogRecordDetails, LogRecordItem } from './LogRecordView';
 
 @ComponentV2
 export struct LogsPage {
@@ -45,7 +46,8 @@ export struct LogsPage {
   private revision: number = 0;
   private session: string = '';
   private seq: number = 0;
-  private readonly history: LogHistory = new LogHistory(LOG_LIMIT);
+  private readonly labels: Map<number, string> = new Map<number, string>();
+  private readonly history: LogHistory = new LogHistory(LOG_LIMIT, (record: LogRecord): string => this.summary(record));
   private readonly viewport: RecordListViewport = new RecordListViewport();
   private readonly arrivalTransition: TransitionEffect = recordListTransition(-8);
   private detailOpen: boolean = false;
@@ -107,6 +109,7 @@ export struct LogsPage {
   }
 
   private clear(): void {
+    this.labels.clear();
     this.followingBeforeDetail = false;
     this.selected = undefined;
     this.detailsShown = false;
@@ -115,6 +118,16 @@ export struct LogsPage {
     this.recordCount = 0;
     this.paused = false;
     this.refreshRows();
+  }
+
+  private summary(record: LogRecord): string {
+    const label = logSummaryLabel(record);
+    if (typeof label === 'string') { return label; }
+    const cached = this.labels.get(label.id);
+    if (cached !== undefined) { return cached; }
+    const text = uiResourceText(this.getUIContext(), label);
+    this.labels.set(label.id, text);
+    return text;
   }
 
   private receive(frame: LogFrame): void {
@@ -182,7 +195,7 @@ export struct LogsPage {
     let message = $r('app.string.diagnostics_copied');
     try {
       await pasteboard.getSystemPasteboard().setData(pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN,
-        logCopyText(row.record)));
+        logCopyText(row.record, row.summary)));
     } catch (_error) { message = $r('app.string.diagnostics_copy_failed'); }
     if (this.selected === row && this.shown && this.foreground) {
       this.getUIContext().getPromptAction().showToast({ message: message });
@@ -243,7 +256,7 @@ export struct LogsPage {
   @Builder
   DetailSheet() {
     if (this.selected !== undefined) {
-      LogRecordDetails({ record: this.selected.record, onCopy: (): void => { this.copySelected(); } })
+      LogRecordDetails({ row: this.selected, onCopy: (): void => { this.copySelected(); } })
     }
   }
 
@@ -296,7 +309,7 @@ export struct LogsPage {
           List({ scroller: this.viewport.scroller, space: 6 }) {
             LazyForEach(this.rows, (row: LogListRow) => {
               ListItem() {
-                LogRecordItem({ record: row.record, onOpen: (): void => this.openDetails(row) })
+                LogRecordItem({ row: row, onOpen: (): void => this.openDetails(row) })
               }
                 .transition(this.animatedBatch === row.batch && !this.reduceMotion ?
                   this.arrivalTransition : TransitionEffect.IDENTITY)

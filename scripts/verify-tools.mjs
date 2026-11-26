@@ -12,7 +12,7 @@ const ts = require(process.env.ARKCLASH_TYPESCRIPT);
 const etsDir = fileURLToPath(new URL('../entry/src/main/ets/', import.meta.url));
 const plain = data => JSON.parse(JSON.stringify(data));
 
-export function createToolsHarness() {
+export function createToolsHarness(extraKits = {}) {
   let now = Date.parse('2026-01-01T00:00:00Z');
   let nextTimer = 0;
   const timers = new Map();
@@ -142,9 +142,10 @@ export function createToolsHarness() {
     const module = { exports: {} };
     modules.set(absolute, module);
     const bindings = {
-      module, exports: module.exports, console, ...clock,
+      module, exports: module.exports, console, ...clock, $r: name => ({ name }),
       DataOperationType: { ADD: 'add', DELETE: 'delete', CHANGE: 'change', EXCHANGE: 'exchange' },
       require(name) {
+        if (name in extraKits) return extraKits[name];
         if (name in kits) return kits[name];
         assert.ok(name.startsWith('.'), `unexpected platform dependency ${name}`);
         const target = path.resolve(path.dirname(absolute), `${name}.ets`);
@@ -1223,7 +1224,7 @@ test('log history keeps an anchored reading window, counts matching arrivals and
   const h = createToolsHarness();
   try {
     const { LogHistory } = h.load('features/tools/LogHistory.ets');
-    const history = new LogHistory(5000);
+    const history = new LogHistory(5000, record => record.level === 'debug' ? '测试超时' : '测试连接');
     const batch = (start, count) => Array.from({ length: count }, (_, index) => {
       const id = start + index;
       return { id: String(id), time: id, level: id % 2 ? 'debug' : 'info', message: 'Fixture event' };
@@ -1233,6 +1234,8 @@ test('log history keeps an anchored reading window, counts matching arrivals and
     history.window.anchor = '125';
     history.receive(batch(5000, 5000), 'delta', false);
     assert.equal(history.filter('EVENT fixt', 'info').length, 5000);
+    assert.equal(history.pending, 2500);
+    assert.equal(history.filter('超时 fIxTuRe', '').length, 5000);
     assert.equal(history.pending, 2500);
     assert.equal(history.window.anchor, '125');
     assert.equal(history.window.latest()[0].id, '5000');
@@ -1250,6 +1253,70 @@ test('log history keeps an anchored reading window, counts matching arrivals and
     history.setFollowing(true);
     assert.equal(history.window.anchor, '');
   } finally { h.cleanup(); }
+});
+
+test('日志中文搜索、详情快照和单条复制独立于完整实时导出', async () => {
+  let exported = '';
+  const h = createToolsHarness({
+    '@kit.ArkTS': { util: { TextEncoder: class { encodeInto(text) { return Buffer.from(text); } } } },
+    '@kit.CoreFileKit': {
+      picker: { DocumentSaveOptions: class {}, DocumentViewPicker: class { async save() { return ['fixture']; } } },
+      fileIo: { OpenMode: { WRITE_ONLY: 1, TRUNC: 2 }, open: async () => ({ fd: 1 }), close: async () => {},
+        fsync: async () => {}, write: async (_fd, text) => { exported += text; return Buffer.byteLength(text); } }
+    }
+  });
+  try {
+    const { LogHistory } = h.load('features/tools/LogHistory.ets');
+    const { logSummaryLabel, logCopyText } = h.load('features/tools/LogLabels.ets');
+    const { exportLogs } = h.load('client/Logs.ets');
+    const resources = JSON.parse(fs.readFileSync(path.join(etsDir, '../resources/zh_CN/element/string.json'))).string;
+    const labels = new Map(resources.map(item => ['app.string.' + item.name, item.value]));
+    const history = new LogHistory(2, record => {
+      const label = logSummaryLabel(record);
+      return typeof label === 'string' ? label : labels.get(label.name);
+    });
+    const record = { id: 'first', time: 123456789, level: 'warning', event: 'dial_failed', reason: 'timeout',
+      message: 'Connection failed: timeout' };
+    history.receive([record], 'snapshot', true);
+    const selected = history.filter('超时 TIMEOUT', 'warning')[0];
+    history.setFollowing(false);
+    for (let i = 0; i < 5; i++) {
+      history.receive([{ id: String(i), time: i, level: 'info', message: 'sanitized ' + i }], 'delta', false);
+    }
+    assert.equal(history.filter('超时', 'warning').length, 0);
+    assert.match(logCopyText(selected.record, selected.summary), /\.789 \[warning\] 连接失败 · 超时\nConnection failed: timeout$/);
+    assert.equal(await exportLogs(h.context, history.window.latest().map(row => row.record)), true);
+    assert.equal(exported, '1970-01-01T00:00:00.003Z [info] sanitized 3\n1970-01-01T00:00:00.004Z [info] sanitized 4\n');
+  } finally { h.cleanup(); }
+});
+
+test('日志流损坏时保留已有记录，显式重连后接受新的快照', async () => {
+  const h = createToolsHarness({ '@kit.ArkTS': {}, '@kit.CoreFileKit': {} });
+  const { logStream } = h.load('client/Logs.ets');
+  const { LogHistory } = h.load('features/tools/LogHistory.ets');
+  const history = new LogHistory(5000, record => record.message);
+  let state;
+  const socket = logStream('boot-a', 1, frame => history.receive(frame.logs, frame.kind, frame.kind === 'snapshot'),
+    next => { state = next; });
+  const record = { id: 'before', time: 10, level: 'info', message: 'safe' };
+  try {
+    socket.start(h.context.filesDir);
+    await h.flush();
+    const first = h.sockets.at(-1);
+    first.open();
+    first.emit(toolFrame('logs', 'snapshot', 1, { logs: [record] }));
+    first.emit(toolFrame('logs', 'delta', 2, { logs: [null] }));
+    assert.equal(state, 'failed');
+    assert.equal(history.window.latest()[0].id, 'before');
+    socket.stop();
+    socket.start(h.context.filesDir);
+    await h.flush();
+    const next = h.sockets.at(-1);
+    next.open();
+    next.emit(toolFrame('logs', 'snapshot', 1, { sessionId: 'session-b', logs: [{ ...record, id: 'after' }] }));
+    assert.equal(state, 'open');
+    assert.deepEqual(Array.from(history.window.latest(), row => row.id), ['after']);
+  } finally { socket.stop(); h.cleanup(); }
 });
 
 test('store速度只用sampledAt，空delta归零，重连同ID的大累计量不得跨断流计算', async () => toolsCase(async h => {

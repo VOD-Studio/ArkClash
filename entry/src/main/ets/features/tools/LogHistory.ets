@@ -5,13 +5,15 @@ export class LogListRow {
   readonly record: LogRecord;
   readonly order: number;
   readonly batch: number;
+  readonly summary: string;
   readonly searchable: string;
 
-  constructor(record: LogRecord, order: number, batch: number) {
+  constructor(record: LogRecord, order: number, batch: number, summary: string) {
     this.record = record;
     this.order = order;
     this.batch = batch;
-    this.searchable = (record.level + ' ' + record.message).toLowerCase();
+    this.summary = summary;
+    this.searchable = (record.level + ' ' + record.message + (summary === record.message ? '' : ' ' + summary)).toLowerCase();
   }
 
   get id(): string { return this.record.id; }
@@ -22,10 +24,14 @@ export class LogHistory {
   readonly window: RecordHistory<LogListRow>;
   private order: number = 0;
   private pausedAt: number = 0;
+  private readonly describe: (record: LogRecord) => string;
   batch: number = 0;
   pending: number = 0;
 
-  constructor(limit: number) { this.window = new RecordHistory<LogListRow>(limit, limit * 2); }
+  constructor(limit: number, describe: (record: LogRecord) => string) {
+    this.window = new RecordHistory<LogListRow>(limit, limit * 2);
+    this.describe = describe;
+  }
 
   clear(): void {
     this.window.clear();
@@ -45,7 +51,7 @@ export class LogHistory {
     if (newSession) { this.clear(); }
     ++this.batch;
     const rows = records.map((record: LogRecord): LogListRow =>
-      this.window.get(record.id) ?? new LogListRow(record, ++this.order, this.batch));
+      this.window.get(record.id) ?? new LogListRow(record, ++this.order, this.batch, this.describe(record)));
     if (kind === 'delta') {
       this.window.append(rows);
     } else {

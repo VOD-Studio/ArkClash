@@ -10,6 +10,16 @@ export interface LogRecord {
   time: number;
   level: string;
   message: string;
+  event?: string;
+  reason?: string;
+}
+
+function validLog(record: LogRecord): boolean {
+  return record !== null && typeof record.id === 'string' && record.id.length > 0 &&
+    Number.isSafeInteger(record.time) && Math.abs(record.time) <= 8640000000000000 &&
+    typeof record.level === 'string' && typeof record.message === 'string' &&
+    (record.event === undefined || typeof record.event === 'string') &&
+    (record.reason === undefined || typeof record.reason === 'string');
 }
 
 export interface LogFrame {
@@ -33,7 +43,7 @@ export function logStream(bootId: string, revision: number, onFrame: (frame: Log
       if (frame.type !== 'logs' || frame.bootId !== bootId || frame.configRevision !== revision ||
         !Number.isSafeInteger(frame.seq) || frame.seq <= 0 || frame.sessionId.length === 0 ||
         !['snapshot', 'delta', 'reset'].includes(frame.kind) ||
-        !Array.isArray(frame.logs) || frame.logs.length > LOG_LIMIT) {
+        !Array.isArray(frame.logs) || frame.logs.length > LOG_LIMIT || !frame.logs.every(validLog)) {
         throw new Error('invalid_log_frame');
       }
       onFrame(frame);
