@@ -154,7 +154,7 @@ export struct LogsPage {
     this.animatedBatch = animate ? this.history.batch : 0;
     this.rows.replace(filtered, animate ? (apply: () => void): void => {
       this.getUIContext().animateTo(RECORD_LIST_ANIMATION, apply);
-    } : undefined);
+    } : undefined, delta);
     this.shownCount = filtered.length;
     this.pending = this.history.pending;
     this.viewport.reconcile<LogListRow>(this.getUIContext(), this.rows, !this.paused, this.history.window.anchor, forceTop);

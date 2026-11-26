@@ -6,24 +6,37 @@ export class LogListRow {
   readonly order: number;
   readonly batch: number;
   readonly summary: string;
-  readonly searchable: string;
+  private searchText?: string;
 
   constructor(record: LogRecord, order: number, batch: number, summary: string) {
     this.record = record;
     this.order = order;
     this.batch = batch;
     this.summary = summary;
-    this.searchable = (record.level + ' ' + record.message + (summary === record.message ? '' : ' ' + summary)).toLowerCase();
   }
 
   get id(): string { return this.record.id; }
   get key(): string { return this.record.id; }
+
+  matches(terms: string[]): boolean {
+    if (terms.length === 0) { return true; }
+    if (this.searchText === undefined) {
+      this.searchText = (this.record.level + ' ' + this.record.message +
+        (this.summary === this.record.message ? '' : ' ' + this.summary)).toLowerCase();
+    }
+    for (const term of terms) {
+      if (!this.searchText.includes(term)) { return false; }
+    }
+    return true;
+  }
 }
 
 export class LogHistory {
   readonly window: RecordHistory<LogListRow>;
   private order: number = 0;
   private pausedAt: number = 0;
+  private query: string = '';
+  private terms: string[] = [];
   private readonly describe: (record: LogRecord) => string;
   batch: number = 0;
   pending: number = 0;
@@ -61,17 +74,23 @@ export class LogHistory {
   }
 
   filter(query: string, level: string): LogListRow[] {
-    const words = query.toLowerCase().trim().split(new RegExp('\\s+')).filter((word: string): boolean => word !== '');
-    const source = this.window.values();
-    const result: LogListRow[] = [];
-    this.pending = 0;
-    for (let i = source.length - 1; i >= 0; i--) {
-      const row = source[i];
-      if ((level !== '' && row.record.level !== level) ||
-        !words.every((word: string): boolean => row.searchable.includes(word))) { continue; }
-      result.push(row);
-      if (!this.window.following && row.order > this.pausedAt && this.window.hasLatest(row.id)) { ++this.pending; }
+    if (query !== this.query) {
+      this.query = query;
+      const trimmed = query.toLowerCase().trim();
+      this.terms = trimmed === '' ? [] : trimmed.split(new RegExp('\\s+'));
     }
-    return result;
+    let rows = this.window.values().reverse();
+    if (level !== '' || this.terms.length > 0) {
+      rows = rows.filter((row: LogListRow): boolean =>
+        (level === '' || row.record.level === level) && row.matches(this.terms));
+    }
+    this.pending = 0;
+    if (!this.window.following) {
+      for (const row of rows) {
+        if (row.order <= this.pausedAt) { break; }
+        if (this.window.hasLatest(row.id)) { ++this.pending; }
+      }
+    }
+    return rows;
   }
 }

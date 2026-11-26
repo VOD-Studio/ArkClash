@@ -39,8 +39,7 @@ interface RecordHistoryItem {
 // canonical 按内核顺序保存；暂停时保留独立、有界的滚动窗口。
 export class RecordHistory<T extends RecordHistoryItem> {
   private canonical: Map<string, T> = new Map<string, T>();
-  private paused: T[] = [];
-  private pausedIndices: Map<string, number> = new Map<string, number>();
+  private paused: Map<string, T> = new Map<string, T>();
   private limit: number;
   private pausedLimit: number;
   following: boolean = true;
@@ -53,50 +52,46 @@ export class RecordHistory<T extends RecordHistoryItem> {
 
   clear(): void {
     this.canonical.clear();
-    this.paused = [];
-    this.pausedIndices.clear();
+    this.paused.clear();
     this.following = true;
     this.anchor = '';
   }
 
   values(): T[] {
-    return this.following ? this.latest() : this.paused;
+    return Array.from<T>((this.following ? this.canonical : this.paused).values());
   }
 
   latest(): T[] { return Array.from<T>(this.canonical.values()); }
   hasLatest(id: string): boolean { return this.canonical.has(id); }
   get latestCount(): number { return this.canonical.size; }
 
-  get count(): number { return this.following ? this.canonical.size : this.paused.length; }
+  get count(): number { return this.following ? this.canonical.size : this.paused.size; }
 
   get(id: string): T | undefined {
-    const index = this.pausedIndices.get(id);
-    return this.canonical.get(id) ?? (index === undefined ? undefined : this.paused[index]);
+    return this.canonical.get(id) ?? this.paused.get(id);
   }
 
   append(records: T[]): void {
-    for (const record of records) { this.canonical.set(record.id, record); }
-    if (this.canonical.size > this.limit) {
-      for (const id of this.canonical.keys()) {
-        this.canonical.delete(id);
-        if (this.canonical.size === this.limit) { break; }
+    this.appendBounded(this.canonical, records, this.limit);
+    if (!this.following) {
+      this.appendBounded(this.paused, records, this.pausedLimit);
+      if (this.anchor !== '' && !this.paused.has(this.anchor)) {
+        this.anchor = '';
+        for (const id of this.paused.keys()) { this.anchor = id; break; }
       }
     }
-    this.mergePaused(records);
   }
 
   update(record: T): void {
     if (this.canonical.has(record.id)) { this.canonical.set(record.id, record); }
-    const index = this.pausedIndices.get(record.id);
-    if (index !== undefined) { this.paused[index] = record; }
+    if (this.paused.has(record.id)) { this.paused.set(record.id, record); }
   }
 
   replace(records: T[], newSession: boolean): void {
     this.canonical.clear();
     // 同一 boot/revision 的新流也可能来自新 collector，不能携带旧暂停记录。
     if (newSession && !this.following) {
-      this.paused = [];
-      this.pausedIndices.clear();
+      this.paused.clear();
     }
     this.append(records);
   }
@@ -104,40 +99,20 @@ export class RecordHistory<T extends RecordHistoryItem> {
   setFollowing(following: boolean): void {
     if (following === this.following) { return; }
     if (!following) {
-      this.paused = Array.from<T>(this.canonical.values());
-      this.reindexPaused();
+      this.paused = new Map<string, T>(this.canonical);
     } else {
-      this.paused = [];
-      this.pausedIndices.clear();
+      this.paused.clear();
       this.anchor = '';
     }
     this.following = following;
   }
 
-  private mergePaused(records: T[]): void {
-    if (this.following) { return; }
-    for (const record of records) {
-      const index = this.pausedIndices.get(record.id);
-      if (index === undefined) {
-        this.pausedIndices.set(record.id, this.paused.length);
-        this.paused.push(record);
-      } else {
-        this.paused[index] = record;
-      }
-    }
-    if (this.paused.length > this.pausedLimit) {
-      this.paused.splice(0, this.paused.length - this.pausedLimit);
-      this.reindexPaused();
-    }
-    if (this.anchor !== '' && !this.pausedIndices.has(this.anchor)) {
-      this.anchor = this.paused.length > 0 ? this.paused[0].id : '';
-    }
-  }
-
-  private reindexPaused(): void {
-    this.pausedIndices.clear();
-    for (let index = 0; index < this.paused.length; index++) {
-      this.pausedIndices.set(this.paused[index].id, index);
+  private appendBounded(window: Map<string, T>, records: T[], limit: number): void {
+    for (const record of records) { window.set(record.id, record); }
+    if (window.size <= limit) { return; }
+    for (const id of window.keys()) {
+      window.delete(id);
+      if (window.size <= limit) { break; }
     }
   }
 }
@@ -923,7 +898,7 @@ export class DnsRecordsStore {
   }
 
   private refresh(animate: boolean = false): void {
-    const ordered = this.history.values().slice().reverse();
+    const ordered = this.history.values().reverse();
     const filtered = filterDns(ordered, this.query, this.facets);
     const records = sortDns(filtered, this.tableSort);
     const next: Map<string, DnsListRow> = new Map<string, DnsListRow>();

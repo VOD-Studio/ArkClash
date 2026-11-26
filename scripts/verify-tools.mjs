@@ -1255,6 +1255,33 @@ test('log history keeps an anchored reading window, counts matching arrivals and
   } finally { h.cleanup(); }
 });
 
+test('满载日志一批只裁去末尾和添加首行，重置中变化的同键记录仍会更新', () => {
+  const h = createToolsHarness();
+  try {
+    const { KeyedListSource } = h.load('components/KeyedListSource.ets');
+    const source = new KeyedListSource();
+    const [a, b, c, d, e, f] = Array.from('abcdef', key => ({ key }));
+    source.replace([d, c, b, a]);
+    const notices = [];
+    source.registerDataChangeListener({ onDatasetChange(operations) {
+      notices.push({ keys: Array.from(source.values(), row => row.key).join(''), operations: plain(operations) });
+    } });
+    let animations = 0;
+    source.replace([f, e, d, c], apply => { ++animations; apply(); }, true);
+    assert.equal(animations, 1);
+    assert.deepEqual(notices, [
+      { keys: 'dc', operations: [{ type: 'delete', index: 2, count: 2 }] },
+      { keys: 'fedc', operations: [{ type: 'add', index: 0, count: 2 }] }
+    ]);
+    assert.strictEqual(source.getData(3), c);
+    notices.length = 0;
+    const changed = { key: 'e', message: 'updated' };
+    source.replace([{ key: 'g' }, f, changed, d], undefined, true);
+    assert.strictEqual(source.getData(2), changed);
+    assert.ok(notices.some(({ operations }) => operations.some(op => op.type === 'change' && op.index === 2)));
+  } finally { h.cleanup(); }
+});
+
 test('日志中文搜索、详情快照和单条复制独立于完整实时导出', async () => {
   let exported = '';
   const h = createToolsHarness({
