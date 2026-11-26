@@ -3,18 +3,55 @@ import { curves } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { uiResourceText } from '../../components/ResourceText';
 
-const BUTTON_STAGE_SIZE = 84;
-const BUTTON_HALO_SIZE = 82;
-const BUTTON_BODY_SIZE = 68;
-const BUTTON_CIRCLE_RADIUS = 34;
-const BUTTON_SQUIRCLE_RADIUS = 22;
-const BUTTON_HALO_CIRCLE_RADIUS = 41;
-const BUTTON_HALO_SQUIRCLE_RADIUS = 29;
-const MORPH_SPRING = curves.springMotion(0.36, 0.74);
-const HALO_SPRING = curves.springMotion(0.38, 0.76);
+const BUTTON_STAGE_SIZE = 82;
+const BUTTON_SHAPE_SIZE = 78;
+const BUTTON_ICON_SIZE = 28;
+const MORPH_SPRING = curves.springMotion(0.42, 0.82);
 
-function shadowHex(argb: number): string {
-  return `#${(argb >>> 0).toString(16).padStart(8, '0')}`;
+// 原始不规则鹅卵石轮廓（1 个起点 + 6 段三次贝塞尔闭合曲线，共 38 个坐标值）。
+const IRREGULAR_BUTTON_POINTS: number[] = [
+  54, 4,
+  71, 2, 86, 4, 92, 14,
+  102, 31, 93, 58, 84, 77,
+  78, 90, 69, 100, 58, 99,
+  42, 97, 23, 84, 12, 70,
+  -1, 55, -1, 37, 9, 24,
+  19, 10, 35, 5, 54, 4
+];
+
+// 与上方 6 段锚点一一对应的等面积正圆（圆心 50,50、半径 45.5、从 -85° 顺时针每 60° 一段）。
+const REGULAR_CIRCLE_POINTS: number[] = [
+  53.97, 4.67,
+  70.16, 6.09, 84.37, 16.04, 91.24, 30.77,
+  98.11, 45.5, 96.6, 62.78, 87.27, 76.1,
+  77.95, 89.41, 62.23, 96.74, 46.03, 95.33,
+  29.84, 93.91, 15.63, 83.96, 8.76, 69.23,
+  1.89, 54.5, 3.4, 37.22, 12.73, 23.9,
+  22.05, 10.59, 37.77, 3.26, 53.97, 4.67
+];
+
+function lerpCoordinate(index: number, factor: number): string {
+  const start = IRREGULAR_BUTTON_POINTS[index];
+  const value = start + (REGULAR_CIRCLE_POINTS[index] - start) * factor;
+  return value.toFixed(2);
+}
+
+function morphedRunButtonCommands(progress: number): string {
+  const factor = Math.max(-0.08, Math.min(1.08, progress));
+  let commands = `M${lerpCoordinate(0, factor)} ${lerpCoordinate(1, factor)}`;
+  for (let segment = 0; segment < 6; segment++) {
+    const base = 2 + segment * 6;
+    commands += ` C${lerpCoordinate(base, factor)} ${lerpCoordinate(base + 1, factor)} ` +
+      `${lerpCoordinate(base + 2, factor)} ${lerpCoordinate(base + 3, factor)} ` +
+      `${lerpCoordinate(base + 4, factor)} ${lerpCoordinate(base + 5, factor)}`;
+  }
+  return `${commands} Z`;
+}
+
+// 逐帧插值 6 段三次贝塞尔控制点，让不规则轮廓与规则圆形之间连续自然形变。
+@AnimatableExtend(Path)
+function runButtonMorphCommands(progress: number) {
+  .commands(morphedRunButtonCommands(progress))
 }
 
 @ComponentV2
@@ -26,25 +63,15 @@ struct RunButtonFace {
   @Param visible: boolean = false;
 
   @Local private loadingShown: boolean = false;
-  @Local private busyPulsing: boolean = false;
-  @Local private ripplePhase: number = 0;
-  private appeared: boolean = false;
-  private wasSettledRunning: boolean = false;
   private loadingGeneration: number = 0;
-  private rippleGeneration: number = 0;
-  private rippleExpandTimer: number = -1;
-  private rippleResetTimer: number = -1;
 
   aboutToAppear(): void {
     this.syncLoading();
   }
 
   aboutToDisappear(): void {
-    this.appeared = false;
     this.loadingGeneration++;
     this.loadingShown = false;
-    this.busyPulsing = false;
-    this.clearRipple();
   }
 
   @Monitor('busy', 'visible', 'motionEnabled')
@@ -53,50 +80,6 @@ struct RunButtonFace {
     if (this.busy || !this.visible || !this.motionEnabled) {
       this.loadingShown = this.visible && this.busy;
     }
-    this.busyPulsing = this.appeared && this.busy && this.visible && this.motionEnabled;
-  }
-
-  @Monitor('running', 'busy', 'visible', 'motionEnabled')
-  syncRipple(): void {
-    const settledRunning = this.running && !this.busy;
-    if (settledRunning && !this.wasSettledRunning && this.appeared && this.visible && this.motionEnabled) {
-      this.triggerRipple();
-    } else if (!settledRunning || !this.visible || !this.motionEnabled) {
-      this.clearRipple();
-    }
-    this.wasSettledRunning = settledRunning;
-  }
-
-  private clearRipple(): void {
-    this.rippleGeneration++;
-    if (this.rippleExpandTimer !== -1) {
-      clearTimeout(this.rippleExpandTimer);
-      this.rippleExpandTimer = -1;
-    }
-    if (this.rippleResetTimer !== -1) {
-      clearTimeout(this.rippleResetTimer);
-      this.rippleResetTimer = -1;
-    }
-    this.ripplePhase = 0;
-  }
-
-  // 连接落定后播一次向外消散的同心圆角波纹，结束后完全静止不占电量。
-  private triggerRipple(): void {
-    this.clearRipple();
-    const generation = this.rippleGeneration;
-    this.ripplePhase = 1;
-    this.rippleExpandTimer = setTimeout((): void => {
-      this.rippleExpandTimer = -1;
-      if (generation === this.rippleGeneration && this.appeared && this.visible && this.motionEnabled) {
-        this.ripplePhase = 2;
-      }
-    }, 24);
-    this.rippleResetTimer = setTimeout((): void => {
-      this.rippleResetTimer = -1;
-      if (generation === this.rippleGeneration) {
-        this.ripplePhase = 0;
-      }
-    }, 620);
   }
 
   private loadingAnimation(): AnimateParam {
@@ -123,80 +106,32 @@ struct RunButtonFace {
 
   build() {
     Stack() {
-      // 单次连接确认波纹：起手藏在主体下方，落定时从圆角方轮廓平滑扩散消隐。
-      Column()
-        .width(BUTTON_BODY_SIZE)
-        .height(BUTTON_BODY_SIZE)
-        .borderRadius(BUTTON_SQUIRCLE_RADIUS)
-        .border({ width: 2, color: this.appStyle.palette.brandPulse })
-        .backgroundColor(Color.Transparent)
-        .scale({ x: this.ripplePhase === 2 ? 1.38 : 0.94, y: this.ripplePhase === 2 ? 1.38 : 0.94 })
-        .opacity(this.ripplePhase === 1 ? 0.72 : 0)
-        .animation({
-          duration: this.ripplePhase === 2 && this.motionEnabled && this.visible ? 560 : 0,
-          curve: Curve.EaseOut
-        })
-        .hitTestBehavior(HitTestMode.None)
-        .accessibilityLevel('no')
-
-      // 连接/断开过渡呼吸环：使用对称往返脉冲，任意时刻停止都能平滑收回，无突兀跳变。
-      Column()
-        .width(BUTTON_HALO_SIZE)
-        .height(BUTTON_HALO_SIZE)
-        .borderRadius(BUTTON_HALO_CIRCLE_RADIUS)
-        .backgroundColor(this.appStyle.palette.brandSoft)
-        .border({ width: 1.5, color: this.appStyle.palette.brandPulse })
-        .scale({ x: this.busyPulsing ? 1.1 : 0.88, y: this.busyPulsing ? 1.1 : 0.88 })
-        .opacity(this.busyPulsing ? 0.85 : 0)
-        .animation({
-          duration: this.busyPulsing ? 720 : (this.motionEnabled && this.visible ? 220 : 0),
-          curve: this.busyPulsing ? Curve.EaseInOut : Curve.EaseOut,
-          iterations: this.busyPulsing ? -1 : 1,
-          playMode: this.busyPulsing ? PlayMode.Alternate : PlayMode.Normal
-        })
-        .hitTestBehavior(HitTestMode.None)
-        .accessibilityLevel('no')
-
-      // 运行态同心软晕：与主体严格等距同心（22vp + 7vp = 29vp），稳态零动画。
-      Column()
-        .width(BUTTON_HALO_SIZE)
-        .height(BUTTON_HALO_SIZE)
-        .borderRadius(this.settledRunning() ? BUTTON_HALO_SQUIRCLE_RADIUS : BUTTON_HALO_CIRCLE_RADIUS)
-        .backgroundColor(this.appStyle.palette.brandSoft)
-        .scale({ x: this.settledRunning() ? 1 : 0.78, y: this.settledRunning() ? 1 : 0.78 })
-        .opacity(this.settledRunning() ? 1 : 0)
-        .animation({
-          duration: this.motionEnabled && this.visible ? 360 : 0,
-          curve: this.settledRunning() ? HALO_SPRING : Curve.EaseOut
-        })
-        .hitTestBehavior(HitTestMode.None)
-        .accessibilityLevel('no')
-
-      // 开关主体：待机为正圆、运行态弹簧形变为圆角方，过渡期稳态微缩不晃动。
-      Column()
-        .width(BUTTON_BODY_SIZE)
-        .height(BUTTON_BODY_SIZE)
-        .borderRadius(this.settledRunning() ? BUTTON_SQUIRCLE_RADIUS : BUTTON_CIRCLE_RADIUS)
-        .backgroundColor(this.appStyle.palette.brand)
-        .scale({ x: this.busy ? 0.92 : 1, y: this.busy ? 0.92 : 1 })
-        .shadow({
-          radius: this.getUIContext().vp2px(this.settledRunning() ? 14 : 10),
-          color: shadowHex(this.appStyle.palette.brandPulse),
-          offsetX: 0,
-          offsetY: this.getUIContext().vp2px(4)
-        })
-        .animation({
-          duration: this.motionEnabled && this.visible ? 380 : 0,
-          curve: this.motionEnabled && this.visible ? MORPH_SPRING : Curve.EaseOut
-        })
-        .hitTestBehavior(HitTestMode.None)
-        .accessibilityLevel('no')
+      Shape() {
+        Path()
+          .runButtonMorphCommands(this.running ? 1 : 0)
+          .fill(this.appStyle.palette.brand)
+          .strokeWidth(0)
+          .animation({
+            duration: this.motionEnabled && this.visible ? 460 : 0,
+            curve: this.motionEnabled && this.visible ? MORPH_SPRING : Curve.EaseOut
+          })
+      }
+      .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
+      .width(BUTTON_SHAPE_SIZE)
+      .height(BUTTON_SHAPE_SIZE)
+      .scale({ x: this.busy ? 0.93 : 1, y: this.busy ? 0.93 : 1 })
+      .animation({
+        duration: this.motionEnabled && this.visible ? 320 : 0,
+        curve: this.motionEnabled && this.visible ? MORPH_SPRING : Curve.EaseOut
+      })
+      .hitTestBehavior(HitTestMode.None)
+      .accessibilityLevel('no')
 
       SymbolGlyph($r('sys.symbol.play_fill'))
-        .fontSize(28)
+        .fontSize(BUTTON_ICON_SIZE)
         .fontColor([this.appStyle.palette.onBrand])
-        .width(28)
-        .height(28)
+        .width(BUTTON_ICON_SIZE)
+        .height(BUTTON_ICON_SIZE)
         .translate({ x: 1.5 })
         .scale({ x: this.showPlay() ? 1 : 0.55, y: this.showPlay() ? 1 : 0.55 })
         .rotate({ angle: this.showPlay() ? 0 : -24 })
@@ -206,10 +141,10 @@ struct RunButtonFace {
         .accessibilityLevel('no')
 
       SymbolGlyph($r('sys.symbol.pause_fill'))
-        .fontSize(28)
+        .fontSize(BUTTON_ICON_SIZE)
         .fontColor([this.appStyle.palette.onBrand])
-        .width(28)
-        .height(28)
+        .width(BUTTON_ICON_SIZE)
+        .height(BUTTON_ICON_SIZE)
         .scale({ x: this.settledRunning() ? 1 : 0.55, y: this.settledRunning() ? 1 : 0.55 })
         .rotate({ angle: this.settledRunning() ? 0 : 24 })
         .opacity(this.settledRunning() ? 1 : 0)
@@ -218,8 +153,8 @@ struct RunButtonFace {
         .accessibilityLevel('no')
 
       LoadingProgress()
-        .width(28)
-        .height(28)
+        .width(BUTTON_ICON_SIZE)
+        .height(BUTTON_ICON_SIZE)
         .color(this.appStyle.palette.onBrand)
         .enableLoading(this.loadingShown)
         .scale({ x: this.busy ? 1 : 0.65, y: this.busy ? 1 : 0.65 })
@@ -230,17 +165,6 @@ struct RunButtonFace {
     }
     .width(BUTTON_STAGE_SIZE)
     .height(BUTTON_STAGE_SIZE)
-    .clip(false)
-    .onAppear((): void => {
-      this.appeared = true;
-      this.wasSettledRunning = this.settledRunning();
-      this.syncLoading();
-    })
-    .onDisAppear((): void => {
-      this.appeared = false;
-      this.busyPulsing = false;
-      this.clearRipple();
-    })
   }
 }
 
@@ -275,7 +199,6 @@ function runButtonContent(configuration: ButtonConfiguration) {
   }
     .width(BUTTON_STAGE_SIZE)
     .height(BUTTON_STAGE_SIZE)
-    .clip(false)
     .gesture(TapGesture({ count: 1 }).onAction((event: GestureEvent): void => {
       if (configuration.enabled && event.fingerList.length > 0) {
         configuration.triggerClick(event.fingerList[0].localX, event.fingerList[0].localY);
@@ -315,7 +238,6 @@ export struct DashboardRunButton {
       .padding(0)
       .backgroundColor(Color.Transparent)
       .borderRadius(0)
-      .clip(false)
       .stateEffect(false)
       .stateStyles({
         normal: {

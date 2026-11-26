@@ -183,22 +183,22 @@ export struct DashboardStatus {
 
   @Builder
   Decoration() {
-    // 以右侧开关为中心的柔边径向环境光，仅随运行态柔和显隐，避免硬边裁切感。
+    // 以右侧开关为中心的极轻径向环境光，仅随运行态柔和显隐，不抢主体层次。
     Column()
-      .width(240)
-      .height(240)
+      .width(200)
+      .height(200)
       .radialGradient({
-        center: [120, 120],
-        radius: 118,
+        center: [100, 100],
+        radius: 96,
         colors: [
           [this.appStyle.palette.brandSoft, 0.0],
-          [this.appStyle.palette.brandSoft, 0.35],
+          [this.appStyle.palette.brandSoft, 0.3],
           [transparentHue(this.appStyle.palette.brand), 1.0]
         ]
       })
-      .opacity(this.appearsStarted() ? 1 : 0)
+      .opacity(this.appearsStarted() ? 0.65 : 0)
       .animation({ duration: this.motionEnabled && this.visible ? 420 : 0, curve: Curve.EaseOut })
-      .position({ right: -60, top: -55 })
+      .position({ right: -44, top: -38 })
       .hitTestBehavior(HitTestMode.None)
       .accessibilityLevel('no')
   }
@@ -217,21 +217,21 @@ export struct DashboardStatus {
                   .fontSize(15)
                   .lineHeight(20)
                   .fontWeight(600)
-                Row({ space: 4 }) {
+                Row({ space: 5 }) {
                   if (this.conn.connected) {
-                    Circle({ width: 5, height: 5 }).fill($r('app.color.success_foreground')).strokeWidth(0)
+                    Circle({ width: 6, height: 6 }).fill($r('app.color.status_connected')).strokeWidth(0)
                   }
                   Text(this.conn.connected ? $r('app.string.chip_running') : this.statusText())
                     .fontFamily(this.appStyle.fontFamily)
                     .fontSize(11)
-                    .lineHeight(13)
+                    .lineHeight(14)
                     .fontWeight(600)
                     .fontColor(this.conn.connected ? $r('app.color.success_foreground') : $r('sys.color.font_secondary'))
                     .maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                 }
-                .padding({ left: 7, right: 7, top: 3, bottom: 3 })
-                .borderRadius(7)
+                .padding({ left: 8, right: 9, top: 3.5, bottom: 3.5 })
+                .borderRadius(999)
                 .backgroundColor(this.conn.connected ? $r('app.color.success_soft') :
                   this.appStyle.palette.tileBackground)
                 .accessibilityDescription(this.conn.error === '' ? '' : uiResourceText(this.getUIContext(), this.statusError()))
@@ -297,11 +297,7 @@ export struct DashboardStatus {
           }
           .width('100%')
           .alignItems(VerticalAlign.Center)
-          .padding({ left: 20, right: 18, top: 18 })
-          Divider()
-            .color(this.appStyle.palette.divider)
-            .opacity(0.45)
-            .margin({ left: 20, right: 20, top: 14, bottom: 12 })
+          .padding({ left: 20, right: 20, top: 18 })
           Row({ space: 20 }) {
             Column({ space: 2 }) {
               Text($r('app.string.uptime_label'))
@@ -340,7 +336,8 @@ export struct DashboardStatus {
             .onClick((): void => { if (this.interactive) { this.details = true; } })
           }
           .width('100%')
-          .padding({ left: 20, right: 20, bottom: 16 })
+          .margin({ top: 18 })
+          .padding({ left: 20, right: 20, bottom: 18 })
         }
         .width('100%')
       }

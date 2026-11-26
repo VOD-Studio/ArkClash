@@ -10,7 +10,7 @@
     },
     {
       "name": "status_connected",
-      "value": "#18A058"
+      "value": "#16A34A"
     },
     {
       "name": "status_error",
@@ -26,19 +26,19 @@
     },
     {
       "name": "warning",
-      "value": "#C76A00"
+      "value": "#B45309"
     },
     {
       "name": "warning_soft",
-      "value": "#1FE59900"
+      "value": "#FEF3C7"
     },
     {
       "name": "error_soft",
-      "value": "#1AE5484D"
+      "value": "#FEE2E2"
     },
     {
       "name": "success_soft",
-      "value": "#1A18A058"
+      "value": "#DCFCE7"
     },
     {
       "name": "service_icon_background",
@@ -50,7 +50,7 @@
     },
     {
       "name": "success_foreground",
-      "value": "#146B3B"
+      "value": "#15803D"
     },
     {
       "name": "profile_expiry_error_tonal",
