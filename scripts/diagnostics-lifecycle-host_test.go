@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -109,16 +110,6 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 	waitDiagnosticStream(t, captureExecution.done)
 }
 
-type diagnosticUncertainInbound struct {
-	net.Conn
-	err error
-}
-
-func (conn *diagnosticUncertainInbound) Close() error {
-	_ = conn.Conn.Close()
-	return conn.err
-}
-
 func TestDiagnosticsReloadKeepsCollectorsOnForwardingSuspensionFailure(t *testing.T) {
 	fixture(t)
 	t.Cleanup(tunnel.ArkClashResumeForwarding)
@@ -137,10 +128,19 @@ func TestDiagnosticsReloadKeepsCollectorsOnForwardingSuspensionFailure(t *testin
 	dns.observeDNS(diagnosticTestRecord(1))
 
 	sentinel := errors.New("fixture forwarding close uncertainty")
+	socksPort, entered, _ := forwardingBlockedSocks(t)
 	inbound, peer := net.Pipe()
 	defer peer.Close()
-	// 无效 Metadata 不拨号；已准入连接的 Close 错误仍由转发代次保留。
-	tunnel.Tunnel.HandleTCPConn(&diagnosticUncertainInbound{Conn: inbound, err: sentinel}, &C.Metadata{})
+	go tunnel.Tunnel.HandleTCPConn(&forwardingCloseErrorConn{Conn: inbound, err: sentinel}, &C.Metadata{
+		NetWork: C.TCP, DstIP: netip.MustParseAddr("127.0.0.1"), DstPort: uint16(socksPort),
+	})
+	if err := peer.SetWriteDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := peer.Write([]byte{5, 1, 0}); err != nil {
+		t.Fatal(err)
+	}
+	forwardingAwait(t, entered, "connection was not forwarding before suspension")
 	path := filepath.Join(current.HomeDir, "profiles", "next.yaml")
 	if err := os.WriteFile(path, []byte("mode: direct\nrules: ['MATCH,DIRECT']\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -162,7 +162,7 @@ func TestDiagnosticsReloadKeepsCollectorsOnForwardingSuspensionFailure(t *testin
 	}
 	late, releaseLate := diagnosticTestSubscribe(t, "connections")
 	recent := diagnosticTestFrame(t, late, time.Now()).Recent
-	if len(recent) != 1 || recent[0].ID != old.ID() {
+	if !slices.ContainsFunc(recent, func(c DiagnosticConnection) bool { return c.ID == old.ID() }) {
 		t.Fatal("connection ring was cleared by failed suspension")
 	}
 	releaseLate()

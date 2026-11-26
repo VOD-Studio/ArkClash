@@ -356,7 +356,7 @@
  func handleSocket(inbound, outbound net.Conn) {
 --- /dev/null
 +++ b/tunnel/arkclash_forwarding.go
-@@ -0,0 +1,200 @@
+@@ -0,0 +1,203 @@
 +package tunnel
 +
 +import (
@@ -405,7 +405,6 @@
 +	arkClashForwarding.current = nil
 +	arkClashForwarding.mu.Unlock()
 +	if generation != nil {
-+		generation.cancel()
 +		generation.mu.Lock()
 +		generation.closed = true
 +		resources := make([]*arkClashForwardingResource, 0, len(generation.resources))
@@ -413,6 +412,7 @@
 +			resources = append(resources, resource)
 +		}
 +		generation.mu.Unlock()
++		generation.cancel()
 +		for _, resource := range resources {
 +			_ = resource.Close()
 +		}
@@ -479,7 +479,10 @@
 +		return
 +	}
 +	g.mu.Lock()
-+	g.err = errors.Join(g.err, err)
++	// 只有暂停期间的清理错误属于本代；已结束连接的错误由各自的 Close 返回。
++	if g.closed {
++		g.err = errors.Join(g.err, err)
++	}
 +	g.mu.Unlock()
 +}
 +
