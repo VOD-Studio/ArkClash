@@ -1,12 +1,10 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
-import { curves } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { connection, Connection, ConnectionState } from '../../client/Connection';
 import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
 import { DASHBOARD_CARD } from '../../components/Theme';
 import { dashboardSettings, DashboardSettings } from './DashboardSettings';
-import { DASHBOARD_COOKIE12, DASHBOARD_COOKIE6 } from './DashboardShapePaths';
 import {
   homeHasPendingCleanup, homeRunActionLabel, homeRunFailureMessage, homeRuntimeAppearsStarted, homeShouldStopRuntime
 } from './HomeRunControls';
@@ -16,10 +14,6 @@ import { DashboardCountryBadge } from './DashboardCountryBadge';
 import { DashboardExitDetails } from './DashboardExitDetails';
 import { DashboardIpQuality } from './DashboardIpQuality';
 import { DashboardRunButton } from './DashboardRunButton';
-import { DashboardLoadingRotation } from './DashboardLoadingRotation';
-
-const START_CURVE = curves.cubicBezierCurve(0.175, 0.885, 0.32, 1.275);
-const STOP_CURVE = curves.cubicBezierCurve(0.55, 0.055, 0.675, 0.19);
 
 function dashboardUptime(milliseconds: number): string {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -27,6 +21,11 @@ function dashboardUptime(milliseconds: number): string {
   if (hours > 999) { return '999:59:59'; }
   const pad = (number: number): string => number.toString().padStart(2, '0');
   return `${pad(hours)}:${pad(Math.floor(seconds / 60) % 60)}:${pad(seconds % 60)}`;
+}
+
+// 8 位 ARGB 透明色保留同色相，避免径向渐变向纯黑透明过渡时边缘发灰。
+function transparentHue(color: number): string {
+  return `#00${(color & 0x00FFFFFF).toString(16).padStart(6, '0')}`;
 }
 
 @ComponentV2
@@ -184,49 +183,24 @@ export struct DashboardStatus {
 
   @Builder
   Decoration() {
-    // 双层同心装饰围绕右侧开关中心展开，收束在操作区范围，不再横切左侧 IP 与质量标签。
-    Stack() {
-      DashboardLoadingRotation({
-        active: this.conn.busy, visible: this.visible, motionEnabled: this.motionEnabled,
-        reverse: true, sideLength: 168, duration: 7200
-      }) {
-        Shape() {
-          Path().commands(DASHBOARD_COOKIE12)
-            .fill(this.conn.connected ? this.appStyle.palette.dashStatusDecoration : this.appStyle.palette.dashStatusIdleDecoration)
-            .strokeWidth(0)
-            .animation({ duration: this.motionEnabled && this.visible ? 420 : 0, curve: Curve.EaseOut })
-        }
-        .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
-        .width(168)
-        .height(168)
-        .opacity(this.conn.connected ? 0.78 : 0.62)
-        .rotate({ angle: this.appearsStarted() ? 24 : 0 })
-        .scale({ x: this.appearsStarted() ? 1.05 : 0.92, y: this.appearsStarted() ? 1.05 : 0.92 })
-        .animation({ duration: this.motionEnabled && this.visible ? 480 : 0,
-          curve: this.appearsStarted() ? START_CURVE : STOP_CURVE })
-      }
-      Shape() {
-        Path().commands(DASHBOARD_COOKIE6)
-          .fill(this.appStyle.palette.brandSoft)
-          .strokeWidth(0)
-      }
-      .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
-      .width(116)
-      .height(116)
-      .opacity(this.appearsStarted() ? 1 : 0)
-      .rotate({ angle: this.appearsStarted() ? 12 : -24 })
-      .scale({ x: this.appearsStarted() ? 1.04 : 0.76, y: this.appearsStarted() ? 1.04 : 0.76 })
-      .animation({
-        delay: this.appearsStarted() && this.motionEnabled && this.visible ? 40 : 0,
-        duration: this.motionEnabled && this.visible ? 500 : 0,
-        curve: this.appearsStarted() ? START_CURVE : STOP_CURVE
+    // 以右侧开关为中心的柔边径向环境光，仅随运行态柔和显隐，避免硬边裁切感。
+    Column()
+      .width(240)
+      .height(240)
+      .radialGradient({
+        center: [120, 120],
+        radius: 118,
+        colors: [
+          [this.appStyle.palette.brandSoft, 0.0],
+          [this.appStyle.palette.brandSoft, 0.35],
+          [transparentHue(this.appStyle.palette.brand), 1.0]
+        ]
       })
-    }
-    .width(168)
-    .height(168)
-    .position({ right: -24, top: -19 })
-    .hitTestBehavior(HitTestMode.None)
-    .accessibilityLevel('no')
+      .opacity(this.appearsStarted() ? 1 : 0)
+      .animation({ duration: this.motionEnabled && this.visible ? 420 : 0, curve: Curve.EaseOut })
+      .position({ right: -60, top: -55 })
+      .hitTestBehavior(HitTestMode.None)
+      .accessibilityLevel('no')
   }
 
   build() {
@@ -323,7 +297,7 @@ export struct DashboardStatus {
           }
           .width('100%')
           .alignItems(VerticalAlign.Center)
-          .padding({ left: 20, right: 16, top: 18 })
+          .padding({ left: 20, right: 18, top: 18 })
           Divider()
             .color(this.appStyle.palette.divider)
             .opacity(0.45)

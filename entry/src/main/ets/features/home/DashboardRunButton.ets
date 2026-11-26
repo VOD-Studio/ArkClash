@@ -2,12 +2,20 @@ import { AppearanceState, appAppearance } from '../../components/AppearanceState
 import { curves } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { uiResourceText } from '../../components/ResourceText';
-import { DashboardLoadingRotation } from './DashboardLoadingRotation';
 
-const START_CURVE = curves.cubicBezierCurve(0.175, 0.885, 0.32, 1.275);
-const STOP_CURVE = curves.cubicBezierCurve(0.55, 0.055, 0.675, 0.19);
-const RUN_BUTTON_SHAPE = 'M54 4 C71 2 86 4 92 14 C102 31 93 58 84 77 C78 90 69 100 58 99 ' +
-  'C42 97 23 84 12 70 C-1 55 -1 37 9 24 C19 10 35 5 54 4 Z';
+const BUTTON_STAGE_SIZE = 84;
+const BUTTON_HALO_SIZE = 82;
+const BUTTON_BODY_SIZE = 68;
+const BUTTON_CIRCLE_RADIUS = 34;
+const BUTTON_SQUIRCLE_RADIUS = 22;
+const BUTTON_HALO_CIRCLE_RADIUS = 41;
+const BUTTON_HALO_SQUIRCLE_RADIUS = 29;
+const MORPH_SPRING = curves.springMotion(0.36, 0.74);
+const HALO_SPRING = curves.springMotion(0.38, 0.76);
+
+function shadowHex(argb: number): string {
+  return `#${(argb >>> 0).toString(16).padStart(8, '0')}`;
+}
 
 @ComponentV2
 struct RunButtonFace {
@@ -17,16 +25,26 @@ struct RunButtonFace {
   @Param motionEnabled: boolean = false;
   @Param visible: boolean = false;
 
-  @Local loadingShown: boolean = false;
+  @Local private loadingShown: boolean = false;
+  @Local private busyPulsing: boolean = false;
+  @Local private ripplePhase: number = 0;
+  private appeared: boolean = false;
+  private wasSettledRunning: boolean = false;
   private loadingGeneration: number = 0;
+  private rippleGeneration: number = 0;
+  private rippleExpandTimer: number = -1;
+  private rippleResetTimer: number = -1;
 
   aboutToAppear(): void {
     this.syncLoading();
   }
 
   aboutToDisappear(): void {
+    this.appeared = false;
     this.loadingGeneration++;
     this.loadingShown = false;
+    this.busyPulsing = false;
+    this.clearRipple();
   }
 
   @Monitor('busy', 'visible', 'motionEnabled')
@@ -35,12 +53,56 @@ struct RunButtonFace {
     if (this.busy || !this.visible || !this.motionEnabled) {
       this.loadingShown = this.visible && this.busy;
     }
+    this.busyPulsing = this.appeared && this.busy && this.visible && this.motionEnabled;
+  }
+
+  @Monitor('running', 'busy', 'visible', 'motionEnabled')
+  syncRipple(): void {
+    const settledRunning = this.running && !this.busy;
+    if (settledRunning && !this.wasSettledRunning && this.appeared && this.visible && this.motionEnabled) {
+      this.triggerRipple();
+    } else if (!settledRunning || !this.visible || !this.motionEnabled) {
+      this.clearRipple();
+    }
+    this.wasSettledRunning = settledRunning;
+  }
+
+  private clearRipple(): void {
+    this.rippleGeneration++;
+    if (this.rippleExpandTimer !== -1) {
+      clearTimeout(this.rippleExpandTimer);
+      this.rippleExpandTimer = -1;
+    }
+    if (this.rippleResetTimer !== -1) {
+      clearTimeout(this.rippleResetTimer);
+      this.rippleResetTimer = -1;
+    }
+    this.ripplePhase = 0;
+  }
+
+  // 连接落定后播一次向外消散的同心圆角波纹，结束后完全静止不占电量。
+  private triggerRipple(): void {
+    this.clearRipple();
+    const generation = this.rippleGeneration;
+    this.ripplePhase = 1;
+    this.rippleExpandTimer = setTimeout((): void => {
+      this.rippleExpandTimer = -1;
+      if (generation === this.rippleGeneration && this.appeared && this.visible && this.motionEnabled) {
+        this.ripplePhase = 2;
+      }
+    }, 24);
+    this.rippleResetTimer = setTimeout((): void => {
+      this.rippleResetTimer = -1;
+      if (generation === this.rippleGeneration) {
+        this.ripplePhase = 0;
+      }
+    }, 620);
   }
 
   private loadingAnimation(): AnimateParam {
     const generation = this.loadingGeneration;
     return {
-      duration: this.motionEnabled && this.visible ? 140 : 0,
+      duration: this.motionEnabled && this.visible ? 160 : 0,
       curve: Curve.EaseOut,
       onFinish: (): void => {
         // enableLoading(false) 会隐藏图形，淡出结束后再停，旧回调不能截断新一轮反馈。
@@ -51,45 +113,134 @@ struct RunButtonFace {
     };
   }
 
+  private settledRunning(): boolean {
+    return this.running && !this.busy;
+  }
+
+  private showPlay(): boolean {
+    return !this.running && !this.busy;
+  }
+
   build() {
     Stack() {
-      DashboardLoadingRotation({ active: this.busy, visible: this.visible, motionEnabled: this.motionEnabled }) {
-        Shape() {
-          Path().commands(RUN_BUTTON_SHAPE)
-            .fill(this.appStyle.palette.brand)
-            .strokeWidth(0)
-        }
-        .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
-        .width(84)
-        .height(84)
-        .rotate({ angle: this.running ? 40 : 0 })
-        .scale({ x: this.running ? 1.02 : 1, y: this.running ? 1.02 : 1 })
-        .animation({ duration: this.motionEnabled && this.visible ? 450 : 0,
-          curve: this.running ? START_CURVE : STOP_CURVE })
-      }
-      SymbolGlyph(this.running ? $r('sys.symbol.pause_fill') : $r('sys.symbol.play_fill'))
-        .fontSize(30)
-        .fontColor([this.appStyle.palette.onBrand])
-        .width(30)
-        .height(30)
-        .scale({ x: this.busy ? 0.72 : 1, y: this.busy ? 0.72 : 1 })
-        .opacity(this.busy ? 0 : 1)
-        .animation({ duration: this.motionEnabled && this.visible ? 160 : 0, curve: Curve.EaseOut })
+      // 单次连接确认波纹：起手藏在主体下方，落定时从圆角方轮廓平滑扩散消隐。
+      Column()
+        .width(BUTTON_BODY_SIZE)
+        .height(BUTTON_BODY_SIZE)
+        .borderRadius(BUTTON_SQUIRCLE_RADIUS)
+        .border({ width: 2, color: this.appStyle.palette.brandPulse })
+        .backgroundColor(Color.Transparent)
+        .scale({ x: this.ripplePhase === 2 ? 1.38 : 0.94, y: this.ripplePhase === 2 ? 1.38 : 0.94 })
+        .opacity(this.ripplePhase === 1 ? 0.72 : 0)
+        .animation({
+          duration: this.ripplePhase === 2 && this.motionEnabled && this.visible ? 560 : 0,
+          curve: Curve.EaseOut
+        })
         .hitTestBehavior(HitTestMode.None)
         .accessibilityLevel('no')
+
+      // 连接/断开过渡呼吸环：使用对称往返脉冲，任意时刻停止都能平滑收回，无突兀跳变。
+      Column()
+        .width(BUTTON_HALO_SIZE)
+        .height(BUTTON_HALO_SIZE)
+        .borderRadius(BUTTON_HALO_CIRCLE_RADIUS)
+        .backgroundColor(this.appStyle.palette.brandSoft)
+        .border({ width: 1.5, color: this.appStyle.palette.brandPulse })
+        .scale({ x: this.busyPulsing ? 1.1 : 0.88, y: this.busyPulsing ? 1.1 : 0.88 })
+        .opacity(this.busyPulsing ? 0.85 : 0)
+        .animation({
+          duration: this.busyPulsing ? 720 : (this.motionEnabled && this.visible ? 220 : 0),
+          curve: this.busyPulsing ? Curve.EaseInOut : Curve.EaseOut,
+          iterations: this.busyPulsing ? -1 : 1,
+          playMode: this.busyPulsing ? PlayMode.Alternate : PlayMode.Normal
+        })
+        .hitTestBehavior(HitTestMode.None)
+        .accessibilityLevel('no')
+
+      // 运行态同心软晕：与主体严格等距同心（22vp + 7vp = 29vp），稳态零动画。
+      Column()
+        .width(BUTTON_HALO_SIZE)
+        .height(BUTTON_HALO_SIZE)
+        .borderRadius(this.settledRunning() ? BUTTON_HALO_SQUIRCLE_RADIUS : BUTTON_HALO_CIRCLE_RADIUS)
+        .backgroundColor(this.appStyle.palette.brandSoft)
+        .scale({ x: this.settledRunning() ? 1 : 0.78, y: this.settledRunning() ? 1 : 0.78 })
+        .opacity(this.settledRunning() ? 1 : 0)
+        .animation({
+          duration: this.motionEnabled && this.visible ? 360 : 0,
+          curve: this.settledRunning() ? HALO_SPRING : Curve.EaseOut
+        })
+        .hitTestBehavior(HitTestMode.None)
+        .accessibilityLevel('no')
+
+      // 开关主体：待机为正圆、运行态弹簧形变为圆角方，过渡期稳态微缩不晃动。
+      Column()
+        .width(BUTTON_BODY_SIZE)
+        .height(BUTTON_BODY_SIZE)
+        .borderRadius(this.settledRunning() ? BUTTON_SQUIRCLE_RADIUS : BUTTON_CIRCLE_RADIUS)
+        .backgroundColor(this.appStyle.palette.brand)
+        .scale({ x: this.busy ? 0.92 : 1, y: this.busy ? 0.92 : 1 })
+        .shadow({
+          radius: this.getUIContext().vp2px(this.settledRunning() ? 14 : 10),
+          color: shadowHex(this.appStyle.palette.brandPulse),
+          offsetX: 0,
+          offsetY: this.getUIContext().vp2px(4)
+        })
+        .animation({
+          duration: this.motionEnabled && this.visible ? 380 : 0,
+          curve: this.motionEnabled && this.visible ? MORPH_SPRING : Curve.EaseOut
+        })
+        .hitTestBehavior(HitTestMode.None)
+        .accessibilityLevel('no')
+
+      SymbolGlyph($r('sys.symbol.play_fill'))
+        .fontSize(28)
+        .fontColor([this.appStyle.palette.onBrand])
+        .width(28)
+        .height(28)
+        .translate({ x: 1.5 })
+        .scale({ x: this.showPlay() ? 1 : 0.55, y: this.showPlay() ? 1 : 0.55 })
+        .rotate({ angle: this.showPlay() ? 0 : -24 })
+        .opacity(this.showPlay() ? 1 : 0)
+        .animation({ duration: this.motionEnabled && this.visible ? 200 : 0, curve: Curve.EaseOut })
+        .hitTestBehavior(HitTestMode.None)
+        .accessibilityLevel('no')
+
+      SymbolGlyph($r('sys.symbol.pause_fill'))
+        .fontSize(28)
+        .fontColor([this.appStyle.palette.onBrand])
+        .width(28)
+        .height(28)
+        .scale({ x: this.settledRunning() ? 1 : 0.55, y: this.settledRunning() ? 1 : 0.55 })
+        .rotate({ angle: this.settledRunning() ? 0 : 24 })
+        .opacity(this.settledRunning() ? 1 : 0)
+        .animation({ duration: this.motionEnabled && this.visible ? 200 : 0, curve: Curve.EaseOut })
+        .hitTestBehavior(HitTestMode.None)
+        .accessibilityLevel('no')
+
       LoadingProgress()
-        .width(30)
-        .height(30)
+        .width(28)
+        .height(28)
         .color(this.appStyle.palette.onBrand)
         .enableLoading(this.loadingShown)
-        .scale({ x: this.busy ? 1 : 0.72, y: this.busy ? 1 : 0.72 })
+        .scale({ x: this.busy ? 1 : 0.65, y: this.busy ? 1 : 0.65 })
         .opacity(this.busy ? 1 : 0)
         .animation(this.loadingAnimation())
         .hitTestBehavior(HitTestMode.None)
         .accessibilityLevel('no')
     }
-    .width(88)
-    .height(88)
+    .width(BUTTON_STAGE_SIZE)
+    .height(BUTTON_STAGE_SIZE)
+    .clip(false)
+    .onAppear((): void => {
+      this.appeared = true;
+      this.wasSettledRunning = this.settledRunning();
+      this.syncLoading();
+    })
+    .onDisAppear((): void => {
+      this.appeared = false;
+      this.busyPulsing = false;
+      this.clearRipple();
+    })
   }
 }
 
@@ -122,8 +273,9 @@ function runButtonContent(configuration: ButtonConfiguration) {
       motionEnabled: (configuration.contentModifier as RunButtonContent).motionEnabled
     })
   }
-    .width(88)
-    .height(88)
+    .width(BUTTON_STAGE_SIZE)
+    .height(BUTTON_STAGE_SIZE)
+    .clip(false)
     .gesture(TapGesture({ count: 1 }).onAction((event: GestureEvent): void => {
       if (configuration.enabled && event.fingerList.length > 0) {
         configuration.triggerClick(event.fingerList[0].localX, event.fingerList[0].localY);
@@ -158,11 +310,12 @@ export struct DashboardRunButton {
       .id('arkclash_vpn_toggle')
       .fontFamily(this.appStyle.fontFamily)
       .contentModifier(new RunButtonContent(this.running, this.busy, this.visible, this.motionEnabled))
-      .width(88)
-      .height(88)
+      .width(BUTTON_STAGE_SIZE)
+      .height(BUTTON_STAGE_SIZE)
       .padding(0)
       .backgroundColor(Color.Transparent)
       .borderRadius(0)
+      .clip(false)
       .stateEffect(false)
       .stateStyles({
         normal: {
@@ -170,15 +323,15 @@ export struct DashboardRunButton {
           .opacity(this.available || this.running || this.busy ? 1 : 0.45)
         },
         pressed: {
-          .scale({ x: this.motionEnabled ? 0.92 : 1, y: this.motionEnabled ? 0.98 : 1 })
-          .opacity(0.88)
+          .scale({ x: this.motionEnabled ? 0.91 : 1, y: this.motionEnabled ? 0.91 : 1 })
+          .opacity(0.9)
         },
         disabled: {
           .scale({ x: 1, y: 1 })
           .opacity(this.available || this.running || this.busy ? 1 : 0.45)
         }
       })
-      .animation({ duration: this.motionEnabled && this.visible ? 180 : 0, curve: Curve.EaseOut })
+      .animation({ duration: this.motionEnabled && this.visible ? 160 : 0, curve: Curve.EaseOut })
       .enabled(this.interactive)
       .onVisibleAreaChange([0.0], (isVisible: boolean, ratio: number): void => {
         this.inViewport = isVisible && ratio > 0;
