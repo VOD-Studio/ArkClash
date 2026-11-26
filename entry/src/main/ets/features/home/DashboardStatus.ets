@@ -6,7 +6,7 @@ import { connection, Connection, ConnectionState } from '../../client/Connection
 import { exitIpProbe, ExitIpProbe } from '../../client/ExitIp';
 import { DASHBOARD_CARD } from '../../components/Theme';
 import { dashboardSettings, DashboardSettings } from './DashboardSettings';
-import { DASHBOARD_COOKIE12 } from './DashboardShapePaths';
+import { DASHBOARD_COOKIE12, DASHBOARD_COOKIE6 } from './DashboardShapePaths';
 import {
   homeHasPendingCleanup, homeRunActionLabel, homeRunFailureMessage, homeRuntimeAppearsStarted, homeShouldStopRuntime
 } from './HomeRunControls';
@@ -184,26 +184,47 @@ export struct DashboardStatus {
 
   @Builder
   Decoration() {
+    // 双层同心装饰围绕右侧开关中心展开，收束在操作区范围，不再横切左侧 IP 与质量标签。
     Stack() {
-      DashboardLoadingRotation({ active: this.conn.busy, visible: this.visible, motionEnabled: this.motionEnabled,
-        sideLength: 240, duration: 6000 }) {
+      DashboardLoadingRotation({
+        active: this.conn.busy, visible: this.visible, motionEnabled: this.motionEnabled,
+        reverse: true, sideLength: 168, duration: 7200
+      }) {
         Shape() {
           Path().commands(DASHBOARD_COOKIE12)
             .fill(this.conn.connected ? this.appStyle.palette.dashStatusDecoration : this.appStyle.palette.dashStatusIdleDecoration)
             .strokeWidth(0)
-            .animation({ duration: this.motionEnabled && this.visible ? 450 : 0, curve: Curve.EaseOut })
+            .animation({ duration: this.motionEnabled && this.visible ? 420 : 0, curve: Curve.EaseOut })
         }
         .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
-        .width(240)
-        .height(240)
-        .rotate({ angle: this.appearsStarted() ? 30 : 0 })
-        .scale({ x: this.appearsStarted() ? 1.12 : 1, y: this.appearsStarted() ? 1.12 : 1 })
-        .animation({ duration: this.motionEnabled ? 450 : 0, curve: this.appearsStarted() ? START_CURVE : STOP_CURVE })
+        .width(168)
+        .height(168)
+        .opacity(this.conn.connected ? 0.78 : 0.62)
+        .rotate({ angle: this.appearsStarted() ? 24 : 0 })
+        .scale({ x: this.appearsStarted() ? 1.05 : 0.92, y: this.appearsStarted() ? 1.05 : 0.92 })
+        .animation({ duration: this.motionEnabled && this.visible ? 480 : 0,
+          curve: this.appearsStarted() ? START_CURVE : STOP_CURVE })
       }
+      Shape() {
+        Path().commands(DASHBOARD_COOKIE6)
+          .fill(this.appStyle.palette.brandSoft)
+          .strokeWidth(0)
+      }
+      .viewPort({ x: '0px', y: '0px', width: '100px', height: '100px' })
+      .width(116)
+      .height(116)
+      .opacity(this.appearsStarted() ? 1 : 0)
+      .rotate({ angle: this.appearsStarted() ? 12 : -24 })
+      .scale({ x: this.appearsStarted() ? 1.04 : 0.76, y: this.appearsStarted() ? 1.04 : 0.76 })
+      .animation({
+        delay: this.appearsStarted() && this.motionEnabled && this.visible ? 40 : 0,
+        duration: this.motionEnabled && this.visible ? 500 : 0,
+        curve: this.appearsStarted() ? START_CURVE : STOP_CURVE
+      })
     }
-    .width(240)
-    .height(240)
-    .position({ right: -60, top: -66 })
+    .width(168)
+    .height(168)
+    .position({ right: -24, top: -19 })
     .hitTestBehavior(HitTestMode.None)
     .accessibilityLevel('no')
   }
@@ -212,133 +233,142 @@ export struct DashboardStatus {
     Column() {
       Column() {
         this.Decoration()
-        Row({ space: 10 }) {
-          Column() {
-            Row({ space: 8 }) {
-              AppGlyph({ name: 'status', iconSize: 18, iconColor: $r('sys.color.font_secondary') })
-              Text($r('app.string.card_status'))
+        Column() {
+          Row({ space: 12 }) {
+            Column() {
+              Row({ space: 8 }) {
+                AppGlyph({ name: 'status', iconSize: 18, iconColor: $r('sys.color.font_secondary') })
+                Text($r('app.string.card_status'))
+                  .fontFamily(this.appStyle.fontFamily)
+                  .fontSize(15)
+                  .lineHeight(20)
+                  .fontWeight(600)
+                Row({ space: 4 }) {
+                  if (this.conn.connected) {
+                    Circle({ width: 5, height: 5 }).fill($r('app.color.success_foreground')).strokeWidth(0)
+                  }
+                  Text(this.conn.connected ? $r('app.string.chip_running') : this.statusText())
+                    .fontFamily(this.appStyle.fontFamily)
+                    .fontSize(11)
+                    .lineHeight(13)
+                    .fontWeight(600)
+                    .fontColor(this.conn.connected ? $r('app.color.success_foreground') : $r('sys.color.font_secondary'))
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                .padding({ left: 7, right: 7, top: 3, bottom: 3 })
+                .borderRadius(7)
+                .backgroundColor(this.conn.connected ? $r('app.color.success_soft') :
+                  this.appStyle.palette.tileBackground)
+                .accessibilityDescription(this.conn.error === '' ? '' : uiResourceText(this.getUIContext(), this.statusError()))
+                .onClick((): void => {
+                  if (this.interactive && this.conn.error !== '') { this.showRuntimeError(this.statusError()); }
+                })
+              }
+              .width('100%')
+              .constraintSize({ minHeight: 26 })
+              Row({ space: 12 }) {
+                DashboardCountryBadge({ countryCode: this.probe.result?.countryCode ?? '', busy: this.probe.busy,
+                  running: this.conn.connected, visible: this.visible, motionEnabled: this.motionEnabled,
+                  interactive: this.interactive, onRefresh: (): void => { this.refreshExit(); } })
+                Column({ space: 5 }) {
+                  if (this.probe.result === undefined && !this.probe.failed && !this.settings.hideIp) {
+                    Row()
+                      .width('100%')
+                      .height(22)
+                      .borderRadius(4)
+                      .backgroundColor(this.appStyle.palette.track)
+                      .opacity(0.55)
+                      .margin({ top: 3, bottom: 3 })
+                  } else {
+                    Text(this.address())
+                      .fontFamily(this.appStyle.fontFamily)
+                      .fontSize(22)
+                      .minFontSize(16.5)
+                      .maxFontSize(22)
+                      .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
+                      .width('100%')
+                      .lineHeight(28)
+                      .height(28)
+                      .fontWeight(FontWeight.Bold)
+                      .fontFeature('"tnum" on')
+                      .fontColor(this.probe.failed && this.probe.result === undefined ? $r('app.color.status_error') :
+                        this.conn.connected ? $r('sys.color.font_primary') : $r('sys.color.font_secondary'))
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  }
+                  DashboardIpQuality({ quality: this.probe.quality,
+                    busy: this.probe.quality === undefined && (this.probe.busy || this.probe.qualityBusy || this.conn.busy) })
+                }
+                .alignItems(HorizontalAlign.Start)
+                .layoutWeight(1)
+                .constraintSize({ minHeight: 56 })
+                .onClick((): void => { if (this.interactive) { this.details = true; } })
+              }
+              .width('100%')
+              .margin({ top: 12 })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            DashboardRunButton({
+              running: this.appearsStarted(), busy: this.conn.busy, visible: this.visible,
+              available: this.profileReady || this.shouldStop(),
+              motionEnabled: this.motionEnabled,
+              interactive: this.interactive && (this.profileReady || this.shouldStop()) &&
+                this.conn.state !== ConnectionState.Disconnecting,
+              label: homeRunActionLabel(this.conn.intent, this.conn.forward,
+                this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState),
+              onToggle: (): void => { this.toggleRun(); }
+            })
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+          .padding({ left: 20, right: 16, top: 18 })
+          Divider()
+            .color(this.appStyle.palette.divider)
+            .opacity(0.45)
+            .margin({ left: 20, right: 20, top: 14, bottom: 12 })
+          Row({ space: 20 }) {
+            Column({ space: 2 }) {
+              Text($r('app.string.uptime_label'))
+                .fontFamily(this.appStyle.fontFamily)
+                .fontSize(12)
+                .lineHeight(16)
+                .fontColor($r('sys.color.font_secondary'))
+              Text(this.conn.connected && this.conn.connectedAt > 0 ?
+                dashboardUptime(this.clock - this.conn.connectedAt) : '—')
                 .fontFamily(this.appStyle.fontFamily)
                 .fontSize(15)
                 .lineHeight(20)
                 .fontWeight(600)
-              Row({ space: 4 }) {
-                if (this.conn.connected) {
-                  Circle({ width: 5, height: 5 }).fill($r('app.color.success_foreground')).strokeWidth(0)
-                }
-                Text(this.conn.connected ? $r('app.string.chip_running') : this.statusText())
-                  .fontFamily(this.appStyle.fontFamily)
-                  .fontSize(11)
-                  .lineHeight(13)
-                  .fontWeight(600)
-                  .fontColor(this.conn.connected ? $r('app.color.success_foreground') : $r('sys.color.font_secondary'))
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-              }
-              .padding({ left: 7, right: 7, top: 3, bottom: 3 })
-              .borderRadius(7)
-              .backgroundColor(this.conn.connected ? $r('app.color.success_soft') :
-                this.appStyle.palette.tileBackground)
-              .accessibilityDescription(this.conn.error === '' ? '' : uiResourceText(this.getUIContext(), this.statusError()))
-              .onClick((): void => {
-                if (this.interactive && this.conn.error !== '') { this.showRuntimeError(this.statusError()); }
-              })
+                .fontFeature('"tnum" on')
             }
-            .width('100%')
-            .constraintSize({ minHeight: 26 })
-            Row({ space: 12 }) {
-              DashboardCountryBadge({ countryCode: this.probe.result?.countryCode ?? '', busy: this.probe.busy,
-                running: this.conn.connected, motionEnabled: this.motionEnabled, interactive: this.interactive,
-                onRefresh: (): void => { this.refreshExit(); } })
-              Column({ space: 4 }) {
-                if (this.probe.result === undefined && !this.probe.failed && !this.settings.hideIp) {
-                  Row()
-                    .width('100%')
-                    .height(22)
-                    .borderRadius(4)
-                    .backgroundColor(this.appStyle.palette.track)
-                    .opacity(0.55)
-                    .margin({ top: 3, bottom: 3 })
-                } else {
-                  Text(this.address())
-                    .fontFamily(this.appStyle.fontFamily)
-                    .fontSize(22)
-                    .minFontSize(16.5)
-                    .maxFontSize(22)
-                    .heightAdaptivePolicy(TextHeightAdaptivePolicy.MIN_FONT_SIZE_FIRST)
-                    .width('100%')
-                    .lineHeight(28)
-                    .height(28)
-                    .fontWeight(FontWeight.Bold)
-                    .fontFeature('"tnum" on')
-                    .fontColor(this.probe.failed && this.probe.result === undefined ? $r('app.color.status_error') :
-                      this.conn.connected ? $r('sys.color.font_primary') : $r('sys.color.font_secondary'))
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                }
-                DashboardIpQuality({ quality: this.probe.quality,
-                  busy: this.probe.quality === undefined && (this.probe.busy || this.probe.qualityBusy || this.conn.busy) })
-              }
-              .alignItems(HorizontalAlign.Start)
-              .layoutWeight(1)
-              .constraintSize({ minHeight: 56 })
-              .onClick((): void => { if (this.interactive) { this.details = true; } })
+            .alignItems(HorizontalAlign.Start)
+            .constraintSize({ minWidth: 96 })
+            Column({ space: 2 }) {
+              Text($r('app.string.dash_ip_organization'))
+                .fontFamily(this.appStyle.fontFamily)
+                .fontSize(12)
+                .lineHeight(16)
+                .fontColor($r('sys.color.font_secondary'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+              Text(this.probe.result?.org || this.probe.result?.asn || '—')
+                .fontFamily(this.appStyle.fontFamily)
+                .fontSize(15)
+                .lineHeight(20)
+                .fontWeight(600)
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
             }
-            .width('100%')
-            .margin({ top: 12 })
-            Row({ space: 24 }) {
-              Column({ space: 2 }) {
-                Text($r('app.string.uptime_label'))
-                  .fontFamily(this.appStyle.fontFamily)
-                  .fontSize(12)
-                  .lineHeight(16)
-                  .fontColor($r('sys.color.font_secondary'))
-                Text(this.conn.connected && this.conn.connectedAt > 0 ?
-                  dashboardUptime(this.clock - this.conn.connectedAt) : '—')
-                  .fontFamily(this.appStyle.fontFamily)
-                  .fontSize(15)
-                  .lineHeight(20)
-                  .fontWeight(600)
-                  .fontFeature('"tnum" on')
-              }
-              .alignItems(HorizontalAlign.Start)
-              .layoutWeight(1)
-              Column({ space: 2 }) {
-                Text($r('app.string.dash_ip_organization'))
-                  .fontFamily(this.appStyle.fontFamily)
-                  .fontSize(12)
-                  .lineHeight(16)
-                  .fontColor($r('sys.color.font_secondary'))
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-                Text(this.probe.result?.org || this.probe.result?.asn || '—')
-                  .fontFamily(this.appStyle.fontFamily)
-                  .fontSize(15)
-                  .lineHeight(20)
-                  .fontWeight(600)
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-              }
-              .alignItems(HorizontalAlign.Start)
-              .layoutWeight(1)
-            }
-            .width('100%')
-            .margin({ top: 16 })
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            .onClick((): void => { if (this.interactive) { this.details = true; } })
           }
-          .alignItems(HorizontalAlign.Start)
-          .layoutWeight(1)
-          DashboardRunButton({
-            running: this.appearsStarted(), busy: this.conn.busy, visible: this.visible,
-            available: this.profileReady || this.shouldStop(),
-            motionEnabled: this.motionEnabled,
-            interactive: this.interactive && (this.profileReady || this.shouldStop()) &&
-              this.conn.state !== ConnectionState.Disconnecting,
-            label: homeRunActionLabel(this.conn.intent, this.conn.forward,
-              this.conn.listenersOpen, this.conn.tunAttached, this.conn.vpnCreated, this.conn.hostState),
-            onToggle: (): void => { this.toggleRun(); }
-          })
+          .width('100%')
+          .padding({ left: 20, right: 20, bottom: 16 })
         }
         .width('100%')
-        .padding({ left: 20, right: 16, top: 18, bottom: 18 })
       }
       .width('100%')
       .borderRadius(34)
