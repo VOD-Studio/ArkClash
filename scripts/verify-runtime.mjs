@@ -24,6 +24,9 @@ const ready = {
 const hostBinding = { binds: [], releases: 0, listener: undefined,
   setListener(listener) { this.listener = listener; }, bind(_context, bootId) { if (this.binds.at(-1) !== bootId) this.binds.push(bootId); },
   async release() { this.releases++; } };
+// 后台保持只暴露是否持有长时任务；任务申请由真机验证。
+const keep = { running: false, wanted: false, restore() {}, foreground() {}, pressureDelayMs() { return 0; },
+  sync(wanted) { this.wanted = wanted; } };
 const kits = {
   '@kit.AbilityKit': {},
   '@kit.CryptoArchitectureKit': { cryptoFramework: {
@@ -87,7 +90,7 @@ const kits = {
     async withProfileStorage(_filesDir, operation) { await state.storageGate; return operation(); }
   },
   './VpnNetworkSettings': { async readVpnNetworkSettings() { return state.networkSettings; } },
-  './VpnHostBinding': { vpnHostBinding: hostBinding },
+  './VpnHostBinding': { vpnHostBinding: hostBinding }, './BackgroundKeep': { backgroundKeep: keep },
   './Controller': {}
 };
 const module = { exports: {} };
@@ -157,7 +160,7 @@ const geoSettings = loadConsumer('../entry/src/main/ets/shared/GeoResources.ets'
 const connectionBindings = {
   '@kit.AbilityKit': {}, '@kit.BasicServicesKit': {}, '@kit.NetworkKit': {},
   '@kit.ArkData': { preferences: { getPreferencesSync: () => prefs } },
-  './Controller': {}, './VpnHostBinding': { vpnHostBinding: hostBinding },
+  './Controller': {}, './VpnHostBinding': { vpnHostBinding: hostBinding }, './BackgroundKeep': { backgroundKeep: keep },
   './CoreClient': core, './Proxies': { flushProxySelections: async () => {} },
   './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': {
     CONTROLLER_ADDRESS: '127.0.0.1:19090', readRuntime: async () => state.runtime,
@@ -676,7 +679,7 @@ function runtimeConsumers() {
     './Controller': {}, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } },
     './CoreClient': client, './Proxies': { flushProxySelections: async () => {} },
     './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': runtime,
-    './VpnHostBinding': { vpnHostBinding: hostBinding },
+    './VpnHostBinding': { vpnHostBinding: hostBinding }, './BackgroundKeep': { backgroundKeep: keep },
     '../shared/GeoResources': geoSettings
   });
   const connection = new ConsumerConnection();
@@ -845,6 +848,24 @@ test('宿主留下停止回执、用户已断开或界面在后台时，绑定�
   hostBinding.listener('boot.1');
   await settle(() => false);
   assert.equal(background.fixture.starts, 1);
+});
+
+test('后台保持持有长时任务时，界面在后台也立即恢复连接，用户断开后释放任务', async () => {
+  const { fixture, connection, context: localContext } = await connectedConsumers();
+  assert.equal(keep.wanted, true);
+  connection.foreground = false;
+  keep.running = true;
+  try {
+    reclaimHost(fixture, 'boot.2');
+    hostBinding.listener('boot.1');
+    await settle(() => connection.connected && connection.bootId === 'boot.2');
+    assert.equal(fixture.starts, 2);
+    assert.equal(keep.wanted, true);
+    await connection.disconnect(localContext);
+    assert.equal(keep.wanted, false);
+  } finally {
+    keep.running = false;
+  }
 });
 
 test('30 分钟内宿主反复退出时最多恢复 4 次，间隔逐次拉长', async () => {

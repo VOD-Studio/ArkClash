@@ -2865,6 +2865,50 @@
       "value": "Enter one application bundle name per line. Changes apply when VPN reconnects."
     },
     {
+      "name": "network_background",
+      "value": "Background"
+    },
+    {
+      "name": "network_keep_alive",
+      "value": "Stay connected in background"
+    },
+    {
+      "name": "network_keep_alive_footer",
+      "value": "Keeps ArkClash running in the background while connected and shows tunnel traffic in a notification. Reconnects automatically if the system reclaims the VPN process. Uses more battery."
+    },
+    {
+      "name": "network_keep_alive_state",
+      "value": "Status"
+    },
+    {
+      "name": "network_keep_alive_suspended",
+      "value": "Paused by the system"
+    },
+    {
+      "name": "network_keep_alive_stopped",
+      "value": "Stopped by the system, resumes when you return"
+    },
+    {
+      "name": "network_keep_alive_removed",
+      "value": "Notification removed, resumes on next connection"
+    },
+    {
+      "name": "network_keep_alive_failed",
+      "value": "Not allowed by the system, retries when you return"
+    },
+    {
+      "name": "network_keep_alive_notification",
+      "value": "Allow ArkClash to send notifications first"
+    },
+    {
+      "name": "keep_notification_title",
+      "value": "ArkClash connected"
+    },
+    {
+      "name": "keep_notification_text",
+      "value": "↑ %s  ↓ %s"
+    },
+    {
       "name": "action_retry",
       "value": "Retry"
     },

@@ -9,6 +9,7 @@ import {
   CoreHostState, connectVpn, disconnectVpn, hostInterrupted, readCoreHostStatus, startCore, stopCore,
   updateRuntimeOptions
 } from './CoreClient';
+import { backgroundKeep } from './BackgroundKeep';
 import { flushProxySelections } from './Proxies';
 import { traffic } from './Traffic';
 import { vpnHostBinding } from './VpnHostBinding';
@@ -116,6 +117,7 @@ export class Connection {
   restore(context: common.UIAbilityContext): void {
     this.context = context;
     vpnHostBinding.setListener((bootId: string): void => { this.hostLost(bootId); });
+    backgroundKeep.restore(context);
     this.filesDir = context.filesDir;
     this.prefs = preferences.getPreferencesSync(context, { name: 'settings' });
     const saved = this.prefs.getSync(PREF_MODE, '') as string;
@@ -141,6 +143,7 @@ export class Connection {
       this.invalidateRoute();
       this.watchNetwork();
       this.recheck(context).catch((): void => {});
+      backgroundKeep.foreground();
     } else {
       const observer = this.network;
       this.network = undefined;
@@ -199,7 +202,13 @@ export class Connection {
 
   // 后台是否允许恢复。界面进程在后台会被冻结，只有持有长时任务时回调才能及时执行。
   private backgroundRecovery(): boolean {
-    return false;
+    return backgroundKeep.running;
+  }
+
+  // 用户希望保持连接时由后台保持持有长时任务，宿主恢复期间不释放。
+  private setWantConnected(wanted: boolean): void {
+    this.wantConnected = wanted;
+    backgroundKeep.sync(wanted);
   }
 
   // 绑定断开即宿主进程已退出（ADR-0038）。用户希望保持连接时立即恢复，不必等回到前台。
@@ -231,7 +240,7 @@ export class Connection {
       hilog.info(0x0A11, 'ArkClashBench', 'vpn_recover_limited');
       return;
     }
-    const delay = RECOVERY_DELAYS_MS[this.recoveryTimes.length];
+    const delay = Math.max(RECOVERY_DELAYS_MS[this.recoveryTimes.length], backgroundKeep.pressureDelayMs());
     this.recoveryTimes.push(now);
     this.recovering = true;
     const generation = this.generation;
@@ -263,7 +272,7 @@ export class Connection {
         }
         if (!interrupted) {
           // 留下了停止回执：用户在系统设置里断开，或被其他 VPN 接管。
-          this.wantConnected = false;
+          this.setWantConnected(false);
           this.applyStopped();
           return;
         }
@@ -333,7 +342,7 @@ export class Connection {
       }
     }
     const generation = ++this.generation;
-    this.wantConnected = true;
+    this.setWantConnected(true);
     this.intent = 'started';
     this.error = '';
     this.forward = 'preparing';
@@ -406,7 +415,7 @@ export class Connection {
       throw new Error('代理正在停止，请稍后重试');
     }
     const generation = ++this.generation;
-    this.wantConnected = false;
+    this.setWantConnected(false);
     this.intent = 'stopped';
     this.error = '';
     this.state = ConnectionState.Disconnecting;
@@ -555,7 +564,7 @@ export class Connection {
       status.tunAttached && status.listenersOpen ? ConnectionState.Connected : ConnectionState.Disconnected;
     this.routeRevision = `${this.bootId}/${this.revision}/${this.routeEpoch}`;
     if (status.running && !this.busy && !this.recovering) {
-      this.wantConnected = status.intent === 'started';
+      this.setWantConnected(status.intent === 'started');
     }
     if (status.running && this.context !== undefined) {
       vpnHostBinding.bind(this.context, status.bootId);

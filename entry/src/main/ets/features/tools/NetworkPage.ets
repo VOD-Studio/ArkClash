@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { BackgroundKeep, backgroundKeep } from '../../client/BackgroundKeep';
 import { Connection, connection } from '../../client/Connection';
 import { readVpnNetworkSettings, saveVpnNetworkSettings } from '../../client/VpnNetworkSettings';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
@@ -26,6 +27,8 @@ export struct NetworkPage {
   @Param foreground: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private conn: Connection = connection;
+  @Local private keep: BackgroundKeep = backgroundKeep;
+  @Local private keepSaving: boolean = false;
   @Local private settings: VpnNetworkSettings = new VpnNetworkSettings();
   @Local private loading: boolean = true;
   @Local private loadFailed: boolean = false;
@@ -205,6 +208,43 @@ export struct NetworkPage {
     })
   }
 
+  private async changeKeep(isOn: boolean): Promise<void> {
+    if (this.keepSaving) {
+      return;
+    }
+    this.keepSaving = true;
+    try {
+      await this.keep.setEnabled(this.context(), isOn);
+    } catch (error) {
+      this.toast((error as Error).message === 'keep_notification_disabled' ?
+        $r('app.string.network_keep_alive_notification') : $r('app.string.network_save_failed'));
+    } finally {
+      this.keepSaving = false;
+    }
+  }
+
+  private keepStateText(): ResourceStr {
+    switch (this.keep.state) {
+      case 'suspended': return $r('app.string.network_keep_alive_suspended');
+      case 'stopped': return $r('app.string.network_keep_alive_stopped');
+      case 'removed': return $r('app.string.network_keep_alive_removed');
+      case 'failed': return $r('app.string.network_keep_alive_failed');
+      default: return '';
+    }
+  }
+
+  @Builder
+  KeepRows() {
+    NetworkToggleRow({
+      label: $r('app.string.network_keep_alive'), checked: this.keep.enabled, available: !this.keepSaving,
+      onToggle: (isOn: boolean): void => { this.changeKeep(isOn); }
+    })
+    if (this.keepStateText() !== '') {
+      this.Rule()
+      ListRow({ title: $r('app.string.network_keep_alive_state'), value: this.keepStateText(), chevron: false })
+    }
+  }
+
   @Builder
   VpnRows() {
     ListRow({ title: $r('app.string.network_system_proxy'),
@@ -348,6 +388,10 @@ export struct NetworkPage {
               .onClick((): void => { this.load(); })
           }
           SettingsSection({ rows: (): void => this.VpnSwitch() })
+          SettingsSection({
+            heading: $r('app.string.network_background'), footer: $r('app.string.network_keep_alive_footer'),
+            rows: (): void => this.KeepRows()
+          })
           SettingsSection({
             heading: 'VPN', footer: $r('app.string.network_platform_limit'),
             rows: (): void => this.VpnRows()

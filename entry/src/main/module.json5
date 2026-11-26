@@ -30,6 +30,8 @@
         "startWindowBackground": "$color:start_window_background",
         "launchType": "singleton",
         "exported": true,
+        // 后台保持连接：用户开启后，连接期间申请数据传输长时任务（ADR-0038）。
+        "backgroundModes": ["dataTransfer"],
         "skills": [
           {
             "entities": [
@@ -68,6 +70,9 @@
       },
       {
         "name": "ohos.permission.GET_NETWORK_INFO"
+      },
+      {
+        "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
       }
     ]
   }

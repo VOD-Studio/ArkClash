@@ -2845,6 +2845,50 @@
       "value": "每行填写一个应用包名，重新连接 VPN 后生效。"
     },
     {
+      "name": "network_background",
+      "value": "后台"
+    },
+    {
+      "name": "network_keep_alive",
+      "value": "后台保持连接"
+    },
+    {
+      "name": "network_keep_alive_footer",
+      "value": "连接期间让 ArkClash 在后台保持运行，并在通知栏显示隧道流量。VPN 进程被系统回收时自动重连。耗电会增加。"
+    },
+    {
+      "name": "network_keep_alive_state",
+      "value": "状态"
+    },
+    {
+      "name": "network_keep_alive_suspended",
+      "value": "已被系统暂停"
+    },
+    {
+      "name": "network_keep_alive_stopped",
+      "value": "已被系统停止，回到应用后恢复"
+    },
+    {
+      "name": "network_keep_alive_removed",
+      "value": "通知已移除，下次连接时恢复"
+    },
+    {
+      "name": "network_keep_alive_failed",
+      "value": "系统未允许，回到应用后重试"
+    },
+    {
+      "name": "network_keep_alive_notification",
+      "value": "需要允许 ArkClash 发送通知"
+    },
+    {
+      "name": "keep_notification_title",
+      "value": "ArkClash 已连接"
+    },
+    {
+      "name": "keep_notification_text",
+      "value": "↑ %s  ↓ %s"
+    },
+    {
       "name": "action_retry",
       "value": "重试"
     },
