@@ -388,6 +388,7 @@ export class Connection {
       if (generation !== this.generation) {
         return;
       }
+      this.setWantConnected(false);
       const host = await readCoreHostStatus(context).catch((): undefined => undefined);
       if (generation !== this.generation) {
         return;
@@ -543,6 +544,8 @@ export class Connection {
     if (status.bootId === this.bootId && status.revision < this.revision) {
       return;
     }
+    // 连接和断开途中的中间状态不代表用户意图；下面改写 state 前先记下。
+    const switching = this.busy;
     this.bootId = status.bootId;
     this.revision = status.revision;
     this.configRevision = status.configRevision;
@@ -563,7 +566,7 @@ export class Connection {
     this.state = status.running && status.forward === 'running' && status.vpnCreated &&
       status.tunAttached && status.listenersOpen ? ConnectionState.Connected : ConnectionState.Disconnected;
     this.routeRevision = `${this.bootId}/${this.revision}/${this.routeEpoch}`;
-    if (status.running && !this.busy && !this.recovering) {
+    if (status.running && !switching && !this.recovering) {
       this.setWantConnected(status.intent === 'started');
     }
     if (status.running && this.context !== undefined) {

@@ -26,7 +26,7 @@ const hostBinding = { binds: [], releases: 0, listener: undefined,
   async release() { this.releases++; } };
 // 后台保持只暴露是否持有长时任务；任务申请由真机验证。
 const keep = { running: false, wanted: false, restore() {}, foreground() {}, pressureDelayMs() { return 0; },
-  sync(wanted) { this.wanted = wanted; } };
+  syncs: [], sync(wanted) { this.wanted = wanted; this.syncs.push(wanted); } };
 const kits = {
   '@kit.AbilityKit': {},
   '@kit.CryptoArchitectureKit': { cryptoFramework: {
@@ -848,6 +848,16 @@ test('宿主留下停止回执、用户已断开或界面在后台时，绑定�
   hostBinding.listener('boot.1');
   await settle(() => false);
   assert.equal(background.fixture.starts, 1);
+});
+
+test('连接途中的中间状态不释放后台保持，连接失败时释放', async () => {
+  keep.syncs = [];
+  const { connection, context: localContext } = await connectedConsumers();
+  assert.deepEqual(keep.syncs.filter((wanted, i) => i === 0 || wanted !== keep.syncs[i - 1]), [true]);
+  await connection.disconnect(localContext);
+  state.commandError = new Error('fixture platform refused');
+  await assert.rejects(connection.connect(localContext));
+  assert.equal(keep.wanted, false);
 });
 
 test('后台保持持有长时任务时，界面在后台也立即恢复连接，用户断开后释放任务', async () => {
