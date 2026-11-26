@@ -2865,6 +2865,50 @@
       "value": "Enter one application bundle name per line. Changes apply when VPN reconnects."
     },
     {
+      "name": "network_background",
+      "value": "Background"
+    },
+    {
+      "name": "network_keep_alive",
+      "value": "Stay connected in background"
+    },
+    {
+      "name": "network_keep_alive_footer",
+      "value": "Keeps ArkClash running in the background while connected and shows tunnel traffic in a notification. Reconnects automatically if the system reclaims the VPN process. Uses more battery."
+    },
+    {
+      "name": "network_keep_alive_state",
+      "value": "Status"
+    },
+    {
+      "name": "network_keep_alive_suspended",
+      "value": "Paused by the system"
+    },
+    {
+      "name": "network_keep_alive_stopped",
+      "value": "Stopped by the system, resumes when you return"
+    },
+    {
+      "name": "network_keep_alive_removed",
+      "value": "Notification removed, resumes on next connection"
+    },
+    {
+      "name": "network_keep_alive_failed",
+      "value": "Not allowed by the system, retries when you return"
+    },
+    {
+      "name": "network_keep_alive_notification",
+      "value": "Allow ArkClash to send notifications first"
+    },
+    {
+      "name": "keep_notification_title",
+      "value": "ArkClash connected"
+    },
+    {
+      "name": "keep_notification_text",
+      "value": "↑ %s  ↓ %s"
+    },
+    {
       "name": "action_retry",
       "value": "Retry"
     },
@@ -3997,6 +4041,106 @@
       "value": "Search logs"
     },
     {
+      "name": "logs_detail",
+      "value": "Log details"
+    },
+    {
+      "name": "log_route_selected",
+      "value": "Connected via selected route"
+    },
+    {
+      "name": "log_route_direct",
+      "value": "Direct connection established"
+    },
+    {
+      "name": "log_dns_udp",
+      "value": "Intercepted UDP DNS query"
+    },
+    {
+      "name": "log_dns_tcp",
+      "value": "Intercepted TCP DNS query"
+    },
+    {
+      "name": "log_dns_cache",
+      "value": "DNS cache hit"
+    },
+    {
+      "name": "log_dns_query",
+      "value": "Sent DNS query to upstream"
+    },
+    {
+      "name": "log_dns_answer",
+      "value": "Received DNS answer"
+    },
+    {
+      "name": "log_dns_failed",
+      "value": "DNS lookup failed"
+    },
+    {
+      "name": "log_default_rules",
+      "value": "Matching connection against default rules"
+    },
+    {
+      "name": "log_named_rules",
+      "value": "Matching connection against named rules"
+    },
+    {
+      "name": "log_vision_direct",
+      "value": "XTLS Vision started direct transfer"
+    },
+    {
+      "name": "log_core_started",
+      "value": "Core started"
+    },
+    {
+      "name": "log_controller_unavailable",
+      "value": "External controller port unavailable"
+    },
+    {
+      "name": "log_vpn_cleanup",
+      "value": "Core stopped with VPN resources pending"
+    },
+    {
+      "name": "log_profile_reloaded",
+      "value": "Profile reloaded"
+    },
+    {
+      "name": "log_dial_timeout",
+      "value": "Connection failed · Timeout"
+    },
+    {
+      "name": "log_dial_certificate",
+      "value": "Connection failed · Certificate error"
+    },
+    {
+      "name": "log_dial_refused",
+      "value": "Connection failed · Connection refused"
+    },
+    {
+      "name": "log_dial_host",
+      "value": "Connection failed · Host not found"
+    },
+    {
+      "name": "log_dial_network",
+      "value": "Connection failed · Network unreachable"
+    },
+    {
+      "name": "log_dial_auth",
+      "value": "Connection failed · Authentication error"
+    },
+    {
+      "name": "log_dial_failed",
+      "value": "Dial failed"
+    },
+    {
+      "name": "log_other",
+      "value": "Unclassified core event"
+    },
+    {
+      "name": "logs_copy_record",
+      "value": "Copy this log"
+    },
+    {
       "name": "logs_export",
       "value": "Export logs"
     },
@@ -4015,6 +4159,10 @@
     {
       "name": "logs_resume",
       "value": "Resume"
+    },
+    {
+      "name": "logs_view_new",
+      "value": "View new (%d)"
     },
     {
       "name": "logs_capture_off",
@@ -4042,11 +4190,91 @@
     },
     {
       "name": "logs_gap",
-      "value": "Some logs were missed during capture."
+      "value": "Some log entries were skipped"
     },
     {
       "name": "logs_evicted",
       "value": "%d older logs removed."
+    },
+    {
+      "name": "logs_clear",
+      "value": "Clear logs"
+    },
+    {
+      "name": "logs_cleared",
+      "value": "Logs cleared"
+    },
+    {
+      "name": "logs_clear_failed",
+      "value": "Could not clear logs."
+    },
+    {
+      "name": "logs_enable_capture",
+      "value": "Enable log capture"
+    },
+    {
+      "name": "logs_disable_capture",
+      "value": "Disable log capture"
+    },
+    {
+      "name": "logs_capture_off_hint",
+      "value": "When enabled, the core keeps the latest 5,000 logs across page and profile switches."
+    },
+    {
+      "name": "logs_silent_hint",
+      "value": "The core does not emit logs while log level is Silent."
+    },
+    {
+      "name": "logs_set_info_level",
+      "value": "Switch to Info"
+    },
+    {
+      "name": "logs_empty_hint",
+      "value": "Current level: %s. Change log level in the menu to capture more details."
+    },
+    {
+      "name": "logs_disconnected_hint",
+      "value": "The log stream will reconnect once the core is ready."
+    },
+    {
+      "name": "logs_clear_filters",
+      "value": "Clear filters"
+    },
+    {
+      "name": "logs_latest",
+      "value": "Back to latest"
+    },
+    {
+      "name": "logs_raw_message",
+      "value": "Raw message"
+    },
+    {
+      "name": "logs_field_event",
+      "value": "Event"
+    },
+    {
+      "name": "logs_field_tag",
+      "value": "Category"
+    },
+    {
+      "name": "logs_field_detail",
+      "value": "Detail"
+    },
+    {
+      "name": "logs_level_filter_title",
+      "value": "Filter by level"
+    },
+    {
+      "name": "logs_level_menu",
+      "value": "Log level"
+    },
+    {
+      "name": "log_sniffer_ok",
+      "value": "Domain sniffed"
+    },
+    {
+      "name": "log_port_hop",
+      "value": "Switched hopping port"
     },
     {
       "name": "general_unavailable",

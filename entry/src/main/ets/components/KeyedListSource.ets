@@ -18,7 +18,7 @@ export class KeyedListSource<T extends KeyedListItem> implements IDataSource {
     return this.items;
   }
 
-  replace(items: T[], animate?: (apply: () => void) => void): void {
+  replace(items: T[], animate?: (apply: () => void) => void, newestFirst: boolean = false): void {
     const previous = this.items;
     if (this.listeners.length === 0) { this.items = items; return; }
     let prefix = 0;
@@ -33,7 +33,10 @@ export class KeyedListSource<T extends KeyedListItem> implements IDataSource {
     const removed = previous.length - prefix - suffix;
     const added = items.length - prefix - suffix;
     if (removed > 0 && added > 0) {
-      const apply = (): void => this.reconcile(previous, items);
+      const apply = (): void => {
+        if (newestFirst && this.slideWindow(previous, items)) { return; }
+        this.reconcile(previous, items);
+      };
       if (animate === undefined) { apply(); } else { animate(apply); }
       return;
     }
@@ -62,6 +65,19 @@ export class KeyedListSource<T extends KeyedListItem> implements IDataSource {
     this.items = items;
     if (operations.length === 0) { return; }
     for (const listener of this.listeners) { listener.onDatasetChange(operations); }
+  }
+
+  private slideWindow(previous: T[], items: T[]): boolean {
+    const added = items.indexOf(previous[0]);
+    const retained = items.length - added;
+    if (added <= 0 || retained >= previous.length) { return false; }
+    for (let index = 0; index < retained; ++index) {
+      if (previous[index] !== items[added + index]) { return false; }
+    }
+    this.publish(previous.slice(0, retained), [{ type: DataOperationType.DELETE, index: retained,
+      count: previous.length - retained }]);
+    this.publish(items, [{ type: DataOperationType.ADD, index: 0, count: added }]);
+    return true;
   }
 
   private reconcile(previous: T[], items: T[]): void {

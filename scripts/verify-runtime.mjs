@@ -20,6 +20,13 @@ const ready = {
   tunAttached: true, vpnCreated: true, listenersOpen: true, startedAt: 1, bootId: 'fixture.boot', revision: 1, configRevision: 1,
   mode: 'rule', version: 'fixture'
 };
+// 绑定宿主只记录每个宿主的首次绑定，与真实模块一致；断开回调由测试直接触发。
+const hostBinding = { binds: [], releases: 0, listener: undefined,
+  setListener(listener) { this.listener = listener; }, bind(_context, bootId) { if (this.binds.at(-1) !== bootId) this.binds.push(bootId); },
+  async release() { this.releases++; } };
+// 后台保持只暴露是否持有长时任务；任务申请由真机验证。
+const keep = { running: false, wanted: false, restore() {}, foreground() {}, pressureDelayMs() { return 0; },
+  syncs: [], sync(wanted) { this.wanted = wanted; this.syncs.push(wanted); } };
 const kits = {
   '@kit.AbilityKit': {},
   '@kit.CryptoArchitectureKit': { cryptoFramework: {
@@ -83,6 +90,7 @@ const kits = {
     async withProfileStorage(_filesDir, operation) { await state.storageGate; return operation(); }
   },
   './VpnNetworkSettings': { async readVpnNetworkSettings() { return state.networkSettings; } },
+  './VpnHostBinding': { vpnHostBinding: hostBinding }, './BackgroundKeep': { backgroundKeep: keep },
   './Controller': {}
 };
 const module = { exports: {} };
@@ -152,7 +160,7 @@ const geoSettings = loadConsumer('../entry/src/main/ets/shared/GeoResources.ets'
 const connectionBindings = {
   '@kit.AbilityKit': {}, '@kit.BasicServicesKit': {}, '@kit.NetworkKit': {},
   '@kit.ArkData': { preferences: { getPreferencesSync: () => prefs } },
-  './Controller': {},
+  './Controller': {}, './VpnHostBinding': { vpnHostBinding: hostBinding }, './BackgroundKeep': { backgroundKeep: keep },
   './CoreClient': core, './Proxies': { flushProxySelections: async () => {} },
   './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': {
     CONTROLLER_ADDRESS: '127.0.0.1:19090', readRuntime: async () => state.runtime,
@@ -671,6 +679,7 @@ function runtimeConsumers() {
     './Controller': {}, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } },
     './CoreClient': client, './Proxies': { flushProxySelections: async () => {} },
     './Traffic': { traffic: { reset() {} } }, '../shared/Runtime': runtime,
+    './VpnHostBinding': { vpnHostBinding: hostBinding }, './BackgroundKeep': { backgroundKeep: keep },
     '../shared/GeoResources': geoSettings
   });
   const connection = new ConsumerConnection();
@@ -778,6 +787,109 @@ test('诊断配置身份不随普通运行revision变化，旧快照不得回退
   assert.equal(connection.configRevision, 1);
   connection.applyStopped();
   assert.equal(connection.configRevision, 0);
+});
+
+const warmStatus = (bootId) => ({ ...ready, bootId, intent: 'stopped', forward: 'stopped',
+  vpnCreated: false, tunAttached: false, listenersOpen: false, startedAt: 0 });
+
+async function settle(done) {
+  for (let i = 0; i < 2000 && !done(); ++i) {
+    await new Promise(resolve => setImmediate(resolve));
+  }
+}
+
+// 系统直接结束宿主进程：只剩界面进程，不写停止回执；下一次启动换新的 bootId。
+function reclaimHost(fixture, bootId) {
+  fixture.processes = [{ pid: 41 }];
+  state.status = warmStatus(bootId);
+}
+
+async function connectedConsumers() {
+  const consumers = runtimeConsumers();
+  hostBinding.binds = [];
+  state.status = warmStatus('boot.1');
+  consumers.connection.foreground = true;
+  await consumers.connection.connect(consumers.context);
+  assert.equal(consumers.connection.connected, true);
+  return consumers;
+}
+
+test('绑定断开且宿主没有停止回执时，前台立即恢复连接并重新绑定新宿主', async () => {
+  const { fixture, connection } = await connectedConsumers();
+  assert.deepEqual(hostBinding.binds, ['boot.1']);
+  reclaimHost(fixture, 'boot.2');
+  hostBinding.listener('boot.1');
+  await settle(() => connection.connected && connection.bootId === 'boot.2');
+  assert.equal(fixture.starts, 2);
+  assert.equal(connection.connected, true);
+  assert.deepEqual(hostBinding.binds, ['boot.1', 'boot.2']);
+});
+
+test('宿主留下停止回执、用户已断开或界面在后台时，绑定断开不重新拉起宿主', async () => {
+  const receipt = await connectedConsumers();
+  const instance = await receipt.runtime.readRuntimeInstance('/fixture');
+  await receipt.runtime.writeRuntimeStopped('/fixture', instance.secret, instance.instance);
+  receipt.fixture.processes = [{ pid: 41 }];
+  hostBinding.listener('boot.1');
+  await settle(() => !receipt.connection.connected);
+  assert.equal(receipt.fixture.starts, 1);
+  assert.equal(receipt.connection.intent, 'stopped');
+
+  const disconnected = await connectedConsumers();
+  await disconnected.connection.disconnect(disconnected.context);
+  reclaimHost(disconnected.fixture, 'boot.2');
+  hostBinding.listener('boot.1');
+  await settle(() => disconnected.connection.hostState === 'stopped');
+  assert.equal(disconnected.fixture.starts, 1);
+
+  const background = await connectedConsumers();
+  background.connection.foreground = false;
+  reclaimHost(background.fixture, 'boot.2');
+  hostBinding.listener('boot.1');
+  await settle(() => false);
+  assert.equal(background.fixture.starts, 1);
+});
+
+test('连接途中的中间状态不释放后台保持，连接失败时释放', async () => {
+  keep.syncs = [];
+  const { connection, context: localContext } = await connectedConsumers();
+  assert.deepEqual(keep.syncs.filter((wanted, i) => i === 0 || wanted !== keep.syncs[i - 1]), [true]);
+  await connection.disconnect(localContext);
+  state.commandError = new Error('fixture platform refused');
+  await assert.rejects(connection.connect(localContext));
+  assert.equal(keep.wanted, false);
+});
+
+test('后台保持持有长时任务时，界面在后台也立即恢复连接，用户断开后释放任务', async () => {
+  const { fixture, connection, context: localContext } = await connectedConsumers();
+  assert.equal(keep.wanted, true);
+  connection.foreground = false;
+  keep.running = true;
+  try {
+    reclaimHost(fixture, 'boot.2');
+    hostBinding.listener('boot.1');
+    await settle(() => connection.connected && connection.bootId === 'boot.2');
+    assert.equal(fixture.starts, 2);
+    assert.equal(keep.wanted, true);
+    await connection.disconnect(localContext);
+    assert.equal(keep.wanted, false);
+  } finally {
+    keep.running = false;
+  }
+});
+
+test('30 分钟内宿主反复退出时最多恢复 4 次，间隔逐次拉长', async () => {
+  const { fixture, connection } = await connectedConsumers();
+  const begin = state.now;
+  for (let i = 2; i <= 6; ++i) {
+    const lost = connection.bootId;
+    reclaimHost(fixture, `boot.${i}`);
+    hostBinding.listener(lost);
+    await settle(() => connection.bootId === `boot.${i}` && connection.connected);
+  }
+  assert.equal(fixture.starts, 5);
+  assert.ok(state.now - begin >= 2000 + 15000 + 60000 + 300000);
+  assert.equal(connection.bootId, 'boot.5');
 });
 
 test('旧运行文件不恢复历史连接意图', async () => {
@@ -1062,4 +1174,107 @@ test('自动预热系统启动等待期间断开不销毁核心或自动attach',
   assert.equal(connection.connected, false);
   assert.equal(connection.offlineWritable, false);
   assert.equal(state.commands.some(command => command.url.endsWith('/connect')), false);
+});
+
+test('回前台且网络与核心未变化时不刷新路由版本，多网并发与自动预热不误清，真实切换网络才失效', async () => {
+  const netObservers = [];
+  let defaultNet = { netId: 100, bearerTypes: [1] };
+  const { Connection: NetConnection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
+    ...connectionBindings,
+    '@kit.NetworkKit': {
+      connection: {
+        NetBearType: { BEARER_CELLULAR: 0, BEARER_WIFI: 1, BEARER_BLUETOOTH: 2, BEARER_ETHERNET: 3, BEARER_VPN: 4 },
+        async getDefaultNet() { return { netId: defaultNet.netId }; },
+        async getNetCapabilities(handle) {
+          return { bearerTypes: handle.netId === defaultNet.netId ? defaultNet.bearerTypes : [] };
+        },
+        createNetConnection() {
+          const handlers = new Map();
+          const observer = {
+            unregistered: false,
+            on(name, listener) { handlers.set(name, listener); },
+            register(done) { done(); },
+            unregister(done) { this.unregistered = true; done?.(); },
+            emit(name, payload) { handlers.get(name)?.(payload); }
+          };
+          netObservers.push(observer);
+          return observer;
+        }
+      }
+    },
+    './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } }
+  });
+  const connection = new NetConnection();
+  const settle = async () => {
+    for (let i = 0; i < 6; ++i) { await new Promise(resolve => setImmediate(resolve)); }
+  };
+  connection.restore(context);
+  state.active = true;
+  state.status = { ...ready, bootId: 'boot.resume', revision: 7, configRevision: 2 };
+  await connection.recheck(context);
+  const initialRoute = connection.routeRevision;
+
+  connection.observe(context, true);
+  await settle();
+  const firstNet = netObservers.at(-1);
+  firstNet.emit('netAvailable', { netId: 100 });
+  firstNet.emit('netCapabilitiesChange', { netHandle: { netId: 100 }, netCap: { bearerTypes: [1] } });
+  firstNet.emit('netAvailable', { netId: 101 });
+  firstNet.emit('netCapabilitiesChange', { netHandle: { netId: 101 }, netCap: { bearerTypes: [0] } });
+  firstNet.emit('netAvailable', { netId: 102 });
+  firstNet.emit('netCapabilitiesChange', { netHandle: { netId: 102 }, netCap: { bearerTypes: [4] } });
+  await settle();
+  assert.equal(connection.routeRevision, initialRoute, '首次监听并发上报 Wi-Fi/5G/VPN 不误清路由');
+  firstNet.emit('netCapabilitiesChange', {
+    netHandle: { netId: 100 }, netCap: { bearerTypes: [1], linkDownBandwidthKbps: 12000 }
+  });
+  await settle();
+  assert.equal(connection.routeRevision, initialRoute, '带宽抖动不误清路由');
+
+  // 模拟 Index.ets onPageShow 同步连续触发 observe(true) + ensureReady(true)（含多网回调重放）。
+  connection.observe(context, false);
+  assert.equal(firstNet.unregistered, true);
+  connection.observe(context, true);
+  const warmPending = connection.ensureReady(context, true);
+  const secondNet = netObservers.at(-1);
+  secondNet.emit('netAvailable', { netId: 100 });
+  secondNet.emit('netCapabilitiesChange', { netHandle: { netId: 100 }, netCap: { bearerTypes: [1] } });
+  secondNet.emit('netAvailable', { netId: 102 });
+  secondNet.emit('netCapabilitiesChange', { netHandle: { netId: 102 }, netCap: { bearerTypes: [4] } });
+  await warmPending;
+  await settle();
+  assert.equal(connection.hostState, 'running', '回前台并发 observe + ensureReady 不应误标 unknown');
+  assert.equal(connection.coreReady, true, '回前台 coreReady 不得闪断');
+  assert.equal(connection.connected, true, '回前台 connected 不得闪断');
+  assert.equal(connection.routeRevision, initialRoute, '同网络回前台且内核未变时不误清路由');
+  assert.equal(state.started, 0, '内核已就绪时自动预热不得重复拉起扩展');
+
+  // 后台切到 5G 后回前台，即使还没等到 netAvailable 也应由默认网络校验发现并失效路由。
+  connection.observe(context, false);
+  defaultNet = { netId: 101, bearerTypes: [0] };
+  connection.observe(context, true);
+  await settle();
+  const switchedRoute = connection.routeRevision;
+  assert.notEqual(switchedRoute, initialRoute, '后台切换到底层新网络后回前台必须失效路由');
+  const thirdNet = netObservers.at(-1);
+  thirdNet.emit('netAvailable', { netId: 101 });
+  thirdNet.emit('netCapabilitiesChange', { netHandle: { netId: 101 }, netCap: { bearerTypes: [0] } });
+  thirdNet.emit('netLost', { netId: 100 });
+  await settle();
+  assert.equal(connection.routeRevision, switchedRoute, '同一新网络的后续回调与旧网络离线不重复失效');
+  defaultNet = { netId: 0, bearerTypes: [] };
+  thirdNet.emit('netLost', { netId: 101 });
+  await settle();
+  assert.notEqual(connection.routeRevision, switchedRoute, '当前默认网络断开必须失效路由');
+
+  // 确认停止后，再次回前台若仍处于已停止且同网络，也不反复失效路由。
+  state.active = false;
+  state.status = undefined;
+  assert.equal(await connection.recheck(context), false);
+  const stoppedRoute = connection.routeRevision;
+  connection.observe(context, false);
+  connection.observe(context, true);
+  await settle();
+  assert.equal(connection.routeRevision, stoppedRoute, '保持已停止状态回前台不重复失效路由');
+  connection.observe(context, false);
 });

@@ -5,15 +5,31 @@ import { connection as networkConnection } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { OutboundMode, RuntimeStatus, setAllowLan, setMode } from './Controller';
 import { ControllerSocket } from './ControllerSocket';
-import { CoreHostState, connectVpn, disconnectVpn, readCoreHostStatus, startCore, stopCore, updateRuntimeOptions } from './CoreClient';
+import {
+  CoreHostState, connectVpn, disconnectVpn, hostInterrupted, readCoreHostStatus, startCore, stopCore,
+  updateRuntimeOptions
+} from './CoreClient';
+import { backgroundKeep } from './BackgroundKeep';
 import { flushProxySelections } from './Proxies';
 import { traffic } from './Traffic';
+import { vpnHostBinding } from './VpnHostBinding';
 import { runtimeMayBeActive } from '../shared/Runtime';
 import { flushGeoSettings } from '../shared/GeoResources';
 
 const PREF_CONNECT_DURATION = 'lastConnectDuration';
 const PREF_MODE = 'outboundMode';
 const PREF_ALLOW_LAN = 'allowLan';
+// 宿主退出后的恢复间隔。内存不足时刚拉起的宿主可能再次被回收，按次数逐步拉长，
+// 30 分钟内最多恢复 4 次，之后等用户回到前台（ADR-0037）。
+const RECOVERY_DELAYS_MS: number[] = [2000, 15000, 60000, 300000];
+const RECOVERY_WINDOW_MS = 30 * 60 * 1000;
+// 系统登记进程退出需要一点时间，宿主状态未确认前不改写 runtime。
+const HOST_EXIT_CHECKS = 10;
+const HOST_EXIT_CHECK_MS = 300;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
 
 export enum ConnectionState {
   Disconnected,
@@ -46,7 +62,14 @@ export class Connection {
   @Trace coreReady: boolean = false;
   @Trace coreStarting: boolean = false;
   private automaticFailed: boolean = false;
+  private resumeVpn: boolean = false;
+  private context?: common.UIAbilityContext;
+  // 用户希望保持连接：连接时置位，断开时清除。宿主退出后据此决定是否恢复。
+  private wantConnected: boolean = false;
+  private recovering: boolean = false;
+  private recoveryTimes: number[] = [];
   private readyPending?: Promise<void>;
+  private recheckPending?: Promise<boolean>;
   @Trace modePending: boolean = false;
   @Trace modeError: string = '';
   @Trace routeRevision: string = '';
@@ -66,6 +89,11 @@ export class Connection {
   @Trace configRevision: number = 0;
   private revision: number = -1;
   private routeEpoch: number = 0;
+  private defaultNetId: number = -1;
+  private defaultNetBearers: string = '';
+  private netCheckRunning: boolean = false;
+  private netCheckQueued: boolean = false;
+  private netCheckGeneration: number = 0;
   private network?: networkConnection.NetConnection;
   private networkRegistered: boolean = false;
   private events: ControllerSocket = new ControllerSocket('/arkclash/events', (text: string): void => {
@@ -93,6 +121,9 @@ export class Connection {
   }
 
   restore(context: common.UIAbilityContext): void {
+    this.context = context;
+    vpnHostBinding.setListener((bootId: string): void => { this.hostLost(bootId); });
+    backgroundKeep.restore(context);
     this.filesDir = context.filesDir;
     this.prefs = preferences.getPreferencesSync(context, { name: 'settings' });
     const saved = this.prefs.getSync(PREF_MODE, '') as string;
@@ -115,10 +146,14 @@ export class Connection {
     this.foreground = visible;
     this.syncEvents();
     if (visible) {
-      this.invalidateRoute();
+      // 回前台不无条件失效路由；状态或底层网络真有变化时由 recheck 和 watchNetwork 刷新。
       this.watchNetwork();
       this.recheck(context).catch((): void => {});
+      backgroundKeep.foreground();
     } else {
+      ++this.netCheckGeneration;
+      this.netCheckRunning = false;
+      this.netCheckQueued = false;
       const observer = this.network;
       this.network = undefined;
       if (observer !== undefined && this.networkRegistered) {
@@ -134,6 +169,19 @@ export class Connection {
     }
     if (this.readyPending !== undefined) {
       return this.readyPending;
+    }
+    // 等正在进行的回前台校验结束再决定是否预热，避免 startCore 的 pendingStart 把 recheck 挤成 unknown。
+    if (this.recheckPending !== undefined) {
+      await this.recheckPending.catch((): boolean => false);
+      if (automatic && (!this.foreground || this.automaticFailed)) {
+        return;
+      }
+      if (this.readyPending !== undefined) {
+        return this.readyPending;
+      }
+    }
+    if (automatic && this.coreReady && this.hostState === 'running') {
+      return;
     }
     const generation = this.coreGeneration;
     this.coreStarting = true;
@@ -152,6 +200,125 @@ export class Connection {
         this.coreStarting = false;
       }
     }
+    this.resumeInterrupted(context);
+  }
+
+  // 系统只在后台回收 VPN 进程，不会自己重新拉起；回到前台、内核就绪后恢复一次，失败后等用户手动连接。
+  private resumeInterrupted(context: common.UIAbilityContext): void {
+    if (!this.resumeVpn) {
+      return;
+    }
+    this.resumeVpn = false;
+    if (!this.foreground || this.busy || this.connected || !this.coreReady || this.hostState !== 'running') {
+      return;
+    }
+    hilog.info(0x0A11, 'ArkClashBench', 'vpn_resume_interrupted');
+    const generation = this.generation + 1;
+    this.connect(context).catch((): void => {
+      // 常见原因是系统里已有其他 VPN（2203002）。不提示错误，界面保持断开。
+      if (generation === this.generation && !this.busy) {
+        this.error = '';
+      }
+    });
+  }
+
+  // 后台是否允许恢复。界面进程在后台会被冻结，只有持有长时任务时回调才能及时执行。
+  private backgroundRecovery(): boolean {
+    return backgroundKeep.running;
+  }
+
+  // 用户希望保持连接时由后台保持持有长时任务，宿主恢复期间不释放。
+  private setWantConnected(wanted: boolean): void {
+    this.wantConnected = wanted;
+    backgroundKeep.sync(wanted);
+  }
+
+  // 绑定断开即宿主进程已退出（ADR-0038）。用户希望保持连接时立即恢复，不必等回到前台。
+  private hostLost(bootId: string): void {
+    const context = this.context;
+    if (context === undefined || bootId !== this.bootId) {
+      return;
+    }
+    hilog.info(0x0A11, 'ArkClashBench', 'vpn_host_lost');
+    if (!this.foreground && !this.backgroundRecovery()) {
+      return;
+    }
+    if (!this.wantConnected) {
+      if (this.foreground) {
+        this.recheck(context).catch((): void => {});
+      }
+      return;
+    }
+    this.recoverHost(context).catch((): void => {});
+  }
+
+  private async recoverHost(context: common.UIAbilityContext): Promise<void> {
+    if (this.recovering) {
+      return;
+    }
+    const now = Date.now();
+    this.recoveryTimes = this.recoveryTimes.filter((at: number): boolean => now - at < RECOVERY_WINDOW_MS);
+    if (this.recoveryTimes.length >= RECOVERY_DELAYS_MS.length) {
+      hilog.info(0x0A11, 'ArkClashBench', 'vpn_recover_limited');
+      return;
+    }
+    const delay = Math.max(RECOVERY_DELAYS_MS[this.recoveryTimes.length], backgroundKeep.pressureDelayMs());
+    this.recoveryTimes.push(now);
+    this.recovering = true;
+    const generation = this.generation;
+    const current = (): boolean => generation === this.generation && this.wantConnected &&
+      (this.foreground || this.backgroundRecovery());
+    let attempt = -1;
+    try {
+      await sleep(delay);
+      let host = await readCoreHostStatus(context);
+      for (let i = 0; i < HOST_EXIT_CHECKS && host.state === 'unknown' && current(); ++i) {
+        await sleep(HOST_EXIT_CHECK_MS);
+        host = await readCoreHostStatus(context);
+      }
+      if (!current() || this.busy) {
+        return;
+      }
+      if (host.state === 'running' && host.status !== undefined) {
+        // 其他路径已经拉起了新宿主。
+        this.applyStatus(host.status);
+        if (this.connected) {
+          return;
+        }
+      } else if (host.state !== 'stopped') {
+        return;
+      } else {
+        const interrupted = await hostInterrupted(context.filesDir);
+        if (!current() || this.busy) {
+          return;
+        }
+        if (!interrupted) {
+          // 留下了停止回执：用户在系统设置里断开，或被其他 VPN 接管。
+          this.setWantConnected(false);
+          this.applyStopped();
+          return;
+        }
+        this.applyStopped();
+      }
+      hilog.info(0x0A11, 'ArkClashBench', 'vpn_recover_start');
+      await this.ensureReady(context);
+      if (!current() || this.busy || this.connected) {
+        return;
+      }
+      attempt = this.generation + 1;
+      await this.connect(context);
+      if (this.connected) {
+        hilog.info(0x0A11, 'ArkClashBench', 'vpn_recover_done');
+      }
+    } catch (_error) {
+      hilog.info(0x0A11, 'ArkClashBench', 'vpn_recover_failed');
+      if (attempt === this.generation && !this.busy) {
+        // 与回前台恢复一致：失败时不提示，用户手动连接时照常显示原因。
+        this.error = '';
+      }
+    } finally {
+      this.recovering = false;
+    }
   }
 
   private async prepareCore(context: common.UIAbilityContext, generation: number, automatic: boolean): Promise<void> {
@@ -162,10 +329,11 @@ export class Connection {
       if (generation !== this.coreGeneration || (automatic && !this.foreground)) {
         return;
       }
-      const status = await startCore(context, this.userMode(), this.allowLan,
+      const start = await startCore(context, this.userMode(), this.allowLan,
         (): boolean => generation === this.coreGeneration && (!automatic || this.foreground));
       if (generation === this.coreGeneration) {
-        this.applyStatus(status);
+        this.applyStatus(start.status);
+        this.resumeVpn = start.resumeVpn;
       }
     } catch (error) {
       if (generation === this.coreGeneration) {
@@ -196,6 +364,7 @@ export class Connection {
       }
     }
     const generation = ++this.generation;
+    this.setWantConnected(true);
     this.intent = 'started';
     this.error = '';
     this.forward = 'preparing';
@@ -241,6 +410,7 @@ export class Connection {
       if (generation !== this.generation) {
         return;
       }
+      this.setWantConnected(false);
       const host = await readCoreHostStatus(context).catch((): undefined => undefined);
       if (generation !== this.generation) {
         return;
@@ -268,6 +438,7 @@ export class Connection {
       throw new Error('代理正在停止，请稍后重试');
     }
     const generation = ++this.generation;
+    this.setWantConnected(false);
     this.intent = 'stopped';
     this.error = '';
     this.state = ConnectionState.Disconnecting;
@@ -320,8 +491,29 @@ export class Connection {
     if (this.busy) {
       throw new Error('代理状态正在切换，请稍后重试');
     }
+    if (this.recheckPending !== undefined) {
+      return this.recheckPending;
+    }
+    const pending = this.performRecheck(context);
+    this.recheckPending = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this.recheckPending === pending) {
+        this.recheckPending = undefined;
+      }
+    }
+  }
+
+  private async performRecheck(context: common.UIAbilityContext): Promise<boolean> {
     const generation = this.generation;
     try {
+      if (this.readyPending !== undefined) {
+        await this.readyPending.catch((): void => {});
+        if (generation !== this.generation || this.busy) {
+          throw new Error('代理状态已变化，请重试');
+        }
+      }
       const host = await readCoreHostStatus(context);
       if (generation !== this.generation || this.busy) {
         throw new Error('代理状态已变化，请重试');
@@ -374,6 +566,8 @@ export class Connection {
   }
 
   private applyStopped(): void {
+    const wasStopped = this.hostState === 'stopped' && !this.coreReady && this.state === ConnectionState.Disconnected &&
+      this.forward === 'stopped' && !this.listenersOpen && !this.tunAttached && !this.vpnCreated;
     this.hostState = 'stopped';
     this.coreReady = false;
     this.state = ConnectionState.Disconnected;
@@ -385,8 +579,10 @@ export class Connection {
     this.tunAttached = false;
     this.vpnCreated = false;
     this.error = '';
-    traffic.reset();
-    this.invalidateRoute();
+    if (!wasStopped || this.routeRevision === '') {
+      traffic.reset();
+      this.invalidateRoute();
+    }
     this.syncEvents();
     this.syncDiagnosticsCapture();
   }
@@ -395,6 +591,8 @@ export class Connection {
     if (status.bootId === this.bootId && status.revision < this.revision) {
       return;
     }
+    // 连接和断开途中的中间状态不代表用户意图；下面改写 state 前先记下。
+    const switching = this.busy;
     this.bootId = status.bootId;
     this.revision = status.revision;
     this.configRevision = status.configRevision;
@@ -415,6 +613,12 @@ export class Connection {
     this.state = status.running && status.forward === 'running' && status.vpnCreated &&
       status.tunAttached && status.listenersOpen ? ConnectionState.Connected : ConnectionState.Disconnected;
     this.routeRevision = `${this.bootId}/${this.revision}/${this.routeEpoch}`;
+    if (status.running && !switching && !this.recovering) {
+      this.setWantConnected(status.intent === 'started');
+    }
+    if (status.running && this.context !== undefined) {
+      vpnHostBinding.bind(this.context, status.bootId);
+    }
     this.syncEvents();
     this.syncDiagnosticsCapture();
   }
@@ -519,20 +723,94 @@ export class Connection {
     this.routeRevision = `${this.bootId}/${this.revision}/${this.routeEpoch}`;
   }
 
+  private sortedBearers(bearers: number[] | undefined): string {
+    return (bearers ?? []).slice().sort((a: number, b: number): number => a - b).join(',');
+  }
+
+  private scheduleNetworkCheck(): void {
+    if (!this.foreground) {
+      return;
+    }
+    if (this.netCheckRunning) {
+      this.netCheckQueued = true;
+      return;
+    }
+    this.checkDefaultNetwork(this.netCheckGeneration).catch((): void => {});
+  }
+
+  // 系统默认网络本身不含 VPN；多网并发（Wi-Fi + 双 5G + VPN）回前台重放回调时只比较默认外网是否真变化。
+  private async checkDefaultNetwork(generation: number): Promise<void> {
+    this.netCheckRunning = true;
+    try {
+      while (this.foreground && generation === this.netCheckGeneration) {
+        this.netCheckQueued = false;
+        let netId = 0;
+        let bearers = '';
+        try {
+          const handle = await networkConnection.getDefaultNet();
+          netId = handle?.netId ?? 0;
+          if (netId > 0) {
+            const cap = await networkConnection.getNetCapabilities(handle);
+            bearers = this.sortedBearers(cap?.bearerTypes);
+          }
+        } catch (_error) {
+          if (!this.netCheckQueued) {
+            break;
+          }
+          continue;
+        }
+        if (!this.foreground || generation !== this.netCheckGeneration) {
+          return;
+        }
+        if (this.defaultNetId === -1) {
+          this.defaultNetId = netId;
+          this.defaultNetBearers = bearers;
+        } else if (netId !== this.defaultNetId || bearers !== this.defaultNetBearers) {
+          this.defaultNetId = netId;
+          this.defaultNetBearers = bearers;
+          this.invalidateRoute();
+        }
+        if (!this.netCheckQueued) {
+          break;
+        }
+      }
+    } finally {
+      if (generation === this.netCheckGeneration) {
+        this.netCheckRunning = false;
+      }
+    }
+  }
+
   private watchNetwork(): void {
     if (this.network !== undefined) {
       return;
     }
+    this.scheduleNetworkCheck();
     const observer = networkConnection.createNetConnection();
     this.network = observer;
-    const changed = (): void => {
+    const check = (): void => {
       if (this.foreground && this.network === observer) {
-        this.invalidateRoute();
+        this.scheduleNetworkCheck();
       }
     };
-    observer.on('netAvailable', changed);
-    observer.on('netLost', changed);
-    observer.on('netCapabilitiesChange', changed);
+    observer.on('netAvailable', check);
+    observer.on('netLost', check);
+    observer.on('netUnavailable', check);
+    observer.on('netCapabilitiesChange', (info: networkConnection.NetCapabilityInfo): void => {
+      if (!this.foreground || this.network !== observer) {
+        return;
+      }
+      const bearerTypes = info?.netCap?.bearerTypes ?? [];
+      if (bearerTypes.includes(networkConnection.NetBearType.BEARER_VPN)) {
+        return;
+      }
+      const netId = info?.netHandle?.netId ?? 0;
+      const bearers = this.sortedBearers(bearerTypes);
+      if (this.defaultNetId > 0 && netId === this.defaultNetId && bearers === this.defaultNetBearers) {
+        return;
+      }
+      this.scheduleNetworkCheck();
+    });
     observer.register((error: BusinessError): void => {
       if (error) {
         if (this.network === observer) {

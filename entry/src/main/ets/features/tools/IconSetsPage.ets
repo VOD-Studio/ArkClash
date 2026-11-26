@@ -22,13 +22,15 @@ class IconSetRowItem {
   }
 }
 
+let cachedIconSets: IconSetSnapshot | undefined = undefined;
+
 @ComponentV2
 export struct IconSetsPage {
   @Param foreground: boolean = true;
   @Event onPreview: (id: string) => void = (_id: string): void => {};
   @Local private appStyle: AppearanceState = appAppearance;
-  @Local private snapshot: IconSetSnapshot = emptyIconSets();
-  @Local private loading: boolean = true;
+  @Local private snapshot: IconSetSnapshot = cachedIconSets ?? emptyIconSets();
+  @Local private loading: boolean = cachedIconSets === undefined;
   @Local private loadFailed: boolean = false;
   @Local private busy: boolean = false;
   @Local private sorting: boolean = false;
@@ -42,11 +44,18 @@ export struct IconSetsPage {
   private shown: boolean = false;
   private rows: KeyedListSource<IconSetRowItem> = new KeyedListSource<IconSetRowItem>();
 
+  aboutToAppear(): void {
+    if (cachedIconSets !== undefined) {
+      this.publish(cachedIconSets);
+    }
+  }
+
   private context(): common.UIAbilityContext {
     return this.getUIContext().getHostContext() as common.UIAbilityContext;
   }
 
   private publish(snapshot: IconSetSnapshot): void {
+    cachedIconSets = snapshot;
     this.snapshot = snapshot;
     this.rows.replace(snapshot.sets.map((set: ProfileIconSet): IconSetRowItem => new IconSetRowItem(set)));
     if (snapshot.sets.length < 2) { this.sorting = false; }
@@ -54,12 +63,14 @@ export struct IconSetsPage {
 
   private async load(): Promise<void> {
     if (this.busy) { return; }
-    this.loading = true;
+    const silent = cachedIconSets !== undefined;
+    if (!silent) { this.loading = true; }
     try {
       this.publish(await readIconSets(this.context().filesDir));
       this.loadFailed = false;
-    } catch (_error) { this.loadFailed = true; }
-    finally { this.loading = false; }
+    } catch (_error) {
+      if (!silent) { this.loadFailed = true; }
+    } finally { this.loading = false; }
   }
 
   private toast(message: ResourceStr): void {
@@ -380,17 +391,27 @@ export struct IconSetPreviewPage {
   @Param setId: string = '';
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private set?: ProfileIconSet;
-  @Local private loading: boolean = true;
+  @Local private loading: boolean = cachedIconSets === undefined;
   @Local private query: string = '';
 
+  aboutToAppear(): void {
+    if (cachedIconSets !== undefined) {
+      this.set = cachedIconSets.sets.find((item: ProfileIconSet): boolean => item.id === this.setId);
+      this.loading = false;
+    }
+  }
+
   private async load(): Promise<void> {
-    this.loading = true;
+    const silent = this.set !== undefined;
+    if (!silent) { this.loading = true; }
     try {
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const snapshot = await readIconSets(context.filesDir);
+      cachedIconSets = snapshot;
       this.set = snapshot.sets.find((item: ProfileIconSet): boolean => item.id === this.setId);
-    } catch (_error) { this.set = undefined; }
-    finally { this.loading = false; }
+    } catch (_error) {
+      if (!silent) { this.set = undefined; }
+    } finally { this.loading = false; }
   }
 
   @Builder

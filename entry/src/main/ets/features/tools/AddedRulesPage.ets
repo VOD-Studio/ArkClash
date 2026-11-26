@@ -25,6 +25,9 @@ class AddedRuleListItem {
   }
 }
 
+let cachedAddedRules: AddedRulesSettings | undefined = undefined;
+let cachedAddedRuleSets: RuleSetItem[] | undefined = undefined;
+
 @ComponentV2
 export struct AddedRulesPage {
   @Param foreground: boolean = true;
@@ -32,8 +35,8 @@ export struct AddedRulesPage {
   @Param profileId: string = '';
   @Event onGlobalRules: () => void = (): void => {};
   @Local private appStyle: AppearanceState = appAppearance;
-  @Local private settings: AddedRulesSettings = emptyAddedRules();
-  @Local private loading: boolean = true;
+  @Local private settings: AddedRulesSettings = cachedAddedRules ?? emptyAddedRules();
+  @Local private loading: boolean = cachedAddedRules === undefined;
   @Local private loadFailed: boolean = false;
   @Local private saving: boolean = false;
   @Local private query: string = '';
@@ -51,10 +54,17 @@ export struct AddedRulesPage {
   @Local private deleteShown: boolean = false;
   @Local private discardRequested: boolean = false;
   @Local private editIssue: ResourceStr = '';
-  @Local private ruleSets: RuleSetItem[] = [];
-  @Local private ruleSetOptions: SelectOption[] = [];
+  @Local private ruleSets: RuleSetItem[] = cachedAddedRuleSets ?? [];
+  @Local private ruleSetOptions: SelectOption[] =
+    (cachedAddedRuleSets ?? []).map((item: RuleSetItem): SelectOption => ({ value: item.name }));
   private shown: boolean = false;
   private rows: KeyedListSource<AddedRuleListItem> = new KeyedListSource<AddedRuleListItem>();
+
+  aboutToAppear(): void {
+    if (cachedAddedRules !== undefined) {
+      this.refreshRows();
+    }
+  }
 
   private context(): common.UIAbilityContext {
     return this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -71,16 +81,28 @@ export struct AddedRulesPage {
   }
 
   private async load(): Promise<void> {
-    this.loading = true;
+    const silent = cachedAddedRules !== undefined;
+    if (!silent) {
+      this.loading = true;
+    }
     try {
-      this.settings = await readAddedRules(this.context().filesDir);
+      const settings = await readAddedRules(this.context().filesDir);
       const catalog = await readRuleSets(this.context().filesDir).catch((): undefined => undefined);
-      this.ruleSets = catalog?.items ?? [];
+      cachedAddedRules = settings;
+      this.settings = settings;
+      if (catalog !== undefined) {
+        cachedAddedRuleSets = catalog.items;
+        this.ruleSets = catalog.items;
+      } else if (cachedAddedRuleSets === undefined) {
+        this.ruleSets = [];
+      }
       this.ruleSetOptions = this.ruleSets.map((item: RuleSetItem): SelectOption => ({ value: item.name }));
       this.refreshRows();
       this.loadFailed = false;
     } catch (_error) {
-      this.loadFailed = true;
+      if (!silent) {
+        this.loadFailed = true;
+      }
     } finally {
       this.loading = false;
     }
@@ -195,6 +217,7 @@ export struct AddedRulesPage {
     }
     try {
       this.settings = await saveAddedRules(this.context(), previous, update === undefined ? rules : previous.rules, update);
+      cachedAddedRules = this.settings;
       this.refreshRows(!reordering);
       this.editShown = false;
       this.presetsShown = false;

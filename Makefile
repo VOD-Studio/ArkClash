@@ -35,6 +35,9 @@ run: install ## 安装并启动
 log: ## 跟踪内核与 VPN 进程日志
 	scripts/device.sh log
 
+vpn-exits: ## 查看设备留存的 ArkClash VPN 进程退出记录（可指定 HDC_TARGET）
+	@scripts/device.sh vpn-exits
+
 lint: ## 代码检查（CHECKS=all|go|shell|arch|arkts|actions|commits|vuln，可多个）
 	scripts/lint.sh $(CHECKS)
 
@@ -56,4 +59,4 @@ site-check: ## 检查官网与文档站点类型及内容契约
 clean: ## 清理构建产物（保留 .toolchain/ 里的补丁工具链）
 	rm -rf entry/build entry/.cxx .hvigor dist entry/libs website/dist website/.astro
 
-.PHONY: help core core-smoke core-codeql geodata geodata-update hap install run log lint test bench site-dev site-build site-check clean
+.PHONY: help core core-smoke core-codeql geodata geodata-update hap install run log vpn-exits lint test bench site-dev site-build site-check clean

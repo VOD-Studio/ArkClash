@@ -122,7 +122,7 @@ export struct TabPage {
         .width('100%')
         .height('100%')
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
-        .contentStartOffset(this.topInset + TAB_HEADER_HEIGHT + 12)
+        .contentStartOffset(this.topInset + TAB_HEADER_HEIGHT)
         .contentEndOffset((this.appStyle.floating ? FLOATING_BAR_INSET : 16))
         .cachedCount(2)
         .lanes(this.listLanes, this.listGutter)
@@ -140,7 +140,7 @@ export struct TabPage {
         .padding({
           left: PAGE_GUTTER,
           right: PAGE_GUTTER,
-          top: this.topInset + TAB_HEADER_HEIGHT + 12,
+          top: this.topInset + TAB_HEADER_HEIGHT,
           bottom: (this.appStyle.floating ? FLOATING_BAR_INSET : 16)
         })
       }

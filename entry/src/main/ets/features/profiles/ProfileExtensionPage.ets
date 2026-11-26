@@ -43,6 +43,8 @@ struct ExtensionScriptOption {
   }
 }
 
+let cachedExtensionScripts: ConfigScriptsSnapshot | undefined = undefined;
+
 @ComponentV2
 export struct ProfileExtensionPage {
   @Local private appStyle: AppearanceState = appAppearance;
@@ -51,9 +53,9 @@ export struct ProfileExtensionPage {
   @Param foreground: boolean = true;
   @Event onScripts: () => void = (): void => {};
   @Event onStandardRules: () => void = (): void => {};
-  @Local private snapshot: ConfigScriptsSnapshot = emptyConfigScripts();
+  @Local private snapshot: ConfigScriptsSnapshot = cachedExtensionScripts ?? emptyConfigScripts();
   @Local private binding: ConfigScriptBinding = { profile: '', mode: 'standard', scriptId: '' };
-  @Local private loading: boolean = true;
+  @Local private loading: boolean = cachedExtensionScripts === undefined;
   @Local private loadFailed: boolean = false;
   @Local private saving: boolean = false;
   @Local private applying: boolean = false;
@@ -67,6 +69,12 @@ export struct ProfileExtensionPage {
   private readId: number = 0;
   private openedStandardRules: boolean = false;
   private context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+
+  aboutToAppear(): void {
+    if (cachedExtensionScripts !== undefined) {
+      this.accept(cachedExtensionScripts);
+    }
+  }
 
   aboutToDisappear(): void {
     ++this.readId;
@@ -84,6 +92,7 @@ export struct ProfileExtensionPage {
   private missing(): boolean { return scriptIdentity(this.snapshot, this.profileId) === undefined; }
 
   private accept(store: ConfigScriptsSnapshot): void {
+    cachedExtensionScripts = store;
     this.snapshot = store;
     this.binding = scriptBinding(store, this.profileId);
     this.scripts.replace(store.scripts);
@@ -91,6 +100,7 @@ export struct ProfileExtensionPage {
 
   private async refresh(): Promise<void> {
     const read = ++this.readId;
+    const silent = cachedExtensionScripts !== undefined;
     try {
       const store = await readConfigScripts(this.context.filesDir);
       const rules = await readAddedRules(this.context.filesDir);
@@ -98,7 +108,7 @@ export struct ProfileExtensionPage {
       this.accept(store);
       this.standardRevision = profileAddedRules(rules, this.profileId).revision;
       this.loadFailed = false;
-    } catch (error) { if (read === this.readId) { this.loadFailed = true; } }
+    } catch (error) { if (read === this.readId && !silent) { this.loadFailed = true; } }
     finally { if (read === this.readId) { this.loading = false; } }
     try {
       const status = await getRuntimeStatus(this.context.filesDir);

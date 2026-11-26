@@ -360,3 +360,5 @@ export class RuntimeProvidersStore {
     }
   }
 }
+
+export const runtimeProvidersStore: RuntimeProvidersStore = new RuntimeProvidersStore();

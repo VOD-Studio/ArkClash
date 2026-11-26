@@ -1,6 +1,6 @@
 // VPN 扩展持有内核与 TUN；系统销毁扩展后不承诺继续运行。
 import { refreshDueScripts } from './ScriptUpdates';
-import { Want } from '@kit.AbilityKit';
+import { AbilityConstant, Want } from '@kit.AbilityKit';
 import { connection as networkConnection, vpnExtension, VpnExtensionAbility } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import core from 'libarkclash.so';
@@ -8,7 +8,8 @@ import { hasFile } from '../shared/Files';
 import { newId, ProfileRecord, readList, readListAsync, validProfileId, withProfileStorage,
   yamlPath } from '../shared/profiles/Store';
 import { UpdateEnv, UpdateScheduler } from '../shared/profiles/Updater';
-import { beginRuntimeInstance, CONTROLLER_ADDRESS, readRuntime, RuntimeConfig, writeCoreError,
+import { rpc } from '@kit.IPCKit';
+import { beginRuntimeInstance, CONTROLLER_ADDRESS, HOST_BINDING_PARAM, readRuntime, RuntimeConfig, writeCoreError,
   writeRuntime, writeRuntimeStopped } from '../shared/Runtime';
 import {
   TUN_IPV4, TUN_IPV4_DNS, TUN_IPV6, TUN_IPV6_DNS, vpnExcludedApplications, VpnNetworkSettings, VpnRoutePrefix, vpnRoutePrefixes
@@ -25,6 +26,10 @@ const FAMILY_IPV4 = 1;
 const FAMILY_IPV6 = 2;
 // 内核就绪后再补齐其他配置的 rule-provider，不和启动抢资源。
 const PREFETCH_DELAY_MS = 10000;
+const LOW_MEMORY_LEVELS: AbilityConstant.MemoryLevel[] = [
+  AbilityConstant.MemoryLevel.MEMORY_LEVEL_LOW, AbilityConstant.MemoryLevel.MEMORY_LEVEL_CRITICAL,
+  AbilityConstant.MemoryLevel.MEMORY_LEVEL_BACKGROUND_LOW, AbilityConstant.MemoryLevel.MEMORY_LEVEL_BACKGROUND_CRITICAL
+];
 
 // 和 core/lifecycle.go 的 startOptions 一致。
 interface CoreOptions {
@@ -65,6 +70,12 @@ interface VpnQueuedOperation {
 
 type VpnIntent = 'started' | 'stopped';
 
+class HostBinding extends rpc.RemoteObject {
+  constructor() {
+    super('arkclash.vpn.host');
+  }
+}
+
 interface VpnCleanupResult {
   errors: string[];
   canceled?: VpnCommandError;
@@ -88,8 +99,21 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
   private runtimeSecret: string = '';
   private runtimeInstance: string = newId('vpn.');
   private bootId: string = '';
+  private environmentCallbackId?: number;
+  private reclaimingMemory: boolean = false;
 
-  onCreate(_want: Want): void {
+  onCreate(want: Want): void {
+    if (want.parameters?.[HOST_BINDING_PARAM] === true) {
+      // 绑定只用于已在运行的宿主；宿主恰好退出时系统可能借绑定重新拉起扩展，这里直接退出，不写实例和回执。
+      hilog.warn(DOMAIN, TAG, 'created by host binding, stopping');
+      this.invalidateHost();
+      vpnExtension.stopVpnExtensionAbility({
+        bundleName: this.context.applicationInfo.name, abilityName: 'ClashVpnAbility'
+      }).catch((): void => {
+        hilog.error(DOMAIN, TAG, 'binding-created host stop failed');
+      });
+      return;
+    }
     const generation = this.generation;
     this.startup = this.start(generation);
     this.startup.catch((error: Error): void => {
@@ -108,6 +132,14 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       });
     });
   }
+
+  // 系统按绑定方中最好的回收优先级加 100 计算本进程的优先级，没有绑定时固定为 500，
+  // 先于普通后台应用被回收。绑定不承载业务调用，业务仍走 controller（ADR-0038）。
+  onConnect(_want: Want): rpc.RemoteObject {
+    return new HostBinding();
+  }
+
+  onDisconnect(_want: Want): void {}
 
   onDestroy(): void {
     this.invalidateHost();
@@ -143,6 +175,14 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
   }
 
   private async releaseResources(): Promise<void> {
+    if (this.environmentCallbackId !== undefined) {
+      try {
+        await this.context.getApplicationContext().off('environment', this.environmentCallbackId);
+      } catch (_error) {
+        hilog.warn(DOMAIN, TAG, 'memory pressure listener removal failed');
+      }
+      this.environmentCallbackId = undefined;
+    }
     await this.startup?.catch((): void => {});
     await this.operationQueue;
     clearTimeout(this.prefetchTimer);
@@ -176,6 +216,42 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     this.connection = undefined;
     if (this.runtimeSecret !== '') {
       await writeRuntimeStopped(this.context.filesDir, this.runtimeSecret, this.runtimeInstance);
+    }
+  }
+
+  private watchMemoryPressure(): void {
+    try {
+      this.environmentCallbackId = this.context.getApplicationContext().on('environment', {
+        onConfigurationUpdated: (): void => {},
+        onMemoryLevel: (level: AbilityConstant.MemoryLevel): void => {
+          if (LOW_MEMORY_LEVELS.includes(level)) {
+            this.reclaimMemory(level);
+          }
+        }
+      });
+    } catch (_error) {
+      hilog.warn(DOMAIN, TAG, 'memory pressure listener unavailable');
+    }
+  }
+
+  private async reclaimMemory(level?: AbilityConstant.MemoryLevel): Promise<void> {
+    if (this.stopped || this.reclaimingMemory) {
+      return;
+    }
+    this.reclaimingMemory = true;
+    try {
+      const reclaim: Promise<boolean> = core.reclaimMemory();
+      if (await reclaim) {
+        if (level === undefined) {
+          hilog.info(DOMAIN, TAG, 'reclaimed idle heap after warmup');
+        } else {
+          hilog.info(DOMAIN, TAG, 'handled memory pressure level %{public}d', level);
+        }
+      }
+    } catch (_error) {
+      hilog.warn(DOMAIN, TAG, 'heap reclaim failed');
+    } finally {
+      this.reclaimingMemory = false;
     }
   }
 
@@ -242,6 +318,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
     this.checkGeneration(generation);
     this.coreTouched = true;
     this.nativeInitialized = true;
+    this.watchMemoryPressure();
     const starting: Promise<void> = core.start(JSON.stringify(options));
     await starting;
     this.checkGeneration(generation);
@@ -535,11 +612,19 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
 
   private async prefetchOthers(filesDir: string): Promise<void> {
     const running = core.runningProfile();
-    for (const record of readList(filesDir).profiles.filter((p: ProfileRecord) => p.id !== running)) {
-      if (this.stopped) {
-        return;
+    const profiles = readList(filesDir).profiles;
+    if (running === '' && profiles.length === 0) {
+      return;
+    }
+    try {
+      for (const record of profiles.filter((p: ProfileRecord) => p.id !== running)) {
+        if (this.stopped) {
+          return;
+        }
+        await this.prefetch(yamlPath(filesDir, record.id));
       }
-      await this.prefetch(yamlPath(filesDir, record.id));
+    } finally {
+      await this.reclaimMemory();
     }
   }
 }

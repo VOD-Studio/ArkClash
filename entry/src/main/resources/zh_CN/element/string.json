@@ -2845,6 +2845,50 @@
       "value": "每行填写一个应用包名，重新连接 VPN 后生效。"
     },
     {
+      "name": "network_background",
+      "value": "后台"
+    },
+    {
+      "name": "network_keep_alive",
+      "value": "后台保持连接"
+    },
+    {
+      "name": "network_keep_alive_footer",
+      "value": "连接期间让 ArkClash 在后台保持运行，并在通知栏显示隧道流量。VPN 进程被系统回收时自动重连。耗电会增加。"
+    },
+    {
+      "name": "network_keep_alive_state",
+      "value": "状态"
+    },
+    {
+      "name": "network_keep_alive_suspended",
+      "value": "已被系统暂停"
+    },
+    {
+      "name": "network_keep_alive_stopped",
+      "value": "已被系统停止，回到应用后恢复"
+    },
+    {
+      "name": "network_keep_alive_removed",
+      "value": "通知已移除，下次连接时恢复"
+    },
+    {
+      "name": "network_keep_alive_failed",
+      "value": "系统未允许，回到应用后重试"
+    },
+    {
+      "name": "network_keep_alive_notification",
+      "value": "需要允许 ArkClash 发送通知"
+    },
+    {
+      "name": "keep_notification_title",
+      "value": "ArkClash 已连接"
+    },
+    {
+      "name": "keep_notification_text",
+      "value": "↑ %s  ↓ %s"
+    },
+    {
       "name": "action_retry",
       "value": "重试"
     },
@@ -3977,6 +4021,106 @@
       "value": "搜索日志"
     },
     {
+      "name": "logs_detail",
+      "value": "日志详情"
+    },
+    {
+      "name": "log_route_selected",
+      "value": "已按选定路由建立连接"
+    },
+    {
+      "name": "log_route_direct",
+      "value": "已建立直连"
+    },
+    {
+      "name": "log_dns_udp",
+      "value": "已接管 UDP DNS 查询"
+    },
+    {
+      "name": "log_dns_tcp",
+      "value": "已接管 TCP DNS 查询"
+    },
+    {
+      "name": "log_dns_cache",
+      "value": "DNS 查询命中缓存"
+    },
+    {
+      "name": "log_dns_query",
+      "value": "已向上游发起 DNS 查询"
+    },
+    {
+      "name": "log_dns_answer",
+      "value": "已收到 DNS 应答"
+    },
+    {
+      "name": "log_dns_failed",
+      "value": "DNS 解析失败"
+    },
+    {
+      "name": "log_default_rules",
+      "value": "使用默认规则匹配连接"
+    },
+    {
+      "name": "log_named_rules",
+      "value": "使用指定规则匹配连接"
+    },
+    {
+      "name": "log_vision_direct",
+      "value": "XTLS Vision 开始直接传输"
+    },
+    {
+      "name": "log_core_started",
+      "value": "内核已启动"
+    },
+    {
+      "name": "log_controller_unavailable",
+      "value": "外部控制器端口不可用"
+    },
+    {
+      "name": "log_vpn_cleanup",
+      "value": "内核已停止，VPN 资源待释放"
+    },
+    {
+      "name": "log_profile_reloaded",
+      "value": "已重新加载配置"
+    },
+    {
+      "name": "log_dial_timeout",
+      "value": "连接失败 · 超时"
+    },
+    {
+      "name": "log_dial_certificate",
+      "value": "连接失败 · 证书错误"
+    },
+    {
+      "name": "log_dial_refused",
+      "value": "连接失败 · 连接被拒绝"
+    },
+    {
+      "name": "log_dial_host",
+      "value": "连接失败 · 找不到主机"
+    },
+    {
+      "name": "log_dial_network",
+      "value": "连接失败 · 网络不可达"
+    },
+    {
+      "name": "log_dial_auth",
+      "value": "连接失败 · 认证错误"
+    },
+    {
+      "name": "log_dial_failed",
+      "value": "拨号连接失败"
+    },
+    {
+      "name": "log_other",
+      "value": "未分类内核事件"
+    },
+    {
+      "name": "logs_copy_record",
+      "value": "复制这条日志"
+    },
+    {
       "name": "logs_export",
       "value": "导出日志"
     },
@@ -3995,6 +4139,10 @@
     {
       "name": "logs_resume",
       "value": "继续"
+    },
+    {
+      "name": "logs_view_new",
+      "value": "查看 %d 条新日志"
     },
     {
       "name": "logs_capture_off",
@@ -4022,11 +4170,91 @@
     },
     {
       "name": "logs_gap",
-      "value": "日志采集出现断档。"
+      "value": "部分日志记录已跳过"
     },
     {
       "name": "logs_evicted",
       "value": "已淘汰 %d 条较早日志。"
+    },
+    {
+      "name": "logs_clear",
+      "value": "清空日志"
+    },
+    {
+      "name": "logs_cleared",
+      "value": "日志已清空"
+    },
+    {
+      "name": "logs_clear_failed",
+      "value": "无法清空日志。"
+    },
+    {
+      "name": "logs_enable_capture",
+      "value": "开启日志捕获"
+    },
+    {
+      "name": "logs_disable_capture",
+      "value": "关闭日志捕获"
+    },
+    {
+      "name": "logs_capture_off_hint",
+      "value": "开启后内核持续保留最近 5,000 条日志，切换页面或配置不丢失。"
+    },
+    {
+      "name": "logs_silent_hint",
+      "value": "静默等级下内核不会输出任何日志。"
+    },
+    {
+      "name": "logs_set_info_level",
+      "value": "切换为信息等级"
+    },
+    {
+      "name": "logs_empty_hint",
+      "value": "当前日志等级为「%s」，可在右上角菜单调整等级。"
+    },
+    {
+      "name": "logs_disconnected_hint",
+      "value": "内核就绪后会自动连接日志流。"
+    },
+    {
+      "name": "logs_clear_filters",
+      "value": "清除筛选"
+    },
+    {
+      "name": "logs_latest",
+      "value": "回到最新"
+    },
+    {
+      "name": "logs_raw_message",
+      "value": "日志原文"
+    },
+    {
+      "name": "logs_field_event",
+      "value": "事件"
+    },
+    {
+      "name": "logs_field_tag",
+      "value": "分类"
+    },
+    {
+      "name": "logs_field_detail",
+      "value": "详情"
+    },
+    {
+      "name": "logs_level_filter_title",
+      "value": "按等级筛选"
+    },
+    {
+      "name": "logs_level_menu",
+      "value": "日志等级"
+    },
+    {
+      "name": "log_sniffer_ok",
+      "value": "嗅探到域名"
+    },
+    {
+      "name": "log_port_hop",
+      "value": "端口跳跃已切换"
     },
     {
       "name": "general_unavailable",

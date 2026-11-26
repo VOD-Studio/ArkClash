@@ -297,7 +297,7 @@ struct Index {
     } else if (name === ToolRoute.General) {
       GeneralPage()
     } else if (name === ToolRoute.Logs) {
-      LogsPage({ foreground: this.foreground })
+      LogsPage({ foreground: this.foreground, reduceMotion: this.reduceMotion })
     } else if (name === ToolRoute.AdvancedConfig) {
       AdvancedConfigPage({ onOpen: (route: ToolRoute): void => { this.stack.pushPath({ name: route }); } })
     } else if (name === ToolRoute.Network) {

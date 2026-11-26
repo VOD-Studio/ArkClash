@@ -1,6 +1,8 @@
 import { common } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
 import { fileIo as fs, picker } from '@kit.CoreFileKit';
+import { http } from '@kit.NetworkKit';
+import { call } from './Controller';
 import { ControllerSocket, ControllerSocketState } from './ControllerSocket';
 
 export const LOG_LIMIT = 5000;
@@ -10,12 +12,38 @@ export interface LogRecord {
   time: number;
   level: string;
   message: string;
+  event?: string;
+  tag?: string;
+  reason?: string;
+  target?: string;
+  source?: string;
+  rule?: string;
+  proxy?: string;
+  detail?: string;
+}
+
+interface LogClearBody {
+  expectedBootId: string;
+}
+
+function optionalString(value: string | undefined): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+function validLog(record: LogRecord): boolean {
+  return record !== null && typeof record === 'object' &&
+    typeof record.id === 'string' && record.id.length > 0 &&
+    Number.isSafeInteger(record.time) && Math.abs(record.time) <= 8640000000000000 &&
+    typeof record.level === 'string' && typeof record.message === 'string' &&
+    optionalString(record.event) && optionalString(record.tag) && optionalString(record.reason) &&
+    optionalString(record.target) && optionalString(record.source) && optionalString(record.rule) &&
+    optionalString(record.proxy) && optionalString(record.detail);
 }
 
 export interface LogFrame {
   type: string;
   bootId: string;
-  configRevision: number;
+  configRevision?: number;
   sessionId: string;
   seq: number;
   kind: string;
@@ -24,16 +52,20 @@ export interface LogFrame {
   logs: LogRecord[];
 }
 
-export function logStream(bootId: string, revision: number, onFrame: (frame: LogFrame) => void,
+export function logStream(bootId: string, onFrame: (frame: LogFrame) => void,
   onState: (state: ControllerSocketState) => void): ControllerSocket {
-  const path = `/arkclash/diagnostics/logs?expectedBootId=${encodeURIComponent(bootId)}&expectedConfigRevision=${revision}`;
+  const path = `/arkclash/diagnostics/logs?expectedBootId=${encodeURIComponent(bootId)}`;
   const socket = new ControllerSocket(path, (text: string): void => {
     try {
       const frame = JSON.parse(text) as LogFrame;
-      if (frame.type !== 'logs' || frame.bootId !== bootId || frame.configRevision !== revision ||
-        !Number.isSafeInteger(frame.seq) || frame.seq <= 0 || frame.sessionId.length === 0 ||
+      if (frame.type !== 'logs' || frame.bootId !== bootId ||
+        (frame.configRevision !== undefined && (!Number.isSafeInteger(frame.configRevision) || frame.configRevision < 0)) ||
+        !Number.isSafeInteger(frame.seq) || frame.seq <= 0 ||
+        typeof frame.sessionId !== 'string' || frame.sessionId.length === 0 ||
         !['snapshot', 'delta', 'reset'].includes(frame.kind) ||
-        !Array.isArray(frame.logs) || frame.logs.length > LOG_LIMIT) {
+        !Number.isSafeInteger(frame.dropped) || frame.dropped < 0 ||
+        !Number.isSafeInteger(frame.evicted) || frame.evicted < 0 ||
+        !Array.isArray(frame.logs) || frame.logs.length > LOG_LIMIT || !frame.logs.every(validLog)) {
         throw new Error('invalid_log_frame');
       }
       onFrame(frame);
@@ -42,6 +74,14 @@ export function logStream(bootId: string, revision: number, onFrame: (frame: Log
     }
   }, onState);
   return socket;
+}
+
+export async function clearDiagnosticLogs(filesDir: string, bootId: string): Promise<void> {
+  if (filesDir === '' || bootId.trim() === '') {
+    throw new Error('diagnostics_invalid_request');
+  }
+  const body: LogClearBody = { expectedBootId: bootId };
+  await call(filesDir, http.RequestMethod.POST, '/arkclash/diagnostics/logs/clear', JSON.stringify(body));
 }
 
 export async function exportLogs(context: common.UIAbilityContext, records: LogRecord[]): Promise<boolean> {

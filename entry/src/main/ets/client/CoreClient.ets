@@ -4,17 +4,19 @@ import { common, Want } from '@kit.AbilityKit';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { http, vpnExtension } from '@kit.NetworkKit';
 import {
-  CONTROLLER_ADDRESS, readRuntime, readRuntimeInstance, runtimeMayBeActive, RuntimeConfig, takeCoreError, writeRuntime
+  CONTROLLER_ADDRESS, readRuntime, readRuntimeInstance, runtimeMayBeActive, RuntimeConfig, takeCoreError,
+  wasRuntimeStopped, writeRuntime
 } from '../shared/Runtime';
 import { RuntimeStatus } from './Controller';
 import { readVpnNetworkSettings } from './VpnNetworkSettings';
 import { withProfileStorage } from '../shared/profiles/Store';
+import { vpnHostBinding } from './VpnHostBinding';
 
 // Generous until Geo data is bundled: the first start may download it.
 const READY_TIMEOUT_MS = 30000;
 const READY_POLL_MS = 200;
 
-let pendingStart: Promise<RuntimeStatus> | undefined = undefined;
+let pendingStart: Promise<CoreStart> | undefined = undefined;
 let hostGeneration: number = 0;
 
 function vpnWant(context: common.UIAbilityContext): Want {
@@ -116,6 +118,33 @@ export async function readCoreHostStatus(context: common.UIAbilityContext): Prom
   return status?.running === true ? { state: 'running', status: status } : { state: 'unknown' };
 }
 
+export interface CoreStart {
+  status: RuntimeStatus;
+  // 上一个宿主在已连接时被系统回收或崩溃，本次启动可在前台恢复一次连接。
+  resumeVpn: boolean;
+}
+
+/** 只在配置存储锁内、改写 runtime.json 之前调用。 */
+async function interruptedWhileConnected(filesDir: string): Promise<boolean> {
+  try {
+    const previous = await readRuntime(filesDir);
+    // 用户断开会先写 stopped；扩展正常销毁会留下停止回执。两者都没有，宿主只能是被杀或崩溃。
+    return previous?.vpnIntent === 'started' && !await wasRuntimeStopped(filesDir, previous.secret);
+  } catch (_error) {
+    return false;
+  }
+}
+
+/** 最近一个宿主没有留下停止回执：它被系统回收或崩溃，而不是被用户、系统设置或其他 VPN 正常停止。 */
+export async function hostInterrupted(filesDir: string): Promise<boolean> {
+  try {
+    const runtime = await readRuntime(filesDir);
+    return runtime !== undefined && !await wasRuntimeStopped(filesDir, runtime.secret);
+  } catch (_error) {
+    return false;
+  }
+}
+
 export class CoreStartError extends Error {
   extensionStarted: boolean;
 
@@ -127,13 +156,14 @@ export class CoreStartError extends Error {
 
 /** 一次有界启动；取消代次不会将晚到的成功交给界面。 */
 export function startCore(context: common.UIAbilityContext, mode: string,
-  allowLan: boolean | undefined, isCurrent: () => boolean): Promise<RuntimeStatus> {
+  allowLan: boolean | undefined, isCurrent: () => boolean): Promise<CoreStart> {
   if (pendingStart !== undefined) {
-    return pendingStart.then((status: RuntimeStatus): RuntimeStatus => {
+    return pendingStart.then((start: CoreStart): CoreStart => {
       if (!isCurrent()) {
         throw new CoreStartError('启动已取消', true);
       }
-      return status;
+      // 恢复只交给发起启动的调用方，避免并发调用各自重连。
+      return { status: start.status, resumeVpn: false };
     });
   }
   const generation = hostGeneration;
@@ -148,8 +178,9 @@ export function startCore(context: common.UIAbilityContext, mode: string,
 }
 
 async function performStartCore(context: common.UIAbilityContext, mode: string,
-  allowLan: boolean | undefined, isCurrent: () => boolean): Promise<RuntimeStatus> {
+  allowLan: boolean | undefined, isCurrent: () => boolean): Promise<CoreStart> {
   let extensionStarted = false;
+  let resumeVpn = false;
   try {
     const filesDir = context.filesDir;
     if (!isCurrent()) {
@@ -162,7 +193,7 @@ async function performStartCore(context: common.UIAbilityContext, mode: string,
         throw new Error('启动已取消');
       }
       if (existing?.running === true) {
-        return existing;
+        return { status: existing, resumeVpn: false };
       }
       throw new Error('尚未确认代理状态，请先确认停止');
     }
@@ -180,6 +211,7 @@ async function performStartCore(context: common.UIAbilityContext, mode: string,
       if (!isCurrent()) {
         throw new Error('启动已取消');
       }
+      resumeVpn = await interruptedWhileConnected(filesDir);
       await takeCoreError(filesDir);
       await writeRuntime(filesDir, { secret: secret, stack: 'gvisor', mode: mode, allowLan: allowLan,
         vpnIntent: 'stopped', vpnOperation: randomSecret() });
@@ -221,7 +253,7 @@ async function performStartCore(context: common.UIAbilityContext, mode: string,
         throw new Error('启动已取消');
       }
       if (status?.running === true) {
-        return status;
+        return { status: status, resumeVpn: resumeVpn };
       }
       await sleep(READY_POLL_MS);
     }
@@ -369,6 +401,7 @@ export async function stopCore(context: common.UIAbilityContext): Promise<void> 
 
 async function stopRuntimeResources(context: common.UIAbilityContext): Promise<void> {
   let stopError: Error | undefined = undefined;
+  await vpnHostBinding.release();
   try {
     await vpnExtension.stopVpnExtensionAbility(vpnWant(context));
   } catch (error) {

@@ -132,7 +132,7 @@
 +		c.err = c.Conn.Close()
 +		c.owner.mu.Lock()
 +		delete(c.owner.conns, c)
-+		if c.err != nil {
++		if c.owner.closing && c.err != nil && !errors.Is(c.err, net.ErrClosed) {
 +			c.owner.errs = append(c.owner.errs, c.err)
 +		}
 +		c.owner.mu.Unlock()
@@ -234,7 +234,7 @@
 +	return event
 --- /dev/null
 +++ b/adapter/inbound/arkclash_listener_test.go
-@@ -0,0 +1,180 @@
+@@ -0,0 +1,184 @@
 +package inbound
 +
 +import (
@@ -393,11 +393,12 @@
 +	}
 +}
 +
-+func TestArkClashConnCloseRemovesOwnershipOnce(t *testing.T) {
++func TestArkClashCompletedConnCloseErrorStaysWithConn(t *testing.T) {
 +	a, b := net.Pipe()
 +	defer b.Close()
-+	raw := &arkClashTestConn{Conn: a}
-+	owner := newArkClashListener(nil)
++	connErr := errors.New("connection close failure")
++	raw := &arkClashTestConn{Conn: a, closeErr: connErr}
++	owner := newArkClashListener(&arkClashTestListener{closed: make(chan struct{})})
 +	conn := &arkClashConn{Conn: raw, owner: owner}
 +	owner.conns[conn] = struct{}{}
 +	var workers sync.WaitGroup
@@ -405,12 +406,15 @@
 +		workers.Add(1)
 +		go func() {
 +			defer workers.Done()
-+			if err := conn.Close(); err != nil {
-+				t.Errorf("close: %v", err)
++			if err := conn.Close(); !errors.Is(err, connErr) {
++				t.Errorf("connection lost its close error: %v", err)
 +			}
 +		}()
 +	}
 +	workers.Wait()
++	if err := owner.Close(); err != nil {
++		t.Fatalf("completed connection prevented listener shutdown: %v", err)
++	}
 +	if raw.closes != 1 || len(owner.conns) != 0 {
 +		t.Fatalf("close did not release ownership once: closes=%d remaining=%d", raw.closes, len(owner.conns))
 +	}

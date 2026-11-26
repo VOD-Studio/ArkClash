@@ -10,6 +10,9 @@ import "C"
 
 import (
 	"encoding/json"
+	"runtime/debug"
+	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/metacubex/mihomo/constant"
@@ -37,6 +40,24 @@ func ArkClashStart(optionsJSON *C.char) *C.char {
 //export ArkClashStop
 func ArkClashStop() *C.char {
 	return errorString(stop())
+}
+
+var reclaimMu sync.Mutex
+var lastReclaim time.Time
+
+//export ArkClashReclaimMemory
+func ArkClashReclaimMemory() C.int {
+	// 一轮压力可能连续产生多次通知；回收期间和刚收完的通知均无需再做全堆 GC。
+	if !reclaimMu.TryLock() {
+		return 0
+	}
+	defer reclaimMu.Unlock()
+	if time.Since(lastReclaim) < 10*time.Second {
+		return 0
+	}
+	debug.FreeOSMemory()
+	lastReclaim = time.Now()
+	return 1
 }
 
 //export ArkClashAttachTun

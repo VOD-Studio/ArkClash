@@ -30,11 +30,21 @@ export struct DashboardIpQuality {
   @Param quality: ExitIpQuality | undefined = undefined;
   @Param busy: boolean = false;
 
-  private qualityColor(): ResourceColor {
+  private qualityTextColor(): ResourceColor {
     switch (this.quality?.level) {
       case 'good': return $r('app.color.success_foreground');
+      case 'normal': return $r('app.color.warning');
       case 'risky': return $r('app.color.status_error');
       default: return $r('sys.color.font_secondary');
+    }
+  }
+
+  private qualityBackgroundColor(): ResourceColor {
+    switch (this.quality?.level) {
+      case 'good': return $r('app.color.success_soft');
+      case 'normal': return $r('app.color.warning_soft');
+      case 'risky': return $r('app.color.error_soft');
+      default: return this.appStyle.palette.tileBackground;
     }
   }
 
@@ -43,13 +53,13 @@ export struct DashboardIpQuality {
     Row({ space: 6 }) {
       Text(exitIpTypeLabel(this.quality, this.busy))
         .fontFamily(this.appStyle.fontFamily)
-        .fontSize(10.5)
+        .fontSize(11)
         .fontWeight(500)
         .fontColor($r('sys.color.font_secondary'))
-        .padding({ left: 7, right: 7 })
+        .padding({ left: 9, right: 9 })
         .height(24)
         .constraintSize({ maxWidth: '48%' })
-        .borderRadius(7)
+        .borderRadius(12)
         .backgroundColor(this.appStyle.palette.tileBackground)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -61,15 +71,14 @@ export struct DashboardIpQuality {
         Span(exitIpQualityLabel(this.quality, this.busy))
           .fontFamily(this.appStyle.fontFamily)
       }
-      .fontSize(10.5)
-      .fontWeight(500)
-      .fontColor(this.qualityColor())
-      .padding({ left: 7, right: 7 })
+      .fontSize(11)
+      .fontWeight(600)
+      .fontColor(this.qualityTextColor())
+      .padding({ left: 9, right: 9 })
       .height(24)
       .constraintSize({ maxWidth: '48%' })
-      .borderRadius(7)
-      .backgroundColor(this.quality?.level === 'good' ? $r('app.color.success_soft') :
-        this.quality?.level === 'risky' ? $r('app.color.error_soft') : this.appStyle.palette.tileBackground)
+      .borderRadius(12)
+      .backgroundColor(this.qualityBackgroundColor())
       .maxLines(1)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
@@ -83,12 +92,12 @@ export struct DashboardIpQuality {
         Row()
           .width('38%')
           .height(24)
-          .borderRadius(7)
+          .borderRadius(12)
           .backgroundColor(this.appStyle.palette.track)
         Row()
           .width('44%')
           .height(24)
-          .borderRadius(7)
+          .borderRadius(12)
           .backgroundColor(this.appStyle.palette.track)
       }
       .width('100%')

@@ -32,6 +32,7 @@ function fixture(t, { empty = false, historicalIntent = 'stopped' } = {}) {
   let nextTimer = 1;
   let nextCommand = 1;
   let commandCallback;
+  let environmentCallback;
   let registrations = 0;
   let platformCreated = false;
   let activeTun = false;
@@ -73,6 +74,7 @@ function fixture(t, { empty = false, historicalIntent = 'stopped' } = {}) {
       activeTun = false;
       listenersOpen = false;
     },
+    async reclaimMemory() { await invoke('reclaimMemory'); return true; },
     async attachTun(fd, optionsJson, bootId, profile, configRevision) {
       await invoke('attachTun', [fd, JSON.parse(optionsJson), bootId, profile, configRevision]);
       if (bootId !== status.bootId || profile !== status.profile || configRevision !== status.configRevision) {
@@ -162,10 +164,26 @@ function fixture(t, { empty = false, historicalIntent = 'stopped' } = {}) {
     async unlink(path) { if (!files.delete(path)) throw missing(); },
     mkdirSync() {}, async mkdir() {}, async fsync() {}
   };
-  const context = { filesDir, applicationInfo: { name: 'fixture.application' } };
+  const applicationContext = {
+    on(type, callback) {
+      assert.equal(type, 'environment');
+      environmentCallback = callback;
+      return 0;
+    },
+    async off(type, id) {
+      assert.equal(type, 'environment');
+      assert.equal(id, 0);
+      environmentCallback = undefined;
+    }
+  };
+  const context = { filesDir, applicationInfo: { name: 'fixture.application' },
+    getApplicationContext: () => applicationContext };
   const bindings = new Map([
-    ['@kit.AbilityKit', { appManager: {} }],
+    ['@kit.AbilityKit', { appManager: {}, AbilityConstant: { MemoryLevel: {
+      MEMORY_LEVEL_LOW: 1, MEMORY_LEVEL_CRITICAL: 2, MEMORY_LEVEL_BACKGROUND_LOW: 5, MEMORY_LEVEL_BACKGROUND_CRITICAL: 6
+    } } }],
     ['@kit.BasicServicesKit', {}],
+    ['@kit.IPCKit', { rpc: { RemoteObject: class { constructor(descriptor) { this.descriptor = descriptor; } } } }],
     ['@kit.ArkTS', { process: { pid: 20 },
       util: { TextEncoder: class { encodeInto(value) { return new TextEncoder().encode(value); } } }, url: { URL },
       taskpool: { execute: async (operation, ...args) => operation(...args) } }],
@@ -221,6 +239,7 @@ function fixture(t, { empty = false, historicalIntent = 'stopped' } = {}) {
   const runtime = () => JSON.parse(read(runtimePath));
   const api = {
     instance, calls, files, native, schedulers, snapshot,
+    get environmentCallback() { return environmentCallback; },
     count: name => calls.filter(call => call.name === name).length,
     get registrations() { return registrations; },
     get platformCreated() { return platformCreated; },
@@ -243,6 +262,12 @@ function fixture(t, { empty = false, historicalIntent = 'stopped' } = {}) {
     receipt() { return files.has(stoppedPath) ? JSON.parse(read(stoppedPath)) : undefined; },
     activeInstance() { return JSON.parse(read(instancePath)); },
     async warm() { instance.onCreate({}); await instance.startup; },
+    finishWarmupDelay() {
+      const timer = timers.get(instance.prefetchTimer);
+      assert.ok(timer);
+      timers.delete(instance.prefetchTimer);
+      timer.callback();
+    },
     async shutdown() { instance.onDestroy(); assert.ok(instance.cleanupPending); await instance.cleanupPending; },
     command(name, body) {
       assert.equal(typeof commandCallback, 'function', 'extension must install its native command handler');
@@ -322,10 +347,71 @@ test('空配置可以预热，但不能创建系统VPN', async t => {
   assertWarm(f);
   assert.equal(f.snapshot().profile, '');
   assert.equal(f.calls.find(call => call.name === 'start').args[0].configPath, '');
+  f.finishWarmupDelay();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.count('reclaimMemory'), 0);
   const reply = await f.request('connect', 'empty-connect').result;
   assert.notEqual(reply.status, 200);
   assert.equal(f.count('create'), 0);
   assert.equal(f.count('attachTun'), 0);
+});
+
+test('VPN 宿主响应低内存通知，合并并发回收并在销毁时退订', async t => {
+  const f = fixture(t);
+  await f.warm();
+  await connect(f);
+  const callback = f.environmentCallback;
+  for (const level of [0, 3, 4]) callback.onMemoryLevel(level);
+  assert.equal(f.count('reclaimMemory'), 0);
+  const work = f.hold('reclaimMemory');
+  callback.onMemoryLevel(5);
+  await work.entered;
+  callback.onMemoryLevel(6);
+  assert.equal(f.count('reclaimMemory'), 1);
+  work.release();
+  await new Promise(resolve => setImmediate(resolve));
+  f.fail('reclaimMemory');
+  for (const level of [1, 2, 6]) {
+    callback.onMemoryLevel(level);
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  assert.equal(f.count('reclaimMemory'), 4);
+  assertConnected(f);
+  await f.shutdown();
+  assert.equal(f.environmentCallback, undefined);
+  callback.onMemoryLevel(2);
+  assert.equal(f.count('reclaimMemory'), 4);
+});
+
+test('只有当前配置时预热收尾也回收一次，并合并同时到达的系统压力', async t => {
+  const f = fixture(t);
+  await f.warm();
+  assert.equal(f.count('reclaimMemory'), 0);
+  const work = f.hold('reclaimMemory');
+  f.finishWarmupDelay();
+  await work.entered;
+  f.environmentCallback.onMemoryLevel(2);
+  assert.equal(f.count('reclaimMemory'), 1);
+  work.release();
+});
+
+test('预取失败也归还闲置页，预取期间销毁宿主则跳过', async t => {
+  for (const destroy of [false, true]) {
+    const f = fixture(t);
+    const path = `${filesDir}/profiles/list.json`;
+    const list = JSON.parse(f.files.get(path));
+    list.profiles.push({ ...list.profiles[0], id: 'other' });
+    f.files.set(path, JSON.stringify(list));
+    await f.warm();
+    const prefetch = f.hold('prefetch');
+    f.fail('prefetch');
+    f.finishWarmupDelay();
+    await prefetch.entered;
+    if (destroy) await f.shutdown();
+    prefetch.release();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(f.count('reclaimMemory'), destroy ? 0 : 1);
+  }
 });
 
 test('VPN 将同一份网络设置用于系统接口和内核，旧配置保留原有默认值', async t => {

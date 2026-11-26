@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,7 +12,19 @@ import (
 
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
+	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/tunnel"
 )
+
+type forwardingCloseErrorConn struct {
+	net.Conn
+	err error
+}
+
+func (conn *forwardingCloseErrorConn) Close() error {
+	_ = conn.Conn.Close()
+	return conn.err
+}
 
 func forwardingBlockedSocks(t *testing.T) (int, <-chan struct{}, <-chan struct{}) {
 	t.Helper()
@@ -231,6 +244,45 @@ func TestForwardingReloadJoinsOldDialBeforeReplacingConfig(t *testing.T) {
 	if after.BootID != before.BootID || after.ConfigRevision != before.ConfigRevision+1 || !after.TunAttached {
 		t.Fatal("forwarding quiescence rebuilt TUN or lost configuration identity")
 	}
+}
+
+func TestForwardingCompletedCloseErrorAllowsReloadAndReconnect(t *testing.T) {
+	socksPort, entered, _ := forwardingBlockedSocks(t)
+	options, ports := forwardingCoreFixture(t, socksPort)
+	inbound, peer := net.Pipe()
+	defer peer.Close()
+	if err := peer.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	tunnel.Tunnel.HandleTCPConn(&forwardingCloseErrorConn{Conn: inbound, err: errors.New("connection close failed")}, &C.Metadata{})
+	if _, err := peer.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
+		t.Fatalf("connection still open before reload: %v", err)
+	}
+
+	before, originalTun := *runtimeSnapshot.Load(), tunListener
+	if err := reload(options.ConfigPath, options.Profile, &options.Profile); err != nil {
+		t.Fatalf("completed connection prevented reload: %v", err)
+	}
+	after := runtimeSnapshot.Load()
+	if tunListener != originalTun || !after.TunAttached || after.Forward != "running" ||
+		after.BootID != before.BootID || after.ConfigRevision != before.ConfigRevision+1 {
+		t.Fatal("reload did not keep the running TUN and advance the configuration")
+	}
+	if err := detachTun(); err != nil {
+		t.Fatal(err)
+	}
+	lifecycleVpnState(t, "stopped", "stopped", false)
+	lifecycleVpnState(t, "started", "preparing", true)
+	if err := attachTun(12, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
+		t.Fatalf("completed connection prevented reattach: %v", err)
+	}
+	lifecycleVpnState(t, "started", "running", true)
+	client, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", ports[3]), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	forwardingAwait(t, entered, "new connection did not reach the upstream proxy after reconnect")
 }
 
 func TestLifecycleReloadCancelsOldConfigurationURLTest(t *testing.T) {

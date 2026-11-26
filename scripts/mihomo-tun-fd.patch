@@ -159,7 +159,7 @@
 +  c.err = c.Conn.Close()
 +  c.owner.mu.Lock()
 +  delete(c.owner.conns, c)
-+  if c.err != nil { c.owner.errs = append(c.owner.errs, c.err) }
++  if c.owner.closing && c.err != nil && !errors.Is(c.err, net.ErrClosed) { c.owner.errs = append(c.owner.errs, c.err) }
 +  c.owner.mu.Unlock()
 + })
 + return c.err

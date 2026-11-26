@@ -29,13 +29,15 @@ function dnsKindLabel(kind: DnsFieldKind): Resource {
   }
 }
 
+let cachedDnsOverrides: DnsOverrideSettings | undefined = undefined;
+
 @ComponentV2
 export struct DnsOverridesPage {
   @Param foreground: boolean = true;
   @Param reduceMotion: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
-  @Local private settings: DnsOverrideSettings = emptyDnsOverrides();
-  @Local private loading: boolean = true;
+  @Local private settings: DnsOverrideSettings = cachedDnsOverrides ?? emptyDnsOverrides();
+  @Local private loading: boolean = cachedDnsOverrides === undefined;
   @Local private loadFailed: boolean = false;
   @Local private saving: boolean = false;
   @Local private savingKey: string = '';
@@ -54,12 +56,19 @@ export struct DnsOverridesPage {
   }
 
   private async load(): Promise<void> {
-    this.loading = true;
+    const silent = cachedDnsOverrides !== undefined;
+    if (!silent) {
+      this.loading = true;
+    }
     try {
-      this.settings = await readDnsOverrides(this.context().filesDir);
+      const loaded = await readDnsOverrides(this.context().filesDir);
+      cachedDnsOverrides = loaded;
+      this.settings = loaded;
       this.loadFailed = false;
     } catch (_error) {
-      this.loadFailed = true;
+      if (!silent) {
+        this.loadFailed = true;
+      }
     } finally {
       this.loading = false;
     }
@@ -165,6 +174,7 @@ export struct DnsOverridesPage {
     }
     try {
       const saved = await saveDnsOverrides(this.context(), previous.revision, entries);
+      cachedDnsOverrides = saved;
       if (this.shown && this.foreground && !this.reduceMotion) {
         this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, (): void => { this.settings = saved; });
       } else {

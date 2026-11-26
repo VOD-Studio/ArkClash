@@ -95,13 +95,15 @@ struct ConfigScriptRow {
   }
 }
 
+let cachedConfigScripts: ConfigScriptsSnapshot | undefined = undefined;
+
 @ComponentV2
 export struct ScriptsPage {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
   @Event onEdit: (id: string) => void = (_id: string): void => {};
-  @Local private snapshot: ConfigScriptsSnapshot = emptyConfigScripts();
-  @Local private loading: boolean = true;
+  @Local private snapshot: ConfigScriptsSnapshot = cachedConfigScripts ?? emptyConfigScripts();
+  @Local private loading: boolean = cachedConfigScripts === undefined;
   @Local private loadFailed: boolean = false;
   @Local private busy: boolean = false;
   @Local private sorting: boolean = false;
@@ -119,12 +121,19 @@ export struct ScriptsPage {
   private readId: number = 0;
   private context = this.getUIContext().getHostContext() as common.UIAbilityContext;
 
+  aboutToAppear(): void {
+    if (cachedConfigScripts !== undefined) {
+      this.accept(cachedConfigScripts);
+    }
+  }
+
   private toast(message: ResourceStr): void {
     if (this.shown && this.foreground) { this.getUIContext().getPromptAction().showToast({ message: message }); }
   }
 
   private accept(store: ConfigScriptsSnapshot): void {
     this.readId++;
+    cachedConfigScripts = store;
     this.snapshot = store;
     this.rows.replace(store.scripts);
     this.now = Date.now();
@@ -132,12 +141,13 @@ export struct ScriptsPage {
 
   private async refresh(): Promise<void> {
     const read = ++this.readId;
+    const silent = cachedConfigScripts !== undefined;
     this.loadFailed = false;
     try {
       const store = await readConfigScripts(this.context.filesDir);
       if (read === this.readId) { this.accept(store); }
     } catch (error) {
-      if (read === this.readId) { this.loadFailed = true; }
+      if (read === this.readId && !silent) { this.loadFailed = true; }
     } finally { this.loading = false; }
   }
 

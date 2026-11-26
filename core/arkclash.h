@@ -10,6 +10,8 @@ extern "C" {
 // error message to release with ArkClashFree.
 char *ArkClashStart(char *optionsJSON);
 char *ArkClashStop(void);
+// 工作线程执行全堆 GC 并归还闲置页，执行过回收返回 1。
+int ArkClashReclaimMemory(void);
 // 成功返回 NULL；错误与状态 JSON 均由调用方用 ArkClashFree 释放。
 char *ArkClashAttachTun(int fd, char *optionsJSON, char *bootId, char *profile,
                        unsigned long long configRevision);

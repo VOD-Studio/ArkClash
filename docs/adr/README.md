@@ -33,10 +33,14 @@
 | [0026](0026-proxy-filter-presets.md) | 筛选预设与配置 YAML | 已采纳，待真机验收 |
 | [0027](0027-icon-set-library.md) | 图标集库与代理组图标 | 已采纳，待真机验收 |
 | [0028](0028-standard-profile-overrides.md) | 标准覆写的规则顺序与应用时机 | 已采纳，覆写顺序由 0030 更新 |
-| [0029](0029-general-settings-and-log-capture.md) | 常规设置、外部控制器与日志采集 | 已采纳，待真机验收 |
+| [0029](0029-general-settings-and-log-capture.md) | 常规设置、外部控制器与日志采集 | 已采纳，日志部分由 0039 更新 |
 | [0030](0030-composed-overrides-and-live-status.md) | 脚本与附加规则组合、仪表盘运行状态 | 已采纳，待真机验收 |
 | [0031](0031-portable-backup.md) | 原子恢复配置库与 WebDAV 备份 | 已采纳 |
 | [0032](0032-structured-custom-profile.md) | 自定义配置的结构化编辑 | 已采纳 |
 | [0033](0033-age-subscriptions.md) | 订阅下载中的 age 解密 | 已采纳 |
 | [0034](0034-harmonyos-system-dns.md) | 从鸿蒙默认网络读取系统 DNS | 已采纳，待真机验证 |
 | [0035](0035-tailscale-network-monitor.md) | Tailscale 出站使用鸿蒙默认网络 | 已采纳 |
+| [0036](0036-vpn-memory-pressure.md) | 在 VPN 进程响应系统内存压力 | 已采纳 |
+| [0037](0037-resume-after-vpn-reclaim.md) | VPN 进程被回收后在前台恢复连接 | 已采纳，恢复时机由 0038 提前 |
+| [0038](0038-bind-vpn-host-and-background-keep.md) | 绑定 VPN 扩展与后台保持连接 | 已采纳 |
+| [0039](0039-boot-scoped-structured-logs.md) | 按内核代次持续采集日志与结构化脱敏展示 | 已采纳 |

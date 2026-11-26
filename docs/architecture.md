@@ -24,7 +24,8 @@ flowchart LR
 ```
 
 - **UI 进程**只做界面和控制，不加载内核。界面恢复时重新查询运行事实，不能用上次的连接缓存断言 VPN 仍存活。
-- **VPN 进程**是内核的唯一宿主，可先启动无 TUN 的核心。只有连接时才创建系统 VPN 并附加 TUN；普通断开保留核心。系统销毁扩展后不承诺驻留或转发（[ADR-0017](adr/0017-core-ready-without-vpn.md)）。
+- **VPN 进程**是内核的唯一宿主，可先启动无 TUN 的核心。只有连接时才创建系统 VPN 并附加 TUN；普通断开保留核心。系统销毁扩展后不承诺驻留或转发（[ADR-0017](adr/0017-core-ready-without-vpn.md)）；已连接时宿主被回收、没有留下停止回执的，回到前台、内核就绪后恢复一次连接（[ADR-0037](adr/0037-resume-after-vpn-reclaim.md)）。
+- UI 在宿主运行时绑定 VPN 扩展，扩展回收优先级随 UI 降为 UI 加 100；绑定不传数据，断开回调用作宿主退出信号，前台立即恢复连接。用户开启「后台保持连接」时，UI 连接期间持有数据传输长时任务，后台也立即恢复（[ADR-0038](adr/0038-bind-vpn-host-and-background-keep.md)）。
 - 两个进程之间只有两条通道（[ADR-0003](adr/0003-ui-core-via-external-controller.md)）：
   - **内核控制面**：mihomo external-controller 承载运行查询、节点选择、测速、规则探测、流量与事件。ArkClash 路由在 `/arkclash/` 下：Go 处理运行快照、选择事务和热切换，订阅命令经 NAPI 转给 VPN 进程的 ArkTS（[ADR-0009](adr/0009-arkclash-commands-on-controller.md)）。独立进程专用的 `PUT`/`PATCH /configs`、`/restart`、`/upgrade` 保持关闭。
   - **文件通道**：`shared/Runtime.ets` 交接启动设置、错误和停止回执；`shared/profiles/Store.ets` 保存配置列表、内容、摘要及每配置节点选择。跨进程短提交持有存储锁，下载使用独立资源任务锁，不占住提交锁等待网络。
@@ -77,7 +78,7 @@ sequenceDiagram
 |---|---|---|---|
 | 配置列表 `profiles/list.json`（订阅和配置的记录、当前配置） | 应用沙箱 | UI | UI、VPN 进程 |
 | 配置内容、摘要、订阅状态（`profiles/` 下其余文件） | 应用沙箱 | 核心确实停止时 UI；核心运行时订阅由 VPN 进程更新，本地编辑由 UI 经 controller 应用后提交 | UI、VPN 进程、内核 |
-| `runtime.json`（secret、本次连接的网络设置和应用排除名单、模式、LAN、VPN 意图/token） | 应用沙箱 | UI 短锁提交；扩展新实例将转发意图复位为 stopped | VPN 进程、UI |
+| `runtime.json`（secret、本次连接的网络设置和应用排除名单、模式、LAN、VPN 意图/token） | 应用沙箱 | UI 短锁提交，改写前读取上次意图以决定是否恢复连接；扩展新实例将转发意图复位为 stopped | VPN 进程、UI |
 | `core_error.txt` | 应用沙箱 | VPN 进程 | UI，读后删除 |
 | `runtime-instance.json`（当前扩展实例标识） | 应用沙箱 | VPN 进程，创建资源前 | UI、VPN 进程 |
 | `runtime-stopped.json`（当前扩展实例清理完成回执） | 应用沙箱 | VPN 进程，内核与 VPN 连接均释放后 | UI，核对 secret 与实例 |
@@ -92,7 +93,7 @@ sequenceDiagram
 | `profiles/proxy-filters.json`（筛选预设） | 应用沙箱 | UI 配置文件锁、原子提交及修订检查 | UI |
 | `profiles/icon-sets.json`（图标集目录及图标地址） | 应用沙箱 | 本地由 UI 提交，连接时的 URL 同步由 VPN 进程下载并提交 | UI、VPN |
 | `geo.version`（内置资源版本） | 应用沙箱 | VPN 安装器全部复制成功后 | VPN 安装器 |
-| 用户设置（出站模式、局域网代理等） | UI 的 preferences | UI | UI |
+| 用户设置（出站模式、局域网代理、后台保持连接等） | UI 的 preferences | UI | UI |
 | 应用更新设置和临时 HAP | UI 的 `app-update` preferences 与缓存 | UI、系统下载服务 | UI |
 | 应用主题（深浅色、色板、导航及字体） | UI 的 `appearance` preferences | UI | UI；不进入 VPN 进程 |
 | 运行时状态（节点选择、连接、流量、正在运行的配置） | 内核内存 | 内核 | UI，经 controller |
@@ -104,7 +105,7 @@ Geo 资源页使用 `/arkclash/geo`、`/arkclash/geo/settings`、`/arkclash/geo/
 
 全局 DNS 由 `applyOverrides` 在解析配置时逐项合并，再按常规设置补入 `system://`。在线保存使用 `/arkclash/dns/settings`，在原有控制器和 TUN 上应用配置。设置页读取本地设置文件，DNS 记录页通过诊断接口读取数据。见 [ADR-0021](adr/0021-global-dns-overrides.md) 和 [ADR-0034](adr/0034-harmonyos-system-dns.md)。
 
-常规设置通过 `/arkclash/general/settings` 提交。用户启用的面板单独使用 `127.0.0.1:9090`，密钥与内部通道独立。日志页可见且打开捕获时订阅 `/arkclash/diagnostics/logs`，关联当前内核代次，最近 5000 项留在内存。见 [ADR-0029](adr/0029-general-settings-and-log-capture.md)。
+常规设置通过 `/arkclash/general/settings` 提交。用户启用的面板单独使用 `127.0.0.1:9090`，密钥与内部通道独立。开启日志捕获后，内核按 boot 生命周期持续将最近 5000 条结构化脱敏日志留在内存，热切换和离页不丢失；日志页可见时订阅 `/arkclash/diagnostics/logs`（按 `expectedBootId` 校验），可通过 `POST /arkclash/diagnostics/logs/clear` 清空。见 [ADR-0029](adr/0029-general-settings-and-log-capture.md) 与 [ADR-0039](adr/0039-boot-scoped-structured-logs.md)。
 
 附加规则在线保存使用 `/arkclash/rules/settings`。按配置级规则、启用的全局规则、脚本输出中的规则顺序合并，未选脚本时最后一层来自源配置。配置级规则和命名出口保存后在覆写页应用，或随下次配置加载生效。全局规则变更只有影响当前已应用的规则时才热应用。仪表盘可见时订阅 Geo 下载进度。应用版本检查在首次前台显示后异步触发，也可从仪表盘手动发起。应用更新使用 UI 进程的系统接口。见 [ADR-0030](adr/0030-composed-overrides-and-live-status.md)。
 
@@ -188,5 +189,5 @@ entry/ ── hvigor（CMake 编 NAPI 桥 + ArkTS）──► HAP
 - **VpnConfig 级设置**（协议栈、IPv6、分应用代理、VpnConfig 里的 DNS 地址和 MTU）不能热切换，改了只能断开重连（ADR-0010）。
 - **网络设置**保存在 UI preferences，连接时随操作 token 写入 `runtime.json`。系统 VPN 和内核 TUN 使用同一份快照（[ADR-0020](adr/0020-vpn-network-settings.md)）。
 - **分应用绕过**：当前使用 `VpnConfig.blockedApplications`，将用户填写的包名与 ArkClash 自身包名去重合并。[ADR-0020](adr/0020-vpn-network-settings.md)
-- **流量与诊断**：流量使用 `/traffic`，应用的连接、DNS 和日志使用独立的 `/arkclash/diagnostics/` 数据流。[ADR-0019](adr/0019-app-diagnostics-capture.md) · [ADR-0029](adr/0029-general-settings-and-log-capture.md)
+- **流量与诊断**：流量使用 `/traffic`，应用的连接、DNS 和日志使用独立的 `/arkclash/diagnostics/` 数据流。[ADR-0019](adr/0019-app-diagnostics-capture.md) · [ADR-0029](adr/0029-general-settings-and-log-capture.md) · [ADR-0039](adr/0039-boot-scoped-structured-logs.md)
 - **IPv6**：`VpnConfig` 和 `core/tun.go` 使用同一份网络设置快照，地址族和路由需同时生效。开启 IPv6 时，最小 MTU 为 1280。[ADR-0020](adr/0020-vpn-network-settings.md)

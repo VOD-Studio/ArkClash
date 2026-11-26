@@ -12,7 +12,7 @@ const ts = require(process.env.ARKCLASH_TYPESCRIPT);
 const etsDir = fileURLToPath(new URL('../entry/src/main/ets/', import.meta.url));
 const plain = data => JSON.parse(JSON.stringify(data));
 
-export function createToolsHarness() {
+export function createToolsHarness(extraKits = {}) {
   let now = Date.parse('2026-01-01T00:00:00Z');
   let nextTimer = 0;
   const timers = new Map();
@@ -142,9 +142,10 @@ export function createToolsHarness() {
     const module = { exports: {} };
     modules.set(absolute, module);
     const bindings = {
-      module, exports: module.exports, console, ...clock,
+      module, exports: module.exports, console, ...clock, $r: name => ({ name }),
       DataOperationType: { ADD: 'add', DELETE: 'delete', CHANGE: 'change', EXCHANGE: 'exchange' },
       require(name) {
+        if (name in extraKits) return extraKits[name];
         if (name in kits) return kits[name];
         assert.ok(name.startsWith('.'), `unexpected platform dependency ${name}`);
         const target = path.resolve(path.dirname(absolute), `${name}.ets`);
@@ -1218,6 +1219,200 @@ function registerToolsLogicTests(createHarness) {
 }
 
 registerToolsLogicTests(createToolsHarness);
+
+test('log history keeps an anchored reading window, counts matching arrivals and exports only the live window', () => {
+  const h = createToolsHarness();
+  try {
+    const { LogHistory } = h.load('features/tools/LogHistory.ets');
+    const history = new LogHistory(5000, record => record.level === 'debug' ? '测试超时' : '测试连接');
+    const batch = (start, count) => Array.from({ length: count }, (_, index) => {
+      const id = start + index;
+      return { id: String(id), time: id, level: id % 2 ? 'debug' : 'info', message: 'Fixture event' };
+    });
+    history.receive(batch(0, 5000), 'snapshot', true);
+    history.setFollowing(false);
+    history.window.anchor = '125';
+    history.receive(batch(5000, 5000), 'delta', false);
+    assert.equal(history.filter('EVENT fixt', 'info').length, 5000);
+    assert.equal(history.pending, 2500);
+    assert.equal(history.filter('超时 fIxTuRe', '').length, 5000);
+    assert.equal(history.pending, 2500);
+    assert.equal(history.window.anchor, '125');
+    assert.equal(history.window.latest()[0].id, '5000');
+    history.receive(batch(10000, 256), 'delta', false);
+    assert.equal(history.window.count, 10000);
+    assert.equal(history.window.anchor, '256');
+    const latest = history.filter('', '')[0];
+    history.receive(batch(5256, 5000), 'reset', false);
+    assert.equal(history.filter('', '')[0], latest);
+    assert.equal(history.pending, 5000);
+    history.receive(batch(0, 2), 'snapshot', true);
+    assert.equal(history.filter('', '').length, 2);
+    assert.equal(history.pending, 0);
+    assert.equal(history.window.following, false);
+    history.setFollowing(true);
+    assert.equal(history.window.anchor, '');
+  } finally { h.cleanup(); }
+});
+
+test('暂停浏览时显式清空日志，同步清掉暂停窗口并保持暂停状态', () => {
+  const h = createToolsHarness();
+  try {
+    const { LogHistory } = h.load('features/tools/LogHistory.ets');
+    const history = new LogHistory(5000, record => record.message);
+    const batch = (start, count) => Array.from({ length: count }, (_, index) =>
+      ({ id: String(start + index), time: start + index, level: 'info', message: 'Fixture event' }));
+    history.receive(batch(0, 10), 'snapshot', true);
+    history.setFollowing(false);
+    history.receive(batch(10, 5), 'delta', false);
+    assert.equal(history.filter('', '').length, 15);
+    assert.equal(history.pending, 5);
+    history.receive([], 'reset', false);
+    assert.equal(history.window.latestCount, 0);
+    assert.equal(history.filter('', '').length, 0);
+    assert.equal(history.pending, 0);
+    assert.equal(history.window.following, false);
+    history.receive(batch(20, 2), 'delta', false);
+    assert.equal(history.filter('', '').length, 2);
+    assert.equal(history.pending, 2);
+    history.setFollowing(true);
+    assert.equal(history.filter('', '').length, 2);
+  } finally { h.cleanup(); }
+});
+
+test('满载日志一批只裁去末尾和添加首行，重置中变化的同键记录仍会更新', () => {
+  const h = createToolsHarness();
+  try {
+    const { KeyedListSource } = h.load('components/KeyedListSource.ets');
+    const source = new KeyedListSource();
+    const [a, b, c, d, e, f] = Array.from('abcdef', key => ({ key }));
+    source.replace([d, c, b, a]);
+    const notices = [];
+    source.registerDataChangeListener({ onDatasetChange(operations) {
+      notices.push({ keys: Array.from(source.values(), row => row.key).join(''), operations: plain(operations) });
+    } });
+    let animations = 0;
+    source.replace([f, e, d, c], apply => { ++animations; apply(); }, true);
+    assert.equal(animations, 1);
+    assert.deepEqual(notices, [
+      { keys: 'dc', operations: [{ type: 'delete', index: 2, count: 2 }] },
+      { keys: 'fedc', operations: [{ type: 'add', index: 0, count: 2 }] }
+    ]);
+    assert.strictEqual(source.getData(3), c);
+    notices.length = 0;
+    const changed = { key: 'e', message: 'updated' };
+    source.replace([{ key: 'g' }, f, changed, d], undefined, true);
+    assert.strictEqual(source.getData(2), changed);
+    assert.ok(notices.some(({ operations }) => operations.some(op => op.type === 'change' && op.index === 2)));
+  } finally { h.cleanup(); }
+});
+
+test('日志中文搜索、详情快照和单条复制独立于完整实时导出', async () => {
+  let exported = '';
+  const h = createToolsHarness({
+    '@kit.ArkTS': { util: { TextEncoder: class { encodeInto(text) { return Buffer.from(text); } } } },
+    '@kit.CoreFileKit': {
+      picker: { DocumentSaveOptions: class {}, DocumentViewPicker: class { async save() { return ['fixture']; } } },
+      fileIo: { OpenMode: { WRITE_ONLY: 1, TRUNC: 2 }, open: async () => ({ fd: 1 }), close: async () => {},
+        fsync: async () => {}, write: async (_fd, text) => { exported += text; return Buffer.byteLength(text); } }
+    }
+  });
+  try {
+    const { LogHistory } = h.load('features/tools/LogHistory.ets');
+    const { logSummaryLabel, logCopyText } = h.load('features/tools/LogLabels.ets');
+    const { exportLogs } = h.load('client/Logs.ets');
+    const resources = JSON.parse(fs.readFileSync(path.join(etsDir, '../resources/zh_CN/element/string.json'))).string;
+    const labels = new Map(resources.map(item => ['app.string.' + item.name, item.value]));
+    const history = new LogHistory(2, record => {
+      const label = logSummaryLabel(record);
+      return typeof label === 'string' ? label : labels.get(label.name);
+    });
+    const record = { id: 'first', time: 123456789, level: 'warning', event: 'dial_failed', reason: 'timeout',
+      message: 'Connection failed: timeout' };
+    history.receive([record], 'snapshot', true);
+    const selected = history.filter('超时 TIMEOUT', 'warning')[0];
+    history.setFollowing(false);
+    for (let i = 0; i < 5; i++) {
+      history.receive([{ id: String(i), time: i, level: 'info', message: 'sanitized ' + i }], 'delta', false);
+    }
+    assert.equal(history.filter('超时', 'warning').length, 0);
+    assert.match(logCopyText(selected.record, selected.summary), /\.789 \[warning\] 连接失败 · 超时\nConnection failed: timeout$/);
+    assert.equal(await exportLogs(h.context, history.window.latest().map(row => row.record)), true);
+    assert.equal(exported, '1970-01-01T00:00:00.003Z [info] sanitized 3\n1970-01-01T00:00:00.004Z [info] sanitized 4\n');
+  } finally { h.cleanup(); }
+});
+
+test('日志结构化搜索、多等级筛选、24小时时钟与清空接口', async () => {
+  const h = createToolsHarness({ '@kit.ArkTS': {}, '@kit.CoreFileKit': {} });
+  try {
+    const { LogHistory } = h.load('features/tools/LogHistory.ets');
+    const { logClock, logHasRoute, logHasDns, logSummaryLabel } = h.load('features/tools/LogLabels.ets');
+    const { clearDiagnosticLogs } = h.load('client/Logs.ets');
+    const history = new LogHistory(5000, record => {
+      const label = logSummaryLabel(record);
+      return typeof label === 'string' ? label : label.name;
+    });
+    const route = {
+      id: 'r1', time: new Date(2026, 10, 26, 19, 5, 9).getTime(), level: 'info', event: 'route_selected',
+      tag: 'TCP', target: 'www.example.com:443', rule: 'DOMAIN-SUFFIX(example.com)', proxy: 'Proxy[HK-01]',
+      source: '198.18.0.1:54321', message: '[TCP] 198.18.0.1:54321 --> www.example.com:443 match DOMAIN-SUFFIX(example.com) using Proxy[HK-01]'
+    };
+    const dns = {
+      id: 'd1', time: new Date(2026, 10, 26, 7, 4, 3).getTime(), level: 'debug', event: 'dns_answer',
+      tag: 'DNS', target: 'api.example.com', detail: '[93.184.216.34] · 1.1.1.1:53',
+      message: '[DNS] api.example.com --> [93.184.216.34] from 1.1.1.1:53'
+    };
+    const warn = {
+      id: 'w1', time: new Date(2026, 10, 26, 20, 0, 1).getTime(), level: 'warning', event: 'component',
+      tag: 'TUN', message: 'disabled TUN TCP & UDP GRO'
+    };
+    history.receive([route, dns, warn], 'snapshot', true);
+    assert.equal(logClock(route.time), '19:05:09');
+    assert.equal(logClock(dns.time), '07:04:03');
+    assert.equal(logHasRoute(route), true);
+    assert.equal(logHasDns(dns), true);
+    assert.equal(logHasRoute(warn), false);
+    assert.equal(history.filter('hk-01 domain-suffix', []).length, 1);
+    assert.equal(history.filter('', ['info', 'warning']).length, 2);
+    assert.deepEqual(history.levelCounts(), { info: 1, debug: 1, warning: 1 });
+    assert.equal(history.filter('gro', ['warning'])[0].summary, 'disabled TUN TCP & UDP GRO');
+    h.controls.http = async (url, options) => {
+      assert.match(url, /\/arkclash\/diagnostics\/logs\/clear$/);
+      assert.deepEqual(JSON.parse(options.extraData), { expectedBootId: 'boot-a' });
+      return { responseCode: 204, result: '' };
+    };
+    await clearDiagnosticLogs(h.context.filesDir, 'boot-a');
+  } finally { h.cleanup(); }
+});
+
+test('日志流损坏时保留已有记录，显式重连后接受新的快照', async () => {
+  const h = createToolsHarness({ '@kit.ArkTS': {}, '@kit.CoreFileKit': {} });
+  const { logStream } = h.load('client/Logs.ets');
+  const { LogHistory } = h.load('features/tools/LogHistory.ets');
+  const history = new LogHistory(5000, record => record.message);
+  let state;
+  const socket = logStream('boot-a', frame => history.receive(frame.logs, frame.kind, frame.kind === 'snapshot'),
+    next => { state = next; });
+  const record = { id: 'before', time: 10, level: 'info', message: 'safe' };
+  try {
+    socket.start(h.context.filesDir);
+    await h.flush();
+    const first = h.sockets.at(-1);
+    first.open();
+    first.emit(toolFrame('logs', 'snapshot', 1, { logs: [record] }));
+    first.emit(toolFrame('logs', 'delta', 2, { logs: [null] }));
+    assert.equal(state, 'failed');
+    assert.equal(history.window.latest()[0].id, 'before');
+    socket.stop();
+    socket.start(h.context.filesDir);
+    await h.flush();
+    const next = h.sockets.at(-1);
+    next.open();
+    next.emit(toolFrame('logs', 'snapshot', 1, { sessionId: 'session-b', logs: [{ ...record, id: 'after' }] }));
+    assert.equal(state, 'open');
+    assert.deepEqual(Array.from(history.window.latest(), row => row.id), ['after']);
+  } finally { socket.stop(); h.cleanup(); }
+});
 
 test('store速度只用sampledAt，空delta归零，重连同ID的大累计量不得跨断流计算', async () => toolsCase(async h => {
   const { store, socket } = await onlineTools(h, 'connections', { live: [toolConnection('active')] });

@@ -130,7 +130,14 @@ func subscribeDiagnostics(feed, expectedBootID string, expectedConfigRevision ui
 	if feed != "connections" && feed != "dns" && feed != "logs" {
 		return nil, http.StatusBadRequest, errors.New("diagnostics_invalid_request")
 	}
-	if status, err := diagnosticRuntimeError(expectedBootID, expectedConfigRevision); err != nil {
+	if feed == "logs" {
+		if status, err := diagnosticBootError(expectedBootID); err != nil {
+			return nil, status, err
+		}
+		if !current.General.CaptureLogs {
+			return nil, http.StatusForbidden, errDiagnosticLogsDisabled
+		}
+	} else if status, err := diagnosticRuntimeError(expectedBootID, expectedConfigRevision); err != nil {
 		return nil, status, err
 	}
 	owner := &diagnosticConnections
@@ -138,9 +145,6 @@ func subscribeDiagnostics(feed, expectedBootID string, expectedConfigRevision ui
 	case "dns":
 		owner = &diagnosticDNS
 	case "logs":
-		if !current.General.CaptureLogs {
-			return nil, http.StatusForbidden, errDiagnosticLogsDisabled
-		}
 		owner = &diagnosticLogs
 	}
 	c := ensureDiagnosticCollectorLocked(owner, feed)
@@ -163,7 +167,12 @@ func ensureDiagnosticCollectorLocked(owner **diagnosticCollector, feed string) *
 	if c := *owner; c != nil {
 		return c
 	}
-	c := &diagnosticCollector{feed: feed, bootID: runtimeBootID, revision: runtimeConfigRevision,
+	revision := runtimeConfigRevision
+	if feed == "logs" {
+		// 日志采集按内核 boot 生命周期存活，跨配置热切换保留历史。
+		revision = 0
+	}
+	c := &diagnosticCollector{feed: feed, bootID: runtimeBootID, revision: revision,
 		stop: make(chan struct{}), workerDone: make(chan struct{}), kick: make(chan struct{}, 1)}
 	if feed == "connections" {
 		c.connections = make(map[string]*diagnosticConnectionEntry)
@@ -415,7 +424,8 @@ func (s *diagnosticSession) close() {
 	s.cancelLocked()
 	delete(c.sessions, s)
 	last := len(c.sessions) == 0
-	retire := last && (c.feed == "logs" || (diagnosticCapture == nil && !hasDiagnosticStats()))
+	retire := last && ((c.feed == "logs" && (!running || !current.General.CaptureLogs)) ||
+		(c.feed != "logs" && diagnosticCapture == nil && !hasDiagnosticStats()))
 	if retire {
 		c.retireLocked()
 	} else if last && c.feed == "connections" {
@@ -511,7 +521,7 @@ func retireDiagnosticCollectorLocked(c *diagnosticCollector, onlyUnused bool) []
 
 func retireDiagnosticCollectorsLocked(onlyUnused bool) []<-chan struct{} {
 	var workers []<-chan struct{}
-	for _, c := range [...]*diagnosticCollector{diagnosticConnections, diagnosticDNS, diagnosticLogs} {
+	for _, c := range [...]*diagnosticCollector{diagnosticConnections, diagnosticDNS} {
 		workers = append(workers, retireDiagnosticCollectorLocked(c, onlyUnused)...)
 	}
 	return workers
@@ -532,6 +542,7 @@ func reloadDiagnosticsLocked() func() {
 func stopDiagnosticsLocked() func() {
 	workers := retireDiagnosticStatsLocked()
 	workers = append(workers, retireDiagnosticCollectorsLocked(false)...)
+	workers = append(workers, retireDiagnosticCollectorLocked(diagnosticLogs, false)...)
 	if lease := diagnosticCapture; lease != nil {
 		diagnosticCapture = nil
 		_ = lease.conn.Close()

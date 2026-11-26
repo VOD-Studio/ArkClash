@@ -115,7 +115,7 @@ func getDiagnosticCapture(w http.ResponseWriter, r *http.Request) {
 }
 
 func getDiagnosticStream(w http.ResponseWriter, r *http.Request, feed string) {
-	bootID, revision, err := diagnosticStreamRuntime(r, true)
+	bootID, revision, err := diagnosticStreamRuntime(r, feed != "logs")
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, err)
 		return

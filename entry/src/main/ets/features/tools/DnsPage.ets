@@ -266,7 +266,7 @@ export struct DnsPage {
             .onClick((): void => { this.store.retry(); })
         }
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
-      } else if (!this.store.synced) {
+      } else if (this.store.streamState === 'retrying') {
         Text($r('app.string.diagnostics_connecting')).fontFamily(this.appStyle.fontFamily).fontSize(13).fontColor($r('sys.color.font_secondary'))
           .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, bottom: 6 })
       }

@@ -73,14 +73,16 @@ struct LocalProxyHeaderButton {
   }
 }
 
+let cachedLocalProxies: LocalProxySnapshot | undefined = undefined;
+
 @ComponentV2
 export struct LocalProxiesPage {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
-  @Local private snapshot: LocalProxySnapshot = emptyLocalProxies();
+  @Local private snapshot: LocalProxySnapshot = cachedLocalProxies ?? emptyLocalProxies();
   @Local private selected: string[] = [];
   @Local private issues: Map<string, string> = new Map<string, string>();
-  @Local private loading: boolean = true;
+  @Local private loading: boolean = cachedLocalProxies === undefined;
   @Local private failed: boolean = false;
   @Local private busy: boolean = false;
   @Local private search: boolean = false;
@@ -106,6 +108,13 @@ export struct LocalProxiesPage {
   private shown: boolean = false;
   private generation: number = 0;
 
+  aboutToAppear(): void {
+    if (cachedLocalProxies !== undefined) {
+      this.snapshot = cachedLocalProxies;
+      this.showRows();
+    }
+  }
+
   private toast(message: ResourceStr): void {
     if (this.shown && this.foreground) { this.getUIContext().getPromptAction().showToast({ message: message }); }
   }
@@ -116,6 +125,7 @@ export struct LocalProxiesPage {
   }
 
   private accept(snapshot: LocalProxySnapshot): void {
+    cachedLocalProxies = snapshot;
     this.snapshot = snapshot;
     const ids = new Set<string>(snapshot.proxies.map((item: LocalProxy): string => item.id));
     this.selected = this.selected.filter((id: string): boolean => ids.has(id));
@@ -125,12 +135,13 @@ export struct LocalProxiesPage {
 
   private async refresh(): Promise<void> {
     const generation = ++this.generation;
+    const silent = cachedLocalProxies !== undefined;
     this.failed = false;
     try {
       const snapshot = await readLocalProxies(this.context.filesDir);
       if (this.shown && this.generation === generation) { this.accept(snapshot); }
     } catch (error) {
-      if (this.shown && this.generation === generation) { this.failed = true; }
+      if (this.shown && this.generation === generation && !silent) { this.failed = true; }
     } finally {
       this.loading = false;
     }

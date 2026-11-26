@@ -9,7 +9,7 @@
 
 namespace {
 
-enum class CoreCall { Start, Stop, Reload, Fetch, Prefetch, AttachTun, DetachTun, UpdateVpnState, RuntimeStatus };
+enum class CoreCall { Start, Stop, Reload, Fetch, Prefetch, AttachTun, DetachTun, UpdateVpnState, RuntimeStatus, ReclaimMemory };
 
 struct CoreWork {
   napi_async_work work = nullptr;
@@ -23,6 +23,7 @@ struct CoreWork {
   int fd = 0;
   unsigned long long configRevision = 0;
   bool vpnCreated = false;
+  bool reclaimed = false;
   std::string error;
   std::string result; // fetch、prefetch、runtimeStatus 的结果 JSON
 };
@@ -70,6 +71,9 @@ void Execute(napi_env, void *data) {
   case CoreCall::RuntimeStatus:
     w->result = TakeString(ArkClashRuntimeStatus());
     break;
+  case CoreCall::ReclaimMemory:
+    w->reclaimed = ArkClashReclaimMemory() != 0;
+    break;
   }
 }
 
@@ -83,6 +87,8 @@ void Complete(napi_env env, napi_status status, void *data) {
     if (w->call == CoreCall::Fetch || w->call == CoreCall::Prefetch ||
         w->call == CoreCall::RuntimeStatus) {
       napi_create_string_utf8(env, w->result.c_str(), w->result.size(), &value);
+    } else if (w->call == CoreCall::ReclaimMemory) {
+      napi_get_boolean(env, w->reclaimed, &value);
     } else {
       napi_get_undefined(env, &value);
     }
@@ -148,6 +154,12 @@ napi_value Start(napi_env env, napi_callback_info info) {
 
 napi_value Stop(napi_env env, napi_callback_info) {
   return Queue(env, new CoreWork(), "ArkClashStop");
+}
+
+napi_value ReclaimMemory(napi_env env, napi_callback_info) {
+  auto *w = new CoreWork();
+  w->call = CoreCall::ReclaimMemory;
+  return Queue(env, w, "ArkClashReclaimMemory");
 }
 
 bool GetInteger(napi_env env, napi_value value, double min, double max, double &out) {
@@ -361,6 +373,7 @@ napi_value Init(napi_env env, napi_value exports) {
       {"start", nullptr, Start, nullptr, nullptr, nullptr, napi_default,
        nullptr},
       {"stop", nullptr, Stop, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"reclaimMemory", nullptr, ReclaimMemory, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"attachTun", nullptr, AttachTun, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"detachTun", nullptr, DetachTun, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"updateVpnState", nullptr, UpdateVpnState, nullptr, nullptr, nullptr, napi_default, nullptr},
