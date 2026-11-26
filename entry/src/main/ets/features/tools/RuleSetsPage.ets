@@ -35,11 +35,13 @@ class RuleSetRowItem {
   }
 }
 
+let cachedRuleSetCatalog: RuleSetCatalog | undefined = undefined;
+
 @ComponentV2
 export struct RuleSetsPage {
   @Param foreground: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
-  @Local private loading: boolean = true;
+  @Local private loading: boolean = cachedRuleSetCatalog === undefined;
   @Local private failed: boolean = false;
   @Local private busy: boolean = false;
   @Local private sheetShown: boolean = false;
@@ -59,10 +61,16 @@ export struct RuleSetsPage {
   @Local private first: string = '';
   @Local private last: string = '';
 
-  private catalog: RuleSetCatalog = { revision: 'default', items: [] };
+  private catalog: RuleSetCatalog = cachedRuleSetCatalog ?? { revision: 'default', items: [] };
   private shown: boolean = false;
   private rows: KeyedListSource<RuleSetRowItem> = new KeyedListSource<RuleSetRowItem>();
   private fileUri: string = '';
+
+  aboutToAppear(): void {
+    if (cachedRuleSetCatalog !== undefined) {
+      this.publish(cachedRuleSetCatalog);
+    }
+  }
 
   @Computed
   get behaviorIndex(): number {
@@ -79,6 +87,7 @@ export struct RuleSetsPage {
   }
 
   private publish(catalog: RuleSetCatalog): void {
+    cachedRuleSetCatalog = catalog;
     this.catalog = catalog;
     const items = catalog.items;
     this.count = items.length;
@@ -88,12 +97,17 @@ export struct RuleSetsPage {
   }
 
   private async load(): Promise<void> {
-    this.loading = true;
+    const silent = cachedRuleSetCatalog !== undefined;
+    if (!silent) {
+      this.loading = true;
+    }
     try {
       this.publish(await readRuleSets(this.context().filesDir));
       this.failed = false;
     } catch (_error) {
-      this.failed = true;
+      if (!silent) {
+        this.failed = true;
+      }
     } finally {
       this.loading = false;
     }

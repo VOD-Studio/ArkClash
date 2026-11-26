@@ -18,12 +18,14 @@ import {
 type BackupPrompt = 'account' | 'export' | 'restore' | 'overwrite' | 'unbind';
 type BackupLinkState = 'idle' | 'checking' | 'ready' | 'failed';
 
+let cachedBackupSettings: BackupSettings | undefined = undefined;
+
 @ComponentV2
 export struct BackupPage {
   @Event onChanged: () => void = (): void => {};
   @Local private appStyle: AppearanceState = appAppearance;
-  @Local private settings: BackupSettings = { policy: 'merge' };
-  @Local private configReady: boolean = false;
+  @Local private settings: BackupSettings = cachedBackupSettings ?? { policy: 'merge' };
+  @Local private configReady: boolean = cachedBackupSettings !== undefined;
   @Local private draft: BackupDav = emptyBackupDav();
   @Local private busy: boolean = false;
   @Local private restoring: boolean = false;
@@ -52,11 +54,15 @@ export struct BackupPage {
 
   private async load(test: boolean): Promise<void> {
     try {
-      this.settings = await readBackupSettings(this.context().filesDir);
+      const loaded = await readBackupSettings(this.context().filesDir);
+      cachedBackupSettings = loaded;
+      this.settings = loaded;
       this.configReady = true;
       if (test) { this.probe(); }
     } catch (_error) {
-      this.notify($r('app.string.backup_error_io'));
+      if (cachedBackupSettings === undefined) {
+        this.notify($r('app.string.backup_error_io'));
+      }
     }
   }
 
@@ -100,6 +106,7 @@ export struct BackupPage {
     this.busy = true;
     try {
       await writeBackupSettings(this.context().filesDir, next);
+      cachedBackupSettings = next;
       this.settings = next;
       if (retest) { this.probe(); }
     } catch (error) {

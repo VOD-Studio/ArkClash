@@ -387,3 +387,5 @@ export class ResourcesStore {
     if (this.notice !== undefined) { ++this.noticeSerial; }
   }
 }
+
+export const resourcesStore: ResourcesStore = new ResourcesStore();

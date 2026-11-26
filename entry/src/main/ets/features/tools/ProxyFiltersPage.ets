@@ -22,11 +22,13 @@ class ProxyFilterRowItem {
   }
 }
 
+let cachedProxyFilters: ProxyFilterSnapshot | undefined = undefined;
+
 @ComponentV2
 export struct ProxyFiltersPage {
   @Param foreground: boolean = true;
   @Local private appStyle: AppearanceState = appAppearance;
-  @Local private loading: boolean = true;
+  @Local private loading: boolean = cachedProxyFilters === undefined;
   @Local private loadFailed: boolean = false;
   @Local private saving: boolean = false;
   @Local private searchShown: boolean = false;
@@ -45,27 +47,39 @@ export struct ProxyFiltersPage {
   @Local private expressionDraft: string = '';
   @Local private issue: ResourceStr = '';
 
-  private snapshot: ProxyFilterSnapshot = { revision: '', presets: [] };
+  private snapshot: ProxyFilterSnapshot = cachedProxyFilters ?? { revision: '', presets: [] };
   private shown: boolean = false;
   private rows: KeyedListSource<ProxyFilterRowItem> = new KeyedListSource<ProxyFilterRowItem>();
+
+  aboutToAppear(): void {
+    if (cachedProxyFilters !== undefined) {
+      this.publish(cachedProxyFilters);
+    }
+  }
 
   private context(): common.UIAbilityContext {
     return this.getUIContext().getHostContext() as common.UIAbilityContext;
   }
 
   private async load(): Promise<void> {
-    this.loading = true;
+    const silent = cachedProxyFilters !== undefined;
+    if (!silent) {
+      this.loading = true;
+    }
     try {
       this.publish(await readProxyFilters(this.context().filesDir));
       this.loadFailed = false;
     } catch (_error) {
-      this.loadFailed = true;
+      if (!silent) {
+        this.loadFailed = true;
+      }
     } finally {
       this.loading = false;
     }
   }
 
   private publish(snapshot: ProxyFilterSnapshot): void {
+    cachedProxyFilters = snapshot;
     this.snapshot = snapshot;
     this.count = snapshot.presets.length;
     this.refreshRows();

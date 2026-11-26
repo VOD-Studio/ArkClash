@@ -16,19 +16,23 @@ import {
 import { GEO_DEFAULT_URLS, GEO_RESOURCE_IDS, GeoResourceId, GeoResourceStatus, GeoUrls } from '../../shared/GeoResources';
 import { GeoEditorDraft, GeoResourceEditor, geoErrorText } from './GeoResourceEditor';
 import { GeoResourceRow } from './GeoResourceRow';
-import { GeoResourceItem, ResourcesStore } from './Resources';
+import { GeoResourceItem, resourcesStore, ResourcesStore } from './Resources';
 import { RuntimeProviderRow } from './RuntimeProviderRow';
-import { providerErrorText, RuntimeProviderRowModel, RuntimeProvidersStore } from './RuntimeProvidersStore';
+import {
+  providerErrorText, RuntimeProviderRowModel, runtimeProvidersStore, RuntimeProvidersStore
+} from './RuntimeProvidersStore';
+
+let cachedRemoteScripts: ConfigScript[] = [];
 
 @ComponentV2
 export struct ResourcesPage {
   @Event onScript: (id: string) => void = (_id: string): void => {};
-  @Local private remoteScripts: ConfigScript[] = [];
+  @Local private remoteScripts: ConfigScript[] = cachedRemoteScripts;
   @Local private syncingScript: string = '';
   @Local private appStyle: AppearanceState = appAppearance;
   @Param foreground: boolean = true;
-  @Local store: ResourcesStore = new ResourcesStore();
-  @Local providers: RuntimeProvidersStore = new RuntimeProvidersStore();
+  @Local store: ResourcesStore = resourcesStore;
+  @Local providers: RuntimeProvidersStore = runtimeProvidersStore;
   @Local conn: Connection = connection;
   @Local shown: boolean = false;
   @Local editing: boolean = false;
@@ -45,9 +49,15 @@ export struct ResourcesPage {
   private geoMenuChoice: '' | 'sync' | 'edit' | 'copy' = '';
   private active: boolean = false;
   private generation: number = 0;
-  private consumedNotice: number = 0;
-  private consumedProviderNotice: number = 0;
+  private consumedNotice: number = resourcesStore.noticeSerial;
+  private consumedProviderNotice: number = runtimeProvidersStore.noticeSerial;
   private actionOpen: boolean = false;
+
+  aboutToAppear(): void {
+    this.store.setConnection(this.conn.connected && !this.conn.busy, this.conn.bootId);
+    this.providers.setConnection(this.conn.coreReady && !this.conn.busy, this.conn.connected && !this.conn.busy,
+      this.conn.bootId, this.conn.configRevision);
+  }
 
   aboutToDisappear(): void {
     this.shown = false;
@@ -98,8 +108,10 @@ export struct ResourcesPage {
   private async loadScripts(context: common.UIAbilityContext, generation: number): Promise<void> {
     try {
       const snapshot = await readConfigScripts(context.filesDir);
+      const remote = snapshot.scripts.filter((item: ConfigScript): boolean => item.url !== '');
+      cachedRemoteScripts = remote;
       if (this.isCurrent(generation)) {
-        this.remoteScripts = snapshot.scripts.filter((item: ConfigScript): boolean => item.url !== '');
+        this.remoteScripts = remote;
       }
     } catch (error) {
       if (this.isCurrent(generation)) { this.toast($r('app.string.script_err_store')); }
@@ -117,8 +129,10 @@ export struct ResourcesPage {
       try {
         const snapshot = await fetchConfigScript(context, item.url, item);
         saved = true;
+        const remote = snapshot.scripts.filter((script: ConfigScript): boolean => script.url !== '');
+        cachedRemoteScripts = remote;
         if (this.isCurrent(generation)) {
-          this.remoteScripts = snapshot.scripts.filter((script: ConfigScript): boolean => script.url !== '');
+          this.remoteScripts = remote;
         }
         await applyConfigScript(context.filesDir, snapshot, '', item.id);
         if (items.length === 1 && this.isCurrent(generation)) { this.toast($r('app.string.script_synced')); }

@@ -22,6 +22,8 @@ enum NetworkEditor {
   ExcludedApps
 }
 
+let cachedNetworkSettings: VpnNetworkSettings | undefined = undefined;
+
 @ComponentV2
 export struct NetworkPage {
   @Param foreground: boolean = true;
@@ -29,8 +31,9 @@ export struct NetworkPage {
   @Local private conn: Connection = connection;
   @Local private keep: BackgroundKeep = backgroundKeep;
   @Local private keepSaving: boolean = false;
-  @Local private settings: VpnNetworkSettings = new VpnNetworkSettings();
-  @Local private loading: boolean = true;
+  @Local private settings: VpnNetworkSettings =
+    cachedNetworkSettings !== undefined ? cachedNetworkSettings.copy() : new VpnNetworkSettings();
+  @Local private loading: boolean = cachedNetworkSettings === undefined;
   @Local private loadFailed: boolean = false;
   @Local private saving: boolean = false;
   @Local private editing: boolean = false;
@@ -50,12 +53,19 @@ export struct NetworkPage {
   }
 
   private async load(): Promise<void> {
-    this.loading = true;
+    const silent = cachedNetworkSettings !== undefined;
+    if (!silent) {
+      this.loading = true;
+    }
     try {
-      this.settings = await readVpnNetworkSettings(this.context());
+      const loaded = await readVpnNetworkSettings(this.context());
+      cachedNetworkSettings = loaded.copy();
+      this.settings = loaded;
       this.loadFailed = false;
     } catch (_error) {
-      this.loadFailed = true;
+      if (!silent) {
+        this.loadFailed = true;
+      }
     } finally {
       this.loading = false;
     }
@@ -88,6 +98,7 @@ export struct NetworkPage {
     }
     try {
       await saveVpnNetworkSettings(this.context(), next);
+      cachedNetworkSettings = next.copy();
       this.settings = next;
       if (inEditor) {
         this.editing = false;

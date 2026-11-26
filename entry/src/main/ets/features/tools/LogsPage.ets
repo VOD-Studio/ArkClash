@@ -28,6 +28,14 @@ const LOG_MORE_MENU_WIDTH = 240;
 const LOG_GAP_TOAST_COOLDOWN_MS = 15000;
 type LogMenuLevel = 'root' | 'level';
 
+interface CachedLogsState {
+  bootId: string;
+  records: LogRecord[];
+  dropped: number;
+}
+
+let cachedLogsState: CachedLogsState | undefined = undefined;
+
 function logMenuLevelTransition(offsetX: number): TransitionEffect {
   return TransitionEffect.asymmetric(
     TransitionEffect.opacity(0).combine(TransitionEffect.translate({ x: offsetX }))
@@ -116,6 +124,15 @@ export struct LogsPage {
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
       this.settings.load(context).catch((): void => {});
     }
+    if (this.settings.saved.captureLogs && this.conn.coreReady && this.conn.bootId !== '' &&
+      cachedLogsState !== undefined && cachedLogsState.bootId === this.conn.bootId &&
+      cachedLogsState.records.length > 0) {
+      this.boot = this.conn.bootId;
+      this.seenDropped = cachedLogsState.dropped;
+      this.history.receive(cachedLogsState.records, 'snapshot', true);
+      this.recordCount = this.history.window.latestCount;
+      this.refreshRows(false, false);
+    }
   }
 
   aboutToDisappear(): void {
@@ -177,6 +194,7 @@ export struct LogsPage {
   @Monitor('foreground', 'conn.coreReady', 'conn.bootId', 'settings.saved')
   sync(): void {
     if (!this.settings.saved.captureLogs) {
+      cachedLogsState = undefined;
       this.viewport.activate(false);
       this.dismissOverlays();
       this.stop();
@@ -196,6 +214,9 @@ export struct LogsPage {
       return;
     }
     if (this.boot !== this.conn.bootId) {
+      if (cachedLogsState !== undefined && cachedLogsState.bootId !== this.conn.bootId) {
+        cachedLogsState = undefined;
+      }
       this.stop();
       this.clear();
       this.boot = this.conn.bootId;
@@ -280,6 +301,13 @@ export struct LogsPage {
     this.seq = frame.seq;
     this.history.receive(frame.logs, frame.kind, newSession);
     this.recordCount = this.history.window.latestCount;
+    if (this.boot !== '') {
+      cachedLogsState = {
+        bootId: this.boot,
+        records: this.history.window.latest().map((row: LogListRow): LogRecord => row.record),
+        dropped: this.seenDropped
+      };
+    }
     this.refreshRows(frame.kind === 'delta', newSession);
   }
 
@@ -753,7 +781,7 @@ export struct LogsPage {
         this.LevelFilterChips()
       }
       if (this.settings.saved.captureLogs && this.recordCount > 0 &&
-        (!this.conn.coreReady || this.streamState === 'failed' || this.streamState === 'retrying' || this.streamState === 'closed')) {
+        (!this.conn.coreReady || this.streamState === 'failed' || this.streamState === 'retrying')) {
         Row({ space: 8 }) {
           Text($r('app.string.logs_disconnected'))
             .fontFamily(this.appStyle.fontFamily)
