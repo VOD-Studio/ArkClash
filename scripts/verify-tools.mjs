@@ -1255,6 +1255,31 @@ test('log history keeps an anchored reading window, counts matching arrivals and
   } finally { h.cleanup(); }
 });
 
+test('暂停浏览时显式清空日志，同步清掉暂停窗口并保持暂停状态', () => {
+  const h = createToolsHarness();
+  try {
+    const { LogHistory } = h.load('features/tools/LogHistory.ets');
+    const history = new LogHistory(5000, record => record.message);
+    const batch = (start, count) => Array.from({ length: count }, (_, index) =>
+      ({ id: String(start + index), time: start + index, level: 'info', message: 'Fixture event' }));
+    history.receive(batch(0, 10), 'snapshot', true);
+    history.setFollowing(false);
+    history.receive(batch(10, 5), 'delta', false);
+    assert.equal(history.filter('', '').length, 15);
+    assert.equal(history.pending, 5);
+    history.receive([], 'reset', false);
+    assert.equal(history.window.latestCount, 0);
+    assert.equal(history.filter('', '').length, 0);
+    assert.equal(history.pending, 0);
+    assert.equal(history.window.following, false);
+    history.receive(batch(20, 2), 'delta', false);
+    assert.equal(history.filter('', '').length, 2);
+    assert.equal(history.pending, 2);
+    history.setFollowing(true);
+    assert.equal(history.filter('', '').length, 2);
+  } finally { h.cleanup(); }
+});
+
 test('满载日志一批只裁去末尾和添加首行，重置中变化的同键记录仍会更新', () => {
   const h = createToolsHarness();
   try {

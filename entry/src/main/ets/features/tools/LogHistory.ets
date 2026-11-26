@@ -72,7 +72,10 @@ export class LogHistory {
 
   receive(records: LogRecord[], kind: string, newSession: boolean): void {
     const following = this.window.following;
-    if (newSession) { this.clear(); }
+    // 空 reset 是用户显式清空日志：暂停窗口、锚点和待读计数也要一并清掉。
+    const cleared = kind === 'reset' && records.length === 0;
+    const rebuild = newSession || cleared;
+    if (rebuild) { this.clear(); }
     ++this.batch;
     const rows = records.map((record: LogRecord): LogListRow =>
       this.window.get(record.id) ?? new LogListRow(record, ++this.order, this.batch, this.describe(record)));
@@ -80,7 +83,7 @@ export class LogHistory {
       this.window.append(rows);
     } else {
       this.window.replace(rows, false);
-      if (newSession) { this.setFollowing(following); }
+      if (rebuild) { this.setFollowing(following); }
     }
   }
 
