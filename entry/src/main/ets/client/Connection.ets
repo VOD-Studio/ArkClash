@@ -69,6 +69,7 @@ export class Connection {
   private recovering: boolean = false;
   private recoveryTimes: number[] = [];
   private readyPending?: Promise<void>;
+  private recheckPending?: Promise<boolean>;
   @Trace modePending: boolean = false;
   @Trace modeError: string = '';
   @Trace routeRevision: string = '';
@@ -88,8 +89,11 @@ export class Connection {
   @Trace configRevision: number = 0;
   private revision: number = -1;
   private routeEpoch: number = 0;
-  private lastNetId: number = -1;
-  private lastNetSignature: string = '';
+  private defaultNetId: number = -1;
+  private defaultNetBearers: string = '';
+  private netCheckRunning: boolean = false;
+  private netCheckQueued: boolean = false;
+  private netCheckGeneration: number = 0;
   private network?: networkConnection.NetConnection;
   private networkRegistered: boolean = false;
   private events: ControllerSocket = new ControllerSocket('/arkclash/events', (text: string): void => {
@@ -147,6 +151,9 @@ export class Connection {
       this.recheck(context).catch((): void => {});
       backgroundKeep.foreground();
     } else {
+      ++this.netCheckGeneration;
+      this.netCheckRunning = false;
+      this.netCheckQueued = false;
       const observer = this.network;
       this.network = undefined;
       if (observer !== undefined && this.networkRegistered) {
@@ -162,6 +169,19 @@ export class Connection {
     }
     if (this.readyPending !== undefined) {
       return this.readyPending;
+    }
+    // 等正在进行的回前台校验结束再决定是否预热，避免 startCore 的 pendingStart 把 recheck 挤成 unknown。
+    if (this.recheckPending !== undefined) {
+      await this.recheckPending.catch((): boolean => false);
+      if (automatic && (!this.foreground || this.automaticFailed)) {
+        return;
+      }
+      if (this.readyPending !== undefined) {
+        return this.readyPending;
+      }
+    }
+    if (automatic && this.coreReady && this.hostState === 'running') {
+      return;
     }
     const generation = this.coreGeneration;
     this.coreStarting = true;
@@ -471,8 +491,29 @@ export class Connection {
     if (this.busy) {
       throw new Error('代理状态正在切换，请稍后重试');
     }
+    if (this.recheckPending !== undefined) {
+      return this.recheckPending;
+    }
+    const pending = this.performRecheck(context);
+    this.recheckPending = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this.recheckPending === pending) {
+        this.recheckPending = undefined;
+      }
+    }
+  }
+
+  private async performRecheck(context: common.UIAbilityContext): Promise<boolean> {
     const generation = this.generation;
     try {
+      if (this.readyPending !== undefined) {
+        await this.readyPending.catch((): void => {});
+        if (generation !== this.generation || this.busy) {
+          throw new Error('代理状态已变化，请重试');
+        }
+      }
       const host = await readCoreHostStatus(context);
       if (generation !== this.generation || this.busy) {
         throw new Error('代理状态已变化，请重试');
@@ -682,60 +723,93 @@ export class Connection {
     this.routeRevision = `${this.bootId}/${this.revision}/${this.routeEpoch}`;
   }
 
-  private netSignature(info: networkConnection.NetCapabilityInfo): string {
-    const netId = info.netHandle?.netId ?? 0;
-    const bearers = (info.netCap?.bearerTypes ?? []).slice().sort((a: number, b: number): number => a - b).join(',');
-    return `${netId}:${bearers}`;
+  private sortedBearers(bearers: number[] | undefined): string {
+    return (bearers ?? []).slice().sort((a: number, b: number): number => a - b).join(',');
+  }
+
+  private scheduleNetworkCheck(): void {
+    if (!this.foreground) {
+      return;
+    }
+    if (this.netCheckRunning) {
+      this.netCheckQueued = true;
+      return;
+    }
+    this.checkDefaultNetwork(this.netCheckGeneration).catch((): void => {});
+  }
+
+  // 系统默认网络本身不含 VPN；多网并发（Wi-Fi + 双 5G + VPN）回前台重放回调时只比较默认外网是否真变化。
+  private async checkDefaultNetwork(generation: number): Promise<void> {
+    this.netCheckRunning = true;
+    try {
+      while (this.foreground && generation === this.netCheckGeneration) {
+        this.netCheckQueued = false;
+        let netId = 0;
+        let bearers = '';
+        try {
+          const handle = await networkConnection.getDefaultNet();
+          netId = handle?.netId ?? 0;
+          if (netId > 0) {
+            const cap = await networkConnection.getNetCapabilities(handle);
+            bearers = this.sortedBearers(cap?.bearerTypes);
+          }
+        } catch (_error) {
+          if (!this.netCheckQueued) {
+            break;
+          }
+          continue;
+        }
+        if (!this.foreground || generation !== this.netCheckGeneration) {
+          return;
+        }
+        if (this.defaultNetId === -1) {
+          this.defaultNetId = netId;
+          this.defaultNetBearers = bearers;
+        } else if (netId !== this.defaultNetId || bearers !== this.defaultNetBearers) {
+          this.defaultNetId = netId;
+          this.defaultNetBearers = bearers;
+          this.invalidateRoute();
+        }
+        if (!this.netCheckQueued) {
+          break;
+        }
+      }
+    } finally {
+      if (generation === this.netCheckGeneration) {
+        this.netCheckRunning = false;
+      }
+    }
   }
 
   private watchNetwork(): void {
     if (this.network !== undefined) {
       return;
     }
+    this.scheduleNetworkCheck();
     const observer = networkConnection.createNetConnection();
     this.network = observer;
-    observer.on('netAvailable', (handle: networkConnection.NetHandle): void => {
-      if (!this.foreground || this.network !== observer) {
-        return;
+    const check = (): void => {
+      if (this.foreground && this.network === observer) {
+        this.scheduleNetworkCheck();
       }
-      const netId = handle?.netId ?? 0;
-      if (this.lastNetId === -1) {
-        this.lastNetId = netId;
-        return;
-      }
-      if (netId !== this.lastNetId) {
-        this.lastNetId = netId;
-        this.lastNetSignature = '';
-        this.invalidateRoute();
-      }
-    });
-    observer.on('netLost', (handle: networkConnection.NetHandle): void => {
-      if (!this.foreground || this.network !== observer) {
-        return;
-      }
-      const netId = handle?.netId ?? 0;
-      if (this.lastNetId === -1 || netId === this.lastNetId) {
-        this.lastNetId = 0;
-        this.lastNetSignature = '';
-        this.invalidateRoute();
-      }
-    });
+    };
+    observer.on('netAvailable', check);
+    observer.on('netLost', check);
+    observer.on('netUnavailable', check);
     observer.on('netCapabilitiesChange', (info: networkConnection.NetCapabilityInfo): void => {
       if (!this.foreground || this.network !== observer) {
         return;
       }
-      const netId = info?.netHandle?.netId ?? 0;
-      const signature = this.netSignature(info);
-      if (this.lastNetSignature === '') {
-        this.lastNetId = netId;
-        this.lastNetSignature = signature;
+      const bearerTypes = info?.netCap?.bearerTypes ?? [];
+      if (bearerTypes.includes(networkConnection.NetBearType.BEARER_VPN)) {
         return;
       }
-      if (signature !== this.lastNetSignature) {
-        this.lastNetId = netId;
-        this.lastNetSignature = signature;
-        this.invalidateRoute();
+      const netId = info?.netHandle?.netId ?? 0;
+      const bearers = this.sortedBearers(bearerTypes);
+      if (this.defaultNetId > 0 && netId === this.defaultNetId && bearers === this.defaultNetBearers) {
+        return;
       }
+      this.scheduleNetworkCheck();
     });
     observer.register((error: BusinessError): void => {
       if (error) {

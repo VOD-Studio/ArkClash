@@ -1176,12 +1176,18 @@ test('自动预热系统启动等待期间断开不销毁核心或自动attach',
   assert.equal(state.commands.some(command => command.url.endsWith('/connect')), false);
 });
 
-test('回前台且网络与核心未变化时不刷新路由版本，真实切换网络才失效', async () => {
+test('回前台且网络与核心未变化时不刷新路由版本，多网并发与自动预热不误清，真实切换网络才失效', async () => {
   const netObservers = [];
+  let defaultNet = { netId: 100, bearerTypes: [1] };
   const { Connection: NetConnection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
     ...connectionBindings,
     '@kit.NetworkKit': {
       connection: {
+        NetBearType: { BEARER_CELLULAR: 0, BEARER_WIFI: 1, BEARER_BLUETOOTH: 2, BEARER_ETHERNET: 3, BEARER_VPN: 4 },
+        async getDefaultNet() { return { netId: defaultNet.netId }; },
+        async getNetCapabilities(handle) {
+          return { bearerTypes: handle.netId === defaultNet.netId ? defaultNet.bearerTypes : [] };
+        },
         createNetConnection() {
           const handlers = new Map();
           const observer = {
@@ -1199,7 +1205,9 @@ test('回前台且网络与核心未变化时不刷新路由版本，真实切�
     './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } }
   });
   const connection = new NetConnection();
-  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const settle = async () => {
+    for (let i = 0; i < 6; ++i) { await new Promise(resolve => setImmediate(resolve)); }
+  };
   connection.restore(context);
   state.active = true;
   state.status = { ...ready, bootId: 'boot.resume', revision: 7, configRevision: 2 };
@@ -1211,34 +1219,53 @@ test('回前台且网络与核心未变化时不刷新路由版本，真实切�
   const firstNet = netObservers.at(-1);
   firstNet.emit('netAvailable', { netId: 100 });
   firstNet.emit('netCapabilitiesChange', { netHandle: { netId: 100 }, netCap: { bearerTypes: [1] } });
-  assert.equal(connection.routeRevision, initialRoute, '首次监听上报当前网络不误清路由');
+  firstNet.emit('netAvailable', { netId: 101 });
+  firstNet.emit('netCapabilitiesChange', { netHandle: { netId: 101 }, netCap: { bearerTypes: [0] } });
+  firstNet.emit('netAvailable', { netId: 102 });
+  firstNet.emit('netCapabilitiesChange', { netHandle: { netId: 102 }, netCap: { bearerTypes: [4] } });
+  await settle();
+  assert.equal(connection.routeRevision, initialRoute, '首次监听并发上报 Wi-Fi/5G/VPN 不误清路由');
   firstNet.emit('netCapabilitiesChange', {
     netHandle: { netId: 100 }, netCap: { bearerTypes: [1], linkDownBandwidthKbps: 12000 }
   });
+  await settle();
   assert.equal(connection.routeRevision, initialRoute, '带宽抖动不误清路由');
 
+  // 模拟 Index.ets onPageShow 同步连续触发 observe(true) + ensureReady(true)（含多网回调重放）。
   connection.observe(context, false);
   assert.equal(firstNet.unregistered, true);
   connection.observe(context, true);
-  await settle();
+  const warmPending = connection.ensureReady(context, true);
   const secondNet = netObservers.at(-1);
   secondNet.emit('netAvailable', { netId: 100 });
   secondNet.emit('netCapabilitiesChange', { netHandle: { netId: 100 }, netCap: { bearerTypes: [1] } });
+  secondNet.emit('netAvailable', { netId: 102 });
+  secondNet.emit('netCapabilitiesChange', { netHandle: { netId: 102 }, netCap: { bearerTypes: [4] } });
+  await warmPending;
+  await settle();
+  assert.equal(connection.hostState, 'running', '回前台并发 observe + ensureReady 不应误标 unknown');
+  assert.equal(connection.coreReady, true, '回前台 coreReady 不得闪断');
+  assert.equal(connection.connected, true, '回前台 connected 不得闪断');
   assert.equal(connection.routeRevision, initialRoute, '同网络回前台且内核未变时不误清路由');
+  assert.equal(state.started, 0, '内核已就绪时自动预热不得重复拉起扩展');
 
+  // 后台切到 5G 后回前台，即使还没等到 netAvailable 也应由默认网络校验发现并失效路由。
   connection.observe(context, false);
+  defaultNet = { netId: 101, bearerTypes: [0] };
   connection.observe(context, true);
   await settle();
-  const thirdNet = netObservers.at(-1);
-  thirdNet.emit('netAvailable', { netId: 101 });
   const switchedRoute = connection.routeRevision;
   assert.notEqual(switchedRoute, initialRoute, '后台切换到底层新网络后回前台必须失效路由');
+  const thirdNet = netObservers.at(-1);
+  thirdNet.emit('netAvailable', { netId: 101 });
   thirdNet.emit('netCapabilitiesChange', { netHandle: { netId: 101 }, netCap: { bearerTypes: [0] } });
-  assert.equal(connection.routeRevision, switchedRoute, '同一新网络的初始能力回调不重复失效');
   thirdNet.emit('netLost', { netId: 100 });
-  assert.equal(connection.routeRevision, switchedRoute, '旧网络断开回调不干扰当前网络');
+  await settle();
+  assert.equal(connection.routeRevision, switchedRoute, '同一新网络的后续回调与旧网络离线不重复失效');
+  defaultNet = { netId: 0, bearerTypes: [] };
   thirdNet.emit('netLost', { netId: 101 });
-  assert.notEqual(connection.routeRevision, switchedRoute, '当前活动网络断开必须失效路由');
+  await settle();
+  assert.notEqual(connection.routeRevision, switchedRoute, '当前默认网络断开必须失效路由');
 
   // 确认停止后，再次回前台若仍处于已停止且同网络，也不反复失效路由。
   state.active = false;
