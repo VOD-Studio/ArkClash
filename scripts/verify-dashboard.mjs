@@ -432,6 +432,34 @@ try {
   assert.equal(orphanGraph.area, '', '孤立单点不应生成零宽面积毛刺');
   jitter.stop('card');
 
+  // 短暂离开首页（如切后台或切页签 8 秒）恢复订阅时无缝续接曲线，不插入中间断档；久离超过 1 分钟重新起画。
+  const resumedTraffic = new Traffic();
+  resumedTraffic.start('/unused', 'card');
+  const resumedFirstSocket = sockets.at(-1);
+  for (let index = 0; index < 5; index++) {
+    clock.now += 1000;
+    resumedFirstSocket.emit({ up: 100 + index * 20, down: 200 + index * 30 });
+  }
+  resumedTraffic.stop('card');
+  clock.now += 8000;
+  resumedTraffic.start('/unused', 'card');
+  const resumedSecondSocket = sockets.at(-1);
+  clock.now += 1000;
+  resumedSecondSocket.emit({ up: 220, down: 350 });
+  assert.equal(resumedTraffic.samples.length, 6, '短暂离开恢复订阅应无缝接续采样');
+  assert.ok(resumedTraffic.samples.every((sample) => sample.available), '短暂离开恢复订阅不得插入空白断档');
+  assert.equal((chart.dashboardTrafficGraph(resumedTraffic.samples, false, 290, 56).line.match(/M/g) ?? []).length, 1,
+    '短暂离开恢复后曲线保持单段连续');
+  resumedTraffic.stop('card');
+  clock.now += 70000;
+  resumedTraffic.start('/unused', 'card');
+  const resumedThirdSocket = sockets.at(-1);
+  clock.now += 1000;
+  resumedThirdSocket.emit({ up: 50, down: 90 });
+  assert.equal(resumedTraffic.samples.length, 1, '离开超过 1 分钟后应清空旧曲线重新起画');
+  assert.equal(resumedTraffic.samples[0].available, true);
+  resumedTraffic.stop('card');
+
   const duplicate = appendTrafficSample([{ timestamp: 1000, up: 2, down: 3, available: true }],
     { timestamp: 1900, up: 8, down: 9, available: true });
   assert.equal(duplicate.length, 1); assert.equal(duplicate[0].up, 8);

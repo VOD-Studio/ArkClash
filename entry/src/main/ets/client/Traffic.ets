@@ -3,6 +3,7 @@ import { ControllerSocket } from './ControllerSocket';
 export const HISTORY_SIZE = 30;
 const SAMPLE_MS = 1000;
 const STALE_MS = 3500;
+const RESUME_CONTINUOUS_MS = 60000;
 
 interface TrafficMessage {
   up: number;
@@ -44,6 +45,7 @@ export class Traffic {
   private consumers: Set<string> = new Set<string>();
   private receivedAt: number = 0;
   private startedAt: number = 0;
+  private pausedFromStop: boolean = false;
   private renderTimer: number = -1;
   private generation: number = 0;
   private socket?: ControllerSocket;
@@ -75,6 +77,7 @@ export class Traffic {
       return;
     }
     this.generation++;
+    this.pausedFromStop = this.samples.length > 0;
     this.socket?.stop();
     this.socket = undefined;
     if (this.renderTimer !== -1) {
@@ -88,6 +91,7 @@ export class Traffic {
     this.stop();
     this.receivedAt = 0;
     this.startedAt = 0;
+    this.pausedFromStop = false;
     this.sampledAt = 0;
     this.up = 0;
     this.down = 0;
@@ -102,17 +106,20 @@ export class Traffic {
     return this.consumers.size;
   }
 
-  // 按相对间隔单调推进每秒桶位，避免跨整秒边界的几十毫秒抖动被误判为断流空洞。
-  private sampleTimestamp(now: number): number {
+  // 按相对间隔单调推进每秒桶位；短暂切页或退后台恢复续接曲线，不插入中间空白断档。
+  private sampleTimestamp(now: number, resumed: boolean): number {
     if (this.samples.length === 0 || this.receivedAt === 0) {
       return now;
     }
     const lastBucket = this.samples[this.samples.length - 1].timestamp;
+    if (resumed) {
+      return lastBucket + SAMPLE_MS;
+    }
     const elapsed = now - this.receivedAt;
     if (elapsed < 500) {
       return lastBucket;
     }
-    if (elapsed < 2500) {
+    if (elapsed < STALE_MS) {
       return lastBucket + SAMPLE_MS;
     }
     return lastBucket + Math.max(2, Math.round(elapsed / SAMPLE_MS)) * SAMPLE_MS;
@@ -128,7 +135,12 @@ export class Traffic {
         throw new Error('invalid traffic sample');
       }
       const now = Date.now();
-      const timestamp = this.sampleTimestamp(now);
+      const resumed = this.pausedFromStop;
+      this.pausedFromStop = false;
+      if (resumed && this.receivedAt > 0 && now - this.receivedAt >= RESUME_CONTINUOUS_MS) {
+        this.samples = [];
+      }
+      const timestamp = this.sampleTimestamp(now, resumed);
       this.receivedAt = now;
       this.up = message.up;
       this.down = message.down;
