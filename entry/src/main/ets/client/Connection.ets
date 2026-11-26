@@ -46,6 +46,7 @@ export class Connection {
   @Trace coreReady: boolean = false;
   @Trace coreStarting: boolean = false;
   private automaticFailed: boolean = false;
+  private resumeVpn: boolean = false;
   private readyPending?: Promise<void>;
   @Trace modePending: boolean = false;
   @Trace modeError: string = '';
@@ -152,6 +153,26 @@ export class Connection {
         this.coreStarting = false;
       }
     }
+    this.resumeInterrupted(context);
+  }
+
+  // 系统只在后台回收 VPN 进程，不会自己重新拉起；回到前台、内核就绪后恢复一次，失败后等用户手动连接。
+  private resumeInterrupted(context: common.UIAbilityContext): void {
+    if (!this.resumeVpn) {
+      return;
+    }
+    this.resumeVpn = false;
+    if (!this.foreground || this.busy || this.connected || !this.coreReady || this.hostState !== 'running') {
+      return;
+    }
+    hilog.info(0x0A11, 'ArkClashBench', 'vpn_resume_interrupted');
+    const generation = this.generation + 1;
+    this.connect(context).catch((): void => {
+      // 常见原因是系统里已有其他 VPN（2203002）。不提示错误，界面保持断开。
+      if (generation === this.generation && !this.busy) {
+        this.error = '';
+      }
+    });
   }
 
   private async prepareCore(context: common.UIAbilityContext, generation: number, automatic: boolean): Promise<void> {
@@ -162,10 +183,11 @@ export class Connection {
       if (generation !== this.coreGeneration || (automatic && !this.foreground)) {
         return;
       }
-      const status = await startCore(context, this.userMode(), this.allowLan,
+      const start = await startCore(context, this.userMode(), this.allowLan,
         (): boolean => generation === this.coreGeneration && (!automatic || this.foreground));
       if (generation === this.coreGeneration) {
-        this.applyStatus(status);
+        this.applyStatus(start.status);
+        this.resumeVpn = start.resumeVpn;
       }
     } catch (error) {
       if (generation === this.coreGeneration) {
