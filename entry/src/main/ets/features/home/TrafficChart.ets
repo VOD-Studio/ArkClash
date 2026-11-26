@@ -81,35 +81,44 @@ export function dashboardTrafficGraph(samples: TrafficSample[], upload: boolean,
     start = end + 1;
   }
   const oldest = samples[samples.length - 1].timestamp - (HISTORY_SIZE - 1) * 1000;
-  const yScale = Math.max(0, chartHeight - 2) / maximum;
+  // 为 0 B/s 基线预留底部内边距，避免折线紧贴容器底边被圆角裁切后显得断断续续。
+  const baselinePad = Math.min(6, Math.max(2, chartHeight * 0.04));
+  const baseline = Math.max(0, chartHeight - baselinePad);
+  const yScale = Math.max(0, baseline - 2) / maximum;
   let line = '';
   let area = '';
+  let segmentArea = '';
+  let segmentPoints = 0;
   let drawing = false;
   let previousX = 0;
   let previousY = 0;
   for (let i = 0; i < samples.length; i++) {
     if (!samples[i].available) {
-      if (drawing) { area += `L${previousX.toFixed(3)} ${chartHeight} Z `; }
+      if (drawing && segmentPoints >= 2) { area += `${segmentArea}L${previousX.toFixed(3)} ${chartHeight} Z `; }
       drawing = false;
+      segmentArea = '';
+      segmentPoints = 0;
       continue;
     }
     const x = Math.max(0, samples[i].timestamp - oldest) / ((HISTORY_SIZE - 1) * 1000) * chartWidth;
-    const y = chartHeight - heights[i] * yScale;
+    const y = baseline - heights[i] * yScale;
     if (!drawing) {
       line += `M${x.toFixed(3)} ${y.toFixed(3)} `;
-      area += `M${x.toFixed(3)} ${chartHeight} L${x.toFixed(3)} ${y.toFixed(3)} `;
+      segmentArea = `M${x.toFixed(3)} ${chartHeight} L${x.toFixed(3)} ${y.toFixed(3)} `;
+      segmentPoints = 1;
     } else {
       const third = (x - previousX) / 3;
       const curve = `C${(previousX + third).toFixed(3)} ${(previousY - slopes[i - 1] * yScale / 3).toFixed(3)} ` +
         `${(x - third).toFixed(3)} ${(y + slopes[i] * yScale / 3).toFixed(3)} ${x.toFixed(3)} ${y.toFixed(3)} `;
       line += curve;
-      area += curve;
+      segmentArea += curve;
+      segmentPoints++;
     }
     drawing = true;
     previousX = x;
     previousY = y;
   }
-  if (drawing) { area += `L${previousX.toFixed(3)} ${chartHeight} Z`; }
+  if (drawing && segmentPoints >= 2) { area += `${segmentArea}L${previousX.toFixed(3)} ${chartHeight} Z`; }
   return { line: line, area: area };
 }
 

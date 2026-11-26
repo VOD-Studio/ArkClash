@@ -42,10 +42,8 @@ export class Traffic {
   @Trace sampledAt: number = 0;
   @Trace error: boolean = false;
   private consumers: Set<string> = new Set<string>();
-  private pending?: TrafficMessage;
   private receivedAt: number = 0;
   private startedAt: number = 0;
-  private immediatePublish: boolean = false;
   private renderTimer: number = -1;
   private generation: number = 0;
   private socket?: ControllerSocket;
@@ -60,7 +58,6 @@ export class Traffic {
       this.stale = true;
     }
     this.startedAt = Date.now();
-    this.immediatePublish = true;
     const generation = ++this.generation;
     this.socket = new ControllerSocket('/traffic', (text: string): void => {
       if (generation === this.generation) {
@@ -68,7 +65,8 @@ export class Traffic {
       }
     });
     this.socket.start(filesDir);
-    this.renderTimer = setInterval((): void => this.publish(), SAMPLE_MS);
+    // 定时器只做超时巡检，不再和内核 1 秒推送竞争采样，避免相位漂移丢点产生假断档。
+    this.renderTimer = setInterval((): void => this.checkStale(), SAMPLE_MS);
   }
 
   stop(consumer: string = 'shell'): void {
@@ -83,17 +81,13 @@ export class Traffic {
       clearInterval(this.renderTimer);
       this.renderTimer = -1;
     }
-    this.pending = undefined;
-    this.immediatePublish = false;
   }
 
   reset(): void {
     this.consumers.clear();
     this.stop();
-    this.pending = undefined;
     this.receivedAt = 0;
     this.startedAt = 0;
-    this.immediatePublish = false;
     this.sampledAt = 0;
     this.up = 0;
     this.down = 0;
@@ -108,6 +102,22 @@ export class Traffic {
     return this.consumers.size;
   }
 
+  // 按相对间隔单调推进每秒桶位，避免跨整秒边界的几十毫秒抖动被误判为断流空洞。
+  private sampleTimestamp(now: number): number {
+    if (this.samples.length === 0 || this.receivedAt === 0) {
+      return now;
+    }
+    const lastBucket = this.samples[this.samples.length - 1].timestamp;
+    const elapsed = now - this.receivedAt;
+    if (elapsed < 500) {
+      return lastBucket;
+    }
+    if (elapsed < 2500) {
+      return lastBucket + SAMPLE_MS;
+    }
+    return lastBucket + Math.max(2, Math.round(elapsed / SAMPLE_MS)) * SAMPLE_MS;
+  }
+
   private receive(text: string): void {
     if (this.consumers.size === 0) {
       return;
@@ -117,45 +127,35 @@ export class Traffic {
       if (!Number.isFinite(message.up) || !Number.isFinite(message.down) || message.up < 0 || message.down < 0) {
         throw new Error('invalid traffic sample');
       }
-      this.pending = message;
-      this.receivedAt = Date.now();
-      if (this.immediatePublish || this.stale) {
-        this.publish();
+      const now = Date.now();
+      const timestamp = this.sampleTimestamp(now);
+      this.receivedAt = now;
+      this.up = message.up;
+      this.down = message.down;
+      // 累计必须来自核心；缺少累计字段时不在界面进程积分，避免隐藏期间凭空补流量。
+      if (message.upTotal !== undefined && Number.isFinite(message.upTotal) && message.upTotal >= 0) {
+        this.upTotal = message.upTotal;
       }
+      if (message.downTotal !== undefined && Number.isFinite(message.downTotal) && message.downTotal >= 0) {
+        this.downTotal = message.downTotal;
+      }
+      this.samples = appendTrafficSample(this.samples, {
+        timestamp: timestamp, up: message.up, down: message.down, available: true
+      });
+      this.sampledAt = now;
+      this.stale = false;
+      this.error = false;
     } catch (e) {
-      this.pending = undefined;
       this.error = true;
       this.stale = true;
     }
   }
 
-  private publish(): void {
-    const timestamp = Date.now();
-    const message = this.pending;
-    this.pending = undefined;
-    if (message === undefined) {
-      const anchor = Math.max(this.receivedAt, this.startedAt);
-      if (anchor > 0 && timestamp - anchor > STALE_MS) {
-        this.stale = true;
-      }
-      return;
+  private checkStale(): void {
+    const anchor = Math.max(this.receivedAt, this.startedAt);
+    if (anchor > 0 && Date.now() - anchor > STALE_MS) {
+      this.stale = true;
     }
-    this.immediatePublish = false;
-    this.up = message.up;
-    this.down = message.down;
-    // 累计必须来自核心；缺少累计字段时不在界面进程积分，避免隐藏期间凭空补流量。
-    if (message.upTotal !== undefined && Number.isFinite(message.upTotal) && message.upTotal >= 0) {
-      this.upTotal = message.upTotal;
-    }
-    if (message.downTotal !== undefined && Number.isFinite(message.downTotal) && message.downTotal >= 0) {
-      this.downTotal = message.downTotal;
-    }
-    this.samples = appendTrafficSample(this.samples, {
-      timestamp: this.receivedAt, up: message.up, down: message.down, available: true
-    });
-    this.sampledAt = this.receivedAt;
-    this.stale = false;
-    this.error = false;
   }
 }
 

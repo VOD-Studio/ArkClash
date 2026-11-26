@@ -26,7 +26,7 @@ export struct DashboardSpeedTile {
   redraw(): void {
     const density = this.getUIContext().vp2px(1);
     const graph = dashboardTrafficGraph(this.samples, this.upload, (this.tileWidth + 4) * density,
-      Math.max(0, this.tileHeight - 34) * density);
+      Math.max(0, this.tileHeight - 36) * density);
     this.linePath = graph.line;
     this.areaPath = graph.area;
   }
@@ -34,11 +34,11 @@ export struct DashboardSpeedTile {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Stack({ alignContent: Alignment.TopStart }) {
-        Path({ width: this.tileWidth + 4, height: Math.max(0, this.tileHeight - 34) }).commands(this.areaPath)
+        Path({ width: this.tileWidth + 4, height: Math.max(0, this.tileHeight - 36) }).commands(this.areaPath)
           .fill(this.upload ? this.appStyle.palette.dashSeriesSecondary : this.appStyle.palette.brand)
           .fillOpacity(0.14)
           .strokeWidth(0)
-        Path({ width: this.tileWidth + 4, height: Math.max(0, this.tileHeight - 34) }).commands(this.linePath)
+        Path({ width: this.tileWidth + 4, height: Math.max(0, this.tileHeight - 36) }).commands(this.linePath)
           .fillOpacity(0)
           .stroke(this.upload ? this.appStyle.palette.dashSeriesSecondary : this.appStyle.palette.brand)
           .strokeWidth(1.5)
@@ -46,7 +46,7 @@ export struct DashboardSpeedTile {
           .strokeLineJoin(LineJoinStyle.Round)
       }
       .width(this.tileWidth + 4)
-      .height(Math.max(0, this.tileHeight - 34))
+      .height(Math.max(0, this.tileHeight - 36))
       .position({ x: -2, y: 36 })
       .hitTestBehavior(HitTestMode.None)
       .accessibilityLevel('no')

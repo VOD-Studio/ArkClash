@@ -408,6 +408,30 @@ try {
   assert.equal(traffic.stale, true, '重连后长时间无推送仍应标记过期');
   traffic.stop('card');
   traffic.reset(); assert.equal(traffic.upTotal, 0); assert.equal(traffic.samples.length, 0); assert.equal(traffic.stale, true);
+
+  // 跨整秒边界抖动（如 10.995s -> 12.015s -> 12.990s -> 14.020s）不得被误判为断档或覆写丢点。
+  const jitter = new Traffic();
+  jitter.start('/unused', 'card');
+  const jitterSocket = sockets.at(-1);
+  for (const [at, up, down] of [[200995, 100, 200], [202015, 0, 0], [202990, 0, 0], [204020, 300, 400]]) {
+    clock.now = at;
+    jitterSocket.emit({ up, down });
+  }
+  assert.equal(jitter.samples.length, 4, '跨整秒抖动应保留全部 4 个连续采样点');
+  assert.ok(jitter.samples.every((sample) => sample.available), '正常每秒推送抖动不得插入假断档');
+  const jitterGraph = chart.dashboardTrafficGraph(jitter.samples, true, 290, 56);
+  assert.equal((jitterGraph.line.match(/M/g) ?? []).length, 1, '连续采样只应绘制一条完整曲线');
+  assert.ok(jitterGraph.area.length > 0, '连续曲线应绘制闭合面积填充');
+  const firstY = Number(/M[0-9.-]+ ([0-9.-]+)/.exec(jitterGraph.line)?.[1] ?? 56);
+  assert.ok(firstY < 56, '0 B/s 基线应保留在底边裁剪线内');
+  const orphanGraph = chart.dashboardTrafficGraph([
+    { timestamp: 1000, up: 10, down: 10, available: true },
+    { timestamp: 2000, up: 0, down: 0, available: false },
+    { timestamp: 3000, up: 20, down: 20, available: true }
+  ], true, 290, 56);
+  assert.equal(orphanGraph.area, '', '孤立单点不应生成零宽面积毛刺');
+  jitter.stop('card');
+
   const duplicate = appendTrafficSample([{ timestamp: 1000, up: 2, down: 3, available: true }],
     { timestamp: 1900, up: 8, down: 9, available: true });
   assert.equal(duplicate.length, 1); assert.equal(duplicate[0].up, 8);
