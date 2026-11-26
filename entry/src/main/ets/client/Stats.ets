@@ -36,7 +36,6 @@ export class ConnectionStats {
     this.consumers.delete(consumer);
     if (this.consumers.size === 0) {
       this.socket.stop();
-      this.received = false;
     }
   }
 
@@ -99,8 +98,14 @@ export class MemoryStats {
     this.consumers.delete(consumer);
     if (this.consumers.size === 0) {
       this.socket.stop();
-      this.received = false;
     }
+  }
+
+  reset(): void {
+    this.coreBytes = 0;
+    this.sampledAt = 0;
+    this.received = false;
+    this.failed = false;
   }
 
   private update(text: string): void {
@@ -163,3 +168,4 @@ export class UiMemoryStats {
 
 export const connectionStats: ConnectionStats = new ConnectionStats();
 export const memoryStats: MemoryStats = new MemoryStats();
+export const uiMemoryStats: UiMemoryStats = new UiMemoryStats();

@@ -395,8 +395,19 @@ try {
   const chart = load(path.join(homeSource, 'TrafficChart.ets'));
   assert.ok((chart.dashboardTrafficPath(traffic.samples, true, 290, 56).match(/M/g) ?? []).length >= 2);
   traffic.stop('card'); assert.equal(socket.active, false); assert.equal(timers.size, 0);
+  assert.equal(traffic.stale, false, '退订但未断开连接时保留最后速率，避免回前台闪成过期');
   socket.emit({ up: 999, down: 999 }); assert.equal(traffic.up, 7);
-  traffic.reset(); assert.equal(traffic.upTotal, 0); assert.equal(traffic.samples.length, 0);
+  traffic.start('/unused', 'card');
+  assert.equal(traffic.stale, false, '回前台重新订阅时保留已有速率');
+  const resumedSocket = sockets.at(-1);
+  clock.now += 200;
+  resumedSocket.emit({ up: 42, down: 84, upTotal: 420, downTotal: 840 });
+  assert.equal(traffic.up, 42, '重连后的首条速率推送立即发布，不等待 1 秒定时器');
+  assert.equal(traffic.down, 84);
+  clock.now += 5000; for (const callback of timers.values()) { callback(); }
+  assert.equal(traffic.stale, true, '重连后长时间无推送仍应标记过期');
+  traffic.stop('card');
+  traffic.reset(); assert.equal(traffic.upTotal, 0); assert.equal(traffic.samples.length, 0); assert.equal(traffic.stale, true);
   const duplicate = appendTrafficSample([{ timestamp: 1000, up: 2, down: 3, available: true }],
     { timestamp: 1900, up: 8, down: 9, available: true });
   assert.equal(duplicate.length, 1); assert.equal(duplicate[0].up, 8);
@@ -551,6 +562,20 @@ try {
   assert.equal(requests.at(-1), rejectedBatch[1]);
   automatic.observe('/unused', 'auto-d', true, false, ['google']);
 
+  const suspendedServices = new DashboardServiceState();
+  suspendedServices.observe('/unused', 'suspend-a', true, true, ['google']);
+  await flush(); respondProbe(requests.at(-1), {}, 204); await flush();
+  assert.equal(suspendedServices.results.google.httpCode, 204);
+  suspendedServices.suspend();
+  suspendedServices.observe('/unused', 'suspend-a', true, true, ['google', 'github']);
+  await flush();
+  assert.equal(suspendedServices.results.google.httpCode, 204, '挂起再挂载保留同路由结果');
+  const suspendedGithub = requests.at(-1);
+  assertCoreRequest(suspendedGithub, 'https://github.com/', 'GET', 10000);
+  respondProbe(suspendedGithub, {}, 200); await flush();
+  assert.equal(suspendedServices.results.github.httpCode, 200, '挂起不锁死自动检测');
+  suspendedServices.suspend();
+
   const exits = load(path.join(ets, 'client/ExitIp.ets'));
   assert.equal(exits.validExitAddress('2001:db8::1'), true); assert.equal(exits.validExitAddress(':::'), false);
   assert.equal(exits.validExitAddress('999.1.2.3'), false);
@@ -667,7 +692,15 @@ try {
   coordinatedServices.observe('/unused', 'after-switch', true, false, coordinatedIds);
   coordinatedExit.observe('/unused', 'after-switch', true, false);
 
-  const { UiMemoryStats } = load(path.join(ets, 'client/Stats.ets'));
+  const { MemoryStats, UiMemoryStats } = load(path.join(ets, 'client/Stats.ets'));
+  const coreMemory = new MemoryStats();
+  coreMemory.start('/unused', 'dashboard-memory');
+  sockets.at(-1).emit({ inuse: 64 * 1024 * 1024 });
+  assert.equal(coreMemory.received, true); assert.equal(coreMemory.coreBytes, 64 * 1024 * 1024);
+  coreMemory.stop('dashboard-memory');
+  assert.equal(coreMemory.received, true, '隐藏退订不清空核心内存缓存');
+  coreMemory.reset();
+  assert.equal(coreMemory.received, false); assert.equal(coreMemory.coreBytes, 0);
   const memory = new UiMemoryStats(); await memory.refresh();
   assert.equal(memory.pssSwapBytes, 11 * 1024); assert.equal(memory.rssBytes, 17 * 1024);
   console.log('dashboard host: defaults, lossless migration, atomic failure, conflict recovery, traffic gaps, cancellation and route isolation passed');

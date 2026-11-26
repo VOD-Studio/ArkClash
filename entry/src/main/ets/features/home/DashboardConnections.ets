@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { connection, Connection } from '../../client/Connection';
-import { DiagnosticFeedTarget, DiagnosticStats } from '../../client/Diagnostics';
+import { DiagnosticFeedTarget, diagnosticStats, DiagnosticStats } from '../../client/Diagnostics';
 import { uiResourceText } from '../../components/ResourceText';
 import { DASHBOARD_CARD } from '../../components/Theme';
 import { DashboardCardHeader } from './DashboardCardHeader';
@@ -14,7 +14,7 @@ export struct DashboardConnections {
   @Param interactive: boolean = true;
   @Event onOpen: (target: DiagnosticFeedTarget) => void = (_target: DiagnosticFeedTarget): void => {};
   @Local private conn: Connection = connection;
-  @Local private stats: DiagnosticStats = new DiagnosticStats();
+  @Local private stats: DiagnosticStats = diagnosticStats;
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
 
   aboutToAppear(): void {

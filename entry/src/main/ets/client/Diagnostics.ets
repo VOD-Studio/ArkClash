@@ -307,6 +307,8 @@ export class DiagnosticStats {
   }
 }
 
+export const diagnosticStats: DiagnosticStats = new DiagnosticStats();
+
 export function createConnectionsStream(runtime: DiagnosticRuntime,
   onFrame: (frame: DiagnosticConnectionsFrame) => void,
   onState: (state: ControllerSocketState) => void): ControllerSocket {

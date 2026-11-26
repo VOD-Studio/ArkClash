@@ -275,7 +275,8 @@ export struct DashboardStatus {
                     .maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                 }
-                DashboardIpQuality({ quality: this.probe.quality, busy: this.probe.busy || this.conn.busy })
+                DashboardIpQuality({ quality: this.probe.quality,
+                  busy: this.probe.quality === undefined && (this.probe.busy || this.probe.qualityBusy || this.conn.busy) })
               }
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)

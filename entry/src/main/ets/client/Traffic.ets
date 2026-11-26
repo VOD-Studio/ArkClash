@@ -44,6 +44,8 @@ export class Traffic {
   private consumers: Set<string> = new Set<string>();
   private pending?: TrafficMessage;
   private receivedAt: number = 0;
+  private startedAt: number = 0;
+  private immediatePublish: boolean = false;
   private renderTimer: number = -1;
   private generation: number = 0;
   private socket?: ControllerSocket;
@@ -53,7 +55,12 @@ export class Traffic {
     if (this.renderTimer !== -1) {
       return;
     }
-    this.stale = true;
+    // 已有历史采样时保留上次速率，避免回前台重连瞬间闪成“—”；超时未收到推送再转过期。
+    if (this.sampledAt === 0 || this.error) {
+      this.stale = true;
+    }
+    this.startedAt = Date.now();
+    this.immediatePublish = true;
     const generation = ++this.generation;
     this.socket = new ControllerSocket('/traffic', (text: string): void => {
       if (generation === this.generation) {
@@ -77,7 +84,7 @@ export class Traffic {
       this.renderTimer = -1;
     }
     this.pending = undefined;
-    this.stale = true;
+    this.immediatePublish = false;
   }
 
   reset(): void {
@@ -85,6 +92,8 @@ export class Traffic {
     this.stop();
     this.pending = undefined;
     this.receivedAt = 0;
+    this.startedAt = 0;
+    this.immediatePublish = false;
     this.sampledAt = 0;
     this.up = 0;
     this.down = 0;
@@ -110,6 +119,9 @@ export class Traffic {
       }
       this.pending = message;
       this.receivedAt = Date.now();
+      if (this.immediatePublish || this.stale) {
+        this.publish();
+      }
     } catch (e) {
       this.pending = undefined;
       this.error = true;
@@ -122,11 +134,13 @@ export class Traffic {
     const message = this.pending;
     this.pending = undefined;
     if (message === undefined) {
-      if (this.receivedAt > 0 && timestamp - this.receivedAt > STALE_MS) {
+      const anchor = Math.max(this.receivedAt, this.startedAt);
+      if (anchor > 0 && timestamp - anchor > STALE_MS) {
         this.stale = true;
       }
       return;
     }
+    this.immediatePublish = false;
     this.up = message.up;
     this.down = message.down;
     // 累计必须来自核心；缺少累计字段时不在界面进程积分，避免隐藏期间凭空补流量。

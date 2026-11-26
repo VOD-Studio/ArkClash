@@ -7,7 +7,7 @@ import { COMPACT_TITLE_LINE_HEIGHT, COMPACT_TITLE_SIZE, DASHBOARD_CARD, HEADER_A
 import { uiResourceText } from '../../components/ResourceText';
 import { DashboardCardHeader } from './DashboardCardHeader';
 import { DashboardServiceRow, serviceConnectivityLabel } from './DashboardServiceRow';
-import { DashboardServiceState } from './DashboardServiceState';
+import { dashboardServiceState, DashboardServiceState } from './DashboardServiceState';
 import { dashboardSettings, DashboardSettings } from './DashboardSettings';
 import { serviceInfo, ServiceSlot } from './Services';
 
@@ -20,7 +20,7 @@ export struct DashboardServices {
   @Param routeRevision: string = '';
   @Local conn: Connection = connection;
   @Local settings: DashboardSettings = dashboardSettings;
-  @Local state: DashboardServiceState = new DashboardServiceState();
+  @Local state: DashboardServiceState = dashboardServiceState;
   @Local details: boolean = false;
   @Local managing: boolean = false;
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -32,7 +32,7 @@ export struct DashboardServices {
 
   aboutToDisappear(): void {
     this.manualGeneration++;
-    this.state.cancel();
+    this.state.suspend();
   }
 
   @Monitor('visible', 'interactive', 'details', 'managing', 'settings.ready', 'settings.revision', 'profileId',

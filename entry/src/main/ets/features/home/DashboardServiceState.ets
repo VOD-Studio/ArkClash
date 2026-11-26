@@ -58,6 +58,11 @@ export class DashboardServiceState {
     this.abort();
   }
 
+  suspend(): void {
+    this.visible = false;
+    this.abort();
+  }
+
   private abort(): void {
     this.generation++;
     this.task?.cancel();
@@ -138,3 +143,5 @@ export class DashboardServiceState {
     }
   }
 }
+
+export const dashboardServiceState: DashboardServiceState = new DashboardServiceState();

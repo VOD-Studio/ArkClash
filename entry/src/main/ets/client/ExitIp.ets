@@ -196,7 +196,9 @@ export class ExitIpProbe {
 
   private async refreshQuality(generation: number, result: ExitIp, force: boolean): Promise<void> {
     const cached = this.qualityCache.get(result.ip);
-    this.quality = undefined;
+    if (force || this.quality?.ip !== result.ip) {
+      this.quality = undefined;
+    }
     this.qualityFailed = false;
     if (!force && cached !== undefined && Date.now() - cached.checkedAt < QUALITY_MAX_AGE_MS) {
       this.quality = cached;

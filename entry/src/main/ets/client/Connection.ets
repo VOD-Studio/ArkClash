@@ -88,6 +88,8 @@ export class Connection {
   @Trace configRevision: number = 0;
   private revision: number = -1;
   private routeEpoch: number = 0;
+  private lastNetId: number = -1;
+  private lastNetSignature: string = '';
   private network?: networkConnection.NetConnection;
   private networkRegistered: boolean = false;
   private events: ControllerSocket = new ControllerSocket('/arkclash/events', (text: string): void => {
@@ -140,7 +142,7 @@ export class Connection {
     this.foreground = visible;
     this.syncEvents();
     if (visible) {
-      this.invalidateRoute();
+      // 回前台不无条件失效路由；状态或底层网络真有变化时由 recheck 和 watchNetwork 刷新。
       this.watchNetwork();
       this.recheck(context).catch((): void => {});
       backgroundKeep.foreground();
@@ -523,6 +525,8 @@ export class Connection {
   }
 
   private applyStopped(): void {
+    const wasStopped = this.hostState === 'stopped' && !this.coreReady && this.state === ConnectionState.Disconnected &&
+      this.forward === 'stopped' && !this.listenersOpen && !this.tunAttached && !this.vpnCreated;
     this.hostState = 'stopped';
     this.coreReady = false;
     this.state = ConnectionState.Disconnected;
@@ -534,8 +538,10 @@ export class Connection {
     this.tunAttached = false;
     this.vpnCreated = false;
     this.error = '';
-    traffic.reset();
-    this.invalidateRoute();
+    if (!wasStopped || this.routeRevision === '') {
+      traffic.reset();
+      this.invalidateRoute();
+    }
     this.syncEvents();
     this.syncDiagnosticsCapture();
   }
@@ -676,20 +682,61 @@ export class Connection {
     this.routeRevision = `${this.bootId}/${this.revision}/${this.routeEpoch}`;
   }
 
+  private netSignature(info: networkConnection.NetCapabilityInfo): string {
+    const netId = info.netHandle?.netId ?? 0;
+    const bearers = (info.netCap?.bearerTypes ?? []).slice().sort((a: number, b: number): number => a - b).join(',');
+    return `${netId}:${bearers}`;
+  }
+
   private watchNetwork(): void {
     if (this.network !== undefined) {
       return;
     }
     const observer = networkConnection.createNetConnection();
     this.network = observer;
-    const changed = (): void => {
-      if (this.foreground && this.network === observer) {
+    observer.on('netAvailable', (handle: networkConnection.NetHandle): void => {
+      if (!this.foreground || this.network !== observer) {
+        return;
+      }
+      const netId = handle?.netId ?? 0;
+      if (this.lastNetId === -1) {
+        this.lastNetId = netId;
+        return;
+      }
+      if (netId !== this.lastNetId) {
+        this.lastNetId = netId;
+        this.lastNetSignature = '';
         this.invalidateRoute();
       }
-    };
-    observer.on('netAvailable', changed);
-    observer.on('netLost', changed);
-    observer.on('netCapabilitiesChange', changed);
+    });
+    observer.on('netLost', (handle: networkConnection.NetHandle): void => {
+      if (!this.foreground || this.network !== observer) {
+        return;
+      }
+      const netId = handle?.netId ?? 0;
+      if (this.lastNetId === -1 || netId === this.lastNetId) {
+        this.lastNetId = 0;
+        this.lastNetSignature = '';
+        this.invalidateRoute();
+      }
+    });
+    observer.on('netCapabilitiesChange', (info: networkConnection.NetCapabilityInfo): void => {
+      if (!this.foreground || this.network !== observer) {
+        return;
+      }
+      const netId = info?.netHandle?.netId ?? 0;
+      const signature = this.netSignature(info);
+      if (this.lastNetSignature === '') {
+        this.lastNetId = netId;
+        this.lastNetSignature = signature;
+        return;
+      }
+      if (signature !== this.lastNetSignature) {
+        this.lastNetId = netId;
+        this.lastNetSignature = signature;
+        this.invalidateRoute();
+      }
+    });
     observer.register((error: BusinessError): void => {
       if (error) {
         if (this.network === observer) {

@@ -1,7 +1,7 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { common } from '@kit.AbilityKit';
 import { connection, Connection } from '../../client/Connection';
-import { memoryStats, MemoryStats, UiMemoryStats } from '../../client/Stats';
+import { memoryStats, MemoryStats, uiMemoryStats, UiMemoryStats } from '../../client/Stats';
 import { dashboardTraffic, dashboardTrafficValue, DashboardTrafficValue } from './DashboardFormat';
 import { LabeledValue } from '../../components/Labels';
 import { DASHBOARD_CARD, PAGE_GUTTER } from '../../components/Theme';
@@ -14,10 +14,11 @@ export struct DashboardMemory {
   @Param interactive: boolean = true;
   @Local conn: Connection = connection;
   @Local core: MemoryStats = memoryStats;
-  @Local ui: UiMemoryStats = new UiMemoryStats();
+  @Local ui: UiMemoryStats = uiMemoryStats;
   @Local details: boolean = false;
   @Local clock: number = Date.now();
   private timer: number = -1;
+  private resumedAt: number = 0;
   private context: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
 
   aboutToAppear(): void {
@@ -28,18 +29,25 @@ export struct DashboardMemory {
     this.stop();
   }
 
-  @Monitor('visible', 'conn.state', 'conn.coreReady')
+  @Monitor('visible', 'conn.state', 'conn.coreReady', 'conn.hostState')
   sync(): void {
     if (!this.visible) {
       this.details = false;
       this.stop();
       return;
     }
-    this.clock = Date.now();
+    const now = Date.now();
+    if (this.timer === -1) {
+      this.resumedAt = now;
+    }
+    this.clock = now;
     if (this.conn.coreReady) {
       this.core.start(this.context.filesDir, 'dashboard-memory');
     } else {
       this.core.stop('dashboard-memory');
+      if (this.conn.hostState === 'stopped') {
+        this.core.reset();
+      }
     }
     if (this.timer === -1) {
       this.ui.refresh();
@@ -60,8 +68,10 @@ export struct DashboardMemory {
   }
 
   private stale(): boolean {
-    return this.ui.failed || this.core.failed || (this.ui.sampledAt > 0 && this.clock - this.ui.sampledAt > 10000) ||
-      (this.conn.coreReady && this.core.sampledAt > 0 && this.clock - this.core.sampledAt > 5000);
+    const uiAnchor = Math.max(this.ui.sampledAt, this.resumedAt);
+    const coreAnchor = Math.max(this.core.sampledAt, this.resumedAt);
+    return this.ui.failed || this.core.failed || (this.ui.sampledAt > 0 && this.clock - uiAnchor > 10000) ||
+      (this.conn.coreReady && this.core.sampledAt > 0 && this.clock - coreAnchor > 5000);
   }
 
 
