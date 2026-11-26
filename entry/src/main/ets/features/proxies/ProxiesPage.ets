@@ -433,7 +433,7 @@ export struct ProxiesPage {
         .width('100%')
         .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
         .safeAreaPadding({ top: this.pickerMode ? 0 : this.topInset + TAB_HEADER_HEIGHT })
-        .contentStartOffset(12)
+        .contentStartOffset(0)
         .contentEndOffset((this.appStyle.floating ? FLOATING_BAR_INSET : 16))
         .clipContent(ContentClipMode.BOUNDARY)
         .edgeEffect(EdgeEffect.Spring)
