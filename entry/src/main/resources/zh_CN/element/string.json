@@ -3977,6 +3977,14 @@
       "value": "搜索日志"
     },
     {
+      "name": "logs_detail",
+      "value": "日志详情"
+    },
+    {
+      "name": "logs_copy_record",
+      "value": "复制这条日志"
+    },
+    {
       "name": "logs_export",
       "value": "导出日志"
     },

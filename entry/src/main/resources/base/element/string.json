@@ -3997,6 +3997,14 @@
       "value": "Search logs"
     },
     {
+      "name": "logs_detail",
+      "value": "Log details"
+    },
+    {
+      "name": "logs_copy_record",
+      "value": "Copy this log"
+    },
+    {
       "name": "logs_export",
       "value": "Export logs"
     },

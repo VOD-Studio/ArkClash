@@ -1,5 +1,6 @@
 import { ScrollControls } from '../../components/ScrollControls';
 import { common } from '@kit.AbilityKit';
+import { pasteboard } from '@kit.BasicServicesKit';
 import { Connection, connection } from '../../client/Connection';
 import { ControllerSocket, ControllerSocketState } from '../../client/ControllerSocket';
 import { GeneralSettingsState, generalSettingsState } from '../../client/GeneralSettings';
@@ -14,6 +15,7 @@ import { GENERAL_LEVELS } from '../../shared/GeneralSettings';
 import { logLevelLabel } from './LogLabels';
 import { LogHistory, LogListRow } from './LogHistory';
 import { RECORD_LIST_ANIMATION, recordListTransition, RecordListViewport } from './RecordList';
+import { LogRecordDetails, LogRecordItem, logCopyText } from './LogRecordView';
 
 @ComponentV2
 export struct LogsPage {
@@ -31,6 +33,8 @@ export struct LogsPage {
   @Local private pending: number = 0;
   @Local private animatedBatch: number = 0;
   @Local private isExporting: boolean = false;
+  @Local private detailsShown: boolean = false;
+  @Local private selected?: LogListRow;
   @Local private shownCount: number = 0;
   @Local private recordCount: number = 0;
   @Local private gaps: boolean = false;
@@ -44,6 +48,8 @@ export struct LogsPage {
   private readonly history: LogHistory = new LogHistory(LOG_LIMIT);
   private readonly viewport: RecordListViewport = new RecordListViewport();
   private readonly arrivalTransition: TransitionEffect = recordListTransition(-8);
+  private detailOpen: boolean = false;
+  private followingBeforeDetail: boolean = false;
   private readonly rows: KeyedListSource<LogListRow> = new KeyedListSource<LogListRow>();
 
   aboutToAppear(): void {
@@ -101,6 +107,9 @@ export struct LogsPage {
   }
 
   private clear(): void {
+    this.followingBeforeDetail = false;
+    this.selected = undefined;
+    this.detailsShown = false;
     this.history.clear();
     this.evicted = 0;
     this.recordCount = 0;
@@ -148,6 +157,36 @@ export struct LogsPage {
     this.levelFilter = level;
     this.filtering = false;
     this.refreshRows(false, true);
+  }
+
+  private openDetails(row: LogListRow): void {
+    if (!this.shown || !this.foreground || this.filtering || this.detailsShown || this.detailOpen) { return; }
+    this.followingBeforeDetail = !this.paused;
+    if (!this.paused) { this.pauseOrResume(); }
+    this.selected = row;
+    this.detailsShown = true;
+  }
+
+  private closeDetails(): void {
+    this.detailOpen = false;
+    this.selected = undefined;
+    if (this.followingBeforeDetail && this.paused && this.pending === 0 && this.shown && this.foreground) {
+      this.pauseOrResume();
+    }
+    this.followingBeforeDetail = false;
+  }
+
+  private async copySelected(): Promise<void> {
+    const row = this.selected;
+    if (row === undefined || !this.shown || !this.foreground) { return; }
+    let message = $r('app.string.diagnostics_copied');
+    try {
+      await pasteboard.getSystemPasteboard().setData(pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN,
+        logCopyText(row.record)));
+    } catch (_error) { message = $r('app.string.diagnostics_copy_failed'); }
+    if (this.selected === row && this.shown && this.foreground) {
+      this.getUIContext().getPromptAction().showToast({ message: message });
+    }
   }
 
   private async saveFile(): Promise<void> {
@@ -202,6 +241,13 @@ export struct LogsPage {
   }
 
   @Builder
+  DetailSheet() {
+    if (this.selected !== undefined) {
+      LogRecordDetails({ record: this.selected.record, onCopy: (): void => { this.copySelected(); } })
+    }
+  }
+
+  @Builder
   Controls() {
     Row({ space: 8 }) {
       TextInput({ text: this.query, placeholder: $r('app.string.logs_search') })
@@ -249,7 +295,9 @@ export struct LogsPage {
         Stack() {
           List({ scroller: this.viewport.scroller, space: 6 }) {
             LazyForEach(this.rows, (row: LogListRow) => {
-              ListItem() { LogRecordItem({ record: row.record }) }
+              ListItem() {
+                LogRecordItem({ record: row.record, onOpen: (): void => this.openDetails(row) })
+              }
                 .transition(this.animatedBatch === row.batch && !this.reduceMotion ?
                   this.arrivalTransition : TransitionEffect.IDENTITY)
             }, (row: LogListRow): string => row.key)
@@ -282,25 +330,10 @@ export struct LogsPage {
         }.layoutWeight(1).width('100%')
         Column().bindSheet($$this.filtering, this.FilterSheet, { title: { title: $r('app.string.logs_filter') },
           height: SheetSize.MEDIUM, systemMaterial: this.appStyle.sheetMaterial(), showClose: true })
+        Column().bindSheet($$this.detailsShown, this.DetailSheet, { title: { title: $r('app.string.logs_detail') },
+          detents: [SheetSize.MEDIUM, SheetSize.LARGE], systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+          onWillAppear: (): void => { this.detailOpen = true; }, onDisappear: (): void => this.closeDetails() })
       }
     }
-  }
-}
-
-@ReusableV2
-@ComponentV2
-struct LogRecordItem {
-  @Param @Require record: LogRecord;
-  @Local private appStyle: AppearanceState = appAppearance;
-
-  build() {
-    Column({ space: 5 }) {
-      Row({ space: 8 }) {
-        Text(logLevelLabel(this.record.level)).fontSize(13).fontWeight(FontWeight.Medium)
-        Text(new Date(this.record.time).toLocaleTimeString()).fontSize(13).fontColor($r('sys.color.font_secondary'))
-      }
-      Text(this.record.message).fontSize(15).copyOption(CopyOptions.LocalDevice).textSelectable(TextSelectableMode.SELECTABLE_UNFOCUSABLE)
-    }.alignItems(HorizontalAlign.Start).width('100%').constraintSize({ minHeight: 60 }).padding(12)
-      .backgroundColor(this.appStyle.palette.cardBackground).borderRadius(16)
   }
 }
