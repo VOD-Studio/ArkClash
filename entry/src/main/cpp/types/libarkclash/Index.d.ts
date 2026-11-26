@@ -1,6 +1,7 @@
 /** 无 TUN 启动核心；参数见 core/lifecycle.go，失败时 reject。 */
 export const start: (optionsJson: string) => Promise<void>;
 export const stop: () => Promise<void>;
+export const reclaimMemory: () => Promise<boolean>;
 export const attachTun: (fd: number, optionsJson: string, bootId: string, profile: string, configRevision: number) => Promise<void>;
 export const detachTun: () => Promise<void>;
 export const updateVpnState: (intent: string, forward: string, vpnCreated: boolean) => Promise<void>;
