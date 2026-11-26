@@ -55,7 +55,7 @@ if [[ ! -f "$STAMP" ]] || ! cmp -s "$PATCH" "$STAMP"; then
   mv "$TOOLCHAIN.tmp" "$TOOLCHAIN"
 fi
 GO="$TOOLCHAIN/bin/go"
-export GOROOT="$TOOLCHAIN" GOTOOLCHAIN=local
+export GOROOT="$TOOLCHAIN" GOTOOLCHAIN=local PATH="$TOOLCHAIN/bin:$PATH"
 
 cd "$ROOT/core"
 MIHOMO_VERSION="$("$GO" list -m -f '{{.Version}}' github.com/metacubex/mihomo)"
