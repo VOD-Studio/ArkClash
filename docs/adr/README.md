@@ -41,4 +41,5 @@
 | [0034](0034-harmonyos-system-dns.md) | 从鸿蒙默认网络读取系统 DNS | 已采纳，待真机验证 |
 | [0035](0035-tailscale-network-monitor.md) | Tailscale 出站使用鸿蒙默认网络 | 已采纳 |
 | [0036](0036-vpn-memory-pressure.md) | 在 VPN 进程响应系统内存压力 | 已采纳 |
-| [0037](0037-resume-after-vpn-reclaim.md) | VPN 进程被回收后在前台恢复连接 | 已采纳 |
+| [0037](0037-resume-after-vpn-reclaim.md) | VPN 进程被回收后在前台恢复连接 | 已采纳，恢复时机由 0038 提前 |
+| [0038](0038-bind-vpn-host-and-background-keep.md) | 绑定 VPN 扩展与后台保持连接 | 已采纳 |

@@ -25,6 +25,7 @@ flowchart LR
 
 - **UI 进程**只做界面和控制，不加载内核。界面恢复时重新查询运行事实，不能用上次的连接缓存断言 VPN 仍存活。
 - **VPN 进程**是内核的唯一宿主，可先启动无 TUN 的核心。只有连接时才创建系统 VPN 并附加 TUN；普通断开保留核心。系统销毁扩展后不承诺驻留或转发（[ADR-0017](adr/0017-core-ready-without-vpn.md)）；已连接时宿主被回收、没有留下停止回执的，回到前台、内核就绪后恢复一次连接（[ADR-0037](adr/0037-resume-after-vpn-reclaim.md)）。
+- UI 在宿主运行时绑定 VPN 扩展，扩展回收优先级随 UI 降为 UI 加 100；绑定不传数据，断开回调用作宿主退出信号，前台立即恢复连接。用户开启「后台保持连接」时，UI 连接期间持有数据传输长时任务，后台也立即恢复（[ADR-0038](adr/0038-bind-vpn-host-and-background-keep.md)）。
 - 两个进程之间只有两条通道（[ADR-0003](adr/0003-ui-core-via-external-controller.md)）：
   - **内核控制面**：mihomo external-controller 承载运行查询、节点选择、测速、规则探测、流量与事件。ArkClash 路由在 `/arkclash/` 下：Go 处理运行快照、选择事务和热切换，订阅命令经 NAPI 转给 VPN 进程的 ArkTS（[ADR-0009](adr/0009-arkclash-commands-on-controller.md)）。独立进程专用的 `PUT`/`PATCH /configs`、`/restart`、`/upgrade` 保持关闭。
   - **文件通道**：`shared/Runtime.ets` 交接启动设置、错误和停止回执；`shared/profiles/Store.ets` 保存配置列表、内容、摘要及每配置节点选择。跨进程短提交持有存储锁，下载使用独立资源任务锁，不占住提交锁等待网络。
@@ -92,7 +93,7 @@ sequenceDiagram
 | `profiles/proxy-filters.json`（筛选预设） | 应用沙箱 | UI 配置文件锁、原子提交及修订检查 | UI |
 | `profiles/icon-sets.json`（图标集目录及图标地址） | 应用沙箱 | 本地由 UI 提交，连接时的 URL 同步由 VPN 进程下载并提交 | UI、VPN |
 | `geo.version`（内置资源版本） | 应用沙箱 | VPN 安装器全部复制成功后 | VPN 安装器 |
-| 用户设置（出站模式、局域网代理等） | UI 的 preferences | UI | UI |
+| 用户设置（出站模式、局域网代理、后台保持连接等） | UI 的 preferences | UI | UI |
 | 应用更新设置和临时 HAP | UI 的 `app-update` preferences 与缓存 | UI、系统下载服务 | UI |
 | 应用主题（深浅色、色板、导航及字体） | UI 的 `appearance` preferences | UI | UI；不进入 VPN 进程 |
 | 运行时状态（节点选择、连接、流量、正在运行的配置） | 内核内存 | 内核 | UI，经 controller |
