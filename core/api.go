@@ -7,6 +7,7 @@ import (
 	"net"
 
 	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
+	"github.com/VOD-Studio/ArkClash/core/internal/subfetch"
 	"github.com/metacubex/mihomo/hub/route"
 
 	"github.com/metacubex/chi"
@@ -28,13 +29,13 @@ func init() {
 			r.Get("/selections", getSelections)
 			r.Post("/selection", portableMutation(postSelection))
 			r.Get("/delay", getDelay)
-			r.Post("/probe", postProbe)
+			r.Post("/probe", eng.probe.ServeHTTP)
 			r.Post("/backup/dav", postBackupDAV)
 			r.Post("/backup/apply", withPortableMutation(postBackupApply, true))
 			r.Patch("/configs", patchRuntimeOptions)
 			r.Post("/reload", postReload)
 			r.Post("/prefetch", postPrefetch)
-			r.Get("/events", getEvents)
+			r.Get("/events", ctrl.GetEvents)
 			r.Get("/geo", getGeo)
 			r.Post("/geo/settings", postGeoSettings)
 			r.Post("/dns/settings", portableMutation(postDNSOverrides))
@@ -56,9 +57,9 @@ func init() {
 			r.Post("/diagnostics/logs/clear", postDiagnosticLogsClear)
 			r.Post("/diagnostics/connections/close", postDiagnosticConnectionsClose)
 			r.Post("/diagnostics/dns/clear-cache", postDiagnosticDnsClearCache)
-			r.Post("/profiles/{name}", forwardCommand)
-			r.Post("/vpn/connect", forwardCommand)
-			r.Post("/vpn/disconnect", forwardCommand)
+			r.Post("/profiles/{name}", ctrl.ForwardCommand)
+			r.Post("/vpn/connect", ctrl.ForwardCommand)
+			r.Post("/vpn/disconnect", ctrl.ForwardCommand)
 		})
 	})
 }
@@ -143,3 +144,15 @@ func upgradeWebSocket(w http.ResponseWriter, r *http.Request) (net.Conn, *bufio.
 func writeTextFrame(w io.Writer, p []byte) error {
 	return ctrl.WriteTextFrame(w, p)
 }
+
+type (
+	fetchRequest = subfetch.Request
+	fetchResult  = subfetch.Result
+)
+
+func fetch(req fetchRequest) fetchResult { return eng.Fetch(req) }
+func prefetch(path string) (int, error)  { return eng.Prefetch(path) }
+
+func setCommandDispatcher(fn ctrl.CommandDispatcher) { ctrl.SetCommandDispatcher(fn) }
+func replyCommand(id int64, status int, body []byte) { ctrl.ReplyCommand(id, status, body) }
+func emitRaw(data []byte)                            { ctrl.EmitRaw(data) }

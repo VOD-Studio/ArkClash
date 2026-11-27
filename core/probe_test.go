@@ -22,6 +22,8 @@ import (
 	"time"
 	"weak"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
+	"github.com/VOD-Studio/ArkClash/core/internal/probe"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
 	"github.com/metacubex/mihomo/adapter"
@@ -121,8 +123,8 @@ func TestRuleProbeCancellationStopsActualDialBeforeReusingCapacity(t *testing.T)
 	installProbeConfig(t, "mode: rule\nlog-level: silent\nproxies:\n"+probeProxyConfig(t, "Slow", address)+"rules: ['MATCH,Slow']\n")
 	for range 2 {
 		var requests sync.WaitGroup
-		cancels := make([]context.CancelFunc, 0, cap(probeSlots))
-		for range cap(probeSlots) {
+		cancels := make([]context.CancelFunc, 0, cap(eng.probe.Slots()))
+		for range cap(eng.probe.Slots()) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancels = append(cancels, cancel)
 			defer cancel()
@@ -144,11 +146,11 @@ func TestRuleProbeCancellationStopsActualDialBeforeReusingCapacity(t *testing.T)
 		done := make(chan struct{})
 		go func() { requests.Wait(); close(done) }()
 		receiveProbeSignal(t, done, "canceled probes retained slots")
-		for range cap(probeSlots) {
+		for range cap(eng.probe.Slots()) {
 			receiveProbeSignal(t, closed, "canceled actual outbound remained open")
 		}
-		if len(probeSlots) != 0 || active.Load() != 0 {
-			t.Fatalf("slots=%d live handshakes=%d", len(probeSlots), active.Load())
+		if len(eng.probe.Slots()) != 0 || active.Load() != 0 {
+			t.Fatalf("slots=%d live handshakes=%d", len(eng.probe.Slots()), active.Load())
 		}
 	}
 }
@@ -339,8 +341,8 @@ func TestRuleDNSCancellationClosesQueryWithoutBackgroundRetry(t *testing.T) {
 		t.Fatal("canceling rule DNS started another background query")
 	case <-time.After(100 * time.Millisecond):
 	}
-	if count.Load() != 1 || len(probeSlots) != 0 {
-		t.Fatalf("DNS connections=%d probe slots=%d", count.Load(), len(probeSlots))
+	if count.Load() != 1 || len(eng.probe.Slots()) != 0 {
+		t.Fatalf("DNS connections=%d probe slots=%d", count.Load(), len(eng.probe.Slots()))
 	}
 }
 
@@ -442,7 +444,7 @@ func TestAutomaticHealthChangePushesRuntimeAndDiscardsOldProbe(t *testing.T) {
 				close(done)
 			}()
 			receiveProbeSignal(t, a.entered, "old probe did not use the initially selected actual route")
-			events, unsubscribe := subscribeEvents(256)
+			events, unsubscribe := ctrl.SubscribeEvents(256)
 			defer unsubscribe()
 			a.unhealthy.Store(true)
 			expected, err := utils.NewUnsignedRanges[uint16]("204")
@@ -705,7 +707,7 @@ func TestRuleProbeScanJoinsChunksAndStopsAtFirstServiceEvidence(t *testing.T) {
 			releaseOnce.Do(func() { close(release) })
 			receiveProbeSignal(t, done, "scan waited for the unfinished page after finding service evidence")
 			result := decodeProbeReply(t, recorder)
-			if !strings.HasPrefix(result.Body, test.fragment) || len(result.Body) > probeScanChunk+probeScanOverlap {
+			if !strings.HasPrefix(result.Body, test.fragment) || len(result.Body) > probe.ScanChunk+probe.ScanOverlap {
 				t.Fatalf("scan returned invalid evidence window of %d bytes", len(result.Body))
 			}
 			receiveProbeSignal(t, closed, "scan left the rest of the target page downloading")
@@ -722,7 +724,7 @@ func TestProbeScanPreservesRestrictionAfterRegionInSameWindow(t *testing.T) {
 		{`{"webapp.app-context":{"region":"US"}} Access Denied`,
 			`"webapp\.app-context"\s*:\s*\{[^{}]*?"region"\s*:\s*"[^"]*"|Access Denied`, "Access Denied"},
 	} {
-		body, err := scanProbeBody(strings.NewReader(sample.body), regexp.MustCompile(sample.pattern))
+		body, err := probe.ReadBody(strings.NewReader(sample.body), "scan", regexp.MustCompile(sample.pattern))
 		if err != nil || !strings.Contains(body, sample.restriction) {
 			t.Fatalf("restriction was discarded after region evidence: %q, %v", body, err)
 		}
@@ -898,8 +900,8 @@ func TestRuleProbeRejectsUnsafeOrUnboundedProtocolInputsBeforeDial(t *testing.T)
 	}
 	recorder := httptest.NewRecorder()
 	postProbe(recorder, httptest.NewRequest(http.MethodGet, "/arkclash/probe?url="+url.QueryEscape(server.URL), nil))
-	if recorder.Code != http.StatusMethodNotAllowed || calls.Load() != 0 || len(probeSlots) != 0 {
-		t.Fatalf("legacy GET or invalid request dialed the target: status=%d calls=%d slots=%d", recorder.Code, calls.Load(), len(probeSlots))
+	if recorder.Code != http.StatusMethodNotAllowed || calls.Load() != 0 || len(eng.probe.Slots()) != 0 {
+		t.Fatalf("legacy GET or invalid request dialed the target: status=%d calls=%d slots=%d", recorder.Code, calls.Load(), len(eng.probe.Slots()))
 	}
 }
 
@@ -940,7 +942,7 @@ func TestRuleProbeDeadlineAndBodyLimitRemainConsumerErrors(t *testing.T) {
 	}
 	installProbeConfig(t, "mode: direct\nlog-level: silent\nrules: ['MATCH,DIRECT']\n")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, strings.Repeat("x", probeJSONLimit+1))
+		_, _ = io.WriteString(w, strings.Repeat("x", probe.JSONLimit+1))
 	}))
 	defer server.Close()
 	result = httptest.NewRecorder()
@@ -1261,7 +1263,7 @@ func TestProbeCancellationKeepsConcurrentOrdinaryDoHAndDoQAlive(t *testing.T) {
 				}
 				cancel()
 				receiveProbeSignal(t, probeDone, "probe canceled but retained actual DNS work/capacity")
-				if len(probeSlots) != 0 {
+				if len(eng.probe.Slots()) != 0 {
 					t.Fatal("canceled DNS retained its probe slot")
 				}
 				select {

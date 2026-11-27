@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/outboundgroup"
 	"github.com/metacubex/mihomo/adapter/provider"
@@ -139,7 +140,7 @@ func (e *coreEngine) publishRuntimeLocked() {
 		DelayTimeout:    e.current.General.DelayTimeout,
 	}
 	e.view.Store(view)
-	emit(struct {
+	ctrl.Emit(struct {
 		Type   string          `json:"type"`
 		Status *statusResponse `json:"status"`
 	}{Type: "runtime", Status: &view.Status})

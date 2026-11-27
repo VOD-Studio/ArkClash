@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/VOD-Studio/ArkClash/core/internal/backup"
+	"github.com/VOD-Studio/ArkClash/core/internal/ruletunnel"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
 	"github.com/metacubex/mihomo/log"
@@ -90,11 +91,11 @@ func postBackupDAV(w http.ResponseWriter, r *http.Request) {
 	status := &view.Status
 	file, err := backup.WorkspaceArchive(home, req.Work)
 	if err == nil {
-		ctx, stop := ruleRequestContext(r.Context(), nil)
+		ctx, stop := ruletunnel.RequestContext(r.Context(), nil)
 		defer stop()
 		transport := backup.DirectTransport()
 		if status.Forward == "running" {
-			transport, err = newRuleTransport()
+			transport, err = ruletunnel.NewTransport()
 			if err == nil {
 				transport.ResponseHeaderTimeout = 60 * time.Second
 			}

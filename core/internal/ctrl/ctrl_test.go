@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
@@ -91,5 +92,44 @@ func TestCtrlUpgradeWebSocketAndWriteTextFrame(t *testing.T) {
 				t.Fatalf("long frame mismatch for size=%d", size)
 			}
 		}
+	}
+}
+
+func TestCtrlEventBusAndCommandBridge(t *testing.T) {
+	bus := NewEventBus()
+	ch, unsubscribe := bus.Subscribe(1)
+	bus.Emit(map[string]string{"type": "first"})
+	// 满队列时非阻塞丢弃，不能卡住广播方。
+	bus.Emit(map[string]string{"type": "dropped"})
+	if got := string(<-ch); !strings.Contains(got, `"first"`) {
+		t.Fatalf("unexpected event payload: %q", got)
+	}
+	unsubscribe()
+	unsubscribe() // 幂等取消
+
+	bridge := NewCommandBridge(50 * time.Millisecond)
+	rec := httptest.NewRecorder()
+	bridge.Forward(rec, httptest.NewRequest(http.MethodPost, "/arkclash/vpn/connect", strings.NewReader(`{}`)))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unready bridge status=%d, want 503", rec.Code)
+	}
+
+	bridge.SetDispatcher(func(id int64, name, body string) {
+		if name != "vpn/connect" || body != `{"ok":true}` {
+			t.Errorf("unexpected command: name=%q body=%q", name, body)
+		}
+		go bridge.Reply(id, http.StatusAccepted, []byte(`{"done":true}`))
+	})
+	rec = httptest.NewRecorder()
+	bridge.Forward(rec, httptest.NewRequest(http.MethodPost, "/arkclash/vpn/connect", strings.NewReader(`{"ok":true}`)))
+	if rec.Code != http.StatusAccepted || rec.Body.String() != `{"done":true}` {
+		t.Fatalf("reply mismatch: code=%d body=%q", rec.Code, rec.Body.String())
+	}
+
+	bridge.SetDispatcher(func(id int64, name, body string) {})
+	rec = httptest.NewRecorder()
+	bridge.Forward(rec, httptest.NewRequest(http.MethodPost, "/arkclash/vpn/disconnect", nil))
+	if rec.Code != http.StatusGatewayTimeout {
+		t.Fatalf("timeout status=%d, want 504", rec.Code)
 	}
 }

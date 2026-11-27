@@ -1,4 +1,5 @@
-package main
+// Package probe 提供按当前规则执行出口与服务可用性探测的 HTTP 处理器，不接触核心互斥锁。
+package probe
 
 import (
 	"bytes"
@@ -6,23 +7,20 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/url"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
+	"github.com/VOD-Studio/ArkClash/core/internal/ruletunnel"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
-	"github.com/metacubex/mihomo/component/ca"
-	C "github.com/metacubex/mihomo/constant"
-	"github.com/metacubex/mihomo/tunnel"
 )
 
 const probeRequestLimit = 16 << 10
 
-type probeRequestBody struct {
+type RequestBody struct {
 	URL         string            `json:"url"`
 	Method      string            `json:"method"`
 	BodyMode    string            `json:"bodyMode"`
@@ -33,7 +31,7 @@ type probeRequestBody struct {
 	Timeout     int               `json:"timeout"`
 }
 
-type probeResponse struct {
+type Response struct {
 	Status   int    `json:"status"`
 	Body     string `json:"body"`
 	URL      string `json:"url"`
@@ -43,81 +41,36 @@ type probeResponse struct {
 	Revision uint64 `json:"revision"`
 }
 
-var probeSlots = make(chan struct{}, 4)
-
-type ruleRequestKey struct{}
-
-type ruleRequestState struct {
-	ctx          context.Context
-	cancel       context.CancelFunc
-	subscription *statusResponse
-	mu           sync.Mutex
-	closed       bool
-	dials        sync.WaitGroup
+// RuntimeToken 描述一次探测起止之间必须保持一致的运行与路由代次。
+type RuntimeToken struct {
+	Running       bool
+	BootID        string
+	Revision      uint64
+	RouteToken    any
+	RouteRevision uint64
 }
 
-// Transport 会剥离请求取消；值仍保留，因此真实规则解析和拨号使用请求拥有的上下文。
-func ruleRequestContext(ctx context.Context, subscription *statusResponse) (context.Context, func()) {
-	ctx, cancel := context.WithCancel(ctx)
-	state := &ruleRequestState{ctx: ctx, cancel: cancel, subscription: subscription}
-	return context.WithValue(ctx, ruleRequestKey{}, state), func() {
-		state.mu.Lock()
-		state.closed = true
-		state.cancel()
-		state.mu.Unlock()
-		state.dials.Wait()
+type RuntimeObserver func() RuntimeToken
+
+type Handler struct {
+	observe RuntimeObserver
+	slots   chan struct{}
+}
+
+func NewHandler(observe RuntimeObserver) *Handler {
+	return &Handler{
+		observe: observe,
+		slots:   make(chan struct{}, 4),
 	}
 }
 
-func dialRuleRequest(ctx context.Context, network, address string) (net.Conn, error) {
-	state, ok := ctx.Value(ruleRequestKey{}).(*ruleRequestState)
-	if !ok {
-		return nil, errors.New("missing_rule_request_context")
-	}
-	state.mu.Lock()
-	if state.closed {
-		state.mu.Unlock()
-		return nil, context.Canceled
-	}
-	state.dials.Add(1)
-	state.mu.Unlock()
-	defer state.dials.Done()
-	if err := state.ctx.Err(); err != nil {
-		return nil, err
-	}
-	metadata := &C.Metadata{NetWork: C.TCP, Type: C.INNER, DNSMode: C.DNSNormal, Process: C.MihomoName}
-	if err := metadata.SetRemoteAddress(address); err != nil {
-		return nil, err
-	}
-	if start := state.subscription; start != nil {
-		if !start.subscriptionRouteCurrent() {
-			return nil, errors.New("canceled")
-		}
-		if start.Forward == "stopped" || start.Forward == "paused" {
-			metadata.SpecialProxy = "DIRECT"
-		}
-		return tunnel.DialContextWithTimeout(state.ctx, metadata, 0)
-	}
-	return tunnel.DialContext(state.ctx, metadata)
+// Slots 返回执行槽通道，供宿主测试检查并发上限与清理情况。
+func (h *Handler) Slots() chan struct{} {
+	return h.slots
 }
 
-// 每次探测新建连接，避免复用切换节点之前的出口；证书仍使用内核的信任配置。
-func newRuleTransport() (*http.Transport, error) {
-	var options ca.Option
-	tlsConfig, err := ca.GetTLSConfig(options)
-	if err != nil {
-		return nil, err
-	}
-	return &http.Transport{
-		DialContext:         dialRuleRequest,
-		DisableKeepAlives:   true,
-		TLSHandshakeTimeout: 5 * time.Second,
-		TLSClientConfig:     tlsConfig,
-	}, nil
-}
-
-func readProbeRequest(r *http.Request) (probeRequestBody, *regexp.Regexp, error) {
-	var options probeRequestBody
+func readProbeRequest(r *http.Request) (RequestBody, *regexp.Regexp, error) {
+	var options RequestBody
 	body, err := io.ReadAll(io.LimitReader(r.Body, probeRequestLimit+1))
 	if err != nil || len(body) > probeRequestLimit {
 		return options, nil, errors.New("invalid_probe_request")
@@ -190,36 +143,31 @@ func sameProbeOrigin(a, b *url.URL) bool {
 	return strings.EqualFold(a.Scheme, b.Scheme) && strings.EqualFold(a.Hostname(), b.Hostname()) && probeURLPort(a) == probeURLPort(b)
 }
 
-func postProbe(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeError(w, r, http.StatusMethodNotAllowed, errors.New("invalid_probe_method"))
+		ctrl.WriteError(w, r, http.StatusMethodNotAllowed, errors.New("invalid_probe_method"))
 		return
 	}
 	options, pattern, err := readProbeRequest(r)
 	if err != nil {
-		writeError(w, r, http.StatusBadRequest, err)
+		ctrl.WriteError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	snapshot := eng.Status()
-	routes := eng.routes.Load()
-	var routeRevision uint64
-	if routes != nil {
-		routeRevision = routes.changes.Load()
-	}
-	if snapshot == nil || !snapshot.Running {
-		writeError(w, r, http.StatusConflict, errors.New("probe_runtime_changed"))
+	start := h.observe()
+	if !start.Running {
+		ctrl.WriteError(w, r, http.StatusConflict, errors.New("probe_runtime_changed"))
 		return
 	}
 	select {
-	case probeSlots <- struct{}{}:
-		defer func() { <-probeSlots }()
+	case h.slots <- struct{}{}:
+		defer func() { <-h.slots }()
 	default:
-		writeError(w, r, http.StatusTooManyRequests, errors.New("probe_capacity"))
+		ctrl.WriteError(w, r, http.StatusTooManyRequests, errors.New("probe_capacity"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(options.Timeout)*time.Millisecond)
 	defer cancel()
-	ctx, finishRuleRequest := ruleRequestContext(ctx, nil)
+	ctx, finishRuleRequest := ruletunnel.RequestContext(ctx, nil)
 	defer finishRuleRequest()
 	var targetBody io.Reader
 	if options.Body != "" {
@@ -227,15 +175,15 @@ func postProbe(w http.ResponseWriter, r *http.Request) {
 	}
 	request, err := http.NewRequestWithContext(ctx, options.Method, options.URL, targetBody)
 	if err != nil {
-		writeError(w, r, http.StatusBadRequest, errors.New("invalid_probe_url"))
+		ctrl.WriteError(w, r, http.StatusBadRequest, errors.New("invalid_probe_url"))
 		return
 	}
 	for name, value := range options.Headers {
 		request.Header.Set(name, value)
 	}
-	transport, err := newRuleTransport()
+	transport, err := ruletunnel.NewTransport()
 	if err != nil {
-		writeError(w, r, http.StatusServiceUnavailable, errors.New("probe_tls_failed"))
+		ctrl.WriteError(w, r, http.StatusServiceUnavailable, errors.New("probe_tls_failed"))
 		return
 	}
 	defer transport.CloseIdleConnections()
@@ -272,27 +220,27 @@ func postProbe(w http.ResponseWriter, r *http.Request) {
 		defer response.Body.Close()
 	}
 	if err == nil && options.Method != http.MethodHead {
-		body, err = readProbeBody(response.Body, options.BodyMode, pattern)
+		body, err = ReadBody(response.Body, options.BodyMode, pattern)
 	}
 	if r.Context().Err() != nil {
 		return
 	}
-	current := eng.Status()
-	if current == nil || !current.Running || current.BootID != snapshot.BootID || current.Revision != snapshot.Revision ||
-		eng.routes.Load() != routes || (routes != nil && routes.changes.Load() != routeRevision) {
-		writeError(w, r, http.StatusConflict, errors.New("probe_runtime_changed"))
+	current := h.observe()
+	if !current.Running || current.BootID != start.BootID || current.Revision != start.Revision ||
+		current.RouteToken != start.RouteToken || current.RouteRevision != start.RouteRevision {
+		ctrl.WriteError(w, r, http.StatusConflict, errors.New("probe_runtime_changed"))
 		return
 	}
 	if ctx.Err() != nil {
-		writeError(w, r, http.StatusGatewayTimeout, errors.New("probe_timeout"))
+		ctrl.WriteError(w, r, http.StatusGatewayTimeout, errors.New("probe_timeout"))
 		return
 	}
 	if err != nil {
-		writeError(w, r, http.StatusServiceUnavailable, errors.New("probe_failed"))
+		ctrl.WriteError(w, r, http.StatusServiceUnavailable, errors.New("probe_failed"))
 		return
 	}
-	render.JSON(w, r, probeResponse{
+	render.JSON(w, r, Response{
 		Status: response.StatusCode, Body: body, URL: response.Request.URL.String(),
-		Location: response.Header.Get("Location"), Delay: delay, BootID: snapshot.BootID, Revision: snapshot.Revision,
+		Location: response.Header.Get("Location"), Delay: delay, BootID: start.BootID, Revision: start.Revision,
 	})
 }

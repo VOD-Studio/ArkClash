@@ -1,4 +1,4 @@
-package main
+package probe
 
 import (
 	"errors"
@@ -7,15 +7,15 @@ import (
 )
 
 const (
-	probeSmallLimit  = 16 << 10
-	probeHTMLLimit   = 512 << 10
-	probeJSONLimit   = 64 << 10
-	probeScanLimit   = 8 << 20
-	probeScanChunk   = 32 << 10
-	probeScanOverlap = 256
+	probeSmallLimit = 16 << 10
+	probeHTMLLimit  = 512 << 10
+	JSONLimit       = 64 << 10
+	probeScanLimit  = 8 << 20
+	ScanChunk       = 32 << 10
+	ScanOverlap     = 256
 )
 
-func readProbeBody(body io.Reader, mode string, pattern *regexp.Regexp) (string, error) {
+func ReadBody(body io.Reader, mode string, pattern *regexp.Regexp) (string, error) {
 	var limit int64
 	switch mode {
 	case "none":
@@ -25,11 +25,11 @@ func readProbeBody(body io.Reader, mode string, pattern *regexp.Regexp) (string,
 	case "html":
 		limit = probeHTMLLimit
 	case "json":
-		data, err := io.ReadAll(io.LimitReader(body, probeJSONLimit+1))
+		data, err := io.ReadAll(io.LimitReader(body, JSONLimit+1))
 		if err != nil {
 			return "", err
 		}
-		if len(data) > probeJSONLimit {
+		if len(data) > JSONLimit {
 			return "", errors.New("probe_json_too_large")
 		}
 		return string(data), nil
@@ -43,10 +43,10 @@ func readProbeBody(body io.Reader, mode string, pattern *regexp.Regexp) (string,
 }
 
 func scanProbeBody(body io.Reader, pattern *regexp.Regexp) (string, error) {
-	window := make([]byte, probeScanChunk+probeScanOverlap)
+	window := make([]byte, ScanChunk+ScanOverlap)
 	retained, total := 0, 0
 	for total < probeScanLimit {
-		length := min(probeScanChunk, probeScanLimit-total)
+		length := min(ScanChunk, probeScanLimit-total)
 		n, err := body.Read(window[retained : retained+length])
 		total += n
 		available := retained + n
@@ -61,7 +61,7 @@ func scanProbeBody(body io.Reader, pattern *regexp.Regexp) (string, error) {
 			return "", err
 		}
 		// 只保留边界附近的片段；页面正文不会累积到 UI 的 JSON 信封中。
-		retained = min(available, probeScanOverlap)
+		retained = min(available, ScanOverlap)
 		copy(window, window[available-retained:available])
 	}
 	return "", nil

@@ -7,10 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/VOD-Studio/ArkClash/core/internal/providers"
+	"github.com/VOD-Studio/ArkClash/core/internal/subfetch"
 	"github.com/metacubex/mihomo/adapter/inbound"
 	"github.com/metacubex/mihomo/component/process"
 	"github.com/metacubex/mihomo/component/resolver"
@@ -307,14 +307,7 @@ type reloadedEvent struct {
 
 // 热切换只接受配置目录下的文件，见 entry/src/main/ets/shared/profiles/Store.ets。
 func checkProfilePath(home, path string) error {
-	if home == "" {
-		return errors.New("invalid_profile_path")
-	}
-	dir := filepath.Dir(filepath.Clean(path))
-	if dir != filepath.Join(home, "profiles") && dir != filepath.Join(home, "profile-work") {
-		return errors.New("invalid_profile_path")
-	}
-	return nil
+	return subfetch.CheckProfilePath(home, path)
 }
 
 func runningProfile() (string, bool) {

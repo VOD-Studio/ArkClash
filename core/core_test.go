@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/probe"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
 	"github.com/metacubex/mihomo/adapter"
@@ -301,6 +302,15 @@ func TestSelectionRejectsOldConfigurationWithSameProfileAndMembers(t *testing.T)
 	}
 }
 
+type (
+	probeRequestBody = probe.RequestBody
+	probeResponse    = probe.Response
+)
+
+func postProbe(w http.ResponseWriter, r *http.Request) {
+	eng.probe.ServeHTTP(w, r)
+}
+
 func probeRequest(ctx context.Context, target, method string) *http.Request {
 	return probeRequestWithOptions(ctx, probeRequestBody{URL: target, Method: method, BodyMode: "json", Timeout: 5000})
 }
@@ -362,7 +372,7 @@ func TestRuleProbeCancellationReleasesSlotAndConnection(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("target connection remained open")
 	}
-	if len(probeSlots) != 0 {
+	if len(eng.probe.Slots()) != 0 {
 		t.Fatal("probe capacity leaked")
 	}
 }
@@ -401,13 +411,13 @@ func TestRuleProbeDiscardsReplyFromPreviousRevision(t *testing.T) {
 
 func TestProbeAndDelayCapacityAreNotNodeFailures(t *testing.T) {
 	fixture(t)
-	for range cap(probeSlots) {
-		probeSlots <- struct{}{}
+	for range cap(eng.probe.Slots()) {
+		eng.probe.Slots() <- struct{}{}
 	}
 	recorder := httptest.NewRecorder()
 	postProbe(recorder, probeRequest(context.Background(), "http://127.0.0.1/", http.MethodHead))
-	for range cap(probeSlots) {
-		<-probeSlots
+	for range cap(eng.probe.Slots()) {
+		<-eng.probe.Slots()
 	}
 	if recorder.Code != http.StatusTooManyRequests {
 		t.Fatalf("probe capacity=%d", recorder.Code)

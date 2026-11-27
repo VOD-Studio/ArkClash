@@ -28,6 +28,9 @@ const (
 	proxylinkPkg   = internalPrefix + "proxylink"
 	rulesetPkg     = internalPrefix + "ruleset"
 	providersPkg   = internalPrefix + "providers"
+	ruletunnelPkg  = internalPrefix + "ruletunnel"
+	probePkg       = internalPrefix + "probe"
+	subfetchPkg    = internalPrefix + "subfetch"
 	mihomoPrefix   = "github.com/metacubex/mihomo"
 )
 
@@ -41,12 +44,15 @@ var (
 	zeroMihomoPkgs = []string{backupStorePkg, backupPkg, scriptPkg, ctrlPkg}
 	// internal/* 包依赖白名单（未登记即失败）：只列出每个子包允许依赖的其他 core/internal/* 包。
 	allowedInternalDeps = map[string][]string{
-		backupPkg:    nil,
-		scriptPkg:    nil,
-		ctrlPkg:      nil,
-		proxylinkPkg: nil,
-		rulesetPkg:   nil,
-		providersPkg: {ctrlPkg, rulesetPkg},
+		backupPkg:     nil,
+		scriptPkg:     nil,
+		ctrlPkg:       nil,
+		proxylinkPkg:  nil,
+		rulesetPkg:    nil,
+		ruletunnelPkg: nil,
+		providersPkg:  {ctrlPkg, rulesetPkg},
+		probePkg:      {ctrlPkg, ruletunnelPkg},
+		subfetchPkg:   {ruletunnelPkg},
 	}
 	allowedInitFiles = map[string]bool{
 		"api.go":               true,
@@ -60,17 +66,11 @@ var (
 	// 格式："文件名:变量名"。删除对应变量时必须同步收缩此表。
 	allowedRootVars = map[string]bool{
 		"backup.go:backupDAVBusy":                      true,
-		"commands.go:commandHandler":                   true,
-		"commands.go:commandSeq":                       true,
-		"commands.go:pendingMu":                        true,
-		"commands.go:pending":                          true,
 		"delay.go:delaySlots":                          true,
 		"diagnostics.go:diagnosticIDs":                 true,
 		"diagnostics_stats.go:diagnosticStatsInterval": true,
 		"engine.go:eng":                                true,
 		"engine.go:engineUnlockCheck":                  true,
-		"events.go:subscribersMu":                      true,
-		"events.go:subscribers":                        true,
 		"geo_download.go:geoDownloadTimeout":           true,
 		"geo_settings.go:geoIDs":                       true,
 		"lib.go:reclaimMu":                             true,
@@ -78,7 +78,6 @@ var (
 		"local_proxies.go:localProxyValidation":        true,
 		"local_proxies.go:localProxySequence":          true,
 		"loopback.go:disableLoopBackDetector":          true,
-		"probe.go:probeSlots":                          true,
 		"profile_scripts.go:scriptSlot":                true,
 		"rule_sets.go:ruleSetMutation":                 true,
 		"system_dns.go:systemDNSWatcher":               true,

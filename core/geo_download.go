@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ruletunnel"
 	"github.com/metacubex/http"
 	"github.com/metacubex/mihomo/component/geodata"
 	"github.com/metacubex/mihomo/component/geodata/router"
@@ -119,13 +120,13 @@ func (m *geoManager) update(job *geoJob) (outcome string, resultErr error) {
 	if !validGeoURL(job.source) {
 		return "", errors.New("geo_invalid_url")
 	}
-	requestCtx, finishRuleRequest := ruleRequestContext(ctx, nil)
+	requestCtx, finishRuleRequest := ruletunnel.RequestContext(ctx, nil)
 	defer finishRuleRequest()
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, job.source, nil)
 	if err != nil {
 		return "", errors.New("geo_invalid_url")
 	}
-	transport, err := newRuleTransport()
+	transport, err := ruletunnel.NewTransport()
 	if err != nil {
 		return "", errors.New("geo_download_failed")
 	}

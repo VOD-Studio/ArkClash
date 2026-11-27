@@ -6,7 +6,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
+	"github.com/VOD-Studio/ArkClash/core/internal/probe"
 	"github.com/VOD-Studio/ArkClash/core/internal/providers"
+	"github.com/VOD-Studio/ArkClash/core/internal/subfetch"
 	"github.com/metacubex/http"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/config"
@@ -123,6 +126,7 @@ type coreEngine struct {
 	// 5. 下游独立子系统与路线监听
 	providers *providers.Hub
 	diag      *diagnosticsHub
+	probe     *probe.Handler
 	geo       atomic.Pointer[geoManager]
 	routes    atomic.Pointer[runtimeRouteWatch]
 }
@@ -142,7 +146,7 @@ func defaultTunFactory(options LC.Tun) (tunHandle, error) {
 }
 
 func newCoreEngine() *coreEngine {
-	return &coreEngine{
+	e := &coreEngine{
 		intent:     "stopped",
 		forward:    "stopped",
 		tunFactory: defaultTunFactory,
@@ -150,6 +154,49 @@ func newCoreEngine() *coreEngine {
 		providers:  providers.NewHub(),
 		diag:       newDiagnosticsHub(),
 	}
+	e.probe = probe.NewHandler(e.probeToken)
+	return e
+}
+
+func (e *coreEngine) probeToken() probe.RuntimeToken {
+	snapshot := e.Status()
+	if snapshot == nil || !snapshot.Running {
+		return probe.RuntimeToken{}
+	}
+	routes := e.routes.Load()
+	var routeRevision uint64
+	if routes != nil {
+		routeRevision = routes.changes.Load()
+	}
+	return probe.RuntimeToken{
+		Running:       true,
+		BootID:        snapshot.BootID,
+		Revision:      snapshot.Revision,
+		RouteToken:    routes,
+		RouteRevision: routeRevision,
+	}
+}
+
+func (e *coreEngine) subfetchView() subfetch.RuntimeView {
+	view := e.View()
+	if view == nil || !view.Status.Running {
+		return subfetch.RuntimeView{}
+	}
+	status := view.Status
+	return subfetch.RuntimeView{
+		Running:      true,
+		HomeDir:      view.HomeDir,
+		Forward:      status.Forward,
+		StillCurrent: status.subscriptionRouteCurrent,
+	}
+}
+
+func (e *coreEngine) Fetch(req subfetch.Request) subfetch.Result {
+	return subfetch.Fetch(req, e.subfetchView)
+}
+
+func (e *coreEngine) Prefetch(path string) (int, error) {
+	return subfetch.Prefetch(path, e.subfetchView)
 }
 
 func (e *coreEngine) diagIdentityLocked() diagIdentity {
@@ -258,7 +305,7 @@ func (tx *stateTx) CommitReload(plan reloadPlan) (bool, error) {
 		}
 	}
 	e.publishRuntimeLocked()
-	emit(reloadedEvent{Type: "reloaded", Profile: plan.Next.Profile})
+	ctrl.Emit(reloadedEvent{Type: "reloaded", Profile: plan.Next.Profile})
 	return true, errors.Join(inboundErr, e.cleanupFailure)
 }
 

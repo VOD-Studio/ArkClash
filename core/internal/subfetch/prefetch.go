@@ -1,4 +1,4 @@
-package main
+package subfetch
 
 import (
 	"errors"
@@ -21,18 +21,18 @@ type vehicleOwner interface {
 	Vehicle() P.Vehicle
 }
 
-// prefetch 预先下载 path 里本地还没有的 rule-provider。热切换的应用阶段要等所有 provider
+// Prefetch 预先下载 path 里本地还没有的 rule-provider。热切换的应用阶段要等所有 provider
 // 加载完，第一次切到一份带几十个规则集的配置要等几秒，期间新连接会失败（ADR-0010）。
 // 下载过的文件留在原来的位置，真正切换时 Fetcher.Initial 直接读本地文件。
 //
 // 只处理 rule-provider：proxy-provider 的 Initial 会按节点名关掉正在用的连接，
 // 正在运行的配置里有同名节点时会误伤。
-func prefetch(path string) (int, error) {
-	view := eng.View()
-	if view == nil || !view.Status.Running {
+func Prefetch(path string, observe func() RuntimeView) (int, error) {
+	view := observe()
+	if !view.Running {
 		return 0, errors.New("core is not running")
 	}
-	if err := checkProfilePath(view.HomeDir, path); err != nil {
+	if err := CheckProfilePath(view.HomeDir, path); err != nil {
 		return 0, err
 	}
 	buf, err := os.ReadFile(path)

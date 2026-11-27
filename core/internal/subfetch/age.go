@@ -1,4 +1,4 @@
-package main
+package subfetch
 
 import (
 	"bufio"
@@ -13,10 +13,12 @@ import (
 
 const ageBinaryHeader = "age-encryption.org/v1\n"
 
-var errAgeRequired = errors.New("age_required")
-var errAgeDecrypt = errors.New("age_decrypt")
+var (
+	ErrAgeRequired = errors.New("age_required")
+	ErrAgeDecrypt  = errors.New("age_decrypt")
+)
 
-func subscriptionBody(body io.Reader, secretKey string, limit int64) (io.Reader, error) {
+func SubscriptionBody(body io.Reader, secretKey string, limit int64) (io.Reader, error) {
 	buffered := bufio.NewReader(io.LimitReader(body, limit+1))
 	header, _ := buffered.Peek(len(armor.Header))
 	armored := bytes.HasPrefix(header, []byte(armor.Header))
@@ -24,11 +26,11 @@ func subscriptionBody(body io.Reader, secretKey string, limit int64) (io.Reader,
 		return buffered, nil
 	}
 	if strings.TrimSpace(secretKey) == "" {
-		return nil, errAgeRequired
+		return nil, ErrAgeRequired
 	}
 	identities, err := age.ParseIdentities(strings.NewReader(secretKey))
 	if err != nil {
-		return nil, errAgeDecrypt
+		return nil, ErrAgeDecrypt
 	}
 	var encrypted io.Reader = buffered
 	if armored {
@@ -36,7 +38,7 @@ func subscriptionBody(body io.Reader, secretKey string, limit int64) (io.Reader,
 	}
 	plain, err := age.Decrypt(encrypted, identities...)
 	if err != nil {
-		return nil, errAgeDecrypt
+		return nil, ErrAgeDecrypt
 	}
 	return ageSubscriptionReader{plain}, nil
 }
@@ -46,7 +48,7 @@ type ageSubscriptionReader struct{ io.Reader }
 func (r ageSubscriptionReader) Read(p []byte) (int, error) {
 	n, err := r.Reader.Read(p)
 	if err != nil && err != io.EOF {
-		return n, errAgeDecrypt
+		return n, ErrAgeDecrypt
 	}
 	return n, err
 }

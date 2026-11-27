@@ -1,4 +1,4 @@
-package main
+package subfetch
 
 import (
 	"bytes"
@@ -47,13 +47,13 @@ func TestSubscriptionAgeBody(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := subscriptionBody(bytes.NewReader(data.Bytes()), "", fetchLimit); !errors.Is(err, errAgeRequired) {
+			if _, err := SubscriptionBody(bytes.NewReader(data.Bytes()), "", Limit); !errors.Is(err, ErrAgeRequired) {
 				t.Fatalf("missing identity: %v", err)
 			}
-			if _, err := subscriptionBody(bytes.NewReader(data.Bytes()), other.String(), fetchLimit); !errors.Is(err, errAgeDecrypt) {
+			if _, err := SubscriptionBody(bytes.NewReader(data.Bytes()), other.String(), Limit); !errors.Is(err, ErrAgeDecrypt) {
 				t.Fatalf("wrong identity: %v", err)
 			}
-			r, err := subscriptionBody(bytes.NewReader(data.Bytes()), key.String(), fetchLimit)
+			r, err := SubscriptionBody(bytes.NewReader(data.Bytes()), key.String(), Limit)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -61,12 +61,12 @@ func TestSubscriptionAgeBody(t *testing.T) {
 			if err != nil || !bytes.Equal(got, plain) {
 				t.Fatalf("decrypted body mismatch: %v", err)
 			}
-			truncated, err := subscriptionBody(bytes.NewReader(data.Bytes()[:data.Len()-40]), key.String(), fetchLimit)
+			truncated, err := SubscriptionBody(bytes.NewReader(data.Bytes()[:data.Len()-40]), key.String(), Limit)
 			if err != nil {
 				t.Fatal(err)
 			}
 			target := filepath.Join(t.TempDir(), "candidate")
-			if err := writeBody(target, truncated, fetchLimit); !errors.Is(err, errAgeDecrypt) {
+			if err := WriteBody(target, truncated, Limit); !errors.Is(err, ErrAgeDecrypt) {
 				t.Fatalf("truncated body: %v", err)
 			}
 			if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
@@ -74,7 +74,7 @@ func TestSubscriptionAgeBody(t *testing.T) {
 			}
 		})
 	}
-	r, err := subscriptionBody(bytes.NewReader(plain), "", fetchLimit)
+	r, err := SubscriptionBody(bytes.NewReader(plain), "", Limit)
 	if err != nil {
 		t.Fatal(err)
 	}
