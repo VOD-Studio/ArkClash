@@ -3286,7 +3286,7 @@
     },
     {
       "name": "script_no_items",
-      "value": "暂无脚本"
+      "value": "还没有脚本"
     },
     {
       "name": "script_unnamed",
@@ -3491,6 +3491,34 @@
     {
       "name": "script_import_file",
       "value": "从文件导入"
+    },
+    {
+      "name": "script_empty_hint",
+      "value": "在配置的覆写中选用，加载前改写配置。"
+    },
+    {
+      "name": "script_create",
+      "value": "新建脚本"
+    },
+    {
+      "name": "script_import",
+      "value": "导入"
+    },
+    {
+      "name": "script_importing",
+      "value": "导入中"
+    },
+    {
+      "name": "script_syncing",
+      "value": "同步中"
+    },
+    {
+      "name": "script_url_edit",
+      "value": "修改链接"
+    },
+    {
+      "name": "script_import_url_hint",
+      "value": "导入后可以随时从这个链接同步。"
     },
     {
       "name": "rule_set_title",

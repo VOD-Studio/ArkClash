@@ -324,7 +324,8 @@ struct Index {
     } else if (name === ToolRoute.IconSetPreview) {
       IconSetPreviewPage({ setId: (param as IconSetRouteArgument).id })
     } else if (name === ToolRoute.Scripts) {
-      ScriptsPage({ foreground: this.foreground, onEdit: (id: string): void => this.openScriptEditor(id) })
+      ScriptsPage({ foreground: this.foreground, reduceMotion: this.reduceMotion,
+        onEdit: (id: string): void => this.openScriptEditor(id) })
     } else if (name === ToolRoute.ScriptEditor) {
       ScriptEditorPage({ scriptId: (param as ScriptRouteArgument).id, foreground: this.foreground,
         onClose: (): void => { this.stack.pop(); } })

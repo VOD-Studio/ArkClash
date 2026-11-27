@@ -3513,6 +3513,34 @@
       "value": "Import from file"
     },
     {
+      "name": "script_empty_hint",
+      "value": "Pick one in a profile's Override."
+    },
+    {
+      "name": "script_create",
+      "value": "New script"
+    },
+    {
+      "name": "script_import",
+      "value": "Import"
+    },
+    {
+      "name": "script_importing",
+      "value": "Importing"
+    },
+    {
+      "name": "script_syncing",
+      "value": "Syncing"
+    },
+    {
+      "name": "script_url_edit",
+      "value": "Edit URL"
+    },
+    {
+      "name": "script_import_url_hint",
+      "value": "You can sync from this link anytime."
+    },
+    {
       "name": "rule_set_title",
       "value": "Rule Sets"
     },

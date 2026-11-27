@@ -19,6 +19,8 @@
 | `AddedRuleDeleteSheet.ets` | 删除确认抽屉，带待删内容预览 |
 | `AddedRulesPage.ets` | 三个抽屉的 `bindSheet` 选项、快照式打开、脏数据保护 |
 
+第二个样板是脚本页（`features/profiles/`）：`ScriptUrlSheet.ets` 是单输入框表单抽屉，`ScriptDeleteSheet.ets` 是单项删除确认，`ScriptRow.ets` 是带图标块、可切换排序把手的列表行，`ScriptsEmpty.ets` 演示在占位按钮上弹出来源菜单。
+
 ## 复用方式
 
 - 共用部件只依赖 `components/`，各 feature 直接 import。`ruleTargetTone`（`features/tools/AddedRuleTone.ets`）这类业务判断留在各自 feature。
@@ -107,6 +109,8 @@
 
 - 入场：组件持有 `entered`，`aboutToAppear` 里设为 `!motion`，根节点 `onAppear` 里设为 `true`；每个区块包一层 `Column`，依次写 `opacity`、`translate`，再 `.animation(enterMotion(motion, index))`。区块随抽屉上滑同时浮现，整体在抽屉停稳前后结束。
 - 会因选择而出现或消失的区块，在 `animateTo({ curve: SETTLE_SPRING }, ...)` 里改状态，并给区块加 `.transition(sectionTransition(motion))`；同一位置的两套内容用 `Stack` 叠放交替。
+- 列表行的右侧附件（更多按钮、排序把手、转圈）叠在同一格里各挂 `sectionTransition`。要让它们有过渡，行不能因状态重建：长按菜单挂在文字区按钮上，排序时把该按钮设为 `HitTestMode.None`，长按交给列表拖动，不用 if/else 切换两套带或不带 `bindContextMenu` 的行；数据项用 `@ObservedV2` 对象并按 id 复用，`@Trace` 字段换新值时行原地刷新。
+- 拖拽排序时 `LazyForEach.onMove` 触发前 List 已经挪好界面，用 `KeyedListSource.moveQuietly` 只同步数据，之后再用 `replace` 换成保存结果；保存失败时 `replace` 回原顺序，列表会动画挪回。
 - 颜色过渡只对支持属性动画的属性生效：圆点用带 `backgroundColor` 的 `Row` 画，`Circle.fill` 不参与动画、会跳色。
 - 减弱动态：页面把系统设置作为 `motion` 参数传入；关闭时入场首帧即终态（`entered` 初值为 `true`），`enterMotion` 返回零时长，过渡用 `TransitionEffect.IDENTITY`，`clickEffect` 传 `null`，`symbolEffect` 的触发值固定不变。空状态在页面不在前台时也按关闭处理。
 
