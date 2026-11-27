@@ -23,6 +23,7 @@ export struct ToolsPage {
     SettingsSection({ heading: $r('app.string.tools_settings'), rows: (): void => this.Rows([
       new Entry(ToolRoute.General, $r('sys.symbol.slider_horizontal_2'), $r('app.string.tools_general')),
       new Entry(ToolRoute.Theme, $r('sys.symbol.paintpalette'), $r('app.string.tools_theme')),
+      new Entry(ToolRoute.AccessControl, $r('sys.symbol.checkmark_shield'), $r('app.string.access_control_title')),
       new Entry(ToolRoute.AdvancedConfig, $r('sys.symbol.wrench_and_screwdriver'), $r('app.string.tools_advanced_config'))
     ]) })
     SettingsSection({ heading: $r('app.string.tools_other'), rows: (): void => this.Rows([

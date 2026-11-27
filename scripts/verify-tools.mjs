@@ -1571,3 +1571,194 @@ test('仪表盘跳入连接页指定 initialFeed 不被异步偏好覆盖，普�
   await store.load(h.context);
   assert.equal(store.feed, 'live');
 }));
+
+test('应用访问控制存储兼容旧黑名单迁移、独立保存双名单并拒绝空白名单与超限写入', async () => toolsCase(async h => {
+  const {
+    MAX_VPN_EXCLUDED_APPS, MAX_VPN_TRUSTED_APPS, VpnNetworkSettings, vpnAccessEffectiveEqual
+  } = h.load('shared/VpnNetwork.ets');
+  const {
+    clearVpnNetworkSettingsCache, peekVpnNetworkSettings, readVpnNetworkSettings, saveVpnNetworkSettings
+  } = h.load('client/VpnNetworkSettings.ets');
+  const own = 'com.vodstudio.arkclash';
+  const ctx = { ...h.context, applicationInfo: { name: own } };
+
+  // 1. 旧版非空黑名单（无 appAccessMode）自动迁移为 blocked；空旧配置自动迁移为 off。
+  h.controls.preferences.set('settings', JSON.stringify({
+    stack: 'gvisor', mtu: 1500, ipv6: false, dnsHijacking: true,
+    excludedApplications: ['com.tencent.wechat', own, 'com.tencent.wechat']
+  }));
+  const migrated = await readVpnNetworkSettings(ctx);
+  assert.equal(migrated.appAccessMode, 'blocked');
+  assert.deepEqual(migrated.excludedApplications, ['com.tencent.wechat']);
+  assert.deepEqual(migrated.trustedApplications, []);
+  assert.equal(peekVpnNetworkSettings().appAccessMode, 'blocked');
+
+  h.controls.preferences.set('settings', JSON.stringify({
+    stack: 'gvisor', mtu: 1500, excludedApplications: []
+  }));
+  const migratedOff = await readVpnNetworkSettings(ctx);
+  assert.equal(migratedOff.appAccessMode, 'off');
+
+  // 2. 切换模式独立保存两份名单；空白名单（或仅含自身）禁止保存为 trusted。
+  const invalidTrusted = new VpnNetworkSettings();
+  invalidTrusted.appAccessMode = 'trusted';
+  invalidTrusted.excludedApplications = ['com.tencent.wechat'];
+  invalidTrusted.trustedApplications = [own];
+  await assert.rejects(() => saveVpnNetworkSettings(ctx, invalidTrusted), /empty_trusted_apps/);
+  assert.equal(peekVpnNetworkSettings().appAccessMode, 'off', '校验失败不得污染缓存');
+
+  const trusted = new VpnNetworkSettings();
+  trusted.appAccessMode = 'trusted';
+  trusted.excludedApplications = ['com.tencent.wechat', 'com.alipay.mobile.client'];
+  trusted.trustedApplications = ['com.huawei.hmos.browser', own, 'com.droi.tong'];
+  await saveVpnNetworkSettings(ctx, trusted);
+  const reread = await readVpnNetworkSettings(ctx);
+  assert.equal(reread.appAccessMode, 'trusted');
+  assert.deepEqual(reread.excludedApplications, ['com.tencent.wechat', 'com.alipay.mobile.client']);
+  assert.deepEqual(reread.trustedApplications, ['com.huawei.hmos.browser', 'com.droi.tong']);
+
+  // 切到 off 后两份名单继续保留。
+  const turnedOff = reread.copy();
+  turnedOff.appAccessMode = 'off';
+  await saveVpnNetworkSettings(ctx, turnedOff);
+  const rereadOff = await readVpnNetworkSettings(ctx);
+  assert.equal(rereadOff.appAccessMode, 'off');
+  assert.deepEqual(rereadOff.excludedApplications, ['com.tencent.wechat', 'com.alipay.mobile.client']);
+  assert.deepEqual(rereadOff.trustedApplications, ['com.huawei.hmos.browser', 'com.droi.tong']);
+
+  // 3. 超过系统上限（黑名单 255、白名单 256）直接报错不静默截断。
+  const overflowBlocked = new VpnNetworkSettings();
+  overflowBlocked.appAccessMode = 'blocked';
+  overflowBlocked.excludedApplications = Array.from({ length: MAX_VPN_EXCLUDED_APPS + 1 }, (_u, i) => `com.example.b${i}`);
+  await assert.rejects(() => saveVpnNetworkSettings(ctx, overflowBlocked), /too_many_apps/);
+
+  const overflowTrusted = new VpnNetworkSettings();
+  overflowTrusted.appAccessMode = 'trusted';
+  overflowTrusted.trustedApplications = Array.from({ length: MAX_VPN_TRUSTED_APPS + 1 }, (_u, i) => `com.example.t${i}`);
+  await assert.rejects(() => saveVpnNetworkSettings(ctx, overflowTrusted), /too_many_apps/);
+
+  // 4. flush 失败回滚偏好且不覆盖缓存，clearVpnNetworkSettingsCache 正确清空。
+  h.controls.preferenceFlushError = true;
+  const failing = rereadOff.copy();
+  failing.appAccessMode = 'blocked';
+  await assert.rejects(() => saveVpnNetworkSettings(ctx, failing), /flush failure/);
+  h.controls.preferenceFlushError = false;
+  assert.equal(peekVpnNetworkSettings().appAccessMode, 'off');
+  clearVpnNetworkSettingsCache();
+  assert.equal(peekVpnNetworkSettings(), undefined);
+
+  // 5. vpnAccessEffectiveEqual 仅对生效模式与生效名单敏感。
+  const base = reread.copy(); // trusted: [browser, droi]
+  const inactiveEdit = base.copy();
+  inactiveEdit.excludedApplications = ['com.jd.hm.mall'];
+  assert.equal(vpnAccessEffectiveEqual(base, inactiveEdit), true);
+  const activeEdit = base.copy();
+  activeEdit.trustedApplications = ['com.huawei.hmos.browser'];
+  assert.equal(vpnAccessEffectiveEqual(base, activeEdit), false);
+  const offA = rereadOff.copy();
+  const offB = rereadOff.copy();
+  offB.excludedApplications = [];
+  offB.trustedApplications = [];
+  assert.equal(vpnAccessEffectiveEqual(offA, offB), true);
+}));
+
+test('应用访问控制草稿支持目录搜索、进入置顶不跳行、可见全选与 bm dump -a 导入导出', async () => toolsCase(async h => {
+  const {
+    isValidBundleName, MAX_VPN_EXCLUDED_APPS, parseBundleImportText, VpnNetworkSettings
+  } = h.load('shared/VpnNetwork.ets');
+  const { ACCESS_CONTROL_CATALOG } = h.load('features/tools/AccessControlCatalog.ets');
+  const { AccessControlDraft } = h.load('features/tools/AccessControlLogic.ets');
+  const own = 'com.vodstudio.arkclash';
+
+  // 内置目录所有包名均须合法且无重复。
+  const seen = new Set();
+  for (const entry of ACCESS_CONTROL_CATALOG) {
+    assert.equal(isValidBundleName(entry.bundleName), true, `invalid catalog bundle ${entry.bundleName}`);
+    assert.equal(seen.has(entry.bundleName), false, `duplicate catalog bundle ${entry.bundleName}`);
+    seen.add(entry.bundleName);
+  }
+
+  // 进入页已选置顶，且编辑途中取消勾选不跳行。
+  const initial = new VpnNetworkSettings();
+  initial.appAccessMode = 'blocked';
+  initial.excludedApplications = ['com.custom.bankapp', 'yylx.danmaku.bili'];
+  initial.trustedApplications = ['com.huawei.hmos.browser'];
+  const draft = new AccessControlDraft(initial);
+  const firstOrder = draft.rows('', 'all', true).map(row => row.bundleName);
+  assert.equal(firstOrder[0], 'com.custom.bankapp');
+  assert.equal(firstOrder[1], 'yylx.danmaku.bili');
+  assert.equal(draft.toggle('yylx.danmaku.bili'), '');
+  const afterToggle = draft.rows('', 'all', true).map(row => row.bundleName);
+  assert.deepEqual(afterToggle, firstOrder, '勾选或取消勾选不得让行跳动');
+  assert.equal(draft.isDirty(), true);
+  assert.equal(draft.effectiveChanged(), true);
+
+  // 分类筛选与多词搜索（支持中文名、英文名、拼音关键词与包名）。
+  const containerRows = draft.rows('', 'container', true);
+  assert.deepEqual(containerRows.map(r => r.bundleName), ['com.droi.tong', 'com.easy.hmos.abroad']);
+  assert.equal(containerRows.every(r => r.containerNote), true);
+  assert.deepEqual(draft.rows('zhuoyitong droi', 'all', true).map(r => r.bundleName), ['com.droi.tong']);
+  assert.deepEqual(draft.rows('wechat', 'all', false).map(r => r.bundleName), ['com.tencent.wechat']);
+
+  // 可见项全选与取消全选仅作用于当前可见项，保留隐藏项选择。
+  assert.equal(draft.toggleVisible(['com.droi.tong', 'com.easy.hmos.abroad']), '');
+  assert.equal(draft.isSelected('com.custom.bankapp'), true, '隐藏的自定义项选择状态必须保持');
+  assert.equal(draft.isSelected('com.droi.tong'), true);
+  assert.equal(draft.isSelected('com.easy.hmos.abroad'), true);
+  assert.equal(draft.toggleVisible(['com.droi.tong', 'com.easy.hmos.abroad']), '');
+  assert.equal(draft.isSelected('com.droi.tong'), false);
+  assert.equal(draft.isSelected('com.custom.bankapp'), true);
+
+  // 切到白名单不清空黑名单，且允许独立导入与导出。
+  draft.setMode('trusted');
+  assert.deepEqual(draft.trusted, ['com.huawei.hmos.browser']);
+  assert.deepEqual(draft.excluded, ['com.custom.bankapp']);
+
+  // 解析 hdc shell bm dump -a 原始输出，自动跳过表头与自身包名。
+  const bmOutput = [
+    'ID: 100:',
+    '\tcom.huawei.hmos.browser',
+    '\tcom.droi.tong',
+    `\t${own}`,
+    '\tcom.custom.tool',
+    '\t# 注释行',
+    '\tbad-token'
+  ].join('\n');
+  const parsed = parseBundleImportText(bmOutput, own);
+  assert.deepEqual(parsed.valid, ['com.huawei.hmos.browser', 'com.droi.tong', 'com.custom.tool']);
+  assert.deepEqual(parsed.invalid, ['bad-token']);
+  assert.equal(parsed.skippedOwn, true);
+
+  // 全无效输入报错且不清空原有名单。
+  const badOutcome = draft.applyImport('not_a_bundle\n123', own, true);
+  assert.equal(badOutcome.ok, false);
+  assert.equal(badOutcome.error, 'invalid_bundle_name');
+  assert.deepEqual(draft.trusted, ['com.huawei.hmos.browser']);
+
+  // 仅包含自身包名给出明确提示且不清空名单。
+  const ownOutcome = draft.applyImport(own, own, true);
+  assert.equal(ownOutcome.ok, false);
+  assert.equal(ownOutcome.error, 'own_bundle_only');
+  assert.deepEqual(draft.trusted, ['com.huawei.hmos.browser']);
+
+  // 追加合并导入并导出。
+  const okOutcome = draft.applyImport(bmOutput, own, false);
+  assert.equal(okOutcome.ok, true);
+  assert.equal(okOutcome.addedCount, 2);
+  assert.equal(okOutcome.invalidCount, 1);
+  assert.equal(okOutcome.skippedOwn, true);
+  assert.equal(draft.exportText(), 'com.huawei.hmos.browser\ncom.droi.tong\ncom.custom.tool');
+
+  // 白名单清空后校验拦截 empty_trusted_apps。
+  draft.clearActive();
+  assert.equal(draft.validationError(), 'empty_trusted_apps');
+
+  // 切换回黑名单时原黑名单未丢，且超限时整体拒绝不部分写入。
+  draft.setMode('blocked');
+  assert.deepEqual(draft.excluded, ['com.custom.bankapp']);
+  const many = Array.from({ length: MAX_VPN_EXCLUDED_APPS }, (_u, i) => `com.example.limit${i}`).join('\n');
+  const overflowOutcome = draft.applyImport(many, own, false);
+  assert.equal(overflowOutcome.ok, false);
+  assert.equal(overflowOutcome.error, 'too_many_apps');
+  assert.deepEqual(draft.excluded, ['com.custom.bankapp']);
+}));

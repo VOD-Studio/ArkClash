@@ -2865,6 +2865,190 @@
       "value": "Enter one application bundle name per line. Changes apply when VPN reconnects."
     },
     {
+      "name": "access_control_title",
+      "value": "Access control"
+    },
+    {
+      "name": "access_control_mode_off",
+      "value": "Off"
+    },
+    {
+      "name": "access_control_mode_blocked",
+      "value": "Bypass selected"
+    },
+    {
+      "name": "access_control_mode_trusted",
+      "value": "Proxy selected"
+    },
+    {
+      "name": "access_control_summary_blocked",
+      "value": "Bypass · %d"
+    },
+    {
+      "name": "access_control_summary_trusted",
+      "value": "Proxy only · %d"
+    },
+    {
+      "name": "access_control_blocked_summary",
+      "value": "Bypassing %d / %d apps"
+    },
+    {
+      "name": "access_control_trusted_summary",
+      "value": "Proxying %d / %d apps"
+    },
+    {
+      "name": "access_control_off_desc",
+      "value": "All apps except ArkClash route through the VPN. Both allow and bypass lists are kept when access control is off."
+    },
+    {
+      "name": "access_control_saved_counts",
+      "value": "Saved lists: %d bypass, %d proxy-only."
+    },
+    {
+      "name": "access_control_platform_note",
+      "value": "HarmonyOS does not allow third-party apps to read the installed app list. Pick from the built-in common app directory or add bundle names manually. Changes apply when VPN reconnects."
+    },
+    {
+      "name": "access_control_blocked_notice",
+      "value": "Selected apps bypass the VPN. Built-in directory shows common HarmonyOS apps; add any unlisted bundle name via Add / Import."
+    },
+    {
+      "name": "access_control_trusted_notice",
+      "value": "Only selected apps use the VPN; all other apps (including browsers) connect directly. Misspelled or uninstalled bundle names silently stay direct."
+    },
+    {
+      "name": "access_control_add_custom",
+      "value": "Add / Import"
+    },
+    {
+      "name": "access_control_import",
+      "value": "Add or import bundle names"
+    },
+    {
+      "name": "access_control_export",
+      "value": "Copy current list"
+    },
+    {
+      "name": "access_control_select_visible",
+      "value": "Select visible"
+    },
+    {
+      "name": "access_control_unselect_visible",
+      "value": "Unselect visible"
+    },
+    {
+      "name": "access_control_clear_list",
+      "value": "Clear current list"
+    },
+    {
+      "name": "access_control_search_hint",
+      "value": "Search by app name or bundle name"
+    },
+    {
+      "name": "access_control_custom_app",
+      "value": "Custom app"
+    },
+    {
+      "name": "access_control_container_badge",
+      "value": "Container"
+    },
+    {
+      "name": "access_control_no_match",
+      "value": "No matching apps in directory"
+    },
+    {
+      "name": "access_control_import_hint",
+      "value": "Enter one HarmonyOS bundle name per line, or paste raw output from `hdc shell bm dump -a`. ArkClash is automatically excluded."
+    },
+    {
+      "name": "access_control_import_replace",
+      "value": "Replace list"
+    },
+    {
+      "name": "access_control_import_confirm",
+      "value": "Import"
+    },
+    {
+      "name": "access_control_import_empty",
+      "value": "No valid HarmonyOS bundle names found. Current list was not changed."
+    },
+    {
+      "name": "access_control_own_only",
+      "value": "ArkClash always stays direct and cannot be added to the list."
+    },
+    {
+      "name": "access_control_import_done",
+      "value": "Imported %d bundle names."
+    },
+    {
+      "name": "access_control_import_partial",
+      "value": "Imported %d bundle names (%d invalid entries ignored)."
+    },
+    {
+      "name": "access_control_import_own_skipped",
+      "value": "Imported %d bundle names (ArkClash skipped to stay direct)."
+    },
+    {
+      "name": "access_control_clipboard_empty",
+      "value": "Clipboard does not contain text."
+    },
+    {
+      "name": "access_control_clipboard_failed",
+      "value": "Unable to read clipboard."
+    },
+    {
+      "name": "access_control_export_empty",
+      "value": "Current list is empty."
+    },
+    {
+      "name": "access_control_export_done",
+      "value": "Copied %d bundle names."
+    },
+    {
+      "name": "access_control_export_failed",
+      "value": "Failed to copy to clipboard."
+    },
+    {
+      "name": "access_control_empty_trusted",
+      "value": "Select or add at least one app for proxy-only mode."
+    },
+    {
+      "name": "access_control_unsaved_title",
+      "value": "Save access control changes?"
+    },
+    {
+      "name": "access_control_cat_all",
+      "value": "All"
+    },
+    {
+      "name": "access_control_cat_browser",
+      "value": "Browser"
+    },
+    {
+      "name": "access_control_cat_container",
+      "value": "Containers"
+    },
+    {
+      "name": "access_control_cat_social",
+      "value": "Social"
+    },
+    {
+      "name": "access_control_cat_finance",
+      "value": "Finance"
+    },
+    {
+      "name": "access_control_cat_shopping",
+      "value": "Shopping"
+    },
+    {
+      "name": "access_control_cat_life",
+      "value": "Life & Maps"
+    },
+    {
+      "name": "access_control_cat_media",
+      "value": "Media"
+    },
+    {
       "name": "network_background",
       "value": "Background"
     },

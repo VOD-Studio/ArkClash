@@ -2845,6 +2845,190 @@
       "value": "每行填写一个应用包名，重新连接 VPN 后生效。"
     },
     {
+      "name": "access_control_title",
+      "value": "应用访问控制"
+    },
+    {
+      "name": "access_control_mode_off",
+      "value": "关闭"
+    },
+    {
+      "name": "access_control_mode_blocked",
+      "value": "绕过所选"
+    },
+    {
+      "name": "access_control_mode_trusted",
+      "value": "仅代理所选"
+    },
+    {
+      "name": "access_control_summary_blocked",
+      "value": "绕过 · %d"
+    },
+    {
+      "name": "access_control_summary_trusted",
+      "value": "仅代理 · %d"
+    },
+    {
+      "name": "access_control_blocked_summary",
+      "value": "已选绕过 %d / %d 个应用"
+    },
+    {
+      "name": "access_control_trusted_summary",
+      "value": "已选仅代理 %d / %d 个应用"
+    },
+    {
+      "name": "access_control_off_desc",
+      "value": "关闭时，除 ArkClash 自身外的所有应用均按路由走 VPN；已保存的黑名单与白名单会继续保留。"
+    },
+    {
+      "name": "access_control_saved_counts",
+      "value": "已保存名单：绕过 %d 个，仅代理 %d 个。"
+    },
+    {
+      "name": "access_control_platform_note",
+      "value": "HarmonyOS 不允许三方应用读取已安装应用列表。可从内置常用应用目录勾选，或手动/剪贴板导入包名；修改后重新连接 VPN 生效。"
+    },
+    {
+      "name": "access_control_blocked_notice",
+      "value": "选中的应用绕过 VPN 直连。下方为内置常用鸿蒙应用目录，未收录应用可点右上角或“添加/导入”填写包名。"
+    },
+    {
+      "name": "access_control_trusted_notice",
+      "value": "仅选中的应用走 VPN，其余应用（含浏览器）全部直连；包名拼错或未安装时不会报错，会静默直连。容器类应用按整体控制。"
+    },
+    {
+      "name": "access_control_add_custom",
+      "value": "添加 / 导入"
+    },
+    {
+      "name": "access_control_import",
+      "value": "添加或导入包名"
+    },
+    {
+      "name": "access_control_export",
+      "value": "复制当前名单"
+    },
+    {
+      "name": "access_control_select_visible",
+      "value": "全选当前可见"
+    },
+    {
+      "name": "access_control_unselect_visible",
+      "value": "取消全选当前可见"
+    },
+    {
+      "name": "access_control_clear_list",
+      "value": "清空当前名单"
+    },
+    {
+      "name": "access_control_search_hint",
+      "value": "按应用名或包名搜索"
+    },
+    {
+      "name": "access_control_custom_app",
+      "value": "自定义包名"
+    },
+    {
+      "name": "access_control_container_badge",
+      "value": "容器整体"
+    },
+    {
+      "name": "access_control_no_match",
+      "value": "目录中无匹配应用"
+    },
+    {
+      "name": "access_control_import_hint",
+      "value": "每行填写一个鸿蒙应用包名，或直接粘贴 `hdc shell bm dump -a` 输出。ArkClash 自身会自动忽略以保持直连。"
+    },
+    {
+      "name": "access_control_import_replace",
+      "value": "替换当前名单"
+    },
+    {
+      "name": "access_control_import_confirm",
+      "value": "导入"
+    },
+    {
+      "name": "access_control_import_empty",
+      "value": "未找到有效的鸿蒙应用包名，原有名单保持不变。"
+    },
+    {
+      "name": "access_control_own_only",
+      "value": "ArkClash 自身始终直连，无需加入名单。"
+    },
+    {
+      "name": "access_control_import_done",
+      "value": "已导入 %d 个应用包名。"
+    },
+    {
+      "name": "access_control_import_partial",
+      "value": "已导入 %d 个包名，忽略 %d 项无效内容。"
+    },
+    {
+      "name": "access_control_import_own_skipped",
+      "value": "已导入 %d 个包名（已自动跳过 ArkClash 自身）。"
+    },
+    {
+      "name": "access_control_clipboard_empty",
+      "value": "剪贴板中没有文本内容。"
+    },
+    {
+      "name": "access_control_clipboard_failed",
+      "value": "读取剪贴板失败，请直接粘贴到输入框。"
+    },
+    {
+      "name": "access_control_export_empty",
+      "value": "当前名单为空。"
+    },
+    {
+      "name": "access_control_export_done",
+      "value": "已复制 %d 个应用包名。"
+    },
+    {
+      "name": "access_control_export_failed",
+      "value": "复制到剪贴板失败。"
+    },
+    {
+      "name": "access_control_empty_trusted",
+      "value": "仅代理所选模式下请至少选择或添加一个应用。"
+    },
+    {
+      "name": "access_control_unsaved_title",
+      "value": "是否保存应用访问控制修改？"
+    },
+    {
+      "name": "access_control_cat_all",
+      "value": "全部"
+    },
+    {
+      "name": "access_control_cat_browser",
+      "value": "浏览器"
+    },
+    {
+      "name": "access_control_cat_container",
+      "value": "安卓容器"
+    },
+    {
+      "name": "access_control_cat_social",
+      "value": "社交"
+    },
+    {
+      "name": "access_control_cat_finance",
+      "value": "支付金融"
+    },
+    {
+      "name": "access_control_cat_shopping",
+      "value": "购物"
+    },
+    {
+      "name": "access_control_cat_life",
+      "value": "生活出行"
+    },
+    {
+      "name": "access_control_cat_media",
+      "value": "影音"
+    },
+    {
       "name": "network_background",
       "value": "后台"
     },
