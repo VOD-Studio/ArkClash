@@ -8,7 +8,7 @@ export const updateVpnState: (intent: string, forward: string, vpnCreated: boole
 export const runtimeStatus: () => Promise<string>;
 /** path/profile 同为空可清空已断开的配置；expectedProfile 空串只接受空核心，省略则不约束。 */
 export const reload: (path: string, profile: string, expectedProfile?: string) => Promise<void>;
-/** 经内核下载，请求和结果 JSON 见 core/api.go 的 fetchRequest、fetchResult。 */
+/** 经内核下载，请求和结果 JSON 见 core/fetch.go 的 fetchRequest、fetchResult。 */
 export const fetch: (requestJson: string) => Promise<string>;
 /** 预先下载 path 里本地还没有的 rule-provider，结果 JSON 见 core/api.go 的 prefetchResult。 */
 export const prefetch: (path: string) => Promise<string>;

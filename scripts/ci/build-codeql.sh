@@ -23,6 +23,6 @@ export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$quickjs_dir\""
 CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
   CC="$LLVM/aarch64-unknown-linux-ohos-clang" \
   CXX="$LLVM/aarch64-unknown-linux-ohos-clang++" \
-  go build -a -tags with_gvisor -buildmode=c-shared -modfile "$WORK/go.mod" \
+  go build -a -tags with_gvisor,ohos -buildmode=c-shared -modfile "$WORK/go.mod" \
     -o "$WORK/libclash.so" .
 echo "CodeQL 分析构建完成（标准 Go、补丁依赖、临时产物）"

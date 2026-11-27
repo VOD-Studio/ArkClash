@@ -41,7 +41,7 @@ lint_go() {
       trap 'rm -rf "$lint_deps"' EXIT
       bash "$ROOT/scripts/prepare-core-modfile.sh" "$lint_deps" || exit 1
       cd core
-      CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" go vet -modfile "$lint_deps/go.mod" -tags with_gvisor ./...
+      CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" go vet -modfile "$lint_deps/go.mod" -tags with_gvisor,ohos ./...
     ) || failed=1
   else
     echo "跳过：找不到 OHOS NDK（${clang}）"
@@ -135,7 +135,7 @@ lint_vuln() {
       cp "$vuln_deps/go.mod" "$vuln_deps/go.sum" "$vuln_deps/core/"
       cd "$vuln_deps/core"
       CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" \
-        "$ROOT/.toolchain/bin/govulncheck" -tags with_gvisor ./...
+        "$ROOT/.toolchain/bin/govulncheck" -tags with_gvisor,ohos ./...
     ) || failed=1
   else
     echo "跳过：找不到 OHOS NDK（${clang}）"

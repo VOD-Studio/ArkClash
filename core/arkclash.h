@@ -25,7 +25,7 @@ char *ArkClashReload(char *path, char *profile, char *expectedProfile);
 // rule-provider，第一次热切换到它时不用等。 返回 JSON {"downloaded":n} 或
 // {"error":"..."}；会阻塞，只能在工作线程上调用；用 ArkClashFree 释放。
 char *ArkClashPrefetch(char *path);
-// 经内核下载，参数和结果都是 JSON（core/api.go 的 fetchRequest、fetchResult）。
+// 经内核下载，参数和结果都是 JSON（core/fetch.go 的 fetchRequest、fetchResult）。
 // 会阻塞到请求结束，只能在工作线程上调用；结果用 ArkClashFree 释放。
 char *ArkClashFetch(char *requestJSON);
 

@@ -30,7 +30,7 @@ before(async () => {
     'added_rules.go', 'rule_set_data.go', 'rule_sets.go', 'profile_settings.go', 'profile_scripts.go', 'profile_preview.go', 'local_proxies.go', 'local_proxy_links.go',
     'proxy_filters.go', 'diagnostics_connections.go', 'diagnostics_dns.go', 'diagnostics_stream.go',
     'diagnostics_stats.go', 'diagnostics_logs.go', 'general_settings.go', 'panel_controller.go', 'backup.go', 'profile_subscription_age.go',
-    'tailscale_watch.go', 'tailscale_login.go']) {
+    'tailscale_watch.go', 'tailscale_login.go', 'fetch.go', 'commands.go']) {
     await copyFile(join(root, 'core', file), join(sandbox, file));
   }
   for (const file of ['contracts-host_test.go', 'backup-live-host_test.go', 'core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go',
@@ -58,21 +58,6 @@ before(async () => {
     await copyFile(join(root, 'scripts', source), join(sandbox, 'mihomo', destination));
   }
   const apiSource = await readFile(join(root, 'core/api.go'), 'utf8');
-  const fetchDeclarations = ['fetchRequest', 'fetchResult'].map(name => {
-    const declaration = apiSource.match(new RegExp(`^type ${name} struct \\{[\\s\\S]*?^\\}`, 'm'))?.[0];
-    assert.ok(declaration, `未找到产品下载类型 ${name}`);
-    return declaration;
-  });
-  const fetchFunctions = ['fetch', 'writeBody'].map(name => {
-    const declaration = apiSource.match(new RegExp(`^func ${name}\\([^\\n]+\\) [^\\n]+ \\{[\\s\\S]*?^\\}`, 'm'))?.[0];
-    assert.ok(declaration, `未找到产品下载函数 ${name}`);
-    return declaration;
-  });
-  const fetchLimit = apiSource.match(/^const fetchLimit = .+$/m)?.[0];
-  assert.ok(fetchLimit, '未找到产品下载上限');
-  await writeFile(join(sandbox, 'fetch.go'), 'package main\nimport (\n' +
-    '"context"\n"errors"\n"io"\n"net/url"\n"os"\n"strings"\n"time"\n' +
-    '"github.com/metacubex/http"\n)\n' + [fetchLimit, ...fetchDeclarations, ...fetchFunctions].join('\n\n') + '\n');
   const frameFunctions = ['upgradeWebSocket', 'writeTextFrame', 'getStatus', 'writeError'].map(name => {
     const declaration = apiSource.match(new RegExp(`^func ${name}\\([^\\n]+\\) [^\\n]*\\{[\\s\\S]*?^\\}`, 'm'))?.[0];
     assert.ok(declaration, `未找到产品 WebSocket/状态函数 ${name}`);
