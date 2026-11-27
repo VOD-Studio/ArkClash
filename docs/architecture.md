@@ -188,6 +188,6 @@ entry/ ── hvigor（CMake 编 NAPI 桥 + ArkTS）──► HAP
 - **新的 ArkClash 命令**：挂在 `core/api.go` 的 `/arkclash/` 下。内核自己能完成的由 Go 处理；要用到 ArkTS 侧逻辑的，走 `/arkclash/profiles/{name}` 这类转发路由（ADR-0009）。
 - **VpnConfig 级设置**（协议栈、IPv6、分应用代理、VpnConfig 里的 DNS 地址和 MTU）不能热切换，改了只能断开重连（ADR-0010）。
 - **网络设置**保存在 UI preferences，连接时随操作 token 写入 `runtime.json`。系统 VPN 和内核 TUN 使用同一份快照（[ADR-0020](adr/0020-vpn-network-settings.md)）。
-- **分应用绕过**：当前使用 `VpnConfig.blockedApplications`，将用户填写的包名与 ArkClash 自身包名去重合并。[ADR-0020](adr/0020-vpn-network-settings.md)
+- **应用访问控制**：支持关闭、黑名单（`blockedApplications`，上限 255，与 ArkClash 自身去重合并）与白名单（`trustedApplications`，上限 256，剔除自身且拒绝空白名单）三种模式，双名单独立保存；入口在「工具 → 设置 → 应用访问控制」及「网络」页摘要行，内置常用鸿蒙应用目录与免权限 `PasteButton` 批量导入，不在 `module.json5` 声明 `querySchemes`。[ADR-0020](adr/0020-vpn-network-settings.md)
 - **流量与诊断**：流量使用 `/traffic`，应用的连接、DNS 和日志使用独立的 `/arkclash/diagnostics/` 数据流。[ADR-0019](adr/0019-app-diagnostics-capture.md) · [ADR-0029](adr/0029-general-settings-and-log-capture.md) · [ADR-0039](adr/0039-boot-scoped-structured-logs.md)
 - **IPv6**：`VpnConfig` 和 `core/tun.go` 使用同一份网络设置快照，地址族和路由需同时生效。开启 IPv6 时，最小 MTU 为 1280。[ADR-0020](adr/0020-vpn-network-settings.md)
