@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/VOD-Studio/ArkClash/core/internal/backup"
+	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/VOD-Studio/ArkClash/core/internal/ruletunnel"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
@@ -166,7 +167,7 @@ func applyBackup(req backupApplyRequest) error {
 		}
 		var err error
 		for _, read := range []func() error{
-			func() error { next.Geo, err = readGeoSettings(next.HomeDir); return err },
+			func() error { next.Geo, err = geo.ReadSettings(next.HomeDir); return err },
 			func() error { next.DNS, err = readDNSOverrides(next.HomeDir); return err },
 			func() error { next.General, err = readGeneralSettings(next.HomeDir); return err },
 			func() error { next.AddedRules, err = readAddedRules(next.HomeDir); return err },
@@ -188,7 +189,7 @@ func applyBackup(req backupApplyRequest) error {
 				log.Warnln("[ArkClash] external controller port unavailable")
 			}
 			if manager := eng.geo.Load(); manager != nil {
-				err = manager.applySettings(next.Geo)
+				err = manager.ApplySettings(next.Geo)
 			}
 			eng.publishRuntimeLocked()
 		}

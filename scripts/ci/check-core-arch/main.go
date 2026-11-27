@@ -32,6 +32,7 @@ const (
 	probePkg       = internalPrefix + "probe"
 	subfetchPkg    = internalPrefix + "subfetch"
 	diagnosticsPkg = internalPrefix + "diagnostics"
+	geoPkg         = internalPrefix + "geo"
 	mihomoPrefix   = "github.com/metacubex/mihomo"
 )
 
@@ -55,6 +56,7 @@ var (
 		probePkg:       {ctrlPkg, ruletunnelPkg},
 		subfetchPkg:    {ruletunnelPkg},
 		diagnosticsPkg: {ctrlPkg},
+		geoPkg:         {backupPkg, ctrlPkg, ruletunnelPkg},
 	}
 	allowedInitFiles = map[string]bool{
 		"api.go":               true,
@@ -71,8 +73,6 @@ var (
 		"delay.go:delaySlots":                   true,
 		"engine.go:eng":                         true,
 		"engine.go:engineUnlockCheck":           true,
-		"geo_download.go:geoDownloadTimeout":    true,
-		"geo_settings.go:geoIDs":                true,
 		"lib.go:reclaimMu":                      true,
 		"lib.go:lastReclaim":                    true,
 		"local_proxies.go:localProxyValidation": true,

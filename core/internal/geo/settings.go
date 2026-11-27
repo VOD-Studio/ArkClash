@@ -1,4 +1,6 @@
-package main
+// Package geo 管理四类 Geo 数据库（mmdb/asn/geoip/geosite）的磁盘契约、串行可取消下载、
+// 候选校验、热换提交与最新快照 WebSocket 推送，不接触核心互斥锁。
+package geo
 
 import (
 	"bytes"
@@ -10,55 +12,56 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/backup"
 	"github.com/metacubex/mihomo/component/geodata"
 )
 
-type geoResourceID string
+type ResourceID string
 
 const (
-	geoMMDB geoResourceID = "mmdb"
-	geoASN  geoResourceID = "asn"
-	geoIP   geoResourceID = "geoip"
-	geoSite geoResourceID = "geosite"
+	MMDB    ResourceID = "mmdb"
+	ASN     ResourceID = "asn"
+	GeoIP   ResourceID = "geoip"
+	GeoSite ResourceID = "geosite"
 )
 
-var geoIDs = []geoResourceID{geoMMDB, geoASN, geoIP, geoSite}
+var IDs = []ResourceID{MMDB, ASN, GeoIP, GeoSite}
 
 const geoJSONLimit = 16 << 10
 
 var errGeoJSONFile = errors.New("invalid Geo JSON file")
 
-type geoURLs struct {
+type URLs struct {
 	MMDB    string `json:"mmdb"`
 	ASN     string `json:"asn"`
 	GeoIP   string `json:"geoip"`
 	GeoSite string `json:"geosite"`
 }
 
-type geoSettings struct {
-	Version       int     `json:"version"`
-	Revision      string  `json:"revision"`
-	AutoUpdate    bool    `json:"autoUpdate"`
-	IntervalHours int     `json:"intervalHours"`
-	URLs          geoURLs `json:"urls"`
+type Settings struct {
+	Version       int    `json:"version"`
+	Revision      string `json:"revision"`
+	AutoUpdate    bool   `json:"autoUpdate"`
+	IntervalHours int    `json:"intervalHours"`
+	URLs          URLs   `json:"urls"`
 }
 
-type geoMetadata struct {
+type Metadata struct {
 	Version       int   `json:"version"`
 	Managed       bool  `json:"managed"`
 	LastAttemptAt int64 `json:"lastAttemptAt"`
 }
 
-func defaultGeoSettings() geoSettings {
+func DefaultSettings() Settings {
 	const base = "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/"
-	return geoSettings{Version: 1, Revision: "default", AutoUpdate: true, IntervalHours: 24, URLs: geoURLs{
+	return Settings{Version: 1, Revision: "default", AutoUpdate: true, IntervalHours: 24, URLs: URLs{
 		MMDB: base + "geoip.metadb", ASN: base + "GeoLite2-ASN.mmdb",
 		GeoIP: base + "geoip.dat", GeoSite: base + "geosite.dat",
 	}}
 }
 
-func geoIndex(id geoResourceID) int {
-	for i, candidate := range geoIDs {
+func geoIndex(id ResourceID) int {
+	for i, candidate := range IDs {
 		if id == candidate {
 			return i
 		}
@@ -66,21 +69,21 @@ func geoIndex(id geoResourceID) int {
 	return -1
 }
 
-func (s geoSettings) source(id geoResourceID) string {
+func (s Settings) source(id ResourceID) string {
 	switch id {
-	case geoMMDB:
+	case MMDB:
 		return s.URLs.MMDB
-	case geoASN:
+	case ASN:
 		return s.URLs.ASN
-	case geoIP:
+	case GeoIP:
 		return s.URLs.GeoIP
-	case geoSite:
+	case GeoSite:
 		return s.URLs.GeoSite
 	}
 	return ""
 }
 
-func validGeoURL(source string) bool {
+func ValidURL(source string) bool {
 	if len(source) == 0 || len(source) > 2048 {
 		return false
 	}
@@ -93,12 +96,12 @@ func validGeoURL(source string) bool {
 	return err == nil && (target.Scheme == "http" || target.Scheme == "https") && target.Hostname() != "" && target.User == nil
 }
 
-func validateGeoSettings(settings geoSettings) error {
+func ValidateSettings(settings Settings) error {
 	if settings.Version != 1 || settings.Revision == "" || settings.IntervalHours < 1 || settings.IntervalHours > 8760 {
 		return errors.New("geo_invalid_settings")
 	}
-	for _, id := range geoIDs {
-		if !validGeoURL(settings.source(id)) {
+	for _, id := range IDs {
+		if !ValidURL(settings.source(id)) {
 			return errors.New("geo_invalid_url")
 		}
 	}
@@ -155,55 +158,55 @@ func readGeoJSONFile(path string) ([]byte, error) {
 	return data, nil
 }
 
-func readGeoSettings(home string) (geoSettings, error) {
-	data, err := readGeoJSONFile(portableDataPath(home, "geo-settings.json"))
+func ReadSettings(home string) (Settings, error) {
+	data, err := readGeoJSONFile(backup.DataPath(home, "geo-settings.json"))
 	if errors.Is(err, os.ErrNotExist) {
-		return defaultGeoSettings(), nil
+		return DefaultSettings(), nil
 	}
 	if errors.Is(err, errGeoJSONFile) {
-		return geoSettings{}, errors.New("geo_invalid_settings")
+		return Settings{}, errors.New("geo_invalid_settings")
 	}
 	if err != nil {
-		return geoSettings{}, errors.New("geo_io")
+		return Settings{}, errors.New("geo_io")
 	}
-	var settings geoSettings
+	var settings Settings
 	if !geoRequiredFields(data, "version", "revision", "autoUpdate", "intervalHours", "urls") || decodeGeoJSON(data, &settings) != nil {
-		return geoSettings{}, errors.New("geo_invalid_settings")
+		return Settings{}, errors.New("geo_invalid_settings")
 	}
 	var object map[string]json.RawMessage
 	_ = json.Unmarshal(data, &object)
 	if !geoRequiredFields(object["urls"], "mmdb", "asn", "geoip", "geosite") {
-		return geoSettings{}, errors.New("geo_invalid_settings")
+		return Settings{}, errors.New("geo_invalid_settings")
 	}
-	if err := validateGeoSettings(settings); err != nil {
-		return geoSettings{}, err
+	if err := ValidateSettings(settings); err != nil {
+		return Settings{}, err
 	}
 	return settings, nil
 }
 
-func geoMetadataPath(home string, id geoResourceID) string {
+func geoMetadataPath(home string, id ResourceID) string {
 	return filepath.Join(home, "geo-"+string(id)+".json")
 }
 
-func readGeoMetadata(home string, id geoResourceID) (geoMetadata, error) {
+func readGeoMetadata(home string, id ResourceID) (Metadata, error) {
 	data, err := readGeoJSONFile(geoMetadataPath(home, id))
 	if errors.Is(err, os.ErrNotExist) {
-		return geoMetadata{Version: 1}, nil
+		return Metadata{Version: 1}, nil
 	}
 	if errors.Is(err, errGeoJSONFile) {
-		return geoMetadata{}, errors.New("geo_metadata_invalid")
+		return Metadata{}, errors.New("geo_metadata_invalid")
 	}
 	if err != nil {
-		return geoMetadata{}, errors.New("geo_io")
+		return Metadata{}, errors.New("geo_io")
 	}
-	var metadata geoMetadata
+	var metadata Metadata
 	if !geoRequiredFields(data, "version", "managed", "lastAttemptAt") || decodeGeoJSON(data, &metadata) != nil || metadata.Version != 1 || metadata.LastAttemptAt < 0 {
-		return geoMetadata{}, errors.New("geo_metadata_invalid")
+		return Metadata{}, errors.New("geo_metadata_invalid")
 	}
 	return metadata, nil
 }
 
-func writeGeoMetadata(home string, id geoResourceID, metadata geoMetadata) error {
+func writeGeoMetadata(home string, id ResourceID, metadata Metadata) error {
 	data, err := json.Marshal(metadata)
 	if err != nil {
 		return errors.New("geo_io")
@@ -241,18 +244,18 @@ func writeGeoMetadata(home string, id geoResourceID, metadata geoMetadata) error
 	return nil
 }
 
-// ReadDir 的文件名顺序与 mihomo 相同，但列表读取不改变全局 GeoipName。
-func geoPath(home string, id geoResourceID) (string, error) {
+// Path 的 ReadDir 文件名顺序与 mihomo 相同，但列表读取不改变全局 GeoipName。
+func Path(home string, id ResourceID) (string, error) {
 	var names []string
 	var fallback string
 	switch id {
-	case geoMMDB:
+	case MMDB:
 		names, fallback = []string{"Country.mmdb", "geoip.db", "geoip.metadb"}, "geoip.metadb"
-	case geoASN:
+	case ASN:
 		names, fallback = []string{"ASN.mmdb"}, "ASN.mmdb"
-	case geoIP:
+	case GeoIP:
 		names, fallback = []string{"GeoIP.dat"}, "GeoIP.dat"
-	case geoSite:
+	case GeoSite:
 		names, fallback = []string{"GeoSite.dat"}, "geosite.dat"
 	default:
 		return "", errors.New("geo_invalid_settings")
@@ -283,7 +286,7 @@ func geoPath(home string, id geoResourceID) (string, error) {
 	return filepath.Join(home, fallback), nil
 }
 
-func setGeoURLs(settings geoSettings) {
+func SetURLs(settings Settings) {
 	geodata.SetMmdbUrl(settings.URLs.MMDB)
 	geodata.SetASNUrl(settings.URLs.ASN)
 	geodata.SetGeoIpUrl(settings.URLs.GeoIP)

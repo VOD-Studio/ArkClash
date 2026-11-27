@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/config"
 	"github.com/metacubex/mihomo/constant"
@@ -48,7 +49,7 @@ func TestDNSOverridesOnlyReplaceAddedFields(t *testing.T) {
 	settings := dnsOverrideSettings{Revision: "example", Entries: dnsOverrideEntries{
 		IPv6: new(false), Fallback: new([]string{}), EnhancedMode: new(constant.DNSMapping),
 	}}
-	applyOverrides(raw, startOptions{Profile: "a", DNS: settings, Geo: defaultGeoSettings()})
+	applyOverrides(raw, startOptions{Profile: "a", DNS: settings, Geo: geo.DefaultSettings()})
 	if !raw.DNS.Enable || raw.DNS.IPv6 || len(raw.DNS.Fallback) != 0 || !raw.DNS.UseHosts ||
 		raw.DNS.EnhancedMode != constant.DNSMapping {
 		t.Fatal("DNS merge changed inherited fields or dropped explicit false and empty values")

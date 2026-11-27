@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/VOD-Studio/ArkClash/core/internal/probe"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
@@ -145,7 +146,7 @@ rules: ['MATCH,DIRECT']
 	tunnel.SetMode(tunnel.ModeMapping["direct"])
 	inner.New(tunnel.Tunnel)
 	tunnel.OnRunning()
-	eng.current = startOptions{HomeDir: home, Profile: "fixture", Geo: defaultGeoSettings()}
+	eng.current = startOptions{HomeDir: home, Profile: "fixture", Geo: geo.DefaultSettings()}
 	eng.running = true
 	setHostTun(true)
 	waitDiagnostics := beginRuntime()

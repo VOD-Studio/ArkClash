@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/VOD-Studio/ArkClash/core/internal/ruleset"
 	"github.com/VOD-Studio/ArkClash/core/internal/ruletunnel"
 	"github.com/metacubex/chi/render"
@@ -45,7 +46,7 @@ type ruleSetCatalog struct {
 func (s ruleSetItem) validOptions() bool {
 	if !ruleset.ValidID(s.ID) || s.Name == "" || len(s.Name) > 256 ||
 		strings.TrimSpace(s.Name) != s.Name || strings.ContainsAny(s.Name, "\x00\r\n") ||
-		(s.URL != "" && !validGeoURL(s.URL)) {
+		(s.URL != "" && !geo.ValidURL(s.URL)) {
 		return false
 	}
 	switch s.Behavior {
@@ -443,7 +444,7 @@ func downloadRuleSet(ctx context.Context, source string) ([]byte, error) {
 	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, CheckRedirect: func(next *http.Request, via []*http.Request) error {
-		if len(via) >= 10 || !validGeoURL(next.URL.String()) {
+		if len(via) >= 10 || !geo.ValidURL(next.URL.String()) {
 			return errRuleSetDownload
 		}
 		return nil

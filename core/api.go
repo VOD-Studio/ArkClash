@@ -7,6 +7,7 @@ import (
 	"net"
 
 	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
+	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/VOD-Studio/ArkClash/core/internal/subfetch"
 	"github.com/metacubex/mihomo/hub/route"
 
@@ -36,8 +37,7 @@ func init() {
 			r.Post("/reload", postReload)
 			r.Post("/prefetch", postPrefetch)
 			r.Get("/events", ctrl.GetEvents)
-			r.Get("/geo", getGeo)
-			r.Post("/geo/settings", postGeoSettings)
+			geo.RegisterRoutes(r, eng.geo.Load, eng.ApplyGeoSettings)
 			r.Post("/dns/settings", portableMutation(postDNSOverrides))
 			r.Post("/general/settings", portableMutation(postGeneralSettings))
 			r.Post("/rules/settings", portableMutation(postAddedRules))
@@ -47,8 +47,6 @@ func init() {
 			r.Get("/profiles/preview", getProfilePreview)
 			r.Post("/local-proxies/{operation}", postLocalProxies)
 			r.Post("/proxy-filters/validate", postProxyFilterValidation)
-			r.Post("/geo/update", postGeoUpdate)
-			r.Get("/geo/events", getGeoEvents)
 			eng.diag.RegisterRoutes(r)
 			r.Post("/profiles/{name}", ctrl.ForwardCommand)
 			r.Post("/vpn/connect", ctrl.ForwardCommand)

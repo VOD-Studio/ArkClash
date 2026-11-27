@@ -8,6 +8,7 @@ import (
 
 	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
 	"github.com/VOD-Studio/ArkClash/core/internal/diagnostics"
+	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/VOD-Studio/ArkClash/core/internal/probe"
 	"github.com/VOD-Studio/ArkClash/core/internal/providers"
 	"github.com/VOD-Studio/ArkClash/core/internal/subfetch"
@@ -128,7 +129,7 @@ type coreEngine struct {
 	providers *providers.Hub
 	diag      *diagnostics.Hub
 	probe     *probe.Handler
-	geo       atomic.Pointer[geoManager]
+	geo       atomic.Pointer[geo.Manager]
 	routes    atomic.Pointer[runtimeRouteWatch]
 }
 
@@ -333,10 +334,10 @@ func (tx *stateTx) RollbackReload(previous startOptions, fallbackInbound inbound
 }
 
 // ApplyGeoSettings 在核心提交锁下读取并校验 geo-settings.json，按向下锁序
-// e.mu -> m.mu 下推给运行中的 geoManager，并同步 mihomo 全局 URL 与 current.Geo。
-func (e *coreEngine) ApplyGeoSettings(expectedBootID, revision string) (*geoSnapshot, int, error) {
+// e.mu -> m.mu 下推给运行中的 geo.Manager，并同步 mihomo 全局 URL 与 current.Geo。
+func (e *coreEngine) ApplyGeoSettings(expectedBootID, revision string) (*geo.Snapshot, int, error) {
 	var (
-		snapshot *geoSnapshot
+		snapshot *geo.Snapshot
 		status   = http.StatusOK
 	)
 	err := e.withState(func(tx *stateTx) error {
@@ -345,11 +346,11 @@ func (e *coreEngine) ApplyGeoSettings(expectedBootID, revision string) (*geoSnap
 			status = http.StatusServiceUnavailable
 			return errors.New("geo_canceled")
 		}
-		if expectedBootID != manager.bootID {
+		if expectedBootID != manager.BootID() {
 			status = http.StatusConflict
 			return errors.New("geo_stale_boot")
 		}
-		settings, err := readGeoSettings(manager.home)
+		settings, err := geo.ReadSettings(manager.Home())
 		if err != nil {
 			status = http.StatusBadRequest
 			return err
@@ -358,15 +359,15 @@ func (e *coreEngine) ApplyGeoSettings(expectedBootID, revision string) (*geoSnap
 			status = http.StatusConflict
 			return errors.New("geo_invalid_settings")
 		}
-		if err := manager.applySettings(settings); err != nil {
+		if err := manager.ApplySettings(settings); err != nil {
 			status = http.StatusServiceUnavailable
 			return err
 		}
-		setGeoURLs(settings)
+		geo.SetURLs(settings)
 		next := e.current
 		next.Geo = settings
 		e.setCurrentLocked(next)
-		snapshot = manager.snapshot.Load()
+		snapshot = manager.Snapshot()
 		return nil
 	})
 	return snapshot, status, err
@@ -375,10 +376,10 @@ func (e *coreEngine) ApplyGeoSettings(expectedBootID, revision string) (*geoSnap
 // CommitGeoSwap 在核心提交锁下串行执行 Geo 候选落盘与 reader/缓存热换，
 // 避免与配置解析期间 mihomo 的 geodata.Init* 并发写盘，并在内容更新后推进运行快照代次。
 // 锁序：e.mu -> m.mu。
-func (e *coreEngine) CommitGeoSwap(ctx context.Context, m *geoManager, req geoSwapCommit) (outcome string, installed bool, err error) {
+func (e *coreEngine) CommitGeoSwap(fn func() (string, error)) (outcome string, err error) {
 	err = e.withState(func(tx *stateTx) error {
 		var commitErr error
-		outcome, installed, commitErr = m.commitSwap(ctx, req)
+		outcome, commitErr = fn()
 		if commitErr != nil {
 			return commitErr
 		}
@@ -387,5 +388,5 @@ func (e *coreEngine) CommitGeoSwap(ctx context.Context, m *geoManager, req geoSw
 		}
 		return nil
 	})
-	return outcome, installed, err
+	return outcome, err
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/config"
 	"github.com/metacubex/mihomo/tunnel"
@@ -45,7 +46,7 @@ func lifecycleOptions(t *testing.T) startOptions {
 	if err := reserved.Close(); err != nil {
 		t.Fatal(err)
 	}
-	return startOptions{HomeDir: home, Controller: address, Geo: defaultGeoSettings()}
+	return startOptions{HomeDir: home, Controller: address, Geo: geo.DefaultSettings()}
 }
 
 func lifecycleController(t *testing.T, address string, wantOpen bool) {

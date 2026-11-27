@@ -1,4 +1,4 @@
-package main
+package geo
 
 import (
 	"context"
@@ -12,35 +12,41 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
+	"github.com/metacubex/chi"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
 )
 
-type geoResourceStatus struct {
-	ID            geoResourceID `json:"id"`
-	FileName      string        `json:"fileName"`
-	Exists        bool          `json:"exists"`
-	Size          int64         `json:"size"`
-	ModifiedAt    int64         `json:"modifiedAt"`
-	Phase         string        `json:"phase"`
-	OperationID   string        `json:"operationId"`
-	Outcome       string        `json:"outcome"`
-	Error         string        `json:"error"`
-	ReceivedBytes int64         `json:"receivedBytes,omitempty"`
-	TotalBytes    int64         `json:"totalBytes,omitempty"`
+type ResourceStatus struct {
+	ID            ResourceID `json:"id"`
+	FileName      string     `json:"fileName"`
+	Exists        bool       `json:"exists"`
+	Size          int64      `json:"size"`
+	ModifiedAt    int64      `json:"modifiedAt"`
+	Phase         string     `json:"phase"`
+	OperationID   string     `json:"operationId"`
+	Outcome       string     `json:"outcome"`
+	Error         string     `json:"error"`
+	ReceivedBytes int64      `json:"receivedBytes,omitempty"`
+	TotalBytes    int64      `json:"totalBytes,omitempty"`
 }
 
-type geoSnapshot struct {
-	BootID           string              `json:"bootId"`
-	Revision         uint64              `json:"revision"`
-	SettingsRevision string              `json:"settingsRevision"`
-	Items            []geoResourceStatus `json:"items"`
+type Snapshot struct {
+	BootID           string           `json:"bootId"`
+	Revision         uint64           `json:"revision"`
+	SettingsRevision string           `json:"settingsRevision"`
+	Items            []ResourceStatus `json:"items"`
 }
 
-type geoTimer interface{ Stop() bool }
+type Timer interface{ Stop() bool }
+
+// SwapCommitter 由核心引擎注入，在核心提交锁（e.mu）下串行执行候选替换并在更新后推进运行快照代次。
+// Manager 在未持有 m.mu 时调用该回调，保证严格向下锁序 e.mu -> m.mu。
+type SwapCommitter func(fn func() (outcome string, err error)) (string, error)
 
 type geoJob struct {
-	id          geoResourceID
+	id          ResourceID
 	bootID      string
 	source      string
 	path        string
@@ -50,16 +56,17 @@ type geoJob struct {
 	cancel      context.CancelFunc
 }
 
-type geoManager struct {
+type Manager struct {
 	mu           sync.Mutex
 	home         string
 	bootID       string
-	settings     geoSettings
-	items        []geoResourceStatus
-	paths        map[geoResourceID]string
-	metadata     map[geoResourceID]geoMetadata
-	metadataOK   map[geoResourceID]bool
-	jobs         map[geoResourceID]*geoJob
+	settings     Settings
+	commitSwapFn SwapCommitter
+	items        []ResourceStatus
+	paths        map[ResourceID]string
+	metadata     map[ResourceID]Metadata
+	metadataOK   map[ResourceID]bool
+	jobs         map[ResourceID]*geoJob
 	queue        []*geoJob
 	active       *geoJob
 	sequence     uint64
@@ -69,37 +76,38 @@ type geoManager struct {
 	cancel       context.CancelFunc
 	wake         chan struct{}
 	done         chan struct{}
-	snapshot     atomic.Pointer[geoSnapshot]
-	subscribers  map[chan *geoSnapshot]struct{}
+	snapshot     atomic.Pointer[Snapshot]
+	subscribers  map[chan *Snapshot]struct{}
 	now          func() time.Time
-	afterFunc    func(time.Duration, func()) geoTimer
-	timer        geoTimer
+	afterFunc    func(time.Duration, func()) Timer
+	timer        Timer
 	timerVersion uint64
 	startupFloor time.Time
 }
 
-func newGeoManager(home, bootID string, settings geoSettings) (*geoManager, error) {
-	return newGeoManagerWithClock(home, bootID, settings, time.Now, func(delay time.Duration, callback func()) geoTimer {
+func NewManager(home, bootID string, settings Settings, commitSwap SwapCommitter) (*Manager, error) {
+	return NewManagerWithClock(home, bootID, settings, commitSwap, time.Now, func(delay time.Duration, callback func()) Timer {
 		return time.AfterFunc(delay, callback)
 	})
 }
 
-func newGeoManagerWithClock(home, bootID string, settings geoSettings, now func() time.Time, afterFunc func(time.Duration, func()) geoTimer) (*geoManager, error) {
-	if err := validateGeoSettings(settings); err != nil {
+func NewManagerWithClock(home, bootID string, settings Settings, commitSwap SwapCommitter, now func() time.Time, afterFunc func(time.Duration, func()) Timer) (*Manager, error) {
+	if err := ValidateSettings(settings); err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	manager := &geoManager{
-		home: home, bootID: bootID, settings: settings, paths: make(map[geoResourceID]string),
-		metadata: make(map[geoResourceID]geoMetadata), metadataOK: make(map[geoResourceID]bool),
-		jobs: make(map[geoResourceID]*geoJob), subscribers: make(map[chan *geoSnapshot]struct{}),
-		ctx: ctx, cancel: cancel, wake: make(chan struct{}, 1), done: make(chan struct{}),
+	manager := &Manager{
+		home: home, bootID: bootID, settings: settings, commitSwapFn: commitSwap,
+		paths: make(map[ResourceID]string), metadata: make(map[ResourceID]Metadata),
+		metadataOK: make(map[ResourceID]bool), jobs: make(map[ResourceID]*geoJob),
+		subscribers: make(map[chan *Snapshot]struct{}), ctx: ctx, cancel: cancel,
+		wake: make(chan struct{}, 1), done: make(chan struct{}),
 		now: now, afterFunc: afterFunc, startupFloor: now().Add(10 * time.Second),
 	}
 	manager.cleanTemps()
-	for _, id := range geoIDs {
-		item := geoResourceStatus{ID: id, Phase: "idle", Outcome: "none"}
-		path, err := geoPath(home, id)
+	for _, id := range IDs {
+		item := ResourceStatus{ID: id, Phase: "idle", Outcome: "none"}
+		path, err := Path(home, id)
 		item.FileName = filepath.Base(path)
 		if err != nil {
 			item.Error = "geo_io"
@@ -125,7 +133,11 @@ func newGeoManagerWithClock(home, bootID string, settings geoSettings, now func(
 	return manager, nil
 }
 
-func (m *geoManager) cleanTemps() {
+func (m *Manager) Home() string        { return m.home }
+func (m *Manager) BootID() string      { return m.bootID }
+func (m *Manager) Snapshot() *Snapshot { return m.snapshot.Load() }
+
+func (m *Manager) cleanTemps() {
 	entries, err := os.ReadDir(m.home)
 	if err != nil {
 		return
@@ -134,7 +146,7 @@ func (m *geoManager) cleanTemps() {
 		if !entry.Type().IsRegular() || !strings.HasSuffix(entry.Name(), ".tmp") {
 			continue
 		}
-		for _, id := range geoIDs {
+		for _, id := range IDs {
 			if strings.HasPrefix(entry.Name(), "arkclash-geo-"+string(id)+"-") {
 				_ = os.Remove(filepath.Join(m.home, entry.Name()))
 				break
@@ -143,7 +155,7 @@ func (m *geoManager) cleanTemps() {
 	}
 }
 
-func statGeoResource(path string, item *geoResourceStatus) error {
+func statGeoResource(path string, item *ResourceStatus) error {
 	info, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		item.Exists, item.Size, item.ModifiedAt = false, 0, 0
@@ -161,10 +173,10 @@ func statGeoResource(path string, item *geoResourceStatus) error {
 }
 
 // 发布后快照不再修改；慢连接只保留最新完整状态。
-func (m *geoManager) publishLocked() {
+func (m *Manager) publishLocked() {
 	m.revision++
-	snapshot := &geoSnapshot{BootID: m.bootID, Revision: m.revision, SettingsRevision: m.settings.Revision,
-		Items: append([]geoResourceStatus(nil), m.items...)}
+	snapshot := &Snapshot{BootID: m.bootID, Revision: m.revision, SettingsRevision: m.settings.Revision,
+		Items: append([]ResourceStatus(nil), m.items...)}
 	m.snapshot.Store(snapshot)
 	for channel := range m.subscribers {
 		select {
@@ -175,7 +187,7 @@ func (m *geoManager) publishLocked() {
 	}
 }
 
-func (m *geoManager) enqueue(ids []geoResourceID, automatic bool) (*geoSnapshot, error) {
+func (m *Manager) Enqueue(ids []ResourceID, automatic bool) (*Snapshot, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
@@ -196,7 +208,7 @@ func (m *geoManager) enqueue(ids []geoResourceID, automatic bool) (*geoSnapshot,
 	return m.snapshot.Load(), nil
 }
 
-func (m *geoManager) enqueueForBoot(expectedBootID string, ids []geoResourceID) (*geoSnapshot, int, error) {
+func (m *Manager) EnqueueForBoot(expectedBootID string, ids []ResourceID) (*Snapshot, int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
@@ -220,7 +232,7 @@ func (m *geoManager) enqueueForBoot(expectedBootID string, ids []geoResourceID) 
 	return m.snapshot.Load(), http.StatusAccepted, nil
 }
 
-func (m *geoManager) enqueueItemsLocked(ids []geoResourceID, automatic bool) bool {
+func (m *Manager) enqueueItemsLocked(ids []ResourceID, automatic bool) bool {
 	changed := false
 	for _, id := range ids {
 		if job := m.jobs[id]; job != nil {
@@ -253,8 +265,8 @@ func (m *geoManager) enqueueItemsLocked(ids []geoResourceID, automatic bool) boo
 	return changed
 }
 
-func (m *geoManager) applySettings(settings geoSettings) error {
-	if err := validateGeoSettings(settings); err != nil {
+func (m *Manager) ApplySettings(settings Settings) error {
+	if err := ValidateSettings(settings); err != nil {
 		return err
 	}
 	m.mu.Lock()
@@ -283,7 +295,7 @@ func (m *geoManager) applySettings(settings geoSettings) error {
 	return nil
 }
 
-func (m *geoManager) dueAtLocked(id geoResourceID) time.Time {
+func (m *Manager) dueAtLocked(id ResourceID) time.Time {
 	base := m.items[geoIndex(id)].ModifiedAt
 	if attempt := m.metadata[id].LastAttemptAt; attempt > base {
 		base = attempt
@@ -296,7 +308,7 @@ func (m *geoManager) dueAtLocked(id geoResourceID) time.Time {
 }
 
 // 唯一的一次性定时器只瞄准下一项到期时间，不做间隔轮询。
-func (m *geoManager) scheduleLocked() {
+func (m *Manager) scheduleLocked() {
 	if m.timer != nil {
 		m.timer.Stop()
 		m.timer = nil
@@ -306,7 +318,7 @@ func (m *geoManager) scheduleLocked() {
 		return
 	}
 	var next time.Time
-	for _, id := range geoIDs {
+	for _, id := range IDs {
 		if m.jobs[id] != nil || !m.metadataOK[id] || m.paths[id] == "" {
 			continue
 		}
@@ -331,8 +343,8 @@ func (m *geoManager) scheduleLocked() {
 		}
 		m.timer = nil
 		now := m.now()
-		var ids []geoResourceID
-		for _, id := range geoIDs {
+		var ids []ResourceID
+		for _, id := range IDs {
 			if m.jobs[id] == nil && m.metadataOK[id] && m.paths[id] != "" && !m.dueAtLocked(id).After(now) {
 				ids = append(ids, id)
 			}
@@ -344,7 +356,7 @@ func (m *geoManager) scheduleLocked() {
 	})
 }
 
-func (m *geoManager) close() {
+func (m *Manager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
@@ -370,9 +382,9 @@ func (m *geoManager) close() {
 	}
 }
 
-func (m *geoManager) wait() { <-m.done }
+func (m *Manager) Wait() { <-m.done }
 
-func (m *geoManager) run() {
+func (m *Manager) run() {
 	defer close(m.done)
 	for {
 		m.mu.Lock()
@@ -420,57 +432,71 @@ func readGeoRequest(r *http.Request, value any, fields ...string) error {
 	return nil
 }
 
-func getGeo(w http.ResponseWriter, r *http.Request) {
-	manager := eng.geo.Load()
-	if manager == nil || manager.ctx.Err() != nil {
-		writeError(w, r, http.StatusServiceUnavailable, errors.New("geo_canceled"))
-		return
-	}
-	render.JSON(w, r, manager.snapshot.Load())
+// RegisterRoutes 在 /arkclash 子路由上挂载全部 Geo 端点。
+func RegisterRoutes(r chi.Router, load func() *Manager, applySettings func(expectedBootID, revision string) (*Snapshot, int, error)) {
+	r.Get("/geo", HandleGet(load))
+	r.Post("/geo/settings", HandlePostSettings(applySettings))
+	r.Post("/geo/update", HandlePostUpdate(load))
+	r.Get("/geo/events", HandleEvents(load))
 }
 
-func postGeoSettings(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		ExpectedBootID string `json:"expectedBootId"`
-		Revision       string `json:"revision"`
-	}
-	if err := readGeoRequest(r, &body, "expectedBootId", "revision"); err != nil || body.ExpectedBootID == "" || body.Revision == "" {
-		writeError(w, r, http.StatusBadRequest, errors.New("geo_invalid_settings"))
-		return
-	}
-	snapshot, status, err := eng.ApplyGeoSettings(body.ExpectedBootID, body.Revision)
-	if err != nil {
-		writeError(w, r, status, err)
-		return
-	}
-	render.JSON(w, r, snapshot)
-}
-
-func postGeoUpdate(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		ExpectedBootID string          `json:"expectedBootId"`
-		IDs            []geoResourceID `json:"ids"`
-	}
-	if err := readGeoRequest(r, &body, "expectedBootId", "ids"); err != nil || body.ExpectedBootID == "" || len(body.IDs) < 1 || len(body.IDs) > 4 {
-		writeError(w, r, http.StatusBadRequest, errors.New("geo_invalid_settings"))
-		return
-	}
-	for _, id := range body.IDs {
-		if geoIndex(id) < 0 {
-			writeError(w, r, http.StatusBadRequest, errors.New("geo_invalid_settings"))
+func HandleGet(load func() *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		manager := load()
+		if manager == nil || manager.ctx.Err() != nil {
+			ctrl.WriteError(w, r, http.StatusServiceUnavailable, errors.New("geo_canceled"))
 			return
 		}
+		render.JSON(w, r, manager.snapshot.Load())
 	}
-	manager := eng.geo.Load()
-	if manager == nil {
-		writeError(w, r, http.StatusServiceUnavailable, errors.New("geo_canceled"))
-		return
+}
+
+func HandlePostSettings(apply func(expectedBootID, revision string) (*Snapshot, int, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ExpectedBootID string `json:"expectedBootId"`
+			Revision       string `json:"revision"`
+		}
+		if err := readGeoRequest(r, &body, "expectedBootId", "revision"); err != nil || body.ExpectedBootID == "" || body.Revision == "" {
+			ctrl.WriteError(w, r, http.StatusBadRequest, errors.New("geo_invalid_settings"))
+			return
+		}
+		snapshot, status, err := apply(body.ExpectedBootID, body.Revision)
+		if err != nil {
+			ctrl.WriteError(w, r, status, err)
+			return
+		}
+		render.JSON(w, r, snapshot)
 	}
-	snapshot, status, err := manager.enqueueForBoot(body.ExpectedBootID, body.IDs)
-	if err != nil {
-		writeError(w, r, status, err)
-		return
+}
+
+func HandlePostUpdate(load func() *Manager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ExpectedBootID string       `json:"expectedBootId"`
+			IDs            []ResourceID `json:"ids"`
+		}
+		if err := readGeoRequest(r, &body, "expectedBootId", "ids"); err != nil || body.ExpectedBootID == "" || len(body.IDs) < 1 || len(body.IDs) > 4 {
+			ctrl.WriteError(w, r, http.StatusBadRequest, errors.New("geo_invalid_settings"))
+			return
+		}
+		for _, id := range body.IDs {
+			if geoIndex(id) < 0 {
+				ctrl.WriteError(w, r, http.StatusBadRequest, errors.New("geo_invalid_settings"))
+				return
+			}
+		}
+		manager := load()
+		if manager == nil {
+			ctrl.WriteError(w, r, http.StatusServiceUnavailable, errors.New("geo_canceled"))
+			return
+		}
+		snapshot, status, err := manager.EnqueueForBoot(body.ExpectedBootID, body.IDs)
+		if err != nil {
+			ctrl.WriteError(w, r, status, err)
+			return
+		}
+		render.Status(r, status)
+		render.JSON(w, r, snapshot)
 	}
-	render.Status(r, status)
-	render.JSON(w, r, snapshot)
 }

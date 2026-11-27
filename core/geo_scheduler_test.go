@@ -44,8 +44,8 @@ func TestGeoAutomaticUpdatesOnlyDueResourcesAndRestoresAttemptAfterRestart(t *te
 	if attempts.Load() != 1 {
 		t.Fatalf("updated non-due resources: %d", attempts.Load())
 	}
-	manager.close()
-	manager.wait()
+	manager.Close()
+	manager.Wait()
 	restartedClock := &geoTestClock{now: clock.Now().Add(time.Minute)}
 	geoStartFixture(t, settings, restartedClock)
 	restartedClock.Advance(10 * time.Second)
@@ -112,14 +112,14 @@ func TestGeoDisableAutomaticCancelsOnlyAutomaticWork(t *testing.T) {
 				geoTestMetadata(t, eng.current.HomeDir, id, clock.Now())
 			}
 			manager := geoStartFixture(t, settings, clock)
-			_, err := manager.enqueue([]geoResourceID{geoSite, geoIP}, automatic)
+			_, err := manager.Enqueue([]geoResourceID{geoSite, geoIP}, automatic)
 			if err != nil {
 				t.Fatal(err)
 			}
 			receiveProbeSignal(t, entered, "queued Geo task did not start")
 			settings.AutoUpdate = false
 			settings.Revision = "disabled"
-			err = manager.applySettings(settings)
+			err = manager.ApplySettings(settings)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -139,7 +139,7 @@ func TestGeoDisableAutomaticCancelsOnlyAutomaticWork(t *testing.T) {
 				}
 				close(release)
 				geoWait(t, manager, geoSite, geoIP)
-				if item := geoItem(t, manager.snapshot.Load(), geoSite); item.Outcome != "updated" {
+				if item := geoItem(t, manager.Snapshot(), geoSite); item.Outcome != "updated" {
 					t.Fatalf("manual work canceled: %+v", item)
 				}
 			}

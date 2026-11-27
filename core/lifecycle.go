@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/VOD-Studio/ArkClash/core/internal/providers"
 	"github.com/VOD-Studio/ArkClash/core/internal/subfetch"
 	"github.com/metacubex/mihomo/adapter/inbound"
@@ -35,7 +36,7 @@ type startOptions struct {
 	Mode     string `json:"mode"`     // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
 	AllowLan *bool  `json:"allowLan"` // nil = 用配置里的值
 	// Geo 设置只由原生启动流程从磁盘读取，不扩展 C ABI 或 ArkTS 参数。
-	Geo             geoSettings         `json:"-"`
+	Geo             geo.Settings        `json:"-"`
 	General         generalSettings     `json:"-"`
 	DNS             dnsOverrideSettings `json:"-"`
 	AddedRules      addedRulesSettings  `json:"-"`
@@ -64,7 +65,7 @@ func start(opts startOptions) error {
 			return eng.cleanupFailure
 		}
 		opts.StoreGeneration = portableGeneration(opts.HomeDir)
-		settings, err := readGeoSettings(opts.HomeDir)
+		settings, err := geo.ReadSettings(opts.HomeDir)
 		if err != nil {
 			return err
 		}
@@ -117,7 +118,7 @@ func start(opts startOptions) error {
 		eng.running = true
 		eng.current = opts
 		tx.deferUnlock(beginRuntime())
-		manager, err := newGeoManager(opts.HomeDir, eng.bootID, opts.Geo)
+		manager, err := geo.NewManager(opts.HomeDir, eng.bootID, opts.Geo, eng.CommitGeoSwap)
 		if err != nil {
 			tx.deferUnlock(eng.diag.Stop())
 			closeCoreListeners()
@@ -240,7 +241,7 @@ func prepareRawConfig(rawCfg *config.RawConfig, opts startOptions, settings *inb
 		baseline.dnsHasFakeIPRange6 = rawCfg.DNS.FakeIPRange6 != ""
 	}
 	// 配置解析可能初始化缺失的 Geo，来源必须先固定为页面设置。
-	setGeoURLs(opts.Geo)
+	geo.SetURLs(opts.Geo)
 	mappings := rawCfg.Listeners
 	var providerKeys map[string]string
 	if settings != nil {
@@ -482,9 +483,9 @@ func stop() error {
 		tx.deferUnlock(eng.diag.Stop())
 		manager := eng.geo.Swap(nil)
 		if manager != nil {
-			manager.close()
+			manager.Close()
 			// worker 的热换提交可能需要核心锁，且下一次 start 不得越过本次 join。
-			tx.deferUnlock(manager.wait)
+			tx.deferUnlock(manager.Wait)
 		}
 		tx.deferUnlock(eng.providers.Close())
 		resetProxyIdentities()

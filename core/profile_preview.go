@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/VOD-Studio/ArkClash/core/internal/ruleset"
 	"github.com/VOD-Studio/ArkClash/core/internal/script"
 	"github.com/metacubex/chi/render"
@@ -130,7 +131,7 @@ func buildProfilePreview(ctx context.Context, profile string) (profilePreviewRes
 		Mode:       base.Mode,
 		AllowLan:   base.AllowLan,
 	}
-	if previewOpts.Geo, err = readGeoSettings(home); err != nil {
+	if previewOpts.Geo, err = geo.ReadSettings(home); err != nil {
 		return profilePreviewResponse{}, sanitizePreviewError(err)
 	}
 	if previewOpts.General, err = readGeneralSettings(home); err != nil {

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
 	"github.com/metacubex/mihomo/component/geodata"
@@ -26,8 +28,112 @@ import (
 	"github.com/metacubex/mihomo/config"
 	C "github.com/metacubex/mihomo/constant"
 	rules "github.com/metacubex/mihomo/rules/common"
+	"github.com/oschwald/maxminddb-golang"
 	"google.golang.org/protobuf/proto"
 )
+
+type (
+	geoResourceID     = geo.ResourceID
+	geoSettings       = geo.Settings
+	geoURLs           = geo.URLs
+	geoManager        = geo.Manager
+	geoSnapshot       = geo.Snapshot
+	geoResourceStatus = geo.ResourceStatus
+	geoTimer          = geo.Timer
+)
+
+const (
+	geoMMDB          = geo.MMDB
+	geoASN           = geo.ASN
+	geoIP            = geo.GeoIP
+	geoSite          = geo.GeoSite
+	geoDownloadLimit = geo.DownloadLimit
+	countryFixture   = "GeoIP2-Country-Test.mmdb"
+	asnFixture       = "GeoLite2-ASN-Test.mmdb"
+)
+
+var geoIDs = geo.IDs
+
+func defaultGeoSettings() geo.Settings                       { return geo.DefaultSettings() }
+func geoPath(home string, id geo.ResourceID) (string, error) { return geo.Path(home, id) }
+func getGeo(w http.ResponseWriter, r *http.Request)          { geo.HandleGet(eng.geo.Load)(w, r) }
+func postGeoSettings(w http.ResponseWriter, r *http.Request) {
+	geo.HandlePostSettings(eng.ApplyGeoSettings)(w, r)
+}
+func postGeoUpdate(w http.ResponseWriter, r *http.Request) { geo.HandlePostUpdate(eng.geo.Load)(w, r) }
+func getGeoEvents(w http.ResponseWriter, r *http.Request)  { geo.HandleEvents(eng.geo.Load)(w, r) }
+
+func geoReaderBytes(t *testing.T, name string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("internal", "geo", "testdata", "geo", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := map[string]string{
+		countryFixture: "9e0a58e6df30dd8d279c9ede70bcb1f19e1bf72f",
+		asnFixture:     "16f4b201d9069fd0999bf4988ef3e8977fc4ed8e",
+	}[name]
+	hash := sha1.New()
+	fmt.Fprintf(hash, "blob %d%c", len(data), byte(0))
+	hash.Write(data)
+	if got := fmt.Sprintf("%x", hash.Sum(nil)); got != expected {
+		t.Fatalf("fixture %s blob checksum mismatch", name)
+	}
+	return data
+}
+
+func geoReaderOpen(t *testing.T, path string) *maxminddb.Reader {
+	t.Helper()
+	reader, err := maxminddb.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.Verify(); err != nil {
+		reader.Close()
+		t.Fatal(err)
+	}
+	return reader
+}
+
+func geoReaderHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	for name, destination := range map[string]string{countryFixture: "geoip.metadb", asnFixture: "ASN.mmdb"} {
+		if err := os.WriteFile(filepath.Join(home, destination), geoReaderBytes(t, name), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	oldHome, oldIPName, oldASNName := C.Path.HomeDir(), C.GeoipName, C.ASNName
+	C.SetHomeDir(home)
+	oldIP, oldASN := mmdb.IPInstance(), mmdb.ASNInstance()
+	t.Cleanup(func() {
+		mmdb.InstallIPReader(oldIP.Reader)
+		mmdb.InstallASNReader(oldASN.Reader)
+		C.SetHomeDir(oldHome)
+		C.GeoipName, C.ASNName = oldIPName, oldASNName
+	})
+	return home
+}
+
+func geoReaderASNQuery(t *testing.T, reader *maxminddb.Reader) (net.IP, string, string) {
+	t.Helper()
+	networks := reader.Networks()
+	for networks.Next() {
+		var value mmdb.GeoLite2
+		network, err := networks.Network(&value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if value.AutonomousSystemNumber != 0 && value.AutonomousSystemOrganization != "" {
+			return network.IP, fmt.Sprint(value.AutonomousSystemNumber), value.AutonomousSystemOrganization
+		}
+	}
+	if err := networks.Err(); err != nil {
+		t.Fatal(err)
+	}
+	t.Fatal("ASN fixture has no populated network")
+	return nil, "", ""
+}
 
 func geoDiskSettings(t *testing.T, home string, settings geoSettings) {
 	t.Helper()
@@ -61,9 +167,9 @@ func geoStartFixture(t *testing.T, settings geoSettings, clock *geoTestClock) *g
 	var manager *geoManager
 	var err error
 	if clock == nil {
-		manager, err = newGeoManager(eng.current.HomeDir, eng.bootID, settings)
+		manager, err = geo.NewManager(eng.current.HomeDir, eng.bootID, settings, eng.CommitGeoSwap)
 	} else {
-		manager, err = newGeoManagerWithClock(eng.current.HomeDir, eng.bootID, settings, clock.Now, clock.AfterFunc)
+		manager, err = geo.NewManagerWithClock(eng.current.HomeDir, eng.bootID, settings, eng.CommitGeoSwap, clock.Now, clock.AfterFunc)
 	}
 	if err != nil {
 		eng.mu.Unlock()
@@ -73,9 +179,9 @@ func geoStartFixture(t *testing.T, settings geoSettings, clock *geoTestClock) *g
 	eng.geo.Store(manager)
 	eng.mu.Unlock()
 	t.Cleanup(func() {
-		manager.close()
+		manager.Close()
 		eng.geo.CompareAndSwap(manager, nil)
-		manager.wait()
+		manager.Wait()
 	})
 	return manager
 }
@@ -95,7 +201,7 @@ func geoWait(t *testing.T, manager *geoManager, ids ...geoResourceID) *geoSnapsh
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		snapshot := manager.snapshot.Load()
+		snapshot := manager.Snapshot()
 		complete := true
 		for _, id := range ids {
 			item := geoItem(t, snapshot, id)
@@ -127,7 +233,7 @@ func geoHTTP(t *testing.T, handler http.HandlerFunc, body string) (int, *geoSnap
 
 func geoAdmit(t *testing.T, manager *geoManager, ids ...geoResourceID) *geoSnapshot {
 	t.Helper()
-	data, _ := json.Marshal(map[string]any{"expectedBootId": manager.snapshot.Load().BootID, "ids": ids})
+	data, _ := json.Marshal(map[string]any{"expectedBootId": manager.Snapshot().BootID, "ids": ids})
 	status, snapshot := geoHTTP(t, postGeoUpdate, string(data))
 	if status != http.StatusAccepted {
 		t.Fatalf("Geo admission status = %d", status)
@@ -175,68 +281,6 @@ func geoAssertNoTemps(t *testing.T, home string) {
 	paths, err := filepath.Glob(filepath.Join(home, "arkclash-geo-*.tmp"))
 	if err != nil || len(paths) != 0 {
 		t.Fatalf("Geo temporary files remain: %v (%v)", paths, err)
-	}
-}
-
-func TestGeoSettingsAndFixedPathContract(t *testing.T) {
-	home := t.TempDir()
-	defaults, err := readGeoSettings(home)
-	if err != nil || defaults.Revision != "default" || !defaults.AutoUpdate || defaults.IntervalHours != 24 {
-		t.Fatalf("missing settings: %+v %v", defaults, err)
-	}
-	disabled := defaults
-	disabled.AutoUpdate = false
-	geoDiskSettings(t, home, disabled)
-	if saved, err := readGeoSettings(home); err != nil || saved.AutoUpdate {
-		t.Fatalf("saved Geo preference: %+v %v", saved, err)
-	}
-	for _, source := range []string{"", "ftp://example.com/a", "https://user:password@example.com/a", "http:///missing", strings.Repeat("x", 2049)} {
-		settings := defaults
-		settings.URLs.MMDB = source
-		geoDiskSettings(t, home, settings)
-		if _, err := readGeoSettings(home); err == nil {
-			t.Fatal("invalid Geo URL accepted")
-		}
-	}
-	for _, body := range []string{"{", "null", `{"version":2}`, `{"version":1}`, `{} {}`, `{"version":1,"revision":"a","autoUpdate":false,"intervalHours":0,"urls":{}}`} {
-		geoWrite(t, filepath.Join(home, "geo-settings.json"), []byte(body))
-		if _, err := readGeoSettings(home); err == nil {
-			t.Fatal("invalid settings accepted")
-		}
-	}
-	for _, hours := range []int{0, -1, 8761} {
-		settings := defaults
-		settings.IntervalHours = hours
-		geoDiskSettings(t, home, settings)
-		if _, err := readGeoSettings(home); err == nil {
-			t.Fatal("invalid interval accepted")
-		}
-	}
-	unsupported := defaults
-	unsupported.Version = 2
-	geoDiskSettings(t, home, unsupported)
-	if _, err := readGeoSettings(home); err == nil {
-		t.Fatal("unsupported version accepted")
-	}
-	geoDiskSettings(t, home, defaults)
-	for _, name := range []string{"geoip.metadb", "geoip.db", "Country.mmdb", "gEoSiTe.DaT", "aSn.MmDb", "gEOiP.DAT"} {
-		geoWrite(t, filepath.Join(home, name), []byte("fixture"))
-	}
-	for id, expected := range map[geoResourceID]string{geoMMDB: "Country.mmdb", geoASN: "aSn.MmDb", geoIP: "gEOiP.DAT", geoSite: "gEoSiTe.DaT"} {
-		path, err := geoPath(home, id)
-		if err != nil || filepath.Base(path) != expected {
-			t.Fatalf("Geo path %s=%s %v", id, path, err)
-		}
-	}
-	if err := os.Remove(filepath.Join(home, "Country.mmdb")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(filepath.Join(home, "Country.mmdb"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	path, err := geoPath(home, geoMMDB)
-	if err != nil || filepath.Base(path) != "geoip.db" {
-		t.Fatalf("directory counted as database: %s %v", path, err)
 	}
 }
 
@@ -351,11 +395,11 @@ func TestGeoDownloadFailuresPreserveDataAndTimestamp(t *testing.T) {
 			if err := os.Chtimes(path, stamp, stamp); err != nil {
 				t.Fatal(err)
 			}
-			oldTimeout := geoDownloadTimeout
+			oldTimeout := geo.DownloadTimeout
 			if mode == "timeout" {
-				geoDownloadTimeout = 40 * time.Millisecond
+				geo.DownloadTimeout = 40 * time.Millisecond
 			}
-			defer func() { geoDownloadTimeout = oldTimeout }()
+			defer func() { geo.DownloadTimeout = oldTimeout }()
 			geoAdmit(t, manager, geoSite)
 			item := geoItem(t, geoWait(t, manager, geoSite), geoSite)
 			if item.Outcome != "failed" || item.Error == "" {
@@ -530,7 +574,7 @@ func TestGeoQueueDeduplicatesAndKeepsControllerResponsive(t *testing.T) {
 
 func TestGeoStrictHTTPAndSettingsRevision(t *testing.T) {
 	manager := geoFixture(t, defaultGeoSettings())
-	boot := manager.snapshot.Load().BootID
+	boot := manager.Snapshot().BootID
 	for _, body := range []string{`{}`, `{"expectedBootId":"x","ids":["unknown"]}`, fmt.Sprintf(`{"expectedBootId":%q,"ids":[]}`, boot), fmt.Sprintf(`{"expectedBootId":%q,"ids":["mmdb"],"path":"/tmp/escape"}`, boot), strings.Repeat(" ", 16<<10) + "{}", `{} {}`} {
 		if status, _ := geoHTTP(t, postGeoUpdate, body); status != 400 {
 			t.Fatalf("invalid request status=%d", status)
@@ -550,8 +594,8 @@ func TestGeoStrictHTTPAndSettingsRevision(t *testing.T) {
 	if status != 200 || snapshot.SettingsRevision != settings.Revision || eng.current.Geo.IntervalHours != 48 {
 		t.Fatal("saved settings not applied")
 	}
-	manager.close()
-	manager.wait()
+	manager.Close()
+	manager.Wait()
 	if status, _ := geoHTTP(t, postGeoUpdate, fmt.Sprintf(`{"expectedBootId":%q,"ids":["mmdb"]}`, boot)); status != 503 {
 		t.Fatalf("stopped manager accepted operation: %d", status)
 	}
@@ -578,13 +622,13 @@ func TestGeoURLChangeAndStopCancelActualRequest(t *testing.T) {
 				settings.URLs.GeoSite = server.URL + "/changed"
 				settings.Revision = "changed"
 				geoDiskSettings(t, eng.current.HomeDir, settings)
-				status, _ := geoHTTP(t, postGeoSettings, fmt.Sprintf(`{"expectedBootId":%q,"revision":"changed"}`, manager.snapshot.Load().BootID))
+				status, _ := geoHTTP(t, postGeoSettings, fmt.Sprintf(`{"expectedBootId":%q,"revision":"changed"}`, manager.Snapshot().BootID))
 				if status != 200 {
 					t.Fatal("URL change rejected")
 				}
 			} else {
-				manager.close()
-				manager.wait()
+				manager.Close()
+				manager.Wait()
 			}
 			receiveProbeSignal(t, canceled, "actual HTTP request did not receive cancellation")
 			if action == "url" {
@@ -610,10 +654,10 @@ func TestGeoMetadataCorruptionProtectsAutomaticUpdatesAndManualRepairs(t *testin
 	settings := geoTestSettings(server.URL)
 	geoWrite(t, filepath.Join(eng.current.HomeDir, "geo-geosite.json"), []byte("corrupt"))
 	manager := geoStartFixture(t, settings, nil)
-	if item := geoItem(t, manager.snapshot.Load(), geoSite); item.Error != "geo_metadata_invalid" {
+	if item := geoItem(t, manager.Snapshot(), geoSite); item.Error != "geo_metadata_invalid" {
 		t.Fatal("corrupt metadata hidden")
 	}
-	_, err := manager.enqueue([]geoResourceID{geoSite}, true)
+	_, err := manager.Enqueue([]geoResourceID{geoSite}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -714,7 +758,7 @@ func TestGeoWebSocketInitialAndReconnectDeliverFinalState(t *testing.T) {
 	defer events.Close()
 	connection, reader := geoWebSocket(t, events.URL)
 	initial := geoReadFrame(t, reader)
-	if initial.BootID != manager.snapshot.Load().BootID {
+	if initial.BootID != manager.Snapshot().BootID {
 		t.Fatal("initial snapshot omitted current boot")
 	}
 	geoAdmit(t, manager, geoSite)
@@ -819,7 +863,7 @@ func TestGeoAutomaticTimerStartupGuardAndAttemptBackoff(t *testing.T) {
 	settings.AutoUpdate = true
 	settings.IntervalHours = 1
 	settings.Revision = "auto"
-	err := manager.applySettings(settings)
+	err := manager.ApplySettings(settings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -840,7 +884,7 @@ func TestGeoAutomaticTimerStartupGuardAndAttemptBackoff(t *testing.T) {
 		t.Fatal("failure retried before full interval")
 	}
 	settings.AutoUpdate = false
-	err = manager.applySettings(settings)
+	err = manager.ApplySettings(settings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -876,9 +920,9 @@ func TestGeoStopWaitsForActualRuleDialCleanup(t *testing.T) {
 	manager := geoStartFixture(t, settings, nil)
 	geoAdmit(t, manager, geoSite)
 	receiveProbeSignal(t, entered, "Geo request never entered real proxy dial")
-	manager.close()
+	manager.Close()
 	joined := make(chan struct{})
-	go func() { manager.wait(); close(joined) }()
+	go func() { manager.Wait(); close(joined) }()
 	receiveProbeSignal(t, closed, "Geo stop did not cancel actual proxy dial")
 	receiveProbeSignal(t, joined, "Geo stop deadlocked waiting for worker")
 	if active.Load() != 0 {
@@ -902,7 +946,7 @@ func TestGeoConcurrentUpdatesSettingsAndReload(t *testing.T) {
 	settings := geoTestSettings(server.URL)
 	manager := geoFixture(t, settings)
 	home := eng.current.HomeDir
-	boot := manager.snapshot.Load().BootID
+	boot := manager.Snapshot().BootID
 	profilePath := filepath.Join(home, "profiles", "concurrent-geo.yaml")
 	if err := os.MkdirAll(filepath.Dir(profilePath), 0700); err != nil {
 		t.Fatal(err)
@@ -962,7 +1006,7 @@ func TestGeoConcurrentUpdatesSettingsAndReload(t *testing.T) {
 	// 等待队列排空后再执行热切换，避免上游 mihomo 的 ApplyConfig 与在途 Direct.DialContext 竞态。
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if geoItem(t, manager.snapshot.Load(), geoSite).Phase == "idle" {
+		if geoItem(t, manager.Snapshot(), geoSite).Phase == "idle" {
 			break
 		}
 		time.Sleep(time.Millisecond)

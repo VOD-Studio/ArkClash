@@ -1,4 +1,4 @@
-package main
+package geo
 
 import (
 	"bytes"
@@ -22,9 +22,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const geoDownloadLimit = 64 << 20
+const DownloadLimit = 64 << 20
 
-var geoDownloadTimeout = 60 * time.Second
+var DownloadTimeout = 60 * time.Second
 
 type geoContextReader struct {
 	ctx    context.Context
@@ -43,7 +43,7 @@ func (reader geoContextReader) Read(buffer []byte) (int, error) {
 	return n, err
 }
 
-func (m *geoManager) reportDownload(job *geoJob, received, total int64) {
+func (m *Manager) reportDownload(job *geoJob, received, total int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.jobValidLocked(job) {
@@ -63,12 +63,12 @@ func geoContextError(ctx context.Context) error {
 	return errors.New("geo_canceled")
 }
 
-func (m *geoManager) jobValidLocked(job *geoJob) bool {
+func (m *Manager) jobValidLocked(job *geoJob) bool {
 	return !m.closed && job.bootID == m.bootID && job.ctx.Err() == nil && m.jobs[job.id] == job && m.settings.source(job.id) == job.source
 }
 
 // 开始尝试先落盘时间戳；下载失败也不能令调度器立即再次唤醒。
-func (m *geoManager) beginAttempt(job *geoJob) error {
+func (m *Manager) beginAttempt(job *geoJob) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.jobValidLocked(job) {
@@ -77,7 +77,7 @@ func (m *geoManager) beginAttempt(job *geoJob) error {
 	item := &m.items[geoIndex(job.id)]
 	item.Phase = "updating"
 	if job.path == "" {
-		path, err := geoPath(m.home, job.id)
+		path, err := Path(m.home, job.id)
 		if err != nil {
 			m.publishLocked()
 			return errors.New("geo_io")
@@ -86,7 +86,7 @@ func (m *geoManager) beginAttempt(job *geoJob) error {
 	}
 	metadata := m.metadata[job.id]
 	if !m.metadataOK[job.id] {
-		metadata = geoMetadata{Version: 1}
+		metadata = Metadata{Version: 1}
 	}
 	metadata.LastAttemptAt = m.now().UnixMilli()
 	m.metadata[job.id] = metadata
@@ -99,8 +99,8 @@ func (m *geoManager) beginAttempt(job *geoJob) error {
 	return nil
 }
 
-func (m *geoManager) update(job *geoJob) (outcome string, resultErr error) {
-	ctx, cancel := context.WithTimeout(job.ctx, geoDownloadTimeout)
+func (m *Manager) update(job *geoJob) (outcome string, resultErr error) {
+	ctx, cancel := context.WithTimeout(job.ctx, DownloadTimeout)
 	defer cancel()
 	defer func() {
 		if resultErr == nil {
@@ -117,7 +117,7 @@ func (m *geoManager) update(job *geoJob) (outcome string, resultErr error) {
 	if err := m.beginAttempt(job); err != nil {
 		return "", err
 	}
-	if !validGeoURL(job.source) {
+	if !ValidURL(job.source) {
 		return "", errors.New("geo_invalid_url")
 	}
 	requestCtx, finishRuleRequest := ruletunnel.RequestContext(ctx, nil)
@@ -136,7 +136,7 @@ func (m *geoManager) update(job *geoJob) (outcome string, resultErr error) {
 		if len(via) > 10 {
 			return errors.New("geo_download_failed")
 		}
-		if !validGeoURL(request.URL.String()) {
+		if !ValidURL(request.URL.String()) {
 			invalidRedirect = true
 			return errors.New("geo_invalid_url")
 		}
@@ -156,7 +156,7 @@ func (m *geoManager) update(job *geoJob) (outcome string, resultErr error) {
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("geo_http_%03d", response.StatusCode)
 	}
-	if response.ContentLength > geoDownloadLimit {
+	if response.ContentLength > DownloadLimit {
 		return "", errors.New("geo_invalid_data")
 	}
 	file, err := os.CreateTemp(filepath.Dir(job.path), "arkclash-geo-"+string(job.id)+"-*.tmp")
@@ -177,9 +177,9 @@ func (m *geoManager) update(job *geoJob) (outcome string, resultErr error) {
 			nextReport = now.Add(time.Second)
 		}
 	}}
-	n, copyErr := io.Copy(io.MultiWriter(file, hash), io.LimitReader(reader, geoDownloadLimit+1))
+	n, copyErr := io.Copy(io.MultiWriter(file, hash), io.LimitReader(reader, DownloadLimit+1))
 	m.reportDownload(job, received, total)
-	if copyErr == nil && (n == 0 || n > geoDownloadLimit) {
+	if copyErr == nil && (n == 0 || n > DownloadLimit) {
 		copyErr = errors.New("geo_invalid_data")
 	}
 	// 数据刷盘和候选校验都在锁外完成，提交阶段只换文件及 reader。
@@ -224,17 +224,24 @@ func (m *geoManager) update(job *geoJob) (outcome string, resultErr error) {
 		return "", errors.New("geo_io")
 	}
 
-	outcome, installed, err := eng.CommitGeoSwap(ctx, m, geoSwapCommit{
+	req := geoSwapCommit{
 		job:       job,
 		tempPath:  path,
 		candidate: candidate,
 		info:      info,
 		unchanged: unchanged,
-	})
-	if installed {
-		candidate = nil
 	}
-	return outcome, err
+	commit := func() (string, error) {
+		out, installed, commitErr := m.commitSwap(ctx, req)
+		if installed {
+			candidate = nil
+		}
+		return out, commitErr
+	}
+	if m.commitSwapFn != nil {
+		return m.commitSwapFn(commit)
+	}
+	return commit()
 }
 
 type geoSwapCommit struct {
@@ -245,8 +252,8 @@ type geoSwapCommit struct {
 	unchanged bool
 }
 
-// commitSwap 由 eng.CommitGeoSwap 在持有核心锁时向下调用，内部只锁 m.mu。
-func (m *geoManager) commitSwap(ctx context.Context, req geoSwapCommit) (string, bool, error) {
+// commitSwap 由核心引擎在持 e.mu 时回调进入，内部只锁 m.mu，维持严格单向锁序。
+func (m *Manager) commitSwap(ctx context.Context, req geoSwapCommit) (string, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.jobValidLocked(req.job) || ctx.Err() != nil {
@@ -269,15 +276,15 @@ func (m *geoManager) commitSwap(ctx context.Context, req geoSwapCommit) (string,
 	}
 	installed := false
 	switch req.job.id {
-	case geoMMDB:
+	case MMDB:
 		mmdb.InstallIPReader(req.candidate)
 		installed = true
-	case geoASN:
+	case ASN:
 		mmdb.InstallASNReader(req.candidate)
 		installed = true
-	case geoIP:
+	case GeoIP:
 		geodata.ClearGeoIPCache()
-	case geoSite:
+	case GeoSite:
 		geodata.ClearGeoSiteCache()
 	}
 	item := &m.items[geoIndex(req.job.id)]
@@ -311,17 +318,17 @@ func geoSameContent(ctx context.Context, path string, candidateHash []byte) (boo
 	return bytes.Equal(hash.Sum(nil), candidateHash), nil
 }
 
-func validateGeoCandidate(ctx context.Context, id geoResourceID, path string) (*maxminddb.Reader, error) {
+func validateGeoCandidate(ctx context.Context, id ResourceID, path string) (*maxminddb.Reader, error) {
 	if ctx.Err() != nil {
 		return nil, geoContextError(ctx)
 	}
-	if id == geoMMDB || id == geoASN {
+	if id == MMDB || id == ASN {
 		reader, err := maxminddb.Open(path)
 		if err != nil {
 			return nil, errors.New("geo_invalid_data")
 		}
 		validType := false
-		if id == geoASN {
+		if id == ASN {
 			switch reader.Metadata.DatabaseType {
 			case "GeoLite2-ASN", "DBIP-ASN-Lite (compat=GeoLite2-ASN)", "ipinfo generic_asn_free.mmdb":
 				validType = true
@@ -344,7 +351,7 @@ func validateGeoCandidate(ctx context.Context, id geoResourceID, path string) (*
 	if err != nil {
 		return nil, errors.New("geo_io")
 	}
-	if id == geoIP {
+	if id == GeoIP {
 		var list router.GeoIPList
 		if proto.Unmarshal(data, &list) != nil || len(list.Entry) == 0 {
 			return nil, errors.New("geo_invalid_data")
@@ -362,7 +369,7 @@ func validateGeoCandidate(ctx context.Context, id geoResourceID, path string) (*
 				}
 			}
 		}
-	} else if id == geoSite {
+	} else if id == GeoSite {
 		var list router.GeoSiteList
 		if proto.Unmarshal(data, &list) != nil || len(list.Entry) == 0 {
 			return nil, errors.New("geo_invalid_data")
