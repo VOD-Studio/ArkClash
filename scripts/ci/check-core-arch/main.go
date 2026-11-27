@@ -34,13 +34,21 @@ const (
 	diagnosticsPkg = internalPrefix + "diagnostics"
 	geoPkg         = internalPrefix + "geo"
 	configPkg      = internalPrefix + "config"
+	platformPkg    = internalPrefix + "platform"
 	mihomoPrefix   = "github.com/metacubex/mihomo"
 )
 
 var (
-	ohosCgoFiles = []string{"hilog.go", "lib.go", "socket.go", "system_dns.go", "tailscale_network.go"}
-	ohosAllFiles = []string{"hilog.go", "lib.go", "loopback.go", "socket.go", "system_dns.go", "tailscale_network.go"}
-	hostCgoPkgs  = map[string]bool{
+	rootOhosCgoFiles     = []string{"lib.go"}
+	platformOhosCgoFiles = []string{"hilog.go", "socket.go", "system_dns.go", "tailscale_network.go"}
+	platformOhosAllFiles = []string{"hilog.go", "loopback.go", "socket.go", "system_dns.go", "tailscale_network.go"}
+	hostCgoPkgs          = map[string]bool{
+		backupStorePkg: true,
+		scriptPkg:      true,
+	}
+	ohosCgoPkgs = map[string]bool{
+		rootPkg:        true,
+		platformPkg:    true,
 		backupStorePkg: true,
 		scriptPkg:      true,
 	}
@@ -53,6 +61,7 @@ var (
 		proxylinkPkg:   nil,
 		rulesetPkg:     nil,
 		ruletunnelPkg:  nil,
+		platformPkg:    nil,
 		providersPkg:   {ctrlPkg, rulesetPkg},
 		probePkg:       {ctrlPkg, ruletunnelPkg},
 		subfetchPkg:    {ruletunnelPkg},
@@ -60,26 +69,24 @@ var (
 		geoPkg:         {backupPkg, ctrlPkg, ruletunnelPkg},
 		configPkg:      {backupPkg, geoPkg, proxylinkPkg, rulesetPkg, ruletunnelPkg, scriptPkg},
 	}
+	// 顶层 init() 文件白名单（相对 core/ 路径，使用正斜杠）。
 	allowedInitFiles = map[string]bool{
-		"api.go":               true,
-		"hilog.go":             true,
-		"loopback.go":          true,
-		"socket.go":            true,
-		"system_dns.go":        true,
-		"tailscale_network.go": true,
+		"api.go":                                 true,
+		"lib.go":                                 true,
+		"internal/platform/loopback.go":          true,
+		"internal/platform/socket.go":            true,
+		"internal/platform/system_dns.go":        true,
+		"internal/platform/tailscale_network.go": true,
 	}
 	// 根包非哨兵错误/非不可变正则的包级 var 白名单（未登记即失败），阻止后续新增散落全局状态。
 	// 格式："文件名:变量名"。删除对应变量时必须同步收缩此表。
 	allowedRootVars = map[string]bool{
-		"backup.go:backupDAVBusy":             true,
-		"delay.go:delaySlots":                 true,
-		"engine.go:eng":                       true,
-		"engine.go:engineUnlockCheck":         true,
-		"lib.go:reclaimMu":                    true,
-		"lib.go:lastReclaim":                  true,
-		"loopback.go:disableLoopBackDetector": true,
-		"system_dns.go:systemDNSWatcher":      true,
-		"tailscale_network.go:tailnetWatches": true,
+		"backup.go:backupDAVBusy":     true,
+		"delay.go:delaySlots":         true,
+		"engine.go:eng":               true,
+		"engine.go:engineUnlockCheck": true,
+		"lib.go:reclaimMu":            true,
+		"lib.go:lastReclaim":          true,
 	}
 )
 
@@ -192,22 +199,34 @@ func checkPackageDAG(label string, pkgs map[string]listedPackage) []string {
 func checkPackages(coreDir, modfile string) []string {
 	var problems []string
 
-	// 1. 宿主标签（不带 ohos）：根包不得有 Cgo，且只能由 backupstore 与 internal/script 使用 Cgo。
+	// 1. 宿主标签（不带 ohos）：根包与 internal/platform 不得有 Cgo，且只能由 backupstore 与 internal/script 使用 Cgo。
 	hostPkgs, err := goList(coreDir, modfile, "with_gvisor", "CGO_ENABLED=1")
 	if err != nil {
 		return []string{err.Error()}
 	}
-	rootHost, ok := hostPkgs[rootPkg]
-	if !ok {
+	if rootHost, ok := hostPkgs[rootPkg]; !ok {
 		problems = append(problems, "宿主 go list 缺少根包 "+rootPkg)
 	} else {
 		if len(rootHost.CgoFiles) > 0 {
 			problems = append(problems, fmt.Sprintf("宿主构建下 core 根包不允许出现 CgoFiles：%v", rootHost.CgoFiles))
 		}
 		included := append(slices.Clone(rootHost.GoFiles), rootHost.CgoFiles...)
-		for _, forbidden := range ohosAllFiles {
+		for _, forbidden := range rootOhosCgoFiles {
 			if slices.Contains(included, forbidden) {
-				problems = append(problems, fmt.Sprintf("宿主构建（无 ohos 标签）意外包含了平台文件：%s", forbidden))
+				problems = append(problems, fmt.Sprintf("宿主构建（无 ohos 标签）意外包含了入口文件：%s", forbidden))
+			}
+		}
+	}
+	if platHost, ok := hostPkgs[platformPkg]; !ok {
+		problems = append(problems, "宿主 go list 缺少平台包 "+platformPkg)
+	} else {
+		if len(platHost.CgoFiles) > 0 {
+			problems = append(problems, fmt.Sprintf("宿主构建下 %s 不允许出现 CgoFiles：%v", platformPkg, platHost.CgoFiles))
+		}
+		included := append(slices.Clone(platHost.GoFiles), platHost.CgoFiles...)
+		for _, forbidden := range platformOhosAllFiles {
+			if slices.Contains(included, forbidden) {
+				problems = append(problems, fmt.Sprintf("宿主构建（无 ohos 标签）下 %s 意外包含了平台文件：%s", platformPkg, forbidden))
 			}
 		}
 	}
@@ -217,24 +236,42 @@ func checkPackages(coreDir, modfile string) []string {
 		}
 	}
 
-	// 2. OHOS 目标标签（with_gvisor,ohos）：正向核对全部 6 个平台/ABI 文件被包含，避免标签拼错静默跳过。
+	// 2. OHOS 目标标签（with_gvisor,ohos）：正向核对根入口与 internal/platform 全部 6 个平台/ABI 文件被包含，避免标签拼错静默跳过。
 	ohosPkgs, err := goList(coreDir, modfile, "with_gvisor,ohos", "CGO_ENABLED=1", "GOOS=linux", "GOARCH=arm64")
 	if err != nil {
 		return append(problems, err.Error())
 	}
-	rootOhos, ok := ohosPkgs[rootPkg]
-	if !ok {
+	if rootOhos, ok := ohosPkgs[rootPkg]; !ok {
 		problems = append(problems, "ohos go list 缺少根包 "+rootPkg)
 	} else {
 		gotCgo := slices.Clone(rootOhos.CgoFiles)
 		slices.Sort(gotCgo)
-		wantCgo := slices.Clone(ohosCgoFiles)
+		wantCgo := slices.Clone(rootOhosCgoFiles)
 		slices.Sort(wantCgo)
 		if !slices.Equal(gotCgo, wantCgo) {
 			problems = append(problems, fmt.Sprintf("ohos 构建下 core 根包 CgoFiles=%v，预期=%v", gotCgo, wantCgo))
 		}
-		if !slices.Contains(rootOhos.GoFiles, "loopback.go") {
-			problems = append(problems, "ohos 构建下 core 根包缺少 loopback.go")
+	}
+	if platOhos, ok := ohosPkgs[platformPkg]; !ok {
+		problems = append(problems, "ohos go list 缺少平台包 "+platformPkg)
+	} else {
+		gotCgo := slices.Clone(platOhos.CgoFiles)
+		slices.Sort(gotCgo)
+		wantCgo := slices.Clone(platformOhosCgoFiles)
+		slices.Sort(wantCgo)
+		if !slices.Equal(gotCgo, wantCgo) {
+			problems = append(problems, fmt.Sprintf("ohos 构建下 %s CgoFiles=%v，预期=%v", platformPkg, gotCgo, wantCgo))
+		}
+		if !slices.Contains(platOhos.GoFiles, "loopback.go") {
+			problems = append(problems, fmt.Sprintf("ohos 构建下 %s 缺少 loopback.go", platformPkg))
+		}
+		if !slices.Contains(platOhos.GoFiles, "tailscale_watch.go") {
+			problems = append(problems, fmt.Sprintf("ohos 构建下 %s 缺少 tailscale_watch.go", platformPkg))
+		}
+	}
+	for path, pkg := range ohosPkgs {
+		if len(pkg.CgoFiles) > 0 && !ohosCgoPkgs[path] {
+			problems = append(problems, fmt.Sprintf("ohos 构建下非白名单包 %s 存在 CgoFiles：%v", path, pkg.CgoFiles))
 		}
 	}
 
@@ -306,8 +343,14 @@ func coreEngineRecvName(fn *ast.FuncDecl) string {
 
 func checkSources(coreDir string) []string {
 	var problems []string
+	seenRootVars := make(map[string]bool)
+	fset := token.NewFileSet()
 
-	// 检查全目录文件命名：禁止 *_ohos.go（防止未来 Go 新增 GOOS=ohos 后在 GOOS=linux 构建中被隐式排除）。
+	// 遍历 core/ 全目录非测试 Go 文件：
+	// - 禁止 *_ohos.go 命名；
+	// - 除 internal/platform 与入口 lib.go 外禁止出现 //go:build ohos；
+	// - 全包校验 init() 白名单与 //export 导出位置；
+	// - 根包额外校验核心锁访问边界、lib.go 纯转发与顶层 var 白名单。
 	err := filepath.WalkDir(coreDir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -318,38 +361,41 @@ func checkSources(coreDir string) []string {
 			}
 			return nil
 		}
-		if strings.HasSuffix(entry.Name(), "_ohos.go") {
-			rel, _ := filepath.Rel(coreDir, path)
+		relPath, _ := filepath.Rel(coreDir, path)
+		rel := filepath.ToSlash(relPath)
+		name := entry.Name()
+		if strings.HasSuffix(name, "_ohos.go") {
 			problems = append(problems, fmt.Sprintf("core/%s 使用了 _ohos.go 后缀，请改用 //go:build ohos 搭配 *_ndk.go 或业务文件名", rel))
 		}
-		return nil
-	})
-	if err != nil {
-		problems = append(problems, fmt.Sprintf("遍历 core 目录失败：%v", err))
-		return problems
-	}
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			return nil
+		}
 
-	// 仅解析 core 根目录非测试 Go 文件，检查 init() 白名单、//export 收口、核心锁访问边界、lib.go 纯转发与顶层 var 白名单。
-	entries, err := os.ReadDir(coreDir)
-	if err != nil {
-		return append(problems, fmt.Sprintf("读取 core 目录失败：%v", err))
-	}
-	seenRootVars := make(map[string]bool)
-	fset := token.NewFileSet()
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		file, parseErr := parser.ParseFile(fset, filepath.Join(coreDir, name), nil, parser.ParseComments)
+		file, parseErr := parser.ParseFile(fset, path, nil, parser.ParseComments)
 		if parseErr != nil {
-			problems = append(problems, fmt.Sprintf("解析 core/%s 失败：%v", name, parseErr))
-			continue
+			problems = append(problems, fmt.Sprintf("解析 core/%s 失败：%v", rel, parseErr))
+			return nil
 		}
+
+		// 检查 //go:build ohos 只允许出现在 lib.go 和 internal/platform/*.go。
+		for _, cg := range file.Comments {
+			if cg.Pos() >= file.Package {
+				break
+			}
+			for _, c := range cg.List {
+				if strings.HasPrefix(c.Text, "//go:build ") && strings.Contains(c.Text, "ohos") {
+					if rel != "lib.go" && !strings.HasPrefix(rel, "internal/platform/") {
+						problems = append(problems, fmt.Sprintf("core/%s 不允许使用 ohos 构建标签（仅允许入口 lib.go 与 internal/platform）", rel))
+					}
+				}
+			}
+		}
+
+		isRoot := !strings.Contains(rel, "/")
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.GenDecl:
-				if d.Tok != token.VAR {
+				if !isRoot || d.Tok != token.VAR {
 					continue
 				}
 				for _, spec := range d.Specs {
@@ -377,24 +423,25 @@ func checkSources(coreDir string) []string {
 				}
 			case *ast.FuncDecl:
 				if d.Recv == nil {
-					if d.Name.Name == "init" && !allowedInitFiles[name] {
-						problems = append(problems, fmt.Sprintf("core/%s 不允许新增顶层 init()，白名单仅包含路由注册与 ohos 平台钩子", name))
+					if d.Name.Name == "init" && !allowedInitFiles[rel] {
+						problems = append(problems, fmt.Sprintf("core/%s 不允许新增顶层 init()，白名单仅包含入口/路由注册与 ohos 平台钩子", rel))
 					}
 					if d.Doc != nil {
 						for _, comment := range d.Doc.List {
 							if sym, ok := strings.CutPrefix(comment.Text, "//export "); ok {
 								sym = strings.TrimSpace(sym)
 								switch {
-								case name == "lib.go" && strings.HasPrefix(sym, "ArkClash"):
-								case name == "tailscale_network.go" && sym == "arkClashTailscaleNetworkChanged":
+								case rel == "lib.go" && strings.HasPrefix(sym, "ArkClash"):
+								case rel == "backupstore/main.go" && strings.HasPrefix(sym, "ArkStore"):
+								case rel == "internal/platform/tailscale_network.go" && sym == "arkClashTailscaleNetworkChanged":
 								default:
-									problems = append(problems, fmt.Sprintf("core/%s 声明了非预期导出符号 //export %s（公开 C ABI 必须收口在 core/lib.go）", name, sym))
+									problems = append(problems, fmt.Sprintf("core/%s 声明了非预期导出符号 //export %s（公开 C ABI 必须收口在入口包）", rel, sym))
 								}
 							}
 						}
 					}
 				}
-				if name != "engine.go" && d.Body != nil {
+				if isRoot && name != "engine.go" && d.Body != nil {
 					recvName := coreEngineRecvName(d)
 					ast.Inspect(d.Body, func(n ast.Node) bool {
 						if name == "lib.go" {
@@ -420,7 +467,13 @@ func checkSources(coreDir string) []string {
 				}
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		problems = append(problems, fmt.Sprintf("遍历 core 目录失败：%v", err))
+		return problems
 	}
+
 	var allowedKeys []string
 	for key := range allowedRootVars {
 		allowedKeys = append(allowedKeys, key)

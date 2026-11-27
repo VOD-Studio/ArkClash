@@ -1,6 +1,6 @@
 //go:build ohos
 
-package main
+package platform
 
 /*
 #cgo LDFLAGS: -lnet_connection
@@ -74,9 +74,17 @@ import (
 	"github.com/metacubex/mihomo/log"
 )
 
-var systemDNSWatcher sync.Once
-var tunDNSAddr = netip.MustParseAddrPort(tunDNS).Addr()
-var tunDNSAddr6 = netip.MustParseAddrPort(tunDNS6).Addr()
+// 地址须与 TUN 配置（tun.go）及 entry/src/main/ets/shared/VpnNetwork.ets 一致。
+const (
+	TunDNS  = "172.19.0.2:53"
+	TunDNS6 = "[fdfe:dcba:9876::2]:53"
+)
+
+var (
+	systemDNSWatcher sync.Once
+	tunDNSAddr       = netip.MustParseAddrPort(TunDNS).Addr()
+	tunDNSAddr6      = netip.MustParseAddrPort(TunDNS6).Addr()
+)
 
 func init() {
 	dns.SetArkClashSystemDNS(readSystemDNS, systemDNSGeneration)

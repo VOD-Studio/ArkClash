@@ -25,8 +25,21 @@ import (
 	"unsafe"
 
 	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
+	"github.com/VOD-Studio/ArkClash/core/internal/diagnostics"
+	"github.com/VOD-Studio/ArkClash/core/internal/platform"
 	"github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/log"
 )
+
+func init() {
+	if platform.TunDNS != tunDNS || platform.TunDNS6 != tunDNS6 {
+		panic("platform TUN DNS constants out of sync with tun.go")
+	}
+	// 入口装配平台日志格式化回调，避免 platform 反向依赖 diagnostics。
+	platform.StartHilog(func(event log.Event) string {
+		return diagnostics.DescribeLog(event).Message
+	})
+}
 
 func errorString(err error) *C.char {
 	if err == nil {

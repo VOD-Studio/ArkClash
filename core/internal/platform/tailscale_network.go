@@ -1,6 +1,6 @@
 //go:build ohos
 
-package main
+package platform
 
 /*
 #cgo LDFLAGS: -lnet_connection

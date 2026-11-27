@@ -1,4 +1,5 @@
-package main
+// Package platform 隔离 HarmonyOS NDK、Network Kit 与 HiLog 平台适配层。
+package platform
 
 import "sync"
 
