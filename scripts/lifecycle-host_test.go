@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"net"
 	"os"
@@ -385,5 +386,23 @@ func TestLifecycleEmptyProfileExpectationCannotOverwriteNewSelection(t *testing.
 	}
 	if err := reload("", "", new("first")); err == nil {
 		t.Fatal("clearing last profile discarded a live TUN")
+	}
+}
+
+func TestTunNetworkOptionsIgnoresAppAccessFields(t *testing.T) {
+	payload := `{"stack":"gvisor","ipv6":true,"dnsHijacking":false,"mtu":1400,"congestionController":"bbr","bypassPrivateRoute":true,"routeAddress":["192.0.2.0/24"],"routeExcludeAddress":[],"appAccessMode":"trusted","excludedApplications":["com.example.direct"],"trustedApplications":["com.example.browser"]}`
+	var got tunNetworkOptions
+	if err := json.Unmarshal([]byte(payload), &got); err != nil {
+		t.Fatalf("tunNetworkOptions failed to ignore app access fields: %v", err)
+	}
+	want := tunNetworkOptions{
+		Stack:                "gvisor",
+		IPv6:                 true,
+		DNSHijacking:         false,
+		MTU:                  1400,
+		CongestionController: "bbr",
+	}
+	if got != want {
+		t.Fatalf("decoded tunNetworkOptions = %+v, want %+v", got, want)
 	}
 }

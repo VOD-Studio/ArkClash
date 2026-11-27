@@ -455,6 +455,67 @@ test('VPN 将同一份网络设置用于系统接口和内核，旧配置保留�
   ]);
 });
 
+test('VPN 分应用访问控制在关闭、黑名单与白名单模式下严格互斥并保护自身包名', async t => {
+  const f = fixture(t);
+  await f.warm();
+
+  // 关闭模式：保留两份名单数据，但只向系统下发自身排除，不带 trustedApplications。
+  f.replaceRuntime({ network: {
+    stack: 'gvisor', mtu: 1500, ipv6: false, dnsHijacking: true,
+    appAccessMode: 'off',
+    excludedApplications: ['com.example.direct'],
+    trustedApplications: ['com.example.browser']
+  } });
+  assert.equal((await f.request('connect', 'connect-off').result).status, 200);
+  const offConfig = f.calls.filter(call => call.name === 'create').at(-1).args[0];
+  assert.deepEqual(Array.from(offConfig.blockedApplications), ['fixture.application']);
+  assert.equal(offConfig.trustedApplications, undefined);
+  assert.equal((await f.request('disconnect', 'disconnect-off').result).status, 200);
+
+  // 白名单模式：仅下发 trustedApplications（剔除自身、不传 blockedApplications），上限 256 项。
+  const maxTrusted = Array.from({ length: 256 }, (_unused, index) => `com.example.app${index}`);
+  f.replaceRuntime({ network: {
+    stack: 'gvisor', mtu: 1500, ipv6: false, dnsHijacking: true,
+    appAccessMode: 'trusted',
+    excludedApplications: ['com.example.direct'],
+    trustedApplications: ['fixture.application', ...maxTrusted, 'com.example.app0']
+  } });
+  assert.equal((await f.request('connect', 'connect-trusted-max').result).status, 200);
+  const trustedConfig = f.calls.filter(call => call.name === 'create').at(-1).args[0];
+  assert.equal(trustedConfig.blockedApplications, undefined);
+  assert.equal(trustedConfig.trustedApplications.length, 256);
+  assert.ok(!trustedConfig.trustedApplications.includes('fixture.application'));
+  assert.equal((await f.request('disconnect', 'disconnect-trusted-max').result).status, 200);
+
+  // 空白名单（或仅含自身包名）不得创建系统 VPN，防止空数组被系统按全局代理处理。
+  const createdBeforeReject = f.count('create');
+  f.replaceRuntime({ network: {
+    stack: 'gvisor', mtu: 1500, ipv6: false, dnsHijacking: true,
+    appAccessMode: 'trusted',
+    trustedApplications: ['fixture.application']
+  } });
+  assert.equal((await f.request('connect', 'connect-trusted-empty').result).status, 500);
+  assert.equal(f.count('create'), createdBeforeReject);
+
+  // 白名单超过 256 项或黑名单超过 255 项直接拒绝，不静默截断。
+  f.replaceRuntime({ network: {
+    stack: 'gvisor', mtu: 1500, ipv6: false, dnsHijacking: true,
+    appAccessMode: 'trusted',
+    trustedApplications: [...maxTrusted, 'com.example.overflow']
+  } });
+  assert.equal((await f.request('connect', 'connect-trusted-overflow').result).status, 500);
+  assert.equal(f.count('create'), createdBeforeReject);
+
+  const overflowBlocked = Array.from({ length: 256 }, (_unused, index) => `com.example.block${index}`);
+  f.replaceRuntime({ network: {
+    stack: 'gvisor', mtu: 1500, ipv6: false, dnsHijacking: true,
+    appAccessMode: 'blocked',
+    excludedApplications: overflowBlocked
+  } });
+  assert.equal((await f.request('connect', 'connect-blocked-overflow').result).status, 500);
+  assert.equal(f.count('create'), createdBeforeReject);
+});
+
 test('重复连接和断开幂等，保留同一个核心、配置与更新调度器', async t => {
   const f = fixture(t);
   await f.warm();
