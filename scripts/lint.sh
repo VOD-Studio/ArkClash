@@ -45,10 +45,14 @@ lint_go() {
     bash "$ROOT/scripts/prepare-core-modfile.sh" "$lint_deps" || exit 1
     cd core || exit 1
 
-    # 校验构建标签隔离、Cgo 边界、backupstore 依赖、init() 白名单与 C ABI 导出位置。
+    # 先自检架构门禁的静态检查与负向单测，确保门禁自身不退化。
+    CGO_ENABLED=0 go vet "$ROOT/scripts/ci/check-core-arch/main.go" "$ROOT/scripts/ci/check-core-arch/main_test.go" || exit 1
+    CGO_ENABLED=0 go test -count=1 "$ROOT/scripts/ci/check-core-arch/main.go" "$ROOT/scripts/ci/check-core-arch/main_test.go" || exit 1
+
+    # 校验零根 .go 文件、构建标签隔离、Cgo 边界、DAG 白名单、cmd/backupstore 依赖、init() 与 C ABI 导出位置。
     go run "$ROOT/scripts/ci/check-core-arch/main.go" -core "$ROOT/core" -modfile "$lint_deps/go.mod" || exit 1
 
-    # 无 NDK 时也能检查全部纯 Go 与宿主 cgo（QuickJS/backupstore）代码。
+    # 无 NDK 时也能检查全部纯 Go 与宿主 cgo（QuickJS/cmd/backupstore）代码。
     CGO_ENABLED=1 go vet -modfile "$lint_deps/go.mod" -tags with_gvisor ./... || exit 1
 
     # 内核平台代码用 cgo 引用 OHOS NDK 的头文件，含 ohos 标签的 vet 仍需 NDK 编译器。

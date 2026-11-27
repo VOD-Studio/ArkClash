@@ -24,5 +24,5 @@ CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
   CC="$LLVM/aarch64-unknown-linux-ohos-clang" \
   CXX="$LLVM/aarch64-unknown-linux-ohos-clang++" \
   go build -a -tags with_gvisor,ohos -buildmode=c-shared -modfile "$WORK/go.mod" \
-    -o "$WORK/libclash.so" .
+    -o "$WORK/libclash.so" ./cmd/clash
 echo "CodeQL 分析构建完成（标准 Go、补丁依赖、临时产物）"

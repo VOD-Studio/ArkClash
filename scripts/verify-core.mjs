@@ -53,7 +53,7 @@ before(async () => {
   }
 
   // 预热编译缓存，不执行测试。
-  const prewarm = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-run=^$', '.', './internal/...'], {
+  const prewarm = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-run=^$', './internal/...'], {
     timeout: 600000
   });
   assert.equal(prewarm.status, 0, `${prewarm.error ?? ''}\n${prewarm.stdout}\n${prewarm.stderr}`);
@@ -99,7 +99,11 @@ test('内部纯引擎与独立子系统', { timeout: 90000 }, () => {
   const listed = runGo(['list', '-mod=readonly', '-modfile', modfile, './internal/...'], { timeout: 30000 });
   assert.equal(listed.status, 0, `${listed.error ?? ''}\n${listed.stdout}\n${listed.stderr}`);
   const pkgs = listed.stdout.split(/\r?\n/).map(line => line.trim())
-    .filter(pkg => pkg && !pkg.endsWith('/internal/backup') && !pkg.endsWith('/internal/script'));
+    .filter(pkg => pkg &&
+      !pkg.endsWith('/internal/backup') &&
+      !pkg.endsWith('/internal/script') &&
+      !pkg.endsWith('/internal/engine') &&
+      !pkg.endsWith('/internal/api'));
   if (pkgs.length === 0) {
     return;
   }
@@ -110,11 +114,12 @@ test('内部纯引擎与独立子系统', { timeout: 90000 }, () => {
   console.log(result.stdout.trim());
 });
 
-// 宿主只替换 TUN 构造器；其余内核逻辑与 QuickJS 脚本在 core/ 原地编译执行。
-test('核心选择持久化、回滚、规则探测与实际请求取消', { timeout: 240000 }, () => {
+// 宿主只替换 TUN 构造器；核心引擎与控制面路由在 core/internal/{engine,api} 原地编译执行。
+test('核心引擎与控制面选择持久化、回滚、规则探测与取消', { timeout: 240000 }, () => {
   const result = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-count=1', '-timeout=90s', '-v',
     ...(process.env.CORE_TEST_RUN ? [`-run=${process.env.CORE_TEST_RUN}`] : []),
-    ...(process.env.CORE_TEST_SKIP ? [`-skip=${process.env.CORE_TEST_SKIP}`] : []), '.'], {
+    ...(process.env.CORE_TEST_SKIP ? [`-skip=${process.env.CORE_TEST_SKIP}`] : []),
+    './internal/engine', './internal/api'], {
     timeout: 230000
   });
   assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);

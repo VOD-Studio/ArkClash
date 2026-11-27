@@ -94,7 +94,7 @@ jobs:
           # Linux TUN fd 用例以 CGO_ENABLED=0 运行，已在上一非竞态步骤覆盖。
           CORE_LINUX_FD: "0"
           # 仅跳过 2 项命中上游 mihomo 非原子全局变量（inbound.SetSkipAuthPrefixes / resolver.DefaultHosts / resource.SetETag / http.SetUA）的用例；
-          # 其余根包用例、全部 internal/* 包与 6 个 mihomo 白盒包均跑 -race。
+          # 其余 internal/engine、internal/api、全部 internal/* 包与 6 个 mihomo 白盒包均跑 -race。
           CORE_TEST_SKIP: "^(TestGeneralSettingsApplyWithoutReplacingTun|TestHTTPAndFileProviderRetirementReleasesBackgroundResources)$"
         run: make test TESTS=core
 

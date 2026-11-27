@@ -75,13 +75,13 @@ CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH" \
   CXX="$LLVM/$TRIPLE-clang++" \
   "$GO" build -buildmode=c-shared -tags with_gvisor,ohos -trimpath -modfile "$PATCHED_DIR/go.mod" \
     -ldflags "-s -w -extldflags=-Wl,-soname,libclash.so -X github.com/metacubex/mihomo/constant.Version=$MIHOMO_VERSION" \
-    -o "$OUT/libclash.so" .
+    -o "$OUT/libclash.so" ./cmd/clash
 
 # 备份库在界面进程延迟加载，不链接 mihomo。
 CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH" CC="$LLVM/$TRIPLE-clang" \
   "$GO" build -buildmode=c-shared -trimpath \
     -ldflags "-s -w -extldflags=-Wl,-soname,libarkstore_impl.so" \
-    -o "$OUT/libarkstore_impl.so" ./backupstore
+    -o "$OUT/libarkstore_impl.so" ./cmd/backupstore
 rm -f "$OUT/libarkstore_impl.h"
 
 # The C++ bridge uses the hand-written arkclash.h instead.
