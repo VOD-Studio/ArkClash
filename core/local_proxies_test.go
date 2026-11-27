@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/metacubex/chi"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
@@ -35,7 +36,7 @@ func TestLocalProxyController(t *testing.T) {
 	}
 
 	plainList := links[0] + "\n" + "socks5://192.0.2.51:1080#example"
-	body, _ := json.Marshal(localProxyBody{Lines: []string{links[0], "vless://invalid", base64.StdEncoding.EncodeToString([]byte(plainList))}})
+	body, _ := json.Marshal(corecfg.LocalProxyBody{Lines: []string{links[0], "vless://invalid", base64.StdEncoding.EncodeToString([]byte(plainList))}})
 	var decoded [][]map[string]any
 	if status := request("decode", string(body), &decoded); status != 200 || len(decoded) != 3 ||
 		len(decoded[0]) != 1 || len(decoded[1]) != 0 || len(decoded[2]) != 2 {
@@ -52,7 +53,7 @@ func TestLocalProxyController(t *testing.T) {
 	}
 
 	var failure struct{ Message string }
-	if status := request("decode", `{"lines":["`+strings.Repeat("a", localProxyLimit)+`"]}`, &failure); status != 400 ||
+	if status := request("decode", `{"lines":["`+strings.Repeat("a", corecfg.LocalProxyLimit)+`"]}`, &failure); status != 400 ||
 		failure.Message != "local_proxy_input" {
 		t.Fatalf("超大请求限制失效，HTTP %d", status)
 	}

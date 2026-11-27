@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/VOD-Studio/ArkClash/core/internal/ruleset"
 	C "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/tunnel"
@@ -26,10 +27,10 @@ func TestRuleSetRemoteSyncRejectsBadContent(t *testing.T) {
 		_, _ = w.Write([]byte(source.Load().(string)))
 	}))
 	defer server.Close()
-	catalog := ruleSetRequest{
+	catalog := corecfg.RuleSetRequest{
 		BootID:           eng.Status().BootID,
 		ExpectedRevision: "default", Revision: "imported", Action: "save",
-		Item: ruleSetItem{ID: "remote", Name: "Remote", URL: server.URL, Behavior: "auto", Format: "auto"},
+		Item: corecfg.RuleSetItem{ID: "remote", Name: "Remote", URL: server.URL, Behavior: "auto", Format: "auto"},
 	}
 	source.Store("payload: [first.test]\n")
 	if err := changeRuleSet(context.Background(), catalog); err != nil {
@@ -45,7 +46,7 @@ func TestRuleSetRemoteSyncRejectsBadContent(t *testing.T) {
 	if err := changeRuleSet(context.Background(), catalog); err != nil {
 		t.Fatal(err)
 	}
-	saved, err := readRuleSets(opts.HomeDir)
+	saved, err := corecfg.ReadRuleSets(opts.HomeDir)
 	if err != nil || saved.Revision != "good-sync" || len(saved.Items) != 1 || saved.Items[0].Content != "good-sync" {
 		t.Fatalf("sync did not publish the new version: %v", err)
 	}
@@ -64,13 +65,13 @@ func TestRuleSetLiveUpdateKeepsTunnelAndLastGoodData(t *testing.T) {
 	}
 	active := eng.tun
 	boot := eng.Status().BootID
-	item := ruleSetItem{ID: "demo", Name: "Imported", Behavior: "auto", Format: "auto"}
+	item := corecfg.RuleSetItem{ID: "demo", Name: "Imported", Behavior: "auto", Format: "auto"}
 	save := func(expected, revision, source string) error {
 		t.Helper()
 		if err := os.WriteFile(filepath.Join(opts.HomeDir, "profiles", revision+".ruleset"), []byte(source), 0600); err != nil {
 			t.Fatal(err)
 		}
-		return changeRuleSet(context.Background(), ruleSetRequest{
+		return changeRuleSet(context.Background(), corecfg.RuleSetRequest{
 			BootID: boot, ExpectedRevision: expected, Revision: revision, Action: "save", Item: item, Candidate: revision,
 		})
 	}
@@ -80,12 +81,12 @@ func TestRuleSetLiveUpdateKeepsTunnelAndLastGoodData(t *testing.T) {
 	if len(tunnel.RuleProviders()) != 0 {
 		t.Fatal("unused rule set was loaded")
 	}
-	rules := []addedRule{
+	rules := []corecfg.AddedRule{
 		{ID: "a", Kind: "RULE-SET", Payload: item.ID, Target: "REJECT"},
 		{ID: "b", Kind: "RULE-SET", Payload: item.ID, Target: "DIRECT"},
 	}
-	if err := updateAddedRules(profileSettingsRequest[addedRulesSettings]{BootID: boot, ExpectedRevision: "default",
-		Settings: addedRulesSettings{Revision: "rule-1", Rules: rules}}); err != nil {
+	if err := updateAddedRules(corecfg.SettingsRequest[corecfg.AddedRulesSettings]{BootID: boot, ExpectedRevision: "default",
+		Settings: corecfg.AddedRulesSettings{Revision: "rule-1", Rules: rules}}); err != nil {
 		t.Fatal(err)
 	}
 	matches := func(host string) bool {
@@ -109,9 +110,9 @@ func TestRuleSetLiveUpdateKeepsTunnelAndLastGoodData(t *testing.T) {
 	if matches("first.test") || !matches("second.test") || active != eng.tun || eng.Status().BootID != boot {
 		t.Fatal("rule set update failed to preserve the tunnel or replace the matcher")
 	}
-	if err := changeRuleSet(context.Background(), ruleSetRequest{
+	if err := changeRuleSet(context.Background(), corecfg.RuleSetRequest{
 		BootID: boot, ExpectedRevision: "updated", Revision: "delete", Action: "delete", Item: item,
-	}); !errors.Is(err, errRuleSetInUse) {
+	}); !errors.Is(err, corecfg.ErrRuleSetInUse) {
 		t.Fatalf("referenced rule set was deletable: %v", err)
 	}
 	if err := reload(opts.ConfigPath, opts.Profile, new(opts.Profile)); err != nil || !matches("second.test") {

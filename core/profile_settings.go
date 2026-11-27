@@ -1,72 +1,23 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/metacubex/mihomo/config"
 )
-
-const profileSettingsLimit = 128 << 10
-
-var (
-	errProfileSettingsInvalid  = errors.New("profile_settings_invalid")
-	errProfileSettingsConflict = errors.New("profile_settings_conflict")
-	errProfileSettingsIO       = errors.New("profile_settings_io")
-	errProfileSettingsApply    = errors.New("profile_settings_apply_failed")
-	errProfileSettingsListen   = errors.New("profile_settings_listen_failed")
-)
-
-type profileSettingsRequest[T any] struct {
-	BootID           string `json:"bootId"`
-	ExpectedRevision string `json:"expectedRevision"`
-	Settings         T      `json:"settings"`
-}
-
-func decodeProfileSettings(r io.Reader, dst any) error {
-	body, err := io.ReadAll(io.LimitReader(r, profileSettingsLimit+1))
-	if err != nil || len(body) > profileSettingsLimit || !json.Valid(body) {
-		return errProfileSettingsInvalid
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dst); err != nil {
-		return errProfileSettingsInvalid
-	}
-	return nil
-}
-
-func stageProfileSettings(path string, value any) (string, error) {
-	file, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*.tmp")
-	if err != nil {
-		return "", errProfileSettingsIO
-	}
-	encoder := json.NewEncoder(file)
-	encoder.SetEscapeHTML(false)
-	err = encoder.Encode(value)
-	if err == nil {
-		err = file.Sync()
-	}
-	if err = errors.Join(err, file.Close()); err != nil {
-		_ = os.Remove(file.Name())
-		return "", errProfileSettingsIO
-	}
-	return file.Name(), nil
-}
 
 func profileSettingsCurrent(bootID, expected, previous, next string) bool {
 	return eng.running && bootID != "" && bootID == eng.bootID && expected == previous && next != expected
 }
 
 // CommitSettingsFile 统一执行设置文件暂存、按需热切换、原子改名与失败回滚。
-func (tx *stateTx) CommitSettingsFile(next startOptions, path string, value any) error {
+func (tx *stateTx) CommitSettingsFile(next corecfg.StartOptions, path string, value any) error {
 	e := tx.e
 	if e.cleanupFailure != nil {
-		return errProfileSettingsApply
+		return corecfg.ErrSettingsApply
 	}
 	previous := e.current
 	previousInbound := e.desiredInbound
@@ -75,17 +26,17 @@ func (tx *stateTx) CommitSettingsFile(next startOptions, path string, value any)
 	if next.Profile != "" {
 		var err error
 		cfg, err = parseProfileSettingsConfig(&next, &nextInbound)
-		if errors.Is(err, errDNSProxyServersRequired) || errors.Is(err, errAddedRulesMatchTarget) {
+		if errors.Is(err, corecfg.ErrDNSProxyServersRequired) || errors.Is(err, corecfg.ErrAddedRulesMatchTarget) {
 			return err
 		}
 		if err != nil {
-			return errProfileSettingsInvalid
+			return corecfg.ErrSettingsInvalid
 		}
 		if e.tun != nil && !dnsListenerAvailable(nextInbound.dnsListen, nextInbound.dnsMark) {
-			return errProfileSettingsListen
+			return corecfg.ErrSettingsListen
 		}
 	}
-	staged, err := stageProfileSettings(path, value)
+	staged, err := corecfg.StageSettings(path, value)
 	if err != nil {
 		return err
 	}
@@ -105,20 +56,20 @@ func (tx *stateTx) CommitSettingsFile(next startOptions, path string, value any)
 			}
 			return nil
 		}
-		err = errProfileSettingsIO
+		err = corecfg.ErrSettingsIO
 	} else {
-		err = errProfileSettingsApply
+		err = corecfg.ErrSettingsApply
 	}
 	if !applied {
 		return err
 	}
 	if tx.RollbackReload(previous, previousInbound) != nil {
-		return errProfileSettingsApply
+		return corecfg.ErrSettingsApply
 	}
 	return err
 }
 
-func parseProfileSettingsConfig(options *startOptions, inbounds *inboundSettings) (*config.Config, error) {
+func parseProfileSettingsConfig(options *corecfg.StartOptions, inbounds *inboundSettings) (*config.Config, error) {
 	cfg, err := parseConfigWithInboundHash(options.ConfigPath, options, inbounds)
 	// 订阅更新先加载候选，随后原子改名到正式路径。
 	var missing *os.PathError

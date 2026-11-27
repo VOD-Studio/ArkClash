@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
 	"github.com/metacubex/mihomo/adapter/inbound"
@@ -25,7 +26,7 @@ type panelController struct {
 }
 
 func setPanelControllerLocked(secret string) error {
-	return changePanelControllerLocked(net.JoinHostPort("127.0.0.1", strconv.Itoa(panelPort)), secret)
+	return changePanelControllerLocked(net.JoinHostPort("127.0.0.1", strconv.Itoa(corecfg.PanelPort)), secret)
 }
 
 func changePanelControllerLocked(address, secret string) error {
@@ -56,7 +57,7 @@ func startPanelControllerLocked(address, secret string) error {
 	lc := inbound.NewListenConfig()
 	socket, err := lc.Listen(context.Background(), "tcp", address)
 	if err != nil {
-		return errGeneralPanel
+		return corecfg.ErrGeneralPanel
 	}
 	server := &http.Server{Handler: panelHandler(secret), ReadHeaderTimeout: 5 * time.Second, MaxHeaderBytes: 16 << 10}
 	eng.panel = &panelController{secret: secret, listener: socket, server: server}
@@ -127,7 +128,7 @@ func selectPanelProxy(w http.ResponseWriter, r *http.Request, group string) {
 		Name string `json:"name"`
 	}
 	clear := r.Method == http.MethodDelete
-	if !clear && decodeProfileSettings(http.MaxBytesReader(w, r.Body, 8192), &body) != nil {
+	if !clear && corecfg.DecodeSettings(http.MaxBytesReader(w, r.Body, 8192), &body) != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

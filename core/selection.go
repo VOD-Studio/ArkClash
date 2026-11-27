@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
 	"github.com/metacubex/mihomo/adapter/outboundgroup"
@@ -82,7 +83,7 @@ func saveSelections(home, profile string, selected map[string]string) error {
 }
 
 // 在启用转发之前恢复配置自己的选择；provider 成员尚未初始化时由组在加载后解析。
-func restoreSelections(cfg *config.Config, opts startOptions) error {
+func restoreSelections(cfg *config.Config, opts corecfg.StartOptions) error {
 	if opts.Profile == "" {
 		return nil
 	}

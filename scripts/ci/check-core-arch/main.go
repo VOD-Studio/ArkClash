@@ -33,6 +33,7 @@ const (
 	subfetchPkg    = internalPrefix + "subfetch"
 	diagnosticsPkg = internalPrefix + "diagnostics"
 	geoPkg         = internalPrefix + "geo"
+	configPkg      = internalPrefix + "config"
 	mihomoPrefix   = "github.com/metacubex/mihomo"
 )
 
@@ -57,6 +58,7 @@ var (
 		subfetchPkg:    {ruletunnelPkg},
 		diagnosticsPkg: {ctrlPkg},
 		geoPkg:         {backupPkg, ctrlPkg, ruletunnelPkg},
+		configPkg:      {backupPkg, geoPkg, proxylinkPkg, rulesetPkg, ruletunnelPkg, scriptPkg},
 	}
 	allowedInitFiles = map[string]bool{
 		"api.go":               true,
@@ -69,19 +71,15 @@ var (
 	// 根包非哨兵错误/非不可变正则的包级 var 白名单（未登记即失败），阻止后续新增散落全局状态。
 	// 格式："文件名:变量名"。删除对应变量时必须同步收缩此表。
 	allowedRootVars = map[string]bool{
-		"backup.go:backupDAVBusy":               true,
-		"delay.go:delaySlots":                   true,
-		"engine.go:eng":                         true,
-		"engine.go:engineUnlockCheck":           true,
-		"lib.go:reclaimMu":                      true,
-		"lib.go:lastReclaim":                    true,
-		"local_proxies.go:localProxyValidation": true,
-		"local_proxies.go:localProxySequence":   true,
-		"loopback.go:disableLoopBackDetector":   true,
-		"profile_scripts.go:scriptSlot":         true,
-		"rule_sets.go:ruleSetMutation":          true,
-		"system_dns.go:systemDNSWatcher":        true,
-		"tailscale_network.go:tailnetWatches":   true,
+		"backup.go:backupDAVBusy":             true,
+		"delay.go:delaySlots":                 true,
+		"engine.go:eng":                       true,
+		"engine.go:engineUnlockCheck":         true,
+		"lib.go:reclaimMu":                    true,
+		"lib.go:lastReclaim":                  true,
+		"loopback.go:disableLoopBackDetector": true,
+		"system_dns.go:systemDNSWatcher":      true,
+		"tailscale_network.go:tailnetWatches": true,
 	}
 )
 

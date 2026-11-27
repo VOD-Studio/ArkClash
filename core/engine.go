@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
 	"github.com/VOD-Studio/ArkClash/core/internal/diagnostics"
 	"github.com/VOD-Studio/ArkClash/core/internal/geo"
@@ -39,7 +40,7 @@ type runtimeView struct {
 type configSpec struct {
 	BootID         string
 	ConfigRevision uint64
-	Options        startOptions
+	Options        corecfg.StartOptions
 }
 
 type postUnlockTasks struct {
@@ -95,7 +96,7 @@ type coreEngine struct {
 
 	// 1. 生命周期与运行身份
 	running        bool
-	current        startOptions
+	current        corecfg.StartOptions
 	bootID         string
 	startedAt      int64
 	revision       uint64
@@ -126,11 +127,12 @@ type coreEngine struct {
 	ruleProviders atomic.Pointer[ruleProviderGeneration]
 
 	// 5. 下游独立子系统与路线监听
-	providers *providers.Hub
-	diag      *diagnostics.Hub
-	probe     *probe.Handler
-	geo       atomic.Pointer[geo.Manager]
-	routes    atomic.Pointer[runtimeRouteWatch]
+	providers       *providers.Hub
+	diag            *diagnostics.Hub
+	probe           *probe.Handler
+	geo             atomic.Pointer[geo.Manager]
+	routes          atomic.Pointer[runtimeRouteWatch]
+	ruleSetMutation chan struct{}
 }
 
 // 仅宿主测试在 TestMain 挂载，用于在 withState 解锁前校验 view 与核心状态一致。
@@ -149,12 +151,13 @@ func defaultTunFactory(options LC.Tun) (tunHandle, error) {
 
 func newCoreEngine() *coreEngine {
 	e := &coreEngine{
-		intent:     "stopped",
-		forward:    "stopped",
-		tunFactory: defaultTunFactory,
-		delays:     activeDelayRegistry{active: make(map[*http.Request]context.CancelFunc)},
-		providers:  providers.NewHub(),
-		diag:       diagnostics.NewHub(),
+		intent:          "stopped",
+		forward:         "stopped",
+		tunFactory:      defaultTunFactory,
+		delays:          activeDelayRegistry{active: make(map[*http.Request]context.CancelFunc)},
+		providers:       providers.NewHub(),
+		diag:            diagnostics.NewHub(),
+		ruleSetMutation: make(chan struct{}, 1),
 	}
 	e.probe = probe.NewHandler(e.probeToken)
 	return e
@@ -256,13 +259,13 @@ func (e *coreEngine) ConfigSpec() (configSpec, bool) {
 }
 
 // setCurrentLocked 统一更新 current 并同步刷新 runtimeView，防止遗漏发布导致快照过期。
-func (e *coreEngine) setCurrentLocked(next startOptions) {
+func (e *coreEngine) setCurrentLocked(next corecfg.StartOptions) {
 	e.current = next
 	e.publishRuntimeLocked()
 }
 
 type reloadPlan struct {
-	Next                 startOptions
+	Next                 corecfg.StartOptions
 	Cfg                  *config.Config
 	Inbound              inboundSettings
 	AllowInboundRollback bool
@@ -314,7 +317,7 @@ func (tx *stateTx) CommitReload(plan reloadPlan) (bool, error) {
 // RollbackReload 在新配置已应用但后续原子改名或入口恢复失败时重解析并回滚至 previous。
 // 若重解析或回滚热切换也失败，统一进入失败状态（记 cleanupFailure、关闭入口并停掉 TUN、发布快照），
 // 避免运行配置与磁盘文件静默分叉。
-func (tx *stateTx) RollbackReload(previous startOptions, fallbackInbound inboundSettings) error {
+func (tx *stateTx) RollbackReload(previous corecfg.StartOptions, fallbackInbound inboundSettings) error {
 	e := tx.e
 	previousInbound := fallbackInbound
 	oldCfg, parseErr := parseProfileSettingsConfig(&previous, &previousInbound)

@@ -24,6 +24,7 @@ import (
 	"time"
 	"unsafe"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/metacubex/mihomo/constant"
 )
 
@@ -39,7 +40,7 @@ func errorString(err error) *C.char {
 //
 //export ArkClashStart
 func ArkClashStart(optionsJSON *C.char) *C.char {
-	var opts startOptions
+	var opts corecfg.StartOptions
 	if err := json.Unmarshal([]byte(C.GoString(optionsJSON)), &opts); err != nil {
 		return errorString(err)
 	}

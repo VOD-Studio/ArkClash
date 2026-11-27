@@ -10,6 +10,7 @@ import (
 	"testing"
 	"testing/iotest"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
 	"github.com/metacubex/mihomo/constant"
@@ -19,7 +20,7 @@ type configContractFixture struct {
 	YAML       string
 	BaseGroup  string
 	Script     string
-	AddedRules addedRulesSettings
+	AddedRules corecfg.AddedRulesSettings
 	Standard   []string
 	Scripted   []string
 	Custom     []string
@@ -63,7 +64,7 @@ func requireContractJSON(t *testing.T, actual, expected []byte) {
 func TestProfileSettingsContract(t *testing.T) {
 	cases := readContractFixtures(t)
 	opts := lifecycleOptions(t)
-	defaults, err := readGeneralSettings(opts.HomeDir)
+	defaults, err := corecfg.ReadGeneralSettings(opts.HomeDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,9 +74,9 @@ func TestProfileSettingsContract(t *testing.T) {
 	}
 	requireContractJSON(t, encoded, cases.DefaultSettings)
 
-	var request profileSettingsRequest[generalSettings]
+	var request corecfg.SettingsRequest[corecfg.GeneralSettings]
 	reader := iotest.OneByteReader(bytes.NewReader(cases.SettingsRequest))
-	if err := decodeProfileSettings(reader, &request); err != nil {
+	if err := corecfg.DecodeSettings(reader, &request); err != nil {
 		t.Fatal(err)
 	}
 	encoded, err = json.Marshal(request)
@@ -106,7 +107,7 @@ func TestProfileSettingsContract(t *testing.T) {
 	if ok.Code != http.StatusNoContent || ok.Body.Len() != 0 {
 		t.Fatalf("保存应返回空的 204，得到 %d %s", ok.Code, ok.Body.String())
 	}
-	saved, err := readGeneralSettings(opts.HomeDir)
+	saved, err := corecfg.ReadGeneralSettings(opts.HomeDir)
 	if err != nil || !reflect.DeepEqual(saved, request.Settings) {
 		t.Fatalf("保存没有完整保留字段：%+v，%v", saved, err)
 	}
@@ -117,16 +118,16 @@ func TestConfigTransformationContract(t *testing.T) {
 	opts := lifecycleOptions(t)
 	opts.Profile = "fixture"
 	opts.AddedRules = fixture.AddedRules
-	opts.ProfileRules = opts.AddedRules.forProfile(opts.Profile)
+	opts.ProfileRules = opts.AddedRules.ForProfile(opts.Profile)
 	path := lifecycleWriteProfile(t, opts, opts.Profile, fixture.YAML)
 	for _, tc := range []struct {
 		name     string
-		script   profileScript
+		script   corecfg.ProfileScript
 		isCustom bool
 		rules    []string
 	}{
 		{name: "standard", rules: fixture.Standard},
-		{name: "script", script: profileScript{identity: "fixture", source: fixture.Script}, rules: fixture.Scripted},
+		{name: "script", script: corecfg.ProfileScript{Identity: "fixture", Source: fixture.Script}, rules: fixture.Scripted},
 		{name: "custom", isCustom: true, rules: fixture.Custom},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

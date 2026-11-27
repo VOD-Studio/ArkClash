@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/VOD-Studio/ArkClash/core/internal/probe"
 	"github.com/metacubex/http"
@@ -78,7 +79,7 @@ func assertEngineViewInvariant(e *coreEngine) {
 		v.Status.TunAttached != (e.tun != nil) ||
 		v.Status.VpnCreated != e.vpnCreated ||
 		v.Status.PanelOpen != (e.panel != nil) ||
-		v.Status.ProfileExtension != e.current.Script.identity ||
+		v.Status.ProfileExtension != e.current.Script.Identity ||
 		v.Status.StandardRulesRevision != e.current.ProfileRules.Revision ||
 		v.HomeDir != e.current.HomeDir ||
 		v.StoreGeneration != e.current.StoreGeneration ||
@@ -93,7 +94,7 @@ func (e *coreEngine) resetForTestLocked() {
 	stopRuntimeRoutes()
 	cancelDelayTests()
 	e.running = false
-	e.current = startOptions{}
+	e.current = corecfg.StartOptions{}
 	setHostTun(false)
 	e.vpnCreated = false
 	e.intent = "stopped"
@@ -146,7 +147,7 @@ rules: ['MATCH,DIRECT']
 	tunnel.SetMode(tunnel.ModeMapping["direct"])
 	inner.New(tunnel.Tunnel)
 	tunnel.OnRunning()
-	eng.current = startOptions{HomeDir: home, Profile: "fixture", Geo: geo.DefaultSettings()}
+	eng.current = corecfg.StartOptions{HomeDir: home, Profile: "fixture", Geo: geo.DefaultSettings()}
 	eng.running = true
 	setHostTun(true)
 	waitDiagnostics := beginRuntime()
@@ -481,7 +482,7 @@ rules: ['MATCH,DIRECT']
 		t.Fatal(err)
 	}
 	raw.Profile.StoreSelected = true
-	applyOverrides(raw, eng.current)
+	corecfg.ApplyOverrides(raw, eng.current)
 	cfg, err := config.ParseRawConfig(raw)
 	if err != nil {
 		t.Fatal(err)

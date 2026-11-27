@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/VOD-Studio/ArkClash/core/internal/diagnostics"
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/component/dialer"
@@ -23,7 +24,7 @@ import (
 	"github.com/metacubex/mihomo/log"
 )
 
-func generalTestStart(t *testing.T) startOptions {
+func generalTestStart(t *testing.T) corecfg.StartOptions {
 	t.Helper()
 	opts := lifecycleOptions(t)
 	opts.Profile = "general"
@@ -35,8 +36,8 @@ func generalTestStart(t *testing.T) startOptions {
 	return opts
 }
 
-func saveGeneralTestSettings(settings generalSettings) error {
-	return updateGeneralSettings(profileSettingsRequest[generalSettings]{BootID: eng.bootID,
+func saveGeneralTestSettings(settings corecfg.GeneralSettings) error {
+	return updateGeneralSettings(corecfg.SettingsRequest[corecfg.GeneralSettings]{BootID: eng.bootID,
 		ExpectedRevision: eng.current.General.Revision, Settings: settings})
 }
 
@@ -60,8 +61,8 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	free.Close()
 	next := eng.current.General
 	next.Revision = "inbound-configured"
-	next.Ports = &generalPorts{Mixed: port}
-	next.Authentication = &generalAuthentication{Enabled: true, Username: "test-user", Password: "test-pass"}
+	next.Ports = &corecfg.GeneralPorts{Mixed: port}
+	next.Authentication = &corecfg.GeneralAuthentication{Enabled: true, Username: "test-user", Password: "test-pass"}
 	next.UserAgent = "ArkClash-Test"
 	next.DelayTimeout = 1000
 	if err := saveGeneralTestSettings(next); err != nil {
@@ -95,8 +96,8 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	}
 	blocked := next
 	blocked.Revision = "inbound-rejected"
-	blocked.Ports = &generalPorts{Mixed: target.Addr().(*net.TCPAddr).Port}
-	if err := saveGeneralTestSettings(blocked); !errors.Is(err, errGeneralPort) {
+	blocked.Ports = &corecfg.GeneralPorts{Mixed: target.Addr().(*net.TCPAddr).Port}
+	if err := saveGeneralTestSettings(blocked); !errors.Is(err, corecfg.ErrGeneralPort) {
 		t.Fatalf("expected bind conflict: %v", err)
 	}
 	inboundReachable(t, port, true)
@@ -129,7 +130,7 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	if mihomoHttp.UA() != "ArkClash-Test-v2" {
 		t.Fatalf("expected live UA ArkClash-Test-v2, got %q", mihomoHttp.UA())
 	}
-	stored, err := readGeneralSettings(opts.HomeDir)
+	stored, err := corecfg.ReadGeneralSettings(opts.HomeDir)
 	if err != nil || stored.Revision != next.Revision || stored.DelayTimeout != 1000 || stored.UserAgent != next.UserAgent ||
 		strings.Join(stored.UserAgents, ",") != "ArkClash-Test,ArkClash-Test-v2" {
 		t.Fatal("settings were not persisted")
@@ -140,7 +141,7 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	stored, err = readGeneralSettings(opts.HomeDir)
+	stored, err = corecfg.ReadGeneralSettings(opts.HomeDir)
 	if err != nil || !stored.AppendSystemDNS || eng.tun != tun || eng.configRevision != beforeRevision {
 		t.Fatalf("system DNS toggle rebuilt runtime or replaced TUN: rev=%d->%d err=%v",
 			beforeRevision, eng.configRevision, err)
@@ -148,7 +149,7 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	if resolver.DefaultService == serviceBeforeSystemDNS {
 		t.Fatal("system DNS toggle did not refresh live DNS service")
 	}
-	serversWithSystem := eng.desiredInbound.baseline.dnsServers(eng.current.Profile, true)
+	serversWithSystem := eng.desiredInbound.baseline.DNSServers(eng.current.Profile, true)
 	if len(serversWithSystem) == 0 || serversWithSystem[len(serversWithSystem)-1].Net != "system" {
 		t.Fatalf("expected trailing system nameserver, got %+v", serversWithSystem)
 	}
@@ -162,7 +163,7 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	if eng.tun != tun || eng.configRevision != beforeRevision || resolver.DefaultService == serviceWithSystemDNS {
 		t.Fatalf("disabling system DNS did not live-update cleanly: rev=%d->%d", beforeRevision, eng.configRevision)
 	}
-	for _, server := range eng.desiredInbound.baseline.dnsServers(eng.current.Profile, false) {
+	for _, server := range eng.desiredInbound.baseline.DNSServers(eng.current.Profile, false) {
 		if server.Net == "system" {
 			t.Fatalf("unexpected system nameserver after disabling: %+v", server)
 		}
@@ -174,7 +175,7 @@ func TestGeneralPanelControllerIsolationAndRotation(t *testing.T) {
 	reserved := reserveGeneralPort(t)
 	panel := reserved.Addr().String()
 	port := reserved.Addr().(*net.TCPAddr).Port
-	if err := changePanelControllerLocked(panel, "panel-key-one"); !errors.Is(err, errGeneralPanel) {
+	if err := changePanelControllerLocked(panel, "panel-key-one"); !errors.Is(err, corecfg.ErrGeneralPanel) {
 		reserved.Close()
 		t.Fatalf("occupied panel port was accepted: %v", err)
 	}
@@ -338,7 +339,7 @@ rules: ['MATCH,DIRECT']
 	testURL := "https://cp.cloudflare.com/generate_204"
 	next := eng.current.General
 	next.Revision = "core-test-url"
-	next.CoreOverrides = &generalCoreOverrides{TestURL: &testURL}
+	next.CoreOverrides = &corecfg.GeneralCoreOverrides{TestURL: &testURL}
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
@@ -351,7 +352,7 @@ rules: ['MATCH,DIRECT']
 	yes, no := true, false
 	memc := "memconservative"
 	next.Revision = "core-all-on"
-	next.CoreOverrides = &generalCoreOverrides{
+	next.CoreOverrides = &corecfg.GeneralCoreOverrides{
 		TestURL:       &testURL,
 		UnifiedDelay:  &yes,
 		TCPConcurrent: &yes,
@@ -384,13 +385,13 @@ rules: ['MATCH,DIRECT']
 		t.Fatalf("clearing core overrides did not restore profile values: unified=%v tcp=%v disableIPv6=%v loader=%q",
 			adapter.UnifiedDelay.Load(), dialer.GetTcpConcurrent(), resolver.DisableIPv6, geodata.LoaderName())
 	}
-	stored, err := readGeneralSettings(opts.HomeDir)
+	stored, err := corecfg.ReadGeneralSettings(opts.HomeDir)
 	if err != nil || stored.CoreOverrides != nil {
 		t.Fatalf("unexpected persisted overrides after clear: %+v err=%v", stored.CoreOverrides, err)
 	}
 
 	// 校验拒绝非法测速地址和非法 geodata-loader。
-	for _, bad := range []*generalCoreOverrides{
+	for _, bad := range []*corecfg.GeneralCoreOverrides{
 		{TestURL: ptrString("")},
 		{TestURL: ptrString("ftp://example.com/204")},
 		{TestURL: ptrString("https://")},
@@ -399,8 +400,8 @@ rules: ['MATCH,DIRECT']
 		invalid := eng.current.General
 		invalid.Revision = "core-bad"
 		invalid.CoreOverrides = bad
-		if err := saveGeneralTestSettings(invalid); !errors.Is(err, errGeneralInvalid) {
-			t.Fatalf("expected errGeneralInvalid for %+v, got %v", bad, err)
+		if err := saveGeneralTestSettings(invalid); !errors.Is(err, corecfg.ErrGeneralInvalid) {
+			t.Fatalf("expected ErrGeneralInvalid for %+v, got %v", bad, err)
 		}
 	}
 }
@@ -475,7 +476,7 @@ rules: ['MATCH,DIRECT']
 	}
 
 	// 制造落盘失败（用同名非空目录阻断 os.Rename），验证全部运行态字段与 DNS 服务干净回滚。
-	settingsPath := generalSettingsPath(opts.HomeDir)
+	settingsPath := corecfg.GeneralSettingsPath(opts.HomeDir)
 	if err := os.Remove(settingsPath); err != nil {
 		t.Fatal(err)
 	}
@@ -495,14 +496,14 @@ rules: ['MATCH,DIRECT']
 	failing.UserAgent = "Broken-UA"
 	failing.AppendSystemDNS = true
 	failing.Hosts = map[string][]string{"rollback.test": {"192.0.2.77"}}
-	failing.CoreOverrides = &generalCoreOverrides{
+	failing.CoreOverrides = &corecfg.GeneralCoreOverrides{
 		UnifiedDelay:  &yes,
 		TCPConcurrent: &yes,
 		IPv6:          &no,
 		GeodataLoader: &memc,
 	}
-	if err := saveGeneralTestSettings(failing); !errors.Is(err, errGeneralIO) {
-		t.Fatalf("expected errGeneralIO, got %v", err)
+	if err := saveGeneralTestSettings(failing); !errors.Is(err, corecfg.ErrGeneralIO) {
+		t.Fatalf("expected ErrGeneralIO, got %v", err)
 	}
 	if mihomoHttp.UA() != "Profile-Baseline-UA" || adapter.UnifiedDelay.Load() || dialer.GetTcpConcurrent() ||
 		resolver.DisableIPv6 || geodata.LoaderName() != "standard" || resolver.DefaultService != prevService {

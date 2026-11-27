@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	C "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/tunnel"
 )
@@ -67,8 +68,8 @@ func TestRuleProviderReuseAcrossReload(t *testing.T) {
 
 	// 「missing」首次加载失败，空实例不复用；补上文件后热切换要能读到内容。
 	reuseTestWrite(t, missing, "late.example.test\n")
-	request := profileSettingsRequest[addedRulesSettings]{BootID: eng.Status().BootID, ExpectedRevision: "default",
-		Settings: addedRulesSettings{Revision: "one", Rules: []addedRule{
+	request := corecfg.SettingsRequest[corecfg.AddedRulesSettings]{BootID: eng.Status().BootID, ExpectedRevision: "default",
+		Settings: corecfg.AddedRulesSettings{Revision: "one", Rules: []corecfg.AddedRule{
 			{ID: "one", Kind: "DOMAIN", Payload: "added.example.test", Target: "REJECT"}}}}
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)

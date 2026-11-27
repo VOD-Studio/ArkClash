@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/VOD-Studio/ArkClash/core/internal/providers"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
@@ -34,7 +35,7 @@ func providerTestStart(t *testing.T, home, profileID, yamlContent string) (strin
 	if err := os.WriteFile(configPath, []byte(yamlContent), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	err := start(startOptions{
+	err := start(corecfg.StartOptions{
 		HomeDir:    home,
 		ConfigPath: configPath,
 		Controller: "127.0.0.1:0",
@@ -587,7 +588,7 @@ rules:
 	if wsOpts["path"] != "/direct" {
 		t.Fatalf("missing ws-opts in direct definition: %+v", res.Definition)
 	}
-	if errCode := validateLocalProxy(res.Definition); errCode != "" {
+	if errCode := corecfg.ValidateLocalProxy(res.Definition); errCode != "" {
 		t.Fatalf("exported direct definition failed local proxy validation: %s", errCode)
 	}
 
@@ -607,7 +608,7 @@ rules:
 	if grpcOpts["grpc-service-name"] != "svc-a" {
 		t.Fatalf("missing grpc-opts in prov-a definition: %+v", resA.Definition)
 	}
-	if errCode := validateLocalProxy(resA.Definition); errCode != "" {
+	if errCode := corecfg.ValidateLocalProxy(resA.Definition); errCode != "" {
 		t.Fatalf("exported prov-a definition failed local proxy validation: %s", errCode)
 	}
 
@@ -626,7 +627,7 @@ rules:
 	if wsOptsB["path"] != "/ws-b" {
 		t.Fatalf("missing ws-opts in prov-b definition: %+v", resB.Definition)
 	}
-	if errCode := validateLocalProxy(resB.Definition); errCode != "" {
+	if errCode := corecfg.ValidateLocalProxy(resB.Definition); errCode != "" {
 		t.Fatalf("exported prov-b definition failed local proxy validation: %s", errCode)
 	}
 

@@ -108,7 +108,7 @@ func (e *coreEngine) publishRuntimeLocked() {
 		ListenersOpen: businessListenersOpen(),
 		TunAttached:   e.tun != nil, VpnCreated: e.vpnCreated,
 		BootID: e.bootID, Revision: e.revision, Version: constant.Version, Mode: tunnel.Mode().String(),
-		ConfigRevision: e.configRevision, ProfileExtension: e.current.Script.identity,
+		ConfigRevision: e.configRevision, ProfileExtension: e.current.Script.Identity,
 		homeDir: e.current.HomeDir,
 	}
 	next.StandardRulesRevision = e.current.ProfileRules.Revision

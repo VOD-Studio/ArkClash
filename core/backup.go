@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/VOD-Studio/ArkClash/core/internal/backup"
-	"github.com/VOD-Studio/ArkClash/core/internal/geo"
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/VOD-Studio/ArkClash/core/internal/ruletunnel"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
@@ -74,7 +74,7 @@ var backupDAVBusy atomic.Bool
 
 func postBackupDAV(w http.ResponseWriter, r *http.Request) {
 	var req backupDAVRequest
-	if err := decodeProfileSettings(r.Body, &req); err != nil {
+	if err := corecfg.DecodeSettings(r.Body, &req); err != nil {
 		writeError(w, r, http.StatusBadRequest, backup.ErrDAVSettings)
 		return
 	}
@@ -125,7 +125,7 @@ type backupApplyRequest struct {
 
 func postBackupApply(w http.ResponseWriter, r *http.Request) {
 	var req backupApplyRequest
-	if err := decodeProfileSettings(r.Body, &req); err != nil {
+	if err := corecfg.DecodeSettings(r.Body, &req); err != nil {
 		writeError(w, r, http.StatusBadRequest, backup.ErrInvalid)
 		return
 	}
@@ -139,7 +139,7 @@ func postBackupApply(w http.ResponseWriter, r *http.Request) {
 func applyBackup(req backupApplyRequest) error {
 	return eng.withState(func(tx *stateTx) error {
 		if !eng.running || req.BootID != eng.bootID ||
-			(req.Profile != "" && (!addedRulesProfileID.MatchString(req.Profile) || filepath.Base(req.Profile) != req.Profile)) {
+			(req.Profile != "" && (!corecfg.ValidProfileID(req.Profile) || filepath.Base(req.Profile) != req.Profile)) {
 			return backup.ErrChanged
 		}
 		if req.Profile == "" && (eng.tun != nil || eng.vpnCreated || businessListenersOpen()) {
@@ -159,24 +159,13 @@ func applyBackup(req backupApplyRequest) error {
 			}
 		}
 		next := eng.current
-		next.StoreGeneration = portableGeneration(next.HomeDir)
 		next.Mode, next.AllowLan = req.Mode, req.AllowLan
 		next.Profile, next.ConfigPath = req.Profile, ""
 		if req.Profile != "" {
 			next.ConfigPath = filepath.Join(eng.current.HomeDir, "profiles", req.Profile+".yaml")
 		}
-		var err error
-		for _, read := range []func() error{
-			func() error { next.Geo, err = geo.ReadSettings(next.HomeDir); return err },
-			func() error { next.DNS, err = readDNSOverrides(next.HomeDir); return err },
-			func() error { next.General, err = readGeneralSettings(next.HomeDir); return err },
-			func() error { next.AddedRules, err = readAddedRules(next.HomeDir); return err },
-			func() error { next.RuleSets, err = readRuleSets(next.HomeDir); return err },
-			func() error { return loadProfileExtension(&next) },
-		} {
-			if err := read(); err != nil {
-				return err
-			}
+		if err := corecfg.LoadAll(&next); err != nil {
+			return err
 		}
 		var inbound inboundSettings
 		cfg, err := parseConfigWithInboundHash(next.ConfigPath, &next, &inbound)

@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
@@ -291,7 +292,7 @@ func TestGeoOverridesIgnoreSubscriptionSettings(t *testing.T) {
 	}
 	settings := geoTestSettings("https://example.invalid")
 	settings.IntervalHours = 37
-	applyOverrides(raw, startOptions{Geo: settings})
+	corecfg.ApplyOverrides(raw, corecfg.StartOptions{Geo: settings})
 	if raw.GeoAutoUpdate || raw.GeoUpdateInterval != 37 || raw.GeoXUrl.Mmdb != settings.URLs.MMDB || raw.GeoXUrl.ASN != settings.URLs.ASN || raw.GeoXUrl.GeoIp != settings.URLs.GeoIP || raw.GeoXUrl.GeoSite != settings.URLs.GeoSite {
 		t.Fatalf("subscription Geo settings not overridden: %+v", raw.GeoXUrl)
 	}

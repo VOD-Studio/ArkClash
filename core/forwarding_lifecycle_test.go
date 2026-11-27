@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
 	C "github.com/metacubex/mihomo/constant"
@@ -84,7 +85,7 @@ func forwardingBlockedSocks(t *testing.T) (int, <-chan struct{}, <-chan struct{}
 	return server.Addr().(*net.TCPAddr).Port, entered, closed
 }
 
-func forwardingCoreFixture(t *testing.T, socksPort int) (startOptions, []int) {
+func forwardingCoreFixture(t *testing.T, socksPort int) (corecfg.StartOptions, []int) {
 	t.Helper()
 	options := lifecycleOptions(t)
 	ports := []int{inboundPort(t), inboundPort(t), inboundPort(t), inboundPort(t), inboundPort(t)}

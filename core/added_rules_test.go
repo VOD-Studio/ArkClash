@@ -5,60 +5,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
-	"github.com/metacubex/mihomo/config"
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/metacubex/mihomo/tunnel"
 )
-
-func TestAddedRulesPreserveOrderAndMatchTarget(t *testing.T) {
-	list := addedRulesSettings{Revision: "current", Rules: []addedRule{
-		{ID: "a", Kind: "DOMAIN", Payload: "example.test", Target: "MATCH"},
-		{ID: "b", Kind: "IP-CIDR", Payload: "192.0.2.0/24", Target: "REJECT", NoResolve: true, Source: true},
-	}}
-	raw := config.DefaultRawConfig()
-	raw.ProxyGroup = []map[string]any{{"name": "Proxy"}}
-	raw.Rule = []string{"MATCH,REJECT", "DOMAIN,example.test,DIRECT", "MATCH,Proxy"}
-	if err := prependAddedRules(raw, list.Rules, "", nil); err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"DOMAIN,example.test,Proxy", "IP-CIDR,192.0.2.0/24,REJECT,no-resolve,src",
-		"MATCH,REJECT", "DOMAIN,example.test,DIRECT", "MATCH,Proxy"}
-	if !reflect.DeepEqual(raw.Rule, want) {
-		t.Fatalf("unexpected effective order: %v", raw.Rule)
-	}
-	raw.Rule = []string{"DOMAIN,example.test,REJECT"}
-	if err := prependAddedRules(raw, list.Rules, "", nil); !errors.Is(err, errAddedRulesMatchTarget) ||
-		!reflect.DeepEqual(raw.Rule, []string{"DOMAIN,example.test,REJECT"}) {
-		t.Fatalf("missing MATCH was accepted: %v, %v", raw.Rule, err)
-	}
-}
-
-func TestNamedRuleExitsResolveFromFinalOutbounds(t *testing.T) {
-	raw := config.DefaultRawConfig()
-	raw.ProxyGroup = []map[string]any{{"name": "Media"}, {"name": "Mapped"}}
-	raw.Proxy = []map[string]any{{"name": "Node"}}
-	raw.Rule = []string{"MATCH,REJECT"}
-	rules := []addedRule{
-		{Kind: "DOMAIN", Payload: "explicit.test", Target: "Media", CustomExit: true},
-		{Kind: "DOMAIN", Payload: "same.test", Target: "Node", CustomExit: true},
-		{Kind: "DOMAIN", Payload: "fallback.test", Target: "Unavailable", CustomExit: true},
-	}
-	exits := []addedRuleExit{{Name: "Media", Target: "Mapped"}, {Name: "Unavailable", Target: "Gone"}}
-	if err := prependAddedRules(raw, rules, "", exits); err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"DOMAIN,explicit.test,Mapped", "DOMAIN,same.test,Node", "DOMAIN,fallback.test,REJECT", "MATCH,REJECT"}
-	if !reflect.DeepEqual(raw.Rule, want) {
-		t.Fatalf("unexpected exit resolution: %v", raw.Rule)
-	}
-	raw.Rule = nil
-	if err := prependAddedRules(raw, rules[2:], "", nil); err != nil ||
-		!reflect.DeepEqual(raw.Rule, []string{"DOMAIN,fallback.test,DIRECT"}) {
-		t.Fatalf("missing MATCH fallback: %v, %v", raw.Rule, err)
-	}
-}
 
 func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 	opts := lifecycleOptions(t)
@@ -78,28 +29,28 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	boot, tun := eng.Status().BootID, eng.tun
-	global := []addedRule{
+	global := []corecfg.AddedRule{
 		{ID: "global-one", Kind: "DOMAIN", Payload: "global.test", Target: "REJECT"},
 		{ID: "global-two", Kind: "DOMAIN", Payload: "second.test", Target: "MATCH"},
 	}
-	request := profileSettingsRequest[addedRulesSettings]{BootID: boot, ExpectedRevision: "default",
-		Settings: addedRulesSettings{Revision: "globals", Rules: global}}
+	request := corecfg.SettingsRequest[corecfg.AddedRulesSettings]{BootID: boot, ExpectedRevision: "default",
+		Settings: corecfg.AddedRulesSettings{Revision: "globals", Rules: global}}
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)
 	}
 	before := eng.Status().ConfigRevision
-	first := profileAddedRules{Profile: "first", Revision: "local", Disabled: []string{"global-one"}, MatchTarget: "DIRECT",
-		Rules: []addedRule{{ID: "local", Kind: "DOMAIN", Payload: "global.test", Target: "MATCH"},
+	first := corecfg.ProfileAddedRules{Profile: "first", Revision: "local", Disabled: []string{"global-one"}, MatchTarget: "DIRECT",
+		Rules: []corecfg.AddedRule{{ID: "local", Kind: "DOMAIN", Payload: "global.test", Target: "MATCH"},
 			{ID: "local-two", Kind: "DOMAIN", Payload: "local.test", Target: "REJECT"}}}
 	request.ExpectedRevision = "globals"
-	request.Settings = addedRulesSettings{Revision: "local", Rules: global, Profiles: []profileAddedRules{first}}
+	request.Settings = corecfg.AddedRulesSettings{Revision: "local", Rules: global, Profiles: []corecfg.ProfileAddedRules{first}}
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)
 	}
 	if got := eng.Status(); got.ConfigRevision != before || got.StandardRulesRevision != "" {
 		t.Fatal("saving a profile rule changed the runtime")
 	}
-	apply := scriptApplyRequest{BootID: boot, Profile: "first", StandardRevision: new("local")}
+	apply := corecfg.ScriptApplyRequest{BootID: boot, Profile: "first", StandardRevision: new("local")}
 	if err := applyProfileScript(context.Background(), apply); err != nil {
 		t.Fatal(err)
 	}
@@ -114,12 +65,12 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 		t.Fatalf("replaying the same apply changed runtime: %v", err)
 	}
 	request.ExpectedRevision = "local"
-	request.Settings = addedRulesSettings{Revision: "remove-global", Rules: global[1:]}
+	request.Settings = corecfg.AddedRulesSettings{Revision: "remove-global", Rules: global[1:]}
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)
 	}
-	saved, err := readAddedRules(opts.HomeDir)
-	if err != nil || len(saved.forProfile("first").Disabled) != 0 || eng.Status().ConfigRevision != before {
+	saved, err := corecfg.ReadAddedRules(opts.HomeDir)
+	if err != nil || len(saved.ForProfile("first").Disabled) != 0 || eng.Status().ConfigRevision != before {
 		t.Fatalf("deleting a disabled rule should clean its references without reloading: %v", err)
 	}
 	scriptPath := filepath.Join(opts.HomeDir, "profiles", "scripts.json")
@@ -127,56 +78,56 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 	if err := os.WriteFile(scriptPath, []byte(binding), 0600); err != nil {
 		t.Fatal(err)
 	}
-	outbounds, err := readScriptOutbounds(t.Context(), opts.HomeDir, "first")
+	outbounds, err := corecfg.ReadScriptOutbounds(t.Context(), opts.HomeDir, "first")
 	if err != nil || len(outbounds.Groups) != 1 || outbounds.Groups[0].Name != "Script Exit" {
 		t.Fatalf("script outbounds not available: %v, %v", outbounds, err)
 	}
 	const identity = "script:test:first"
-	if err := applyProfileScript(context.Background(), scriptApplyRequest{BootID: boot, Profile: "first", Identity: identity}); err != nil {
+	if err := applyProfileScript(context.Background(), corecfg.ScriptApplyRequest{BootID: boot, Profile: "first", Identity: identity}); err != nil {
 		t.Fatal(err)
 	}
 	if rules := tunnel.Rules(); len(rules) != 4 || rules[0].Adapter() != "DIRECT" || rules[3].Adapter() != "REJECT" || eng.Status().StandardRulesRevision != "local" || eng.tun != tun {
 		t.Fatal("script and added rules did not apply together")
 	}
-	named := saved.forProfile("first")
+	named := saved.ForProfile("first")
 	named.Revision = "named-target"
 	named.Rules[0].Target, named.Rules[0].CustomExit = "Media", true
-	named.ExitTargets = []addedRuleExit{{Name: "Media", Target: "Script Exit"}}
+	named.ExitTargets = []corecfg.AddedRuleExit{{Name: "Media", Target: "Script Exit"}}
 	request.ExpectedRevision = saved.Revision
-	request.Settings = addedRulesSettings{Revision: named.Revision, Rules: saved.Rules, Profiles: []profileAddedRules{named}}
+	request.Settings = corecfg.AddedRulesSettings{Revision: named.Revision, Rules: saved.Rules, Profiles: []corecfg.ProfileAddedRules{named}}
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)
 	}
-	if err := applyProfileScript(t.Context(), scriptApplyRequest{BootID: boot, Profile: "first", Identity: identity,
+	if err := applyProfileScript(t.Context(), corecfg.ScriptApplyRequest{BootID: boot, Profile: "first", Identity: identity,
 		StandardRevision: &named.Revision}); err != nil || tunnel.Rules()[0].Adapter() != "Script Exit" || eng.tun != tun {
 		t.Fatalf("named target was not applied to the scripted outbound: %v", err)
 	}
 	if err := os.Remove(scriptPath); err != nil {
 		t.Fatal(err)
 	}
-	saved, err = readAddedRules(opts.HomeDir)
+	saved, err = corecfg.ReadAddedRules(opts.HomeDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	invalid := saved.forProfile("first")
+	invalid := saved.ForProfile("first")
 	invalid.Revision, invalid.MatchTarget = "invalid-target", "missing-target"
 	request.ExpectedRevision = saved.Revision
-	request.Settings = addedRulesSettings{Revision: "invalid-target", Rules: saved.Rules, Profiles: []profileAddedRules{invalid}}
+	request.Settings = corecfg.AddedRulesSettings{Revision: "invalid-target", Rules: saved.Rules, Profiles: []corecfg.ProfileAddedRules{invalid}}
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)
 	}
-	if err := applyProfileScript(context.Background(), apply); !errors.Is(err, errProfileSettingsConflict) {
+	if err := applyProfileScript(context.Background(), apply); !errors.Is(err, corecfg.ErrSettingsConflict) {
 		t.Fatalf("a stale standard revision was accepted: %v", err)
 	}
 	before = eng.Status().ConfigRevision
 	apply.StandardRevision = &invalid.Revision
-	if err := applyProfileScript(context.Background(), apply); !errors.Is(err, errAddedRulesMatchTarget) || eng.Status().ConfigRevision != before || eng.Status().ProfileExtension != identity || eng.tun != tun {
+	if err := applyProfileScript(context.Background(), apply); !errors.Is(err, corecfg.ErrAddedRulesMatchTarget) || eng.Status().ConfigRevision != before || eng.Status().ProfileExtension != identity || eng.tun != tun {
 		t.Fatalf("a missing target changed the runtime: %v", err)
 	}
-	fixed := saved.forProfile("first")
+	fixed := saved.ForProfile("first")
 	fixed.Revision = "fixed-target"
 	request.ExpectedRevision = invalid.Revision
-	request.Settings = addedRulesSettings{Revision: "fixed-target", Rules: saved.Rules, Profiles: []profileAddedRules{fixed}}
+	request.Settings = corecfg.AddedRulesSettings{Revision: "fixed-target", Rules: saved.Rules, Profiles: []corecfg.ProfileAddedRules{fixed}}
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)
 	}
@@ -213,8 +164,8 @@ func TestAddedRulesLiveApplyAndSwitchPreserveTun(t *testing.T) {
 	}
 	boot := eng.Status().BootID
 	active := eng.tun
-	request := profileSettingsRequest[addedRulesSettings]{BootID: boot, ExpectedRevision: "default",
-		Settings: addedRulesSettings{Revision: "rules.1", Rules: []addedRule{
+	request := corecfg.SettingsRequest[corecfg.AddedRulesSettings]{BootID: boot, ExpectedRevision: "default",
+		Settings: corecfg.AddedRulesSettings{Revision: "rules.1", Rules: []corecfg.AddedRule{
 			{ID: "first", Kind: "DOMAIN", Payload: "example.test", Target: "MATCH"},
 			{ID: "second", Kind: "DOMAIN", Payload: "example.test", Target: "DIRECT"},
 		}}}
@@ -225,18 +176,18 @@ func TestAddedRulesLiveApplyAndSwitchPreserveTun(t *testing.T) {
 		active || eng.Status().BootID != boot {
 		t.Fatal("live rule update did not prepend rules or preserve the live tunnel")
 	}
-	saved, err := readAddedRules(opts.HomeDir)
+	saved, err := corecfg.ReadAddedRules(opts.HomeDir)
 	if err != nil || saved.Revision != "rules.1" || saved.Rules[1].ID != "second" {
 		t.Fatalf("rule order was not persisted: %v", err)
 	}
-	if err := updateAddedRules(request); !errors.Is(err, errProfileSettingsConflict) {
+	if err := updateAddedRules(request); !errors.Is(err, corecfg.ErrSettingsConflict) {
 		t.Fatalf("stale rule revision accepted: %v", err)
 	}
 	request.ExpectedRevision = "rules.1"
-	request.Settings = addedRulesSettings{Revision: "rejected", Rules: []addedRule{
+	request.Settings = corecfg.AddedRulesSettings{Revision: "rejected", Rules: []corecfg.AddedRule{
 		{ID: "broken", Kind: "IP-CIDR", Payload: "invalid-prefix", Target: "DIRECT"},
 	}}
-	if err := updateAddedRules(request); !errors.Is(err, errProfileSettingsInvalid) {
+	if err := updateAddedRules(request); !errors.Is(err, corecfg.ErrSettingsInvalid) {
 		t.Fatalf("invalid rule accepted: %v", err)
 	}
 	if err := reload(second, "second", new("first")); err != nil {
@@ -245,7 +196,7 @@ func TestAddedRulesLiveApplyAndSwitchPreserveTun(t *testing.T) {
 	if rules := tunnel.Rules(); len(rules) != 3 || rules[0].Adapter() != "GLOBAL" || eng.tun != active {
 		t.Fatal("profile switch did not recalculate MATCH-TARGET on the existing tunnel")
 	}
-	request.Settings = addedRulesSettings{Revision: "removed", Rules: []addedRule{}}
+	request.Settings = corecfg.AddedRulesSettings{Revision: "removed", Rules: []corecfg.AddedRule{}}
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)
 	}

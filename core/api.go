@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
 	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/VOD-Studio/ArkClash/core/internal/subfetch"
@@ -143,6 +145,41 @@ type (
 
 func fetch(req fetchRequest) fetchResult { return eng.Fetch(req) }
 func prefetch(path string) (int, error)  { return eng.Prefetch(path) }
+
+func postLocalProxies(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, corecfg.LocalProxyLimit)
+	var body corecfg.LocalProxyBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil ||
+		len(body.Definitions) > corecfg.LocalProxyCount || len(body.Lines) > corecfg.LocalProxyCount {
+		writeError(w, r, http.StatusBadRequest, corecfg.ErrLocalProxyInput)
+		return
+	}
+	switch chi.URLParam(r, "operation") {
+	case "validate":
+		render.JSON(w, r, corecfg.ValidateLocalProxies(body.Definitions))
+	case "encode":
+		render.JSON(w, r, corecfg.EncodeLocalProxies(body.Definitions))
+	case "decode":
+		results, err := corecfg.DecodeLocalProxies(body.Lines)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, err)
+			return
+		}
+		render.JSON(w, r, results)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func postProxyFilterValidation(w http.ResponseWriter, r *http.Request) {
+	var body corecfg.ProxyFilterRequest
+	if err := corecfg.DecodeSettings(http.MaxBytesReader(w, r.Body, 8<<10), &body); err != nil ||
+		!corecfg.ValidProxyFilterExpression(body.Expression) {
+		writeError(w, r, http.StatusBadRequest, corecfg.ErrSettingsInvalid)
+		return
+	}
+	render.JSON(w, r, corecfg.ProxyFilterResult{InvalidPart: corecfg.InvalidProxyFilterPart(body.Expression)})
+}
 
 func setCommandDispatcher(fn ctrl.CommandDispatcher) { ctrl.SetCommandDispatcher(fn) }
 func replyCommand(id int64, status int, body []byte) { ctrl.ReplyCommand(id, status, body) }

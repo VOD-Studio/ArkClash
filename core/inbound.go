@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/metacubex/mihomo/adapter/inbound"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/config"
@@ -22,7 +23,7 @@ type inboundSettings struct {
 	tunnels   []LC.Tunnel
 	dnsListen string
 	dnsMark   int
-	baseline  generalBaseline
+	baseline  corecfg.GeneralBaseline
 	// 这份配置的 rule-provider 定义指纹，应用后随实例一起发布，供下一次热切换判断能否复用（ADR-0043）。
 	ruleProviderKeys map[string]string
 }

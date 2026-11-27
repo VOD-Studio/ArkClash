@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 )
 
 func TestEngineWithStateUnlocksAndRunsPostUnlockOnPanic(t *testing.T) {
@@ -124,10 +126,10 @@ func TestEngineViewReflectsSettingsUpdates(t *testing.T) {
 	if view == nil || view.HomeDir != options.HomeDir || view.CaptureLogs || view.DelayTimeout != 8000 {
 		t.Fatalf("unexpected initial view: %+v", view)
 	}
-	if err := updateGeneralSettings(profileSettingsRequest[generalSettings]{
+	if err := updateGeneralSettings(corecfg.SettingsRequest[corecfg.GeneralSettings]{
 		BootID:           view.Status.BootID,
 		ExpectedRevision: "default",
-		Settings: generalSettings{
+		Settings: corecfg.GeneralSettings{
 			Revision:     "rev-1",
 			DelayTimeout: 5000,
 			LogLevel:     "info",
@@ -191,10 +193,10 @@ func TestCommitSettingsFileRenameAndRollbackParseFailureEntersFailedState(t *tes
 		previous := eng.current
 		next := previous
 		next.ConfigPath = candPath
-		next.DNS = dnsOverrideSettings{Revision: "rev-fail"}
+		next.DNS = corecfg.DNSOverrideSettings{Revision: "rev-fail"}
 		return tx.CommitSettingsFile(next, blockedPath, next.DNS)
 	})
-	if !errors.Is(err, errProfileSettingsApply) {
+	if !errors.Is(err, corecfg.ErrSettingsApply) {
 		t.Fatalf("expected errProfileSettingsApply, got %v", err)
 	}
 	after := eng.Status()

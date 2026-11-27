@@ -2,18 +2,15 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/VOD-Studio/ArkClash/core/internal/providers"
 	"github.com/VOD-Studio/ArkClash/core/internal/subfetch"
 	"github.com/metacubex/mihomo/adapter/inbound"
-	"github.com/metacubex/mihomo/component/process"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/config"
 	"github.com/metacubex/mihomo/constant"
@@ -25,30 +22,7 @@ import (
 	"github.com/metacubex/mihomo/tunnel"
 )
 
-// VPN 进程传入启动设置；JSON 避免新增设置改变 C ABI，TUN 由独立操作附加。
-type startOptions struct {
-	HomeDir    string `json:"homeDir"`
-	ConfigPath string `json:"configPath"`
-	Controller string `json:"controller"`
-	Secret     string `json:"secret"`
-	// 以下由 VPN 进程从 runtime.json 和配置列表（entry/src/main/ets/shared/）读出后传入。
-	Profile  string `json:"profile"`  // 正在运行的配置的编号
-	Mode     string `json:"mode"`     // 'rule' | 'global' | 'direct'，空串 = 用配置里的值
-	AllowLan *bool  `json:"allowLan"` // nil = 用配置里的值
-	// Geo 设置只由原生启动流程从磁盘读取，不扩展 C ABI 或 ArkTS 参数。
-	Geo             geo.Settings        `json:"-"`
-	General         generalSettings     `json:"-"`
-	DNS             dnsOverrideSettings `json:"-"`
-	AddedRules      addedRulesSettings  `json:"-"`
-	RuleSets        ruleSetCatalog      `json:"-"`
-	Script          profileScript       `json:"-"`
-	ProfileRules    profileAddedRules   `json:"-"`
-	StoreGeneration string              `json:"-"`
-	CustomRules     bool                `json:"-"`
-	ContentHash     string              `json:"-"`
-}
-
-func start(opts startOptions) error {
+func start(opts corecfg.StartOptions) error {
 	return eng.withLifecycle(func(tx *stateTx) error {
 		if eng.running {
 			return errors.New("core is already running")
@@ -64,30 +38,7 @@ func start(opts startOptions) error {
 			eng.cleanupFailure = errors.Join(eng.cleanupFailure, err)
 			return eng.cleanupFailure
 		}
-		opts.StoreGeneration = portableGeneration(opts.HomeDir)
-		settings, err := geo.ReadSettings(opts.HomeDir)
-		if err != nil {
-			return err
-		}
-		opts.Geo = settings
-		opts.General, err = readGeneralSettings(opts.HomeDir)
-		if err != nil {
-			return err
-		}
-		opts.DNS, err = readDNSOverrides(opts.HomeDir)
-		if err != nil {
-			return err
-		}
-		opts.AddedRules, err = readAddedRules(opts.HomeDir)
-		if err != nil {
-			return err
-		}
-		opts.RuleSets, err = readRuleSets(opts.HomeDir)
-		if err != nil {
-			return err
-		}
-
-		if err := loadProfileExtension(&opts); err != nil {
+		if err := corecfg.LoadAll(&opts); err != nil {
 			return err
 		}
 
@@ -129,7 +80,7 @@ func start(opts startOptions) error {
 			tunnel.UpdateRules(nil, nil, nil)
 			publishRuleProvidersLocked(nil, nil)
 			eng.running = false
-			eng.current = startOptions{}
+			eng.current = corecfg.StartOptions{}
 			eng.desiredInbound = inboundSettings{}
 			eng.publishRuntimeLocked()
 			return errors.Join(err, eng.cleanupFailure)
@@ -151,94 +102,38 @@ func start(opts startOptions) error {
 	})
 }
 
-var errCustomTunUnsupported = errors.New("custom TUN listeners are not supported")
-
-func parseConfig(path string, opts startOptions) (*config.Config, error) {
+func parseConfig(path string, opts corecfg.StartOptions) (*config.Config, error) {
 	return parseConfigWithInbound(path, opts, nil)
 }
 
-func parseConfigWithInbound(path string, opts startOptions, settings *inboundSettings) (*config.Config, error) {
+func parseConfigWithInbound(path string, opts corecfg.StartOptions, settings *inboundSettings) (*config.Config, error) {
 	return parseConfigWithInboundHash(path, &opts, settings)
 }
 
-func parseConfigWithInboundHash(path string, opts *startOptions, settings *inboundSettings) (*config.Config, error) {
-	rawCfg, hash, err := buildRawConfigWithHash(context.Background(), path, *opts)
+func parseConfigWithInboundHash(path string, opts *corecfg.StartOptions, settings *inboundSettings) (*config.Config, error) {
+	rawCfg, hash, err := corecfg.BuildRawConfigWithHash(context.Background(), path, *opts)
 	if err != nil {
 		return nil, err
 	}
 	opts.ContentHash = hash
 	cfg, err := prepareRawConfig(rawCfg, *opts, settings)
-	if err != nil && opts.Script.enabled() && !errors.Is(err, errDNSProxyServersRequired) &&
-		!errors.Is(err, errAddedRulesMatchTarget) {
-		return nil, errScriptConfig
+	if err != nil && opts.Script.Enabled() && !errors.Is(err, corecfg.ErrDNSProxyServersRequired) &&
+		!errors.Is(err, corecfg.ErrAddedRulesMatchTarget) {
+		return nil, corecfg.ErrScriptConfig
 	}
 	return cfg, err
 }
 
-func buildRawConfig(ctx context.Context, path string, opts startOptions) (*config.RawConfig, error) {
-	rawCfg, _, err := buildRawConfigWithHash(ctx, path, opts)
-	return rawCfg, err
-}
-
-func buildRawConfigWithHash(ctx context.Context, path string, opts startOptions) (*config.RawConfig, string, error) {
-	if path == "" {
-		if opts.Profile != "" {
-			return nil, "", errors.New("selected profile requires a configuration path")
-		}
-		return config.DefaultRawConfig(), "", nil
-	}
-	buf, err := os.ReadFile(path)
-	if err != nil {
-		return nil, "", err
-	}
-	if len(buf) == 0 {
-		return nil, "", errors.New("selected configuration is empty")
-	}
-	sum := sha256.Sum256(buf)
-	hash := hex.EncodeToString(sum[:])
-	if opts.Script.enabled() {
-		rawCfg, err := scriptRawConfig(ctx, buf, opts.Script)
-		return rawCfg, hash, err
-	}
-	rawCfg, err := config.UnmarshalRawConfig(buf)
-	return rawCfg, hash, err
-}
-
-// composeRawConfig 组装实际交给 mihomo 的原始配置；运行加载与运行时预览共用同一套规则。
-func composeRawConfig(rawCfg *config.RawConfig, opts startOptions) error {
-	if opts.Profile != "" && !opts.CustomRules {
-		rules := opts.AddedRules.effective(opts.ProfileRules)
-		if err := prependAddedRules(rawCfg, rules, opts.ProfileRules.MatchTarget, opts.ProfileRules.ExitTargets); err != nil {
-			return err
-		}
-		if err := opts.RuleSets.attach(rawCfg, opts.HomeDir, rules); err != nil {
-			return err
-		}
-	}
-	applyOverrides(rawCfg, opts)
-	if opts.Profile != "" && opts.DNS.Entries.missingProxyServers(&rawCfg.DNS) {
-		return errDNSProxyServersRequired
-	}
-	// 自定义 TUN 不经过平台 fd 所有权，不能让订阅绕过唯一的系统 VPN。
-	for _, mapping := range rawCfg.Listeners {
-		if kind, _ := mapping["type"].(string); kind == "tun" {
-			return errCustomTunUnsupported
-		}
-	}
-	return nil
-}
-
-func prepareRawConfig(rawCfg *config.RawConfig, opts startOptions, settings *inboundSettings) (*config.Config, error) {
-	var baseline generalBaseline
+func prepareRawConfig(rawCfg *config.RawConfig, opts corecfg.StartOptions, settings *inboundSettings) (*config.Config, error) {
+	var baseline corecfg.GeneralBaseline
 	if settings != nil {
-		baseline = captureRawGeneralBaseline(rawCfg, opts)
+		baseline = corecfg.CaptureGeneralBaseline(rawCfg, opts)
 	}
-	if err := composeRawConfig(rawCfg, opts); err != nil {
+	if err := corecfg.ComposeRawConfig(rawCfg, opts); err != nil {
 		return nil, err
 	}
 	if settings != nil {
-		baseline.dnsRespectRules = rawCfg.DNS.RespectRules
-		baseline.dnsHasFakeIPRange6 = rawCfg.DNS.FakeIPRange6 != ""
+		baseline.SetRawDNSFlags(rawCfg.DNS.RespectRules, rawCfg.DNS.FakeIPRange6 != "")
 	}
 	// 配置解析可能初始化缺失的 Geo，来源必须先固定为页面设置。
 	geo.SetURLs(opts.Geo)
@@ -257,7 +152,7 @@ func prepareRawConfig(rawCfg *config.RawConfig, opts startOptions, settings *inb
 		}
 	}
 	if settings != nil {
-		baseline.finalizeDNS(cfg.DNS, opts.Profile != "" && opts.General.AppendSystemDNS)
+		baseline.FinalizeDNS(cfg.DNS, opts.Profile != "" && opts.General.AppendSystemDNS)
 		*settings = captureInbound(cfg, mappings)
 		settings.baseline = baseline
 		settings.ruleProviderKeys = providerKeys
@@ -287,7 +182,7 @@ func reload(path, profile string, expectedProfile *string) error {
 		next := eng.current
 		next.Profile = profile
 		next.ConfigPath = path
-		if err := loadProfileExtension(&next); err != nil {
+		if err := corecfg.LoadProfileExtension(&next); err != nil {
 			return err
 		}
 		var nextInbound inboundSettings
@@ -342,60 +237,6 @@ func setRuntimeOptions(mode *string, allowLan *bool) error {
 		eng.publishRuntimeLocked()
 		return nil
 	})
-}
-
-// applyOverrides forces the settings ArkClash owns, whatever the profile says.
-func applyOverrides(rawCfg *config.RawConfig, opts startOptions) {
-	opts.General.apply(rawCfg)
-	// The TUN is created by VpnExtensionAbility and handed over as an fd, so the
-	// profile must not try to create its own.
-	rawCfg.Tun.Enable = false
-	rawCfg.Tun.AutoRoute = false
-	rawCfg.Tun.AutoRedirect = false
-	rawCfg.Tun.AutoDetectInterface = false
-	rawCfg.IPTables.Enable = false
-
-	// 节点选择只从每配置文件恢复，避免 mihomo 全局同名组缓存覆盖它。
-	rawCfg.Profile.StoreSelected = false
-	// 只有资源管理器可以调度更新，订阅不能覆盖来源或启动第二个更新器。
-	rawCfg.GeoXUrl = config.RawGeoXUrl{
-		Mmdb: opts.Geo.URLs.MMDB, ASN: opts.Geo.URLs.ASN,
-		GeoIp: opts.Geo.URLs.GeoIP, GeoSite: opts.Geo.URLs.GeoSite,
-	}
-	rawCfg.GeoAutoUpdate = false
-	rawCfg.GeoUpdateInterval = opts.Geo.IntervalHours
-
-	// The UI process drives the core over this controller only.
-	rawCfg.ExternalController = opts.Controller
-	rawCfg.Secret = opts.Secret
-	rawCfg.ExternalControllerTLS = ""
-	rawCfg.ExternalControllerUnix = ""
-	rawCfg.ExternalControllerPipe = ""
-	rawCfg.ExternalUI = ""
-
-	// Process lookup scans /proc for every connection and cannot map to apps on
-	// HarmonyOS anyway; it only costs battery.
-	rawCfg.FindProcessMode = process.FindProcessOff
-
-	// DNS from the TUN is hijacked into mihomo, so the resolver has to be on.
-	if !rawCfg.DNS.Enable {
-		rawCfg.DNS.Enable = true
-		rawCfg.DNS.EnhancedMode = constant.DNSFakeIP
-	}
-	if opts.Profile != "" {
-		opts.DNS.Entries.apply(&rawCfg.DNS)
-		if opts.General.AppendSystemDNS {
-			appendSystemDNS(&rawCfg.DNS)
-		}
-	}
-
-	// 用户在界面上选过的出站模式和局域网代理优先于配置，热切换后不会被新配置改回去（ADR-0010）。
-	if m, ok := tunnel.ModeMapping[strings.ToLower(opts.Mode)]; ok {
-		rawCfg.Mode = m
-	}
-	if opts.AllowLan != nil {
-		rawCfg.AllowLan = *opts.AllowLan
-	}
 }
 
 type attachIdentity struct {
@@ -501,7 +342,7 @@ func stop() error {
 		tunnel.UpdateListeners(nil)
 		publishRuleProvidersLocked(nil, nil)
 		eng.running = false
-		eng.current = startOptions{}
+		eng.current = corecfg.StartOptions{}
 		eng.desiredInbound = inboundSettings{}
 		if err := updateVpnState("stopped", "stopped", eng.vpnCreated); err != nil {
 			log.Errorln("[ArkClash] core stopped with pending VPN resources: %s", err)

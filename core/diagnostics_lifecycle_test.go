@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/VOD-Studio/ArkClash/core/internal/diagnostics"
 	"github.com/gobwas/ws"
 	"github.com/metacubex/http"
@@ -570,13 +571,13 @@ func TestBackupRestoreSynchronizesDiagnosticLogsCollector(t *testing.T) {
 	options.ConfigPath = profilePath
 	writeGeneral := func(rev string, capture bool) {
 		t.Helper()
-		raw, err := json.Marshal(generalSettings{
+		raw, err := json.Marshal(corecfg.GeneralSettings{
 			Revision: rev, DelayTimeout: 8000, LogLevel: "error", CaptureLogs: capture,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(generalSettingsPath(options.HomeDir), raw, 0o600); err != nil {
+		if err := os.WriteFile(corecfg.GeneralSettingsPath(options.HomeDir), raw, 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

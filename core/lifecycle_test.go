@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/VOD-Studio/ArkClash/core/internal/geo"
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/config"
@@ -25,7 +26,7 @@ proxy-groups:
 rules: ['MATCH,DIRECT']
 `
 
-func lifecycleOptions(t *testing.T) startOptions {
+func lifecycleOptions(t *testing.T) corecfg.StartOptions {
 	t.Helper()
 	// 先注册的后执行，确保用例清理（stop）结束后一次性 TUN 关闭标记也已复位。
 	t.Cleanup(func() {
@@ -46,7 +47,7 @@ func lifecycleOptions(t *testing.T) startOptions {
 	if err := reserved.Close(); err != nil {
 		t.Fatal(err)
 	}
-	return startOptions{HomeDir: home, Controller: address, Geo: geo.DefaultSettings()}
+	return corecfg.StartOptions{HomeDir: home, Controller: address, Geo: geo.DefaultSettings()}
 }
 
 func lifecycleController(t *testing.T, address string, wantOpen bool) {
@@ -77,7 +78,7 @@ func lifecycleVpnState(t *testing.T, intent, forward string, created bool) {
 	}
 }
 
-func lifecycleWriteProfile(t *testing.T, options startOptions, name, content string) string {
+func lifecycleWriteProfile(t *testing.T, options corecfg.StartOptions, name, content string) string {
 	t.Helper()
 	path := filepath.Join(options.HomeDir, "profiles", name+".yaml")
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
@@ -319,7 +320,7 @@ func TestLifecycleOverridesPreventPlatformTunOwnershipBypass(t *testing.T) {
 	raw.Tun.AutoRedirect = true
 	raw.Tun.AutoDetectInterface = true
 	raw.IPTables.Enable = true
-	applyOverrides(raw, options)
+	corecfg.ApplyOverrides(raw, options)
 	if raw.Tun.Enable || raw.Tun.AutoRoute || raw.Tun.AutoRedirect || raw.Tun.AutoDetectInterface || raw.IPTables.Enable {
 		t.Fatal("subscription retained automatic TUN/routing ownership")
 	}

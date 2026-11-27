@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
 	"github.com/metacubex/mihomo/component/process"
@@ -105,9 +106,9 @@ func TestProfilePreviewMatchesComposedConfigAndCustomProfile(t *testing.T) {
 		"subscriptions": []any{},
 	})
 
-	writePreviewJSON(t, filepath.Join(opts.HomeDir, "profiles", "scripts.json"), scriptStore{
+	writePreviewJSON(t, filepath.Join(opts.HomeDir, "profiles", "scripts.json"), corecfg.ScriptStore{
 		Version: 1,
-		Scripts: []scriptRecord{{
+		Scripts: []corecfg.ScriptRecord{{
 			ID:       "s1",
 			Revision: "sr1",
 			Source: `const main = config => ({
@@ -115,33 +116,33 @@ func TestProfilePreviewMatchesComposedConfigAndCustomProfile(t *testing.T) {
 				rules: ['DOMAIN,script.example.test,媒体', ...config.rules]
 			})`,
 		}},
-		Bindings: []scriptBinding{
+		Bindings: []corecfg.ScriptBinding{
 			{Profile: "synth", Mode: "script", ScriptID: "s1"},
 			{Profile: "custom1", Mode: "script", ScriptID: "s1"},
 		},
 	})
 
-	writePreviewJSON(t, addedRulesPath(opts.HomeDir), addedRulesSettings{
+	writePreviewJSON(t, corecfg.AddedRulesPath(opts.HomeDir), corecfg.AddedRulesSettings{
 		Revision: "ar-1",
-		Rules: []addedRule{
+		Rules: []corecfg.AddedRule{
 			{ID: "g1", Kind: "DOMAIN", Payload: "global.example.test", Target: "流媒体", CustomExit: true},
 		},
-		Profiles: []profileAddedRules{{
+		Profiles: []corecfg.ProfileAddedRules{{
 			Profile:     "synth",
 			Revision:    "pr-1",
-			Rules:       []addedRule{{ID: "p1", Kind: "DOMAIN", Payload: "profile.example.test", Target: "MATCH"}},
+			Rules:       []corecfg.AddedRule{{ID: "p1", Kind: "DOMAIN", Payload: "profile.example.test", Target: "MATCH"}},
 			Disabled:    []string{},
 			MatchTarget: "代理",
-			ExitTargets: []addedRuleExit{{Name: "流媒体", Target: "媒体"}},
+			ExitTargets: []corecfg.AddedRuleExit{{Name: "流媒体", Target: "媒体"}},
 		}},
 	})
 
 	ipv6 := true
 	servers := []string{"https://1.1.1.1/dns-query"}
 	enhanced := constant.DNSFakeIP
-	writePreviewJSON(t, dnsOverridesPath(opts.HomeDir), dnsOverrideSettings{
+	writePreviewJSON(t, corecfg.DNSOverridesPath(opts.HomeDir), corecfg.DNSOverrideSettings{
 		Revision: "dns-1",
-		Entries: dnsOverrideEntries{
+		Entries: corecfg.DNSOverrideEntries{
 			IPv6:         &ipv6,
 			Servers:      &servers,
 			EnhancedMode: &enhanced,
@@ -152,13 +153,13 @@ func TestProfilePreviewMatchesComposedConfigAndCustomProfile(t *testing.T) {
 	tcpConcurrent := true
 	coreIPv6 := false
 	geodataLoader := "standard"
-	writePreviewJSON(t, generalSettingsPath(opts.HomeDir), generalSettings{
+	writePreviewJSON(t, corecfg.GeneralSettingsPath(opts.HomeDir), corecfg.GeneralSettings{
 		Revision:     "gen-1",
 		DelayTimeout: 5000,
 		LogLevel:     "warning",
-		Ports:        &generalPorts{Mixed: 7899},
+		Ports:        &corecfg.GeneralPorts{Mixed: 7899},
 		Hosts:        map[string][]string{"preview.local": {"127.0.0.1"}},
-		CoreOverrides: &generalCoreOverrides{
+		CoreOverrides: &corecfg.GeneralCoreOverrides{
 			UnifiedDelay:  &unifiedDelay,
 			TCPConcurrent: &tcpConcurrent,
 			IPv6:          &coreIPv6,
@@ -191,11 +192,11 @@ func TestProfilePreviewMatchesComposedConfigAndCustomProfile(t *testing.T) {
 	eng.mu.Lock()
 	expectedOpts := eng.current
 	eng.mu.Unlock()
-	expected, err := buildRawConfig(t.Context(), expectedOpts.ConfigPath, expectedOpts)
+	expected, err := corecfg.BuildRawConfig(t.Context(), expectedOpts.ConfigPath, expectedOpts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := composeRawConfig(expected, expectedOpts); err != nil {
+	if err := corecfg.ComposeRawConfig(expected, expectedOpts); err != nil {
 		t.Fatal(err)
 	}
 	expected.Secret = ""
@@ -263,14 +264,14 @@ func TestProfilePreviewPreservesLiveForwardingAndSanitizesErrors(t *testing.T) {
 		},
 		"subscriptions": []any{},
 	})
-	writePreviewJSON(t, filepath.Join(opts.HomeDir, "profiles", "scripts.json"), scriptStore{
+	writePreviewJSON(t, filepath.Join(opts.HomeDir, "profiles", "scripts.json"), corecfg.ScriptStore{
 		Version: 1,
-		Scripts: []scriptRecord{{
+		Scripts: []corecfg.ScriptRecord{{
 			ID:       "bad",
 			Revision: "r-bad",
 			Source:   `const main = () => { throw new Error('leaked-token-xyz'); }`,
 		}},
-		Bindings: []scriptBinding{{Profile: "broken-script", Mode: "script", ScriptID: "bad"}},
+		Bindings: []corecfg.ScriptBinding{{Profile: "broken-script", Mode: "script", ScriptID: "bad"}},
 	})
 
 	if err := start(opts); err != nil {
@@ -304,14 +305,14 @@ func TestProfilePreviewPreservesLiveForwardingAndSanitizesErrors(t *testing.T) {
 	}
 
 	// 磁盘上修改了脚本绑定但尚未应用时，预览必须标记 applied=false。
-	writePreviewJSON(t, filepath.Join(opts.HomeDir, "profiles", "scripts.json"), scriptStore{
+	writePreviewJSON(t, filepath.Join(opts.HomeDir, "profiles", "scripts.json"), corecfg.ScriptStore{
 		Version: 1,
-		Scripts: []scriptRecord{{
+		Scripts: []corecfg.ScriptRecord{{
 			ID:       "ok",
 			Revision: "r-ok",
 			Source:   `const main = c => ({ ...c, rules: ['DOMAIN,pending.example.test,REJECT', ...c.rules] })`,
 		}},
-		Bindings: []scriptBinding{{Profile: "live", Mode: "script", ScriptID: "ok"}},
+		Bindings: []corecfg.ScriptBinding{{Profile: "live", Mode: "script", ScriptID: "ok"}},
 	})
 	pending, err := buildProfilePreview(t.Context(), "live")
 	if err != nil {

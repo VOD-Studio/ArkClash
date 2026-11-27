@@ -3,13 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
-	"github.com/metacubex/mihomo/component/process"
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
 	"github.com/metacubex/mihomo/tunnel"
 )
 
@@ -29,57 +27,6 @@ rules:
   - MATCH,测试
 `
 
-func TestScriptModeTransformsFullRawConfigBeforeOverrides(t *testing.T) {
-	selection := profileScript{identity: "script:example:r1", source: `const main = async config => {
-		if (config.proxies[0]['reality-opts']['short-id'] !== '00' || config['proxy-groups'][0].name !== '测试' ||
-			!config['proxy-providers'] || config.rule !== undefined || config.rules[0] !== 'MATCH,测试') throw Error('invalid');
-		return { ...config, 'external-controller': '0.0.0.0:8888', secret: 'fake', tun: { enable: true, 'auto-route': true },
-		  'find-process-mode': 'always', profile: { 'store-selected': true }, mode: 'global', 'allow-lan': true,
-		  rules: ['DOMAIN-SUFFIX,example.test,DIRECT', ...config.rules] };
-	}`}
-	raw, err := scriptRawConfig(t.Context(), []byte(scriptProfile), selection)
-	if err != nil {
-		t.Fatal(err)
-	}
-	allowLan := false
-	opts := startOptions{Script: selection, Profile: "p1", Controller: "127.0.0.1:19090", Secret: "local", Mode: "direct",
-		AllowLan: &allowLan, AddedRules: addedRulesSettings{Rules: []addedRule{{Kind: "DOMAIN", Payload: "ignored.test", Target: "REJECT"}}}}
-	applyOverrides(raw, opts)
-	if !reflect.DeepEqual(raw.Rule, []string{"DOMAIN-SUFFIX,example.test,DIRECT", "MATCH,测试"}) {
-		t.Fatalf("unexpected rules: %v", raw.Rule)
-	}
-	if raw.Tun.Enable || raw.Tun.AutoRoute || raw.Profile.StoreSelected || raw.FindProcessMode != process.FindProcessOff ||
-		raw.ExternalController != opts.Controller || raw.Secret != opts.Secret || raw.Mode.String() != "direct" || raw.AllowLan {
-		t.Fatal("platform overrides were not enforced")
-	}
-}
-
-func TestScriptBindingsArePerProfileAndMissingIsExplicit(t *testing.T) {
-	home := t.TempDir()
-	if _, err := readProfileScript(home, "original"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(filepath.Join(home, "profiles"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	file := filepath.Join(home, "profiles", "scripts.json")
-	contents := `{"version":1,"scripts":[{"id":"one","revision":"r1","source":"const main = c => c"}],"bindings":[
-		{"profile":"a","mode":"script","scriptId":"one"},{"profile":"b","mode":"standard","scriptId":"one"},
-		{"profile":"c","mode":"script","scriptId":"missing"},{"profile":"d","mode":"script","scriptId":""}]}`
-	if err := os.WriteFile(file, []byte(contents), 0600); err != nil {
-		t.Fatal(err)
-	}
-	for profile, identity := range map[string]string{"a": "script:one:r1", "b": "", "d": "script", "legacy": ""} {
-		selection, err := readProfileScript(home, profile)
-		if err != nil || selection.identity != identity {
-			t.Fatalf("%s: %+v %v", profile, selection, err)
-		}
-	}
-	if _, err := readProfileScript(home, "c"); !errors.Is(err, errScriptMissing) {
-		t.Fatalf("missing script should be recoverable: %v", err)
-	}
-}
-
 func TestScriptFailureCannotAdvanceRuntime(t *testing.T) {
 	home := t.TempDir()
 	if err := os.Mkdir(filepath.Join(home, "profiles"), 0700); err != nil {
@@ -96,7 +43,7 @@ func TestScriptFailureCannotAdvanceRuntime(t *testing.T) {
 	}
 	eng.mu.Lock()
 	previous, wasRunning, boot, revision, prevView := eng.current, eng.running, eng.bootID, eng.configRevision, eng.view.Load()
-	eng.current, eng.running, eng.bootID, eng.configRevision = startOptions{HomeDir: home, Profile: "a", ConfigPath: file}, true, "scripts-test", 27
+	eng.current, eng.running, eng.bootID, eng.configRevision = corecfg.StartOptions{HomeDir: home, Profile: "a", ConfigPath: file}, true, "scripts-test", 27
 	eng.publishRuntimeLocked()
 	eng.mu.Unlock()
 	t.Cleanup(func() {
@@ -105,12 +52,12 @@ func TestScriptFailureCannotAdvanceRuntime(t *testing.T) {
 		eng.view.Store(prevView)
 		eng.mu.Unlock()
 	})
-	if err := applyProfileScript(context.Background(), scriptApplyRequest{
+	if err := applyProfileScript(context.Background(), corecfg.ScriptApplyRequest{
 		BootID: "scripts-test", Profile: "a", Identity: "script:one:broken",
 	}); err == nil {
 		t.Fatal("broken script was applied")
 	}
-	if eng.configRevision != 27 || eng.current.Script.enabled() {
+	if eng.configRevision != 27 || eng.current.Script.Enabled() {
 		t.Fatal("failed script altered applied identity")
 	}
 }
@@ -130,8 +77,8 @@ func TestScriptApplyAndCorrectionPreserveTunAndRoutes(t *testing.T) {
 	active := eng.tun
 	save := func(revision, source string) string {
 		t.Helper()
-		data, err := json.Marshal(scriptStore{Version: 1, Scripts: []scriptRecord{{ID: "one", Revision: revision, Source: source}},
-			Bindings: []scriptBinding{{Profile: opts.Profile, Mode: "script", ScriptID: "one"}}})
+		data, err := json.Marshal(corecfg.ScriptStore{Version: 1, Scripts: []corecfg.ScriptRecord{{ID: "one", Revision: revision, Source: source}},
+			Bindings: []corecfg.ScriptBinding{{Profile: opts.Profile, Mode: "script", ScriptID: "one"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -141,7 +88,7 @@ func TestScriptApplyAndCorrectionPreserveTunAndRoutes(t *testing.T) {
 		return "script:one:" + revision
 	}
 	apply := func(identity string) error {
-		return applyProfileScript(t.Context(), scriptApplyRequest{BootID: before.BootID, Profile: opts.Profile, Identity: identity})
+		return applyProfileScript(t.Context(), corecfg.ScriptApplyRequest{BootID: before.BootID, Profile: opts.Profile, Identity: identity})
 	}
 	good := save("good", `const main = async c => ({ ...await Promise.resolve(c), rules: ['DOMAIN,example.test,REJECT', ...c.rules] })`)
 	if err := apply(good); err != nil {
