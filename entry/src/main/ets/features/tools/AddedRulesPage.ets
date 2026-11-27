@@ -6,11 +6,11 @@ import { readRuleSets, RuleSetItem } from '../../client/RuleSets';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
 import { ScrollDestination } from '../../components/ScrollDestination';
-import { EmptyState } from '../../components/EmptyState';
 import { KeyedListSource } from '../../components/KeyedListSource';
 import { HEADER_ACTION, HEADER_ICON_SIZE, HEADER_GAP, PAGE_GUTTER } from '../../components/Theme';
 import { AddedRuleDraft, AddedRuleEditor } from './AddedRuleEditor';
 import { AddedRulePresets } from './AddedRulePresets';
+import { AddedRulesEmpty } from './AddedRulesEmpty';
 import { ProfileRuleOptions } from './ProfileRuleOptions';
 
 class AddedRuleListItem {
@@ -51,12 +51,11 @@ export struct AddedRulesPage {
   @Local private editingExisting: boolean = false;
   @Local private editShown: boolean = false;
   @Local private presetsShown: boolean = false;
+  @Local private presetExisting: string[] = [];
   @Local private deleteShown: boolean = false;
   @Local private discardRequested: boolean = false;
   @Local private editIssue: ResourceStr = '';
   @Local private ruleSets: RuleSetItem[] = cachedAddedRuleSets ?? [];
-  @Local private ruleSetOptions: SelectOption[] =
-    (cachedAddedRuleSets ?? []).map((item: RuleSetItem): SelectOption => ({ value: item.name }));
   private shown: boolean = false;
   private rows: KeyedListSource<AddedRuleListItem> = new KeyedListSource<AddedRuleListItem>();
 
@@ -96,7 +95,6 @@ export struct AddedRulesPage {
       } else if (cachedAddedRuleSets === undefined) {
         this.ruleSets = [];
       }
-      this.ruleSetOptions = this.ruleSets.map((item: RuleSetItem): SelectOption => ({ value: item.name }));
       this.refreshRows();
       this.loadFailed = false;
     } catch (_error) {
@@ -149,6 +147,15 @@ export struct AddedRulesPage {
     this.editIssue = '';
     this.discardRequested = false;
     this.editShown = true;
+  }
+
+  private openPresets(): void {
+    if (this.saving || this.loading || this.loadFailed) {
+      return;
+    }
+    // 打开时取一次快照；抽屉开着时列表只会被这个抽屉自己改，改完即关闭。
+    this.presetExisting = this.rules().map((rule: AddedRule): string => addedRuleText(rule));
+    this.presetsShown = true;
   }
 
   private requestCloseEditor(dismiss: () => void): void {
@@ -352,7 +359,7 @@ export struct AddedRulesPage {
             available: !this.saving, onPress: (): void => { this.selecting = true; } })
         }
         AddedRuleHeaderButton({ icon: $r('sys.symbol.bolt'), label: $r('app.string.added_rules_presets'),
-          available: !this.loading && !this.loadFailed && !this.saving, onPress: (): void => { this.presetsShown = true; } })
+          available: !this.loading && !this.loadFailed && !this.saving, onPress: (): void => this.openPresets() })
         AddedRuleHeaderButton({ icon: $r('sys.symbol.plus'), label: $r('app.string.action_add'),
           available: !this.loading && !this.loadFailed && !this.saving, onPress: (): void => this.openEdit() })
       }
@@ -411,8 +418,8 @@ export struct AddedRulesPage {
   EditorSheet() {
     if (this.draft !== undefined) {
       AddedRuleEditor({
-        draft: this.draft, saving: this.saving, issue: this.editIssue, discardRequested: this.discardRequested,
-        ruleSets: this.ruleSets, ruleSetOptions: this.ruleSetOptions,
+        draft: this.draft, editing: this.editingExisting, saving: this.saving, issue: this.editIssue,
+        discardRequested: this.discardRequested, ruleSets: this.ruleSets, motion: !this.reduceMotion,
         knownExits: namedExits(this.settings.rules.concat(this.standard().rules)),
         onSave: (): void => this.saveDraft(), onChange: (): void => { this.editIssue = ''; },
         onCancel: (): void => this.requestCloseEditor((): void => { this.editShown = false; }),
@@ -424,7 +431,9 @@ export struct AddedRulesPage {
 
   @Builder
   PresetsSheet() {
-    AddedRulePresets({ saving: this.saving, onAdd: (rules: AddedRule[]): void => this.addPresets(rules) })
+    AddedRulePresets({ saving: this.saving, existing: this.presetExisting, motion: !this.reduceMotion,
+      onAdd: (rules: AddedRule[]): void => this.addPresets(rules),
+      onClose: (): void => { if (!this.saving) { this.presetsShown = false; } } })
   }
 
   @Builder
@@ -452,12 +461,11 @@ export struct AddedRulesPage {
         }
         .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
       } else if (this.loadFailed || this.visibleCount === 0) {
-        EmptyState({
-          icon: $r('sys.symbol.list_bullet'),
-          title: this.loadFailed ? $r('app.string.added_rules_load_failed') :
-            this.query.trim() === '' ? $r('app.string.added_rules_empty') : $r('app.string.diagnostics_no_matches'),
-          actionLabel: this.loadFailed ? $r('app.string.dns_override_retry') : '',
-          onAction: (): void => { this.load(); }
+        AddedRulesEmpty({
+          kind: this.loadFailed ? 'failed' : this.query.trim() === '' ? 'empty' : 'noMatch',
+          motion: !this.reduceMotion && this.foreground, available: !this.saving,
+          onAdd: (): void => this.openEdit(), onPresets: (): void => this.openPresets(),
+          onRetry: (): void => { this.load(); }
         })
         .layoutWeight(1)
       } else {
@@ -477,16 +485,18 @@ export struct AddedRulesPage {
       Stack() {
         this.Content()
         Column()
+          // 两个抽屉的标题区和关闭按钮由内容自己绘制。编辑抽屉高度跟随内容，约占半屏；
+          // 预设列表超过一屏，直接用大尺寸，按钮固定在底部。
           .bindSheet($$this.editShown, this.EditorSheet, {
-            title: { title: this.editingExisting ? $r('app.string.added_rules_edit') : $r('app.string.added_rules_add') },
-            height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+            height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
+            systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
             onWillDismiss: (action: DismissSheetAction): void =>
               this.requestCloseEditor((): void => action.dismiss())
           })
         Column()
           .bindSheet($$this.presetsShown, this.PresetsSheet, {
-            title: { title: $r('app.string.added_rules_presets') }, height: SheetSize.LARGE,
-            systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+            height: SheetSize.LARGE, preferType: SheetType.BOTTOM,
+            systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
             onWillDismiss: (action: DismissSheetAction): void => { if (!this.saving) { action.dismiss(); } }
           })
         Column()

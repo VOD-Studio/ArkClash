@@ -2685,14 +2685,6 @@
       "value": "Added rules"
     },
     {
-      "name": "added_rules_basic",
-      "value": "Basic information"
-    },
-    {
-      "name": "added_rules_params",
-      "value": "Additional parameters"
-    },
-    {
       "name": "added_rules_type",
       "value": "Rule type"
     },
@@ -2727,10 +2719,6 @@
     {
       "name": "added_rules_presets",
       "value": "Quick actions"
-    },
-    {
-      "name": "added_rules_confirm",
-      "value": "Confirm"
     },
     {
       "name": "added_rules_quic",
@@ -2815,6 +2803,90 @@
     {
       "name": "added_rules_discard",
       "value": "Discard changes"
+    },
+    {
+      "name": "added_rules_empty_title",
+      "value": "No added rules yet"
+    },
+    {
+      "name": "added_rules_empty_hint",
+      "value": "Added rules are checked before the profile's own rules, top to bottom."
+    },
+    {
+      "name": "added_rules_no_matches",
+      "value": "No matching rules"
+    },
+    {
+      "name": "added_rules_kind_domain",
+      "value": "Domain"
+    },
+    {
+      "name": "added_rules_kind_ip",
+      "value": "IP address"
+    },
+    {
+      "name": "added_rules_kind_source",
+      "value": "Source"
+    },
+    {
+      "name": "added_rules_kind_inbound",
+      "value": "Port and inbound"
+    },
+    {
+      "name": "added_rules_kind_logic",
+      "value": "Logic"
+    },
+    {
+      "name": "added_rules_kind_other",
+      "value": "Other"
+    },
+    {
+      "name": "added_rules_presets_hint",
+      "value": "Selected rules are added to the top of the list."
+    },
+    {
+      "name": "added_rules_quic_hint",
+      "value": "Drop UDP 443 so HTTP/3 falls back to TCP"
+    },
+    {
+      "name": "added_rules_stun_hint",
+      "value": "Keep WebRTC from revealing your IP over STUN"
+    },
+    {
+      "name": "added_rules_dot_hint",
+      "value": "Reject port 853 so DNS lookups go through the core"
+    },
+    {
+      "name": "added_rules_loopback_hint",
+      "value": "Reject connections to this device so traffic can't loop back"
+    },
+    {
+      "name": "added_rules_lan_hint",
+      "value": "Keep private and LAN addresses off the proxy"
+    },
+    {
+      "name": "added_rules_system_hint",
+      "value": "Reach system updates and services directly"
+    },
+    {
+      "name": "added_rules_tracker_hint",
+      "value": "Reach BT and PT trackers directly"
+    },
+    {
+      "name": "added_rules_presets_count",
+      "value": "Rules: %d"
+    },
+    {
+      "name": "added_rules_presets_add",
+      "value": "Add selected (%d)"
+    },
+    {
+      "name": "added_rules_presets_pick",
+      "value": "Select rules to add"
+    },
+    {
+      "name": "added_rules_presets_added",
+      "value": "Added"
     },
     {
       "name": "dns_override_use_hosts",
@@ -4567,10 +4639,6 @@
     {
       "name": "added_rules_exit_new",
       "value": "New named exit"
-    },
-    {
-      "name": "added_rules_exit_option",
-      "value": "Exit: %s"
     },
     {
       "name": "added_rules_exit_name",

@@ -2665,14 +2665,6 @@
       "value": "附加规则"
     },
     {
-      "name": "added_rules_basic",
-      "value": "基本信息"
-    },
-    {
-      "name": "added_rules_params",
-      "value": "附加参数"
-    },
-    {
       "name": "added_rules_type",
       "value": "规则类型"
     },
@@ -2707,10 +2699,6 @@
     {
       "name": "added_rules_presets",
       "value": "快捷操作"
-    },
-    {
-      "name": "added_rules_confirm",
-      "value": "确认"
     },
     {
       "name": "added_rules_quic",
@@ -2795,6 +2783,90 @@
     {
       "name": "added_rules_discard",
       "value": "放弃修改"
+    },
+    {
+      "name": "added_rules_empty_title",
+      "value": "还没有附加规则"
+    },
+    {
+      "name": "added_rules_empty_hint",
+      "value": "附加规则排在订阅规则之前，从上到下依次匹配。"
+    },
+    {
+      "name": "added_rules_no_matches",
+      "value": "没有匹配的规则"
+    },
+    {
+      "name": "added_rules_kind_domain",
+      "value": "域名"
+    },
+    {
+      "name": "added_rules_kind_ip",
+      "value": "IP 地址"
+    },
+    {
+      "name": "added_rules_kind_source",
+      "value": "来源"
+    },
+    {
+      "name": "added_rules_kind_inbound",
+      "value": "端口与入站"
+    },
+    {
+      "name": "added_rules_kind_logic",
+      "value": "逻辑组合"
+    },
+    {
+      "name": "added_rules_kind_other",
+      "value": "其他"
+    },
+    {
+      "name": "added_rules_presets_hint",
+      "value": "选中的规则会添加到列表顶部。"
+    },
+    {
+      "name": "added_rules_quic_hint",
+      "value": "丢弃 UDP 443，让 HTTP/3 回落到 TCP"
+    },
+    {
+      "name": "added_rules_stun_hint",
+      "value": "防止 WebRTC 通过 STUN 暴露真实 IP"
+    },
+    {
+      "name": "added_rules_dot_hint",
+      "value": "拒绝 853 端口，让 DNS 查询经过内核"
+    },
+    {
+      "name": "added_rules_loopback_hint",
+      "value": "拒绝发往本机的连接，避免流量绕回代理"
+    },
+    {
+      "name": "added_rules_lan_hint",
+      "value": "私有网段与局域网地址不走代理"
+    },
+    {
+      "name": "added_rules_system_hint",
+      "value": "系统更新与服务直接连接"
+    },
+    {
+      "name": "added_rules_tracker_hint",
+      "value": "BT 与 PT Tracker 直接连接"
+    },
+    {
+      "name": "added_rules_presets_count",
+      "value": "%d 条规则"
+    },
+    {
+      "name": "added_rules_presets_add",
+      "value": "添加 %d 条规则"
+    },
+    {
+      "name": "added_rules_presets_pick",
+      "value": "选择要添加的规则"
+    },
+    {
+      "name": "added_rules_presets_added",
+      "value": "已添加"
     },
     {
       "name": "dns_override_use_hosts",
@@ -4547,10 +4619,6 @@
     {
       "name": "added_rules_exit_new",
       "value": "新建命名出口"
-    },
-    {
-      "name": "added_rules_exit_option",
-      "value": "出口：%s"
     },
     {
       "name": "added_rules_exit_name",
