@@ -1,4 +1,4 @@
-// 检查 core/ 的 Go 架构边界：构建标签隔离、Cgo 范围、internal/* DAG 白名单（未登记即失败）、零 mihomo 边界、init() 白名单、C ABI 导出位置及命名约束。
+// 检查 core/ 的 Go 架构边界：构建标签隔离、Cgo 范围、internal/* DAG 白名单（未登记即失败）、零 mihomo 边界、init() 白名单、C ABI 导出收口、核心锁访问边界与根包顶层变量白名单。
 package main
 
 import (
@@ -55,6 +55,34 @@ var (
 		"socket.go":            true,
 		"system_dns.go":        true,
 		"tailscale_network.go": true,
+	}
+	// 根包非哨兵错误/非不可变正则的包级 var 白名单（未登记即失败），阻止后续新增散落全局状态。
+	// 格式："文件名:变量名"。删除对应变量时必须同步收缩此表。
+	allowedRootVars = map[string]bool{
+		"backup.go:backupDAVBusy":                      true,
+		"commands.go:commandHandler":                   true,
+		"commands.go:commandSeq":                       true,
+		"commands.go:pendingMu":                        true,
+		"commands.go:pending":                          true,
+		"delay.go:delaySlots":                          true,
+		"diagnostics.go:diagnosticIDs":                 true,
+		"diagnostics_stats.go:diagnosticStatsInterval": true,
+		"engine.go:eng":                                true,
+		"engine.go:engineUnlockCheck":                  true,
+		"events.go:subscribersMu":                      true,
+		"events.go:subscribers":                        true,
+		"geo_download.go:geoDownloadTimeout":           true,
+		"geo_settings.go:geoIDs":                       true,
+		"lib.go:reclaimMu":                             true,
+		"lib.go:lastReclaim":                           true,
+		"local_proxies.go:localProxyValidation":        true,
+		"local_proxies.go:localProxySequence":          true,
+		"loopback.go:disableLoopBackDetector":          true,
+		"probe.go:probeSlots":                          true,
+		"profile_scripts.go:scriptSlot":                true,
+		"rule_sets.go:ruleSetMutation":                 true,
+		"system_dns.go:systemDNSWatcher":               true,
+		"tailscale_network.go:tailnetWatches":          true,
 	}
 )
 
@@ -231,6 +259,54 @@ func checkPackages(coreDir, modfile string) []string {
 	return problems
 }
 
+func isImmutableRootVar(name string, init ast.Expr) bool {
+	if init == nil {
+		return false
+	}
+	if strings.HasPrefix(name, "err") {
+		if call, ok := init.(*ast.CallExpr); ok {
+			if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+				if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "errors" && sel.Sel.Name == "New" {
+					return true
+				}
+			}
+		}
+	}
+	if call, ok := init.(*ast.CallExpr); ok {
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+			// regexp.MustCompile(...)
+			if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "regexp" && sel.Sel.Name == "MustCompile" {
+				return true
+			}
+			// netip.MustParseAddrPort(...).Addr()
+			if inner, ok := sel.X.(*ast.CallExpr); ok && sel.Sel.Name == "Addr" {
+				if innerSel, ok := inner.Fun.(*ast.SelectorExpr); ok {
+					if pkg, ok := innerSel.X.(*ast.Ident); ok && pkg.Name == "netip" && strings.HasPrefix(innerSel.Sel.Name, "MustParse") {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func coreEngineRecvName(fn *ast.FuncDecl) string {
+	if fn.Recv == nil || len(fn.Recv.List) == 0 {
+		return ""
+	}
+	field := fn.Recv.List[0]
+	typ := field.Type
+	if star, ok := typ.(*ast.StarExpr); ok {
+		typ = star.X
+	}
+	ident, ok := typ.(*ast.Ident)
+	if !ok || ident.Name != "coreEngine" || len(field.Names) == 0 {
+		return ""
+	}
+	return field.Names[0].Name
+}
+
 func checkSources(coreDir string) []string {
 	var problems []string
 
@@ -256,11 +332,12 @@ func checkSources(coreDir string) []string {
 		return problems
 	}
 
-	// 仅解析 core 根目录非测试 Go 文件，检查 init() 白名单与 //export 收口边界。
+	// 仅解析 core 根目录非测试 Go 文件，检查 init() 白名单、//export 收口、核心锁访问边界、lib.go 纯转发与顶层 var 白名单。
 	entries, err := os.ReadDir(coreDir)
 	if err != nil {
 		return append(problems, fmt.Sprintf("读取 core 目录失败：%v", err))
 	}
+	seenRootVars := make(map[string]bool)
 	fset := token.NewFileSet()
 	for _, entry := range entries {
 		name := entry.Name()
@@ -273,26 +350,88 @@ func checkSources(coreDir string) []string {
 			continue
 		}
 		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Recv != nil {
-				continue
-			}
-			if fn.Name.Name == "init" && !allowedInitFiles[name] {
-				problems = append(problems, fmt.Sprintf("core/%s 不允许新增顶层 init()，白名单仅包含路由注册与 ohos 平台钩子", name))
-			}
-			if fn.Doc != nil {
-				for _, comment := range fn.Doc.List {
-					if sym, ok := strings.CutPrefix(comment.Text, "//export "); ok {
-						sym = strings.TrimSpace(sym)
-						switch {
-						case name == "lib.go" && strings.HasPrefix(sym, "ArkClash"):
-						case name == "tailscale_network.go" && sym == "arkClashTailscaleNetworkChanged":
-						default:
-							problems = append(problems, fmt.Sprintf("core/%s 声明了非预期导出符号 //export %s（公开 C ABI 必须收口在 core/lib.go）", name, sym))
+			switch d := decl.(type) {
+			case *ast.GenDecl:
+				if d.Tok != token.VAR {
+					continue
+				}
+				for _, spec := range d.Specs {
+					vs, ok := spec.(*ast.ValueSpec)
+					if !ok {
+						continue
+					}
+					for i, ident := range vs.Names {
+						if ident.Name == "_" {
+							continue
+						}
+						var initExpr ast.Expr
+						if i < len(vs.Values) {
+							initExpr = vs.Values[i]
+						}
+						if isImmutableRootVar(ident.Name, initExpr) {
+							continue
+						}
+						key := name + ":" + ident.Name
+						seenRootVars[key] = true
+						if !allowedRootVars[key] {
+							problems = append(problems, fmt.Sprintf("core/%s 声明了未登记的包级变量 %s（请归入 coreEngine 或子系统 Hub，确需保留须在 check-core-arch 白名单登记）", name, ident.Name))
 						}
 					}
 				}
+			case *ast.FuncDecl:
+				if d.Recv == nil {
+					if d.Name.Name == "init" && !allowedInitFiles[name] {
+						problems = append(problems, fmt.Sprintf("core/%s 不允许新增顶层 init()，白名单仅包含路由注册与 ohos 平台钩子", name))
+					}
+					if d.Doc != nil {
+						for _, comment := range d.Doc.List {
+							if sym, ok := strings.CutPrefix(comment.Text, "//export "); ok {
+								sym = strings.TrimSpace(sym)
+								switch {
+								case name == "lib.go" && strings.HasPrefix(sym, "ArkClash"):
+								case name == "tailscale_network.go" && sym == "arkClashTailscaleNetworkChanged":
+								default:
+									problems = append(problems, fmt.Sprintf("core/%s 声明了非预期导出符号 //export %s（公开 C ABI 必须收口在 core/lib.go）", name, sym))
+								}
+							}
+						}
+					}
+				}
+				if name != "engine.go" && d.Body != nil {
+					recvName := coreEngineRecvName(d)
+					ast.Inspect(d.Body, func(n ast.Node) bool {
+						if name == "lib.go" {
+							if id, ok := n.(*ast.Ident); ok && id.Name == "eng" {
+								pos := fset.Position(id.Pos())
+								problems = append(problems, fmt.Sprintf("core/lib.go:%d 必须保持纯转发入口，禁止直接访问 eng", pos.Line))
+							}
+						}
+						sel, ok := n.(*ast.SelectorExpr)
+						if !ok || (sel.Sel.Name != "mu" && sel.Sel.Name != "lifecycle") {
+							return true
+						}
+						x, ok := sel.X.(*ast.Ident)
+						if !ok {
+							return true
+						}
+						if x.Name == "eng" || (recvName != "" && x.Name == recvName) {
+							pos := fset.Position(sel.Pos())
+							problems = append(problems, fmt.Sprintf("core/%s:%d 禁止在 engine.go 之外直接访问核心锁 %s.%s（请经 engine.go 事务入口进入）", name, pos.Line, x.Name, sel.Sel.Name))
+						}
+						return true
+					})
+				}
 			}
+		}
+	}
+	var allowedKeys []string
+	for key := range allowedRootVars {
+		allowedKeys = append(allowedKeys, key)
+	}
+	slices.Sort(allowedKeys)
+	for _, key := range allowedKeys {
+		if !seenRootVars[key] {
+			problems = append(problems, fmt.Sprintf("check-core-arch 的 allowedRootVars 存在陈旧条目 %s，请同步清理", key))
 		}
 	}
 	return problems
