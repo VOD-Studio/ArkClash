@@ -866,7 +866,9 @@ func TestRuleProbeRejectsUnsafeOrUnboundedProtocolInputsBeforeDial(t *testing.T)
 		{"cookie", func(p *probeRequestBody) { p.Headers = map[string]string{"Cookie": "session=fixture"} }},
 		{"proxy authorization", func(p *probeRequestBody) { p.Headers = map[string]string{"Proxy-Authorization": "Bearer fixture"} }},
 		{"host override", func(p *probeRequestBody) { p.Headers = map[string]string{"Host": "other.invalid"} }},
-		{"header injection", func(p *probeRequestBody) { p.Headers = map[string]string{"Authorization": "Bearer fixture\r\nCookie: injected"} }},
+		{"header injection", func(p *probeRequestBody) {
+			p.Headers = map[string]string{"Authorization": "Bearer fixture\r\nCookie: injected"}
+		}},
 		{"body mode", func(p *probeRequestBody) { p.BodyMode = "unlimited" }},
 		{"pattern on HTML", func(p *probeRequestBody) { p.BodyMode = "html"; p.ScanPattern = "region" }},
 		{"missing scan pattern", func(p *probeRequestBody) { p.BodyMode = "scan" }},

@@ -86,7 +86,6 @@ func hostAttachIdentity() attachIdentity {
 	return attachIdentity{BootID: state.BootID, Profile: state.Profile, ConfigRevision: state.ConfigRevision}
 }
 
-
 func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 	options := lifecycleOptions(t)
 	// 空内核不能把空编号当成一份配置，更不能恢复它的选择文件。

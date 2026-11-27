@@ -18,24 +18,40 @@ func TestLifecycleControllerRetiresBeforeNextBoot(t *testing.T) {
 	previous := ""
 	for i := range 20 {
 		options.Secret = fmt.Sprintf("isolated-controller-%d", i)
-		if err := start(options); err != nil { t.Fatal(err) }
+		if err := start(options); err != nil {
+			t.Fatal(err)
+		}
 		for _, secret := range []string{options.Secret, previous} {
-			if secret == "" { continue }
+			if secret == "" {
+				continue
+			}
 			request, err := http.NewRequest(http.MethodGet, "http://"+options.Controller+"/version", nil)
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			request.Header.Set("Authorization", "Bearer "+secret)
 			response, err := client.Do(request)
-			if err != nil { t.Fatalf("boot %d controller unavailable: %v", i, err) }
+			if err != nil {
+				t.Fatalf("boot %d controller unavailable: %v", i, err)
+			}
 			_, _ = io.Copy(io.Discard, response.Body)
 			_ = response.Body.Close()
 			want := http.StatusOK
-			if secret == previous { want = http.StatusUnauthorized }
-			if response.StatusCode != want { t.Fatalf("boot %d accepted wrong controller generation: %d", i, response.StatusCode) }
+			if secret == previous {
+				want = http.StatusUnauthorized
+			}
+			if response.StatusCode != want {
+				t.Fatalf("boot %d accepted wrong controller generation: %d", i, response.StatusCode)
+			}
 		}
 		stop()
 		connection, err := net.DialTimeout("tcp", options.Controller, 100*time.Millisecond)
-		if connection != nil { _ = connection.Close() }
-		if err == nil { t.Fatalf("boot %d stop returned before controller closed", i) }
+		if connection != nil {
+			_ = connection.Close()
+		}
+		if err == nil {
+			t.Fatalf("boot %d stop returned before controller closed", i)
+		}
 		previous = options.Secret
 	}
 }
