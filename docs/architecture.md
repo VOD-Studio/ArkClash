@@ -151,9 +151,9 @@ ZIP 快照与恢复机制、旧版目录兼容及 WebDAV 路由见 [ADR-0031](ad
 | 文件 | 职责 |
 |---|---|
 | `core/lib.go` | `//go:build ohos`：全部 16 个公开 C ABI（`arkclash.h`）与 `main()`，缺标签构建 `c-shared` 时 fail-closed |
-| `core/lifecycle.go` | 唯一核心状态、无 TUN 启动、attach/detach、热切换及 `applyOverrides` |
+| `core/lifecycle.go` | 唯一核心状态、无 TUN 启动、attach/detach、热切换及 `applyOverrides`（按值同步 `internal/providers` 身份） |
 | `core/inbound.go` | 最小业务入口设置、应用前屏蔽、恢复与真实资源校验 |
-| `core/api.go` | 纯 Go：controller 上的 `/arkclash/` 路由注册、核心接口与共享 HTTP/WebSocket 辅助 |
+| `core/api.go` | 纯 Go：controller 上的 `/arkclash/` 路由装配与核心接口 |
 | `core/fetch.go` | 纯 Go：经内核下载与订阅正文落盘 |
 | `core/events.go` | 纯 Go：运行时事件发布/订阅（`subscribeEvents`）与 `/arkclash/events` 推送 |
 | `core/commands.go` | 纯 Go：转给 VPN 进程 ArkTS 的命令分发桥与超时等待 |
@@ -174,10 +174,16 @@ ZIP 快照与恢复机制、旧版目录兼容及 WebDAV 路由见 [ADR-0031](ad
 | `core/system_dns.go` | `//go:build ohos`：从鸿蒙默认物理网络读取系统 DNS 并监听切网事件 |
 | `core/tailscale_network.go`、`tailscale_watch.go` | `tailscale_network.go`（`//go:build ohos`）读取默认网卡与监听切网；`tailscale_watch.go` 为纯 Go 订阅状态机 |
 | `core/loopback.go` | `//go:build ohos`：关闭回环检测（原因见 platform-pitfalls 第 4 条） |
+| `core/internal/backup/` | ZIP 备份、原子目录交换与 WebDAV 客户端（零 mihomo 依赖，`CGO_ENABLED=0`） |
+| `core/internal/script/` | QuickJS 配置覆写脚本沙箱与执行限额（零 mihomo 依赖） |
+| `core/internal/proxylink/` | 分享链接与代理配置编解码纯引擎（零 `core.mu`、零磁盘、零网络） |
+| `core/internal/ruleset/` | 规则集标识校验、格式识别、MRS 编译校验与可移植性检查纯引擎 |
+| `core/internal/ctrl/` | controller 错误信封与原生 WebSocket 帧写入辅助（零 mihomo 依赖） |
+| `core/internal/providers/` | 零 `core.mu` 的运行中 Provider 管理、单飞更新、本地校验替换与快照推送（依赖 `internal/ctrl`、`internal/ruleset`） |
 
 TUN 由 `tun.go` 单独持有，不走配置文件，所以热切换不重建它。detached 启动和热切换在 `executor.ApplyConfig` 前屏蔽业务入口；连接时只恢复入口，不重新应用整个配置或重建 resolver。controller 只随完整宿主生命周期启停（[ADR-0010](adr/0010-hot-switch-reload-in-vpn.md)、[ADR-0017](adr/0017-core-ready-without-vpn.md)）。
 
-内核的 `ohos` 标签隔离、Cgo 边界、`core/backupstore` 零 mihomo 依赖、`init()` 白名单与 `//export` 收口由 `scripts/ci/check-core-arch/main.go` 在 `make lint CHECKS=go` 中强制校验；宿主回归直接在 `core/` 原地通过 `make test TESTS=core` 运行（[ADR-0040](adr/0040-core-build-tags-and-host-tests.md)）。
+内核的 `ohos` 标签隔离、Cgo 边界、`core/backupstore` 与零 mihomo 内部包依赖、`core/internal/*` fail-closed DAG 依赖白名单、`init()` 白名单与 `//export` 收口由 `scripts/ci/check-core-arch/main.go` 在 `make lint CHECKS=go` 中强制校验；宿主回归直接在 `core/` 原地通过 `make test TESTS=core` 运行（[ADR-0040](adr/0040-core-build-tags-and-host-tests.md)、[ADR-0041](adr/0041-core-internal-deep-modules.md)）。
 
 ## 构建产物
 
