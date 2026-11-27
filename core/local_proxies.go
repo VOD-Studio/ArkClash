@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/proxylink"
 	"github.com/metacubex/chi"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
@@ -39,12 +40,12 @@ func postLocalProxies(w http.ResponseWriter, r *http.Request) {
 	case "validate":
 		render.JSON(w, r, validateLocalProxies(body.Definitions))
 	case "encode":
-		render.JSON(w, r, encodeLocalProxyLinks(body.Definitions))
+		render.JSON(w, r, proxylink.Encode(body.Definitions))
 	case "decode":
 		results := make([][]map[string]any, len(body.Lines))
 		count := 0
 		for i, line := range body.Lines {
-			results[i] = decodeLocalProxyLink(line)
+			results[i] = proxylink.Decode(line)
 			count += len(results[i])
 			if count > localProxyCount {
 				writeError(w, r, http.StatusBadRequest, errors.New("local_proxy_input"))

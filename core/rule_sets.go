@@ -8,11 +8,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ruleset"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
 	"github.com/metacubex/mihomo/config"
@@ -22,7 +22,6 @@ var (
 	errRuleSetInput    = errors.New("rule_set_input")
 	errRuleSetDownload = errors.New("rule_set_download")
 	errRuleSetInUse    = errors.New("rule_set_in_use")
-	ruleSetID          = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,79}$`)
 	ruleSetMutation    = make(chan struct{}, 1)
 )
 
@@ -43,7 +42,7 @@ type ruleSetCatalog struct {
 }
 
 func (s ruleSetItem) validOptions() bool {
-	if !ruleSetID.MatchString(s.ID) || s.Name == "" || len(s.Name) > 256 ||
+	if !ruleset.ValidID(s.ID) || s.Name == "" || len(s.Name) > 256 ||
 		strings.TrimSpace(s.Name) != s.Name || strings.ContainsAny(s.Name, "\x00\r\n") ||
 		(s.URL != "" && !validGeoURL(s.URL)) {
 		return false
@@ -57,13 +56,13 @@ func (s ruleSetItem) validOptions() bool {
 }
 
 func (c ruleSetCatalog) validate() error {
-	if !ruleSetID.MatchString(c.Revision) || c.Items == nil || len(c.Items) > 100 {
+	if !ruleset.ValidID(c.Revision) || c.Items == nil || len(c.Items) > 100 {
 		return errRuleSetInput
 	}
 	ids, names, urls := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, item := range c.Items {
-		if !item.validOptions() || !ruleSetID.MatchString(item.Content) || item.Count < 1 ||
-			item.Count > ruleSetLineLimit || item.UpdatedAt < 1 || ids[item.ID] || names[item.Name] ||
+		if !item.validOptions() || !ruleset.ValidID(item.Content) || item.Count < 1 ||
+			item.Count > ruleset.LineLimit || item.UpdatedAt < 1 || ids[item.ID] || names[item.Name] ||
 			(item.URL != "" && urls[item.URL]) {
 			return errRuleSetInput
 		}
@@ -98,8 +97,6 @@ func readRuleSets(home string) (ruleSetCatalog, error) {
 	return catalog, catalog.validate()
 }
 
-func managedRuleSetName(id string) string { return "__arkclash_ruleset_" + id }
-
 func (c ruleSetCatalog) attach(raw *config.RawConfig, home string, rules []addedRule) error {
 	var attached map[string]bool
 	for _, item := range rules {
@@ -115,7 +112,7 @@ func (c ruleSetCatalog) attach(raw *config.RawConfig, home string, rules []added
 		if err := ensureRuleSetCompiled(home, entry, path); err != nil {
 			return err
 		}
-		name := managedRuleSetName(entry.ID)
+		name := ruleset.ManagedName(entry.ID)
 		if raw.RuleProvider == nil {
 			raw.RuleProvider = make(map[string]map[string]any)
 		}
@@ -173,7 +170,7 @@ func changeRuleSet(ctx context.Context, request ruleSetRequest) error {
 	if !ok {
 		return errProfileSettingsConflict
 	}
-	if !ruleSetID.MatchString(request.Revision) {
+	if !ruleset.ValidID(request.Revision) {
 		return errRuleSetInput
 	}
 	index := catalog.find(request.Item.ID)
@@ -276,18 +273,18 @@ func prepareRuleSet(ctx context.Context, home string, request ruleSetRequest, it
 	var err error
 	switch {
 	case request.Candidate != "" && item.URL == "":
-		if !ruleSetID.MatchString(request.Candidate) {
+		if !ruleset.ValidID(request.Candidate) {
 			return item, false, errRuleSetInput
 		}
 		path := filepath.Join(home, "profile-work", request.Candidate+".ruleset")
 		if _, statErr := os.Stat(path); errors.Is(statErr, os.ErrNotExist) {
 			path = filepath.Join(home, "profiles", request.Candidate+".ruleset")
 		}
-		data, err = readRuleSetFile(path, ruleSetInputLimit)
+		data, err = readRuleSetFile(path, ruleset.InputLimit)
 	case item.URL != "" && (request.Action == "sync" || item.URL != previous.URL):
 		data, err = downloadRuleSet(ctx, item.URL)
 	case previous.Content != "":
-		data, err = readRuleSetFile(previous.path(home, ".source"), ruleSetInputLimit)
+		data, err = readRuleSetFile(previous.path(home, ".source"), ruleset.InputLimit)
 	default:
 		err = errRuleSetInput
 	}
@@ -295,7 +292,7 @@ func prepareRuleSet(ctx context.Context, home string, request ruleSetRequest, it
 		return item, false, err
 	}
 	if item.Format == "auto" {
-		item.Format = detectRuleSetFormat(data)
+		item.Format = ruleset.DetectFormat(data)
 	}
 	behaviors := []string{item.Behavior}
 	if item.Behavior == "auto" {
@@ -304,7 +301,7 @@ func prepareRuleSet(ctx context.Context, home string, request ruleSetRequest, it
 	var compiled []byte
 	var count int
 	for _, behavior := range behaviors {
-		compiled, count, err = compileRuleSet(data, behavior, item.Format)
+		compiled, count, err = ruleset.Compile(data, behavior, item.Format)
 		if err == nil {
 			item.Behavior = behavior
 			break
@@ -315,7 +312,7 @@ func prepareRuleSet(ctx context.Context, home string, request ruleSetRequest, it
 	}
 	item.UpdatedAt = time.Now().UnixMilli()
 	if previous.Content != "" && item.Behavior == previous.Behavior && item.Format == previous.Format {
-		if old, err := readRuleSetFile(previous.path(home, ".source"), ruleSetInputLimit); err == nil && bytes.Equal(old, data) {
+		if old, err := readRuleSetFile(previous.path(home, ".source"), ruleset.InputLimit); err == nil && bytes.Equal(old, data) {
 			if _, err := os.Stat(previous.path(home, ".rules")); err == nil {
 				return item, false, nil
 			}
@@ -339,11 +336,11 @@ func readRuleSetFile(path string, limit int) ([]byte, error) {
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() > int64(limit) {
-		return nil, errRuleSetContent
+		return nil, ruleset.ErrContent
 	}
 	data, err := io.ReadAll(io.LimitReader(file, int64(limit)+1))
 	if err != nil || len(data) > limit {
-		return nil, errRuleSetContent
+		return nil, ruleset.ErrContent
 	}
 	return data, nil
 }
@@ -464,12 +461,12 @@ func downloadRuleSet(ctx context.Context, source string) ([]byte, error) {
 	if response.StatusCode != http.StatusOK {
 		return nil, errRuleSetDownload
 	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, ruleSetInputLimit+1))
+	data, err := io.ReadAll(io.LimitReader(response.Body, ruleset.InputLimit+1))
 	if err != nil {
 		return nil, errRuleSetDownload
 	}
-	if len(data) > ruleSetInputLimit {
-		return nil, errRuleSetContent
+	if len(data) > ruleset.InputLimit {
+		return nil, ruleset.ErrContent
 	}
 	return data, nil
 }
@@ -479,11 +476,11 @@ func ensureRuleSetCompiled(home string, item ruleSetItem, path string) error {
 	if err == nil && info.Mode().IsRegular() {
 		return nil
 	}
-	data, err := readRuleSetFile(item.path(home, ".source"), ruleSetInputLimit)
+	data, err := readRuleSetFile(item.path(home, ".source"), ruleset.InputLimit)
 	if err != nil {
 		return errProfileSettingsIO
 	}
-	compiled, _, err := compileRuleSet(data, item.Behavior, item.Format)
+	compiled, _, err := ruleset.Compile(data, item.Behavior, item.Format)
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,5 @@
-package main
+// Package ruleset 提供规则集标识约定、格式嗅探、MRS 校验与编译能力。
+package ruleset
 
 import (
 	"bytes"
@@ -19,20 +20,36 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-const ruleSetInputLimit = 8 << 20
-const ruleSetOutputLimit = 16 << 20
-const ruleSetLineLimit = 300000
+const InputLimit = 8 << 20
+const OutputLimit = 16 << 20
+const LineLimit = 300000
 
-var errRuleSetContent = errors.New("rule_set_content")
-var ruleSetYAMLHeader = regexp.MustCompile(`(?m)^[\t ]*(payload|rules)[\t ]*:`)
-var ruleSetDomainPattern = regexp.MustCompile(`^[\pL\pM\pN_.+*\-]+$`)
+const managedPrefix = "__arkclash_ruleset_"
 
-func detectRuleSetFormat(data []byte) string {
+var ErrContent = errors.New("rule_set_content")
+
+var (
+	idPattern        = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,79}$`)
+	nonPortableChild = regexp.MustCompile(`(?i)\(\s*(RULE-SET|SUB-RULE|UID|PROCESS-[A-Z-]+)\s*,`)
+	yamlHeader       = regexp.MustCompile(`(?m)^[\t ]*(payload|rules)[\t ]*:`)
+	domainPattern    = regexp.MustCompile(`^[\pL\pM\pN_.+*\-]+$`)
+)
+
+func ValidID(id string) bool { return idPattern.MatchString(id) }
+
+func ManagedName(id string) string { return managedPrefix + id }
+
+func IsManagedName(name string) bool { return strings.HasPrefix(name, managedPrefix) }
+
+// HasNonPortableChild 检测复合规则或 classical 规则集内是否包含不可移植的子规则类型。
+func HasNonPortableChild(line string) bool { return nonPortableChild.MatchString(line) }
+
+func DetectFormat(data []byte) string {
 	if bytes.HasPrefix(data, []byte{0x28, 0xb5, 0x2f, 0xfd}) {
 		return "mrs"
 	}
 	trimmed := bytes.TrimSpace(bytes.TrimPrefix(data, []byte("\xef\xbb\xbf")))
-	if bytes.HasPrefix(trimmed, []byte("{")) || ruleSetYAMLHeader.Match(trimmed) {
+	if bytes.HasPrefix(trimmed, []byte("{")) || yamlHeader.Match(trimmed) {
 		return "yaml"
 	}
 	return "text"
@@ -44,36 +61,36 @@ type ruleSetBuffer struct {
 }
 
 func (b *ruleSetBuffer) Write(data []byte) (int, error) {
-	if len(data) > ruleSetOutputLimit-b.Len() {
+	if len(data) > OutputLimit-b.Len() {
 		b.failed = true
-		return 0, errRuleSetContent
+		return 0, ErrContent
 	}
 	return b.Buffer.Write(data)
 }
 
-func compileRuleSet(data []byte, behavior, format string) (result []byte, count int, err error) {
+func Compile(data []byte, behavior, format string) (result []byte, count int, err error) {
 	defer func() {
 		if recover() != nil {
-			result, count, err = nil, 0, errRuleSetContent
+			result, count, err = nil, 0, ErrContent
 		}
 	}()
-	if len(data) == 0 || len(data) > ruleSetInputLimit {
-		return nil, 0, errRuleSetContent
+	if len(data) == 0 || len(data) > InputLimit {
+		return nil, 0, ErrContent
 	}
 	kind, err := P.ParseBehavior(behavior)
 	if err != nil {
-		return nil, 0, errRuleSetContent
+		return nil, 0, ErrContent
 	}
 	if format == "mrs" {
 		var expanded ruleSetBuffer
-		if !validRuleSetMRS(data, kind) || RP.ConvertToMrs(data, kind, P.MrsRule, &expanded) != nil || expanded.failed {
-			return nil, 0, errRuleSetContent
+		if !ValidateMRS(data, kind) || RP.ConvertToMrs(data, kind, P.MrsRule, &expanded) != nil || expanded.failed {
+			return nil, 0, ErrContent
 		}
 		data = expanded.Bytes()
 		format = "text"
 	}
 	if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
-		return nil, 0, errRuleSetContent
+		return nil, 0, ErrContent
 	}
 	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	var lines []string
@@ -83,7 +100,7 @@ func compileRuleSet(data []byte, behavior, format string) (result []byte, count 
 		decoder := yaml.NewDecoder(bytes.NewReader(data))
 		if decoder.Decode(&root) != nil || decoder.Decode(new(yaml.Node)) != io.EOF ||
 			len(root.Content) != 1 || root.Content[0].Kind != yaml.MappingNode {
-			return nil, 0, errRuleSetContent
+			return nil, 0, ErrContent
 		}
 		fields := root.Content[0].Content
 		for i := 0; i < len(fields); i += 2 {
@@ -91,13 +108,13 @@ func compileRuleSet(data []byte, behavior, format string) (result []byte, count 
 				continue
 			}
 			list := fields[i+1]
-			if lines != nil || list.Kind != yaml.SequenceNode || len(list.Content) > ruleSetLineLimit {
-				return nil, 0, errRuleSetContent
+			if lines != nil || list.Kind != yaml.SequenceNode || len(list.Content) > LineLimit {
+				return nil, 0, ErrContent
 			}
 			lines = make([]string, 0, len(list.Content))
 			for _, node := range list.Content {
 				if node.Kind != yaml.ScalarNode {
-					return nil, 0, errRuleSetContent
+					return nil, 0, ErrContent
 				}
 				lines = append(lines, node.Value)
 			}
@@ -107,61 +124,61 @@ func compileRuleSet(data []byte, behavior, format string) (result []byte, count 
 		for line = range strings.SplitSeq(string(data), "\n") {
 			line = strings.TrimSpace(line)
 			if line != "" && !strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "//") {
-				if len(lines) >= ruleSetLineLimit {
-					return nil, 0, errRuleSetContent
+				if len(lines) >= LineLimit {
+					return nil, 0, ErrContent
 				}
 				lines = append(lines, line)
 			}
 		}
 	default:
-		return nil, 0, errRuleSetContent
+		return nil, 0, ErrContent
 	}
 	if len(lines) == 0 {
-		return nil, 0, errRuleSetContent
+		return nil, 0, ErrContent
 	}
 	var output ruleSetBuffer
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" || len(line) > 2048 || strings.ContainsAny(line, "\x00\r\n") ||
 			strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") {
-			return nil, 0, errRuleSetContent
+			return nil, 0, ErrContent
 		}
 		switch kind {
 		case P.Domain:
-			if !ruleSetDomainPattern.MatchString(line) {
-				return nil, 0, errRuleSetContent
+			if !domainPattern.MatchString(line) {
+				return nil, 0, ErrContent
 			}
 			if _, err := trie.ValidAndSplitDomain(line); err != nil {
-				return nil, 0, errRuleSetContent
+				return nil, 0, ErrContent
 			}
 		case P.IPCIDR:
 			prefix, err := netip.ParsePrefix(line)
 			if err != nil {
-				return nil, 0, errRuleSetContent
+				return nil, 0, ErrContent
 			}
 			line = prefix.Masked().String()
 		case P.Classical:
 			ruleType, payload, target, params := common.ParseRulePayload(line, false)
 			switch ruleType {
 			case "MATCH", "RULE-SET", "SUB-RULE", "UID":
-				return nil, 0, errRuleSetContent
+				return nil, 0, ErrContent
 			}
-			if nonPortableChild.MatchString(line) || strings.HasPrefix(ruleType, "PROCESS-") {
-				return nil, 0, errRuleSetContent
+			if HasNonPortableChild(line) || strings.HasPrefix(ruleType, "PROCESS-") {
+				return nil, 0, ErrContent
 			}
 			if _, err := R.ParseRule(ruleType, payload, target, params, nil); err != nil {
-				return nil, 0, errRuleSetContent
+				return nil, 0, ErrContent
 			}
 		}
 		if _, err := output.Write([]byte(line + "\n")); err != nil {
-			return nil, 0, err
+			return nil, 0, ErrContent
 		}
 	}
 	return output.Bytes(), len(lines), nil
 }
 
 // mihomo 的 MRS 读取器会按文件声明的长度分配。先限制解压量，再核对每个数组和树深。
-func validRuleSetMRS(data []byte, kind P.RuleBehavior) bool {
+func ValidateMRS(data []byte, kind P.RuleBehavior) bool {
 	if kind != P.Domain && kind != P.IPCIDR {
 		return false
 	}
@@ -170,14 +187,14 @@ func validRuleSetMRS(data []byte, kind P.RuleBehavior) bool {
 		return false
 	}
 	defer decoder.Close()
-	plain, err := io.ReadAll(io.LimitReader(decoder, ruleSetOutputLimit+1))
-	if err != nil || len(plain) < 22 || len(plain) > ruleSetOutputLimit || !bytes.Equal(plain[:4], RP.MrsMagicBytes[:]) ||
+	plain, err := io.ReadAll(io.LimitReader(decoder, OutputLimit+1))
+	if err != nil || len(plain) < 22 || len(plain) > OutputLimit || !bytes.Equal(plain[:4], RP.MrsMagicBytes[:]) ||
 		plain[4] != kind.Byte() {
 		return false
 	}
 	count := binary.BigEndian.Uint64(plain[5:13])
 	extra := binary.BigEndian.Uint64(plain[13:21])
-	if count == 0 || count > ruleSetLineLimit || extra > uint64(len(plain)-22) || plain[21+extra] != 1 {
+	if count == 0 || count > LineLimit || extra > uint64(len(plain)-22) || plain[21+extra] != 1 {
 		return false
 	}
 	rest := plain[22+extra:]

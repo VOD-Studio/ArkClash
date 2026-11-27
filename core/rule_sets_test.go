@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -11,51 +10,10 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ruleset"
 	C "github.com/metacubex/mihomo/constant"
-	P "github.com/metacubex/mihomo/constant/provider"
-	RP "github.com/metacubex/mihomo/rules/provider"
 	"github.com/metacubex/mihomo/tunnel"
 )
-
-func TestRuleSetFormats(t *testing.T) {
-	for _, fixture := range []struct {
-		behavior, format, source, compiled string
-	}{
-		{"domain", "yaml", "payload: [+.example.test, other.test]\n", "+.example.test\nother.test\n"},
-		{"ipcidr", "text", "# test\n192.0.2.1/24\n", "192.0.2.0/24\n"},
-		{"classical", "yaml", "rules:\n  - DOMAIN-SUFFIX,example.test\n", "DOMAIN-SUFFIX,example.test\n"},
-	} {
-		got, _, err := compileRuleSet([]byte(fixture.source), fixture.behavior, fixture.format)
-		if err != nil || string(got) != fixture.compiled {
-			t.Fatalf("%s %s: %q, %v", fixture.behavior, fixture.format, got, err)
-		}
-	}
-	for _, fixture := range []struct {
-		kind       P.RuleBehavior
-		name, text string
-	}{
-		{P.Domain, "domain", "+.example.test\nfoo.test\n"},
-		{P.IPCIDR, "ipcidr", "192.0.2.0/24\n2001:db8::/32\n"},
-	} {
-		var binary bytes.Buffer
-		if err := RP.ConvertToMrs([]byte(fixture.text), fixture.kind, P.TextRule, &binary); err != nil {
-			t.Fatal(err)
-		}
-		if detectRuleSetFormat(binary.Bytes()) != "mrs" {
-			t.Fatal("MRS was not detected")
-		}
-		got, count, err := compileRuleSet(binary.Bytes(), fixture.name, "mrs")
-		if err != nil || count != 2 || !bytes.Contains(got, []byte(fixture.text[:12])) {
-			t.Fatalf("MRS %s: %q, %d, %v", fixture.name, got, count, err)
-		}
-		if _, _, err := compileRuleSet(binary.Bytes()[:binary.Len()-1], fixture.name, "mrs"); err == nil {
-			t.Fatal("truncated MRS accepted")
-		}
-	}
-	if _, _, err := compileRuleSet([]byte("RULE-SET,recursive\n"), "classical", "text"); err == nil {
-		t.Fatal("classical set accepted a rule that depends on another provider")
-	}
-}
 
 func TestRuleSetRemoteSyncRejectsBadContent(t *testing.T) {
 	opts := lifecycleOptions(t)
@@ -79,7 +37,7 @@ func TestRuleSetRemoteSyncRejectsBadContent(t *testing.T) {
 	}
 	catalog.ExpectedRevision, catalog.Revision, catalog.Action = "imported", "bad-sync", "sync"
 	source.Store("<html>Error</html>")
-	if err := changeRuleSet(context.Background(), catalog); !errors.Is(err, errRuleSetContent) {
+	if err := changeRuleSet(context.Background(), catalog); !errors.Is(err, ruleset.ErrContent) {
 		t.Fatalf("invalid response was not rejected: %v", err)
 	}
 	catalog.Revision = "good-sync"
@@ -138,7 +96,7 @@ func TestRuleSetLiveUpdateKeepsTunnelAndLastGoodData(t *testing.T) {
 	if !matches("sub.first.test") || matches("second.test") || len(tunnel.RuleProviders()) != 1 {
 		t.Fatal("rule provider did not attach to both references")
 	}
-	if err := save("initial", "broken", "payload: [https://broken.test/path]\n"); !errors.Is(err, errRuleSetContent) {
+	if err := save("initial", "broken", "payload: [https://broken.test/path]\n"); !errors.Is(err, ruleset.ErrContent) {
 		t.Fatalf("invalid update: %v", err)
 	}
 	if !matches("sub.first.test") {

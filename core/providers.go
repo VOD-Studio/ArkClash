@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ruleset"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
 	"github.com/metacubex/mihomo/adapter/provider"
@@ -211,7 +212,7 @@ func providerVehicleString(vt P.VehicleType) string {
 }
 
 func isManagedRuleProvider(name string) bool {
-	return strings.HasPrefix(name, managedRuleSetName(""))
+	return ruleset.IsManagedName(name)
 }
 
 func invalidateProviderManagerLocked() {
@@ -681,7 +682,7 @@ func validateRuleProviderCandidate(data []byte, behavior P.RuleBehavior, format 
 		return errProviderInvalidContent
 	}
 	if format == P.MrsRule {
-		if len(data) > ruleSetInputLimit || !validRuleSetMRS(data, behavior) {
+		if len(data) > ruleset.InputLimit || !ruleset.ValidateMRS(data, behavior) {
 			return errProviderInvalidContent
 		}
 		return nil

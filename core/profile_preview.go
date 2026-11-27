@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ruleset"
 	"github.com/VOD-Studio/ArkClash/core/internal/script"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
@@ -263,7 +264,7 @@ func sanitizePreviewError(err error) error {
 		errors.Is(err, errDNSProxyServersRequired),
 		errors.Is(err, errRuleSetInUse),
 		errors.Is(err, errRuleSetInput),
-		errors.Is(err, errRuleSetContent),
+		errors.Is(err, ruleset.ErrContent),
 		errors.Is(err, errProfileSettingsInvalid),
 		errors.Is(err, errProfileSettingsIO),
 		errors.Is(err, errDNSInvalid),

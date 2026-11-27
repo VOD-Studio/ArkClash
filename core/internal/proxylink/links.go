@@ -1,4 +1,5 @@
-package main
+// Package proxylink 提供自定义代理节点的分享链接编解码能力。
+package proxylink
 
 import (
 	"encoding/base64"
@@ -14,14 +15,14 @@ import (
 // 分享链接格式和逆向编码来自 FlClash（GPL-3.0）。
 // https://github.com/chen08209/FlClash/blob/be84736605527034689c95bf27828ff27d912c5e/core/share_link.go
 // https://github.com/chen08209/FlClash/commit/47824d4
-func encodeLocalProxyLinks(definitions []map[string]any) []string {
+func Encode(definitions []map[string]any) []string {
 	links := make([]string, len(definitions))
 	for i, mapping := range definitions {
 		link := encodeShareLink(proxyFields(mapping))
 		if link == "" {
 			continue
 		}
-		converted := decodeLocalProxyLink(link)
+		converted := Decode(link)
 		if len(converted) == 1 && converted[0]["type"] == mapping["type"] {
 			links[i] = link
 		}
@@ -29,7 +30,7 @@ func encodeLocalProxyLinks(definitions []map[string]any) []string {
 	return links
 }
 
-func decodeLocalProxyLink(line string) []map[string]any {
+func Decode(line string) []map[string]any {
 	proxies, err := convert.ConvertsV2Ray([]byte(line))
 	if err != nil {
 		return []map[string]any{}

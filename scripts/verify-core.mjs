@@ -51,7 +51,7 @@ before(async () => {
   }
 
   // 预热编译缓存，不执行测试。
-  const prewarm = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-run=^$', '.', './internal/backup', './internal/script'], {
+  const prewarm = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-run=^$', '.', './internal/...'], {
     timeout: 600000
   });
   assert.equal(prewarm.status, 0, `${prewarm.error ?? ''}\n${prewarm.stdout}\n${prewarm.stderr}`);
@@ -87,6 +87,21 @@ test('ZIP 备份、原子恢复和 WebDAV', { timeout: 90000 }, () => {
 
 test('QuickJS 配置脚本与执行限额', { timeout: 90000 }, () => {
   const result = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-count=1', '-v', './internal/script'], {
+    timeout: 85000
+  });
+  assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
+  console.log(result.stdout.trim());
+});
+
+test('内部纯引擎与独立子系统', { timeout: 90000 }, () => {
+  const listed = runGo(['list', '-mod=readonly', '-modfile', modfile, './internal/...'], { timeout: 30000 });
+  assert.equal(listed.status, 0, `${listed.error ?? ''}\n${listed.stdout}\n${listed.stderr}`);
+  const pkgs = listed.stdout.split(/\r?\n/).map(line => line.trim())
+    .filter(pkg => pkg && !pkg.endsWith('/internal/backup') && !pkg.endsWith('/internal/script'));
+  if (pkgs.length === 0) {
+    return;
+  }
+  const result = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-count=1', '-v', ...pkgs], {
     timeout: 85000
   });
   assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);

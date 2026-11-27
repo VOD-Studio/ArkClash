@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ruleset"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
 	"github.com/metacubex/mihomo/config"
@@ -47,7 +48,6 @@ type addedRuleExit struct {
 	Target string `json:"target"`
 }
 
-var nonPortableChild = regexp.MustCompile(`(?i)\(\s*(RULE-SET|SUB-RULE|UID|PROCESS-[A-Z-]+)\s*,`)
 var addedRulesProfileID = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
 var errAddedRulesMatchTarget = errors.New("added_rules_match_target")
 
@@ -65,7 +65,7 @@ func (r addedRule) valid() bool {
 	}
 	switch r.Kind {
 	case "RULE-SET":
-		return ruleSetID.MatchString(r.Payload)
+		return ruleset.ValidID(r.Payload)
 	case "IP-CIDR", "IP-CIDR6", "IP-SUFFIX", "IP-ASN", "GEOIP":
 		return !strings.Contains(r.Payload, ",")
 	case "DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-WILDCARD", "GEOSITE", "SRC-GEOIP",
@@ -73,7 +73,7 @@ func (r addedRule) valid() bool {
 		"IN-USER", "IN-NAME", "REMATCH-NAME", "NETWORK", "DSCP":
 		return !r.NoResolve && !r.Source && !strings.Contains(r.Payload, ",")
 	case "AND", "OR", "NOT":
-		return !r.NoResolve && !r.Source && !nonPortableChild.MatchString(r.Payload)
+		return !r.NoResolve && !r.Source && !ruleset.HasNonPortableChild(r.Payload)
 	case "DOMAIN-REGEX":
 		return !r.NoResolve && !r.Source
 	default:
@@ -243,7 +243,7 @@ func validExitName(name string) bool {
 func (r addedRule) raw(target string) string {
 	payload := r.Payload
 	if r.Kind == "RULE-SET" {
-		payload = managedRuleSetName(payload)
+		payload = ruleset.ManagedName(payload)
 	}
 	text := r.Kind + "," + payload + "," + target
 	if r.NoResolve {
