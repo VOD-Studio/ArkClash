@@ -6,7 +6,7 @@ export function installConfigSource(link: string): string | undefined {
     return undefined;
   }
   try {
-    const urls = new url.URL(link).searchParams.getAll('url');
+    const urls = url.URL.parseURL(link).params.getAll('url');
     if (urls.length !== 1) { return undefined; }
     const source = urls[0].trim();
     return validSubscriptionUrl(source) ? source : undefined;

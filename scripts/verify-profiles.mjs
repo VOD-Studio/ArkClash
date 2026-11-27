@@ -57,12 +57,18 @@ const fileIo = {
   }
 };
 
+// 鸿蒙的 url.URL 比 Node 多出 parseURL 和 params；IconSetModel 等仍用构造函数，两种写法都要能跑。
+class OhosURL extends URL {
+  static parseURL(input, base) { return new OhosURL(input, base); }
+  get params() { return this.searchParams; }
+}
+
 const kits = {
   '@kit.AbilityKit': {},
   '@kit.BasicServicesKit': {},
   '@kit.CoreFileKit': { fileIo },
   '@kit.NetworkKit': { http: {} },
-  '@kit.ArkTS': { taskpool: { execute: async (operation, ...args) => operation(...args) }, url: { URL }, util: {
+  '@kit.ArkTS': { taskpool: { execute: async (operation, ...args) => operation(...args) }, url: { URL: OhosURL }, util: {
     TextEncoder: class { encodeInto(text) { return new TextEncoder().encode(text); } },
     TextDecoder: class extends TextDecoder { decodeToString(bytes) { return this.decode(bytes); } },
     Base64Helper: class { async encodeToString(bytes) { return Buffer.from(bytes).toString('base64'); } }
