@@ -9,6 +9,7 @@ import { ScrollDestination } from '../../components/ScrollDestination';
 import { KeyedListSource } from '../../components/KeyedListSource';
 import { HEADER_ACTION, HEADER_ICON_SIZE, HEADER_GAP, PAGE_GUTTER } from '../../components/Theme';
 import { AddedRuleDraft, AddedRuleEditor } from './AddedRuleEditor';
+import { AddedRuleDeleteSheet, RULE_DELETE_PREVIEW_LIMIT, RuleDeletePreview } from './AddedRuleDeleteSheet';
 import { AddedRulePresets } from './AddedRulePresets';
 import { AddedRulesEmpty } from './AddedRulesEmpty';
 import { ProfileRuleOptions } from './ProfileRuleOptions';
@@ -53,6 +54,8 @@ export struct AddedRulesPage {
   @Local private presetsShown: boolean = false;
   @Local private presetExisting: string[] = [];
   @Local private deleteShown: boolean = false;
+  @Local private deletePreviews: RuleDeletePreview[] = [];
+  @Local private deleteTotal: number = 0;
   @Local private discardRequested: boolean = false;
   @Local private editIssue: ResourceStr = '';
   @Local private ruleSets: RuleSetItem[] = cachedAddedRuleSets ?? [];
@@ -304,6 +307,31 @@ export struct AddedRulesPage {
     return this.visibleIds.filter((id: string): boolean => selected.has(id));
   }
 
+  private openDelete(): void {
+    const selected = new Set<string>(this.selectedVisible());
+    if (this.saving || selected.size === 0) {
+      return;
+    }
+    // 打开时取一次快照；抽屉是模态的，开着时选择不会再变。
+    const previews: RuleDeletePreview[] = [];
+    for (const rule of this.rules()) {
+      if (previews.length >= RULE_DELETE_PREVIEW_LIMIT) {
+        break;
+      }
+      if (selected.has(rule.id)) {
+        previews.push({
+          key: rule.id, kind: rule.kind, target: rule.target, customExit: rule.customExit === true,
+          payload: rule.kind === 'RULE-SET' ?
+            this.ruleSets.find((item: RuleSetItem): boolean => item.id === rule.payload)?.name ?? rule.payload :
+            rule.payload
+        });
+      }
+    }
+    this.deletePreviews = previews;
+    this.deleteTotal = selected.size;
+    this.deleteShown = true;
+  }
+
   private deleteSelected(): void {
     const selected = new Set<string>(this.selectedVisible());
     this.commit(this.rules().filter((rule: AddedRule): boolean => !selected.has(rule.id)));
@@ -350,7 +378,7 @@ export struct AddedRulesPage {
         AddedRuleHeaderButton({ icon: $r('sys.symbol.checkmark'), label: $r('app.string.added_rules_select_all'),
           available: !this.saving && this.visibleCount > 0, onPress: (): void => this.selectVisible() })
         AddedRuleHeaderButton({ icon: $r('sys.symbol.trash'), label: $r('app.string.action_delete'),
-          available: !this.saving && this.selectedVisible().length > 0, onPress: (): void => { this.deleteShown = true; } })
+          available: !this.saving && this.selectedVisible().length > 0, onPress: (): void => this.openDelete() })
       } else {
         AddedRuleHeaderButton({ icon: $r('sys.symbol.magnifyingglass'), label: $r('app.string.diagnostics_search'),
           available: !this.loading && !this.loadFailed, onPress: (): void => this.toggleSearch() })
@@ -397,21 +425,11 @@ export struct AddedRulesPage {
 
   @Builder
   DeleteSheet() {
-    Column({ space: 16 }) {
-      Text($r('app.string.added_rules_delete_count', this.selectedVisible().length))
-        .fontFamily(this.appStyle.fontFamily)
-        .fontSize(16)
-        .width('100%')
-      Row({ space: 12 }) {
-        Button($r('app.string.action_cancel')).buttonStyle(ButtonStyleMode.NORMAL).layoutWeight(1)
-          .onClick((): void => { this.deleteShown = false; })
-        Button($r('app.string.action_delete')).role(ButtonRole.ERROR).layoutWeight(1)
-          .onClick((): void => this.deleteSelected())
-      }
-      .width('100%')
-    }
-    .width('100%').enabled(!this.saving)
-    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
+    AddedRuleDeleteSheet({
+      previews: this.deletePreviews, total: this.deleteTotal, saving: this.saving, motion: !this.reduceMotion,
+      onConfirm: (): void => this.deleteSelected(),
+      onCancel: (): void => { if (!this.saving) { this.deleteShown = false; } }
+    })
   }
 
   @Builder
@@ -485,8 +503,8 @@ export struct AddedRulesPage {
       Stack() {
         this.Content()
         Column()
-          // 两个抽屉的标题区和关闭按钮由内容自己绘制。编辑抽屉高度跟随内容，约占半屏；
-          // 预设列表超过一屏，直接用大尺寸，按钮固定在底部。
+          // 编辑、快捷操作、删除三个抽屉的标题区由内容自己绘制，不用系统标题和关闭按钮。
+          // 编辑和删除抽屉高度跟随内容；预设列表超过一屏，直接用大尺寸，按钮固定在底部。
           .bindSheet($$this.editShown, this.EditorSheet, {
             height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
             // 键盘弹起时整个抽屉抬到键盘上方并压缩高度，保存按钮滚动可达，不被键盘挡住。
@@ -503,8 +521,8 @@ export struct AddedRulesPage {
           })
         Column()
           .bindSheet($$this.deleteShown, this.DeleteSheet, {
-            title: { title: $r('app.string.action_delete') }, height: SheetSize.FIT_CONTENT,
-            systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+            height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
+            systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
             onWillDismiss: (action: DismissSheetAction): void => { if (!this.saving) { action.dismiss(); } }
           })
       }

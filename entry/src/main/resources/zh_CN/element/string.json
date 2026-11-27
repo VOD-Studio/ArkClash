@@ -2741,6 +2741,14 @@
       "value": "删除选中的 %d 条规则？"
     },
     {
+      "name": "added_rules_delete_hint",
+      "value": "删除后不能撤销。"
+    },
+    {
+      "name": "added_rules_delete_more",
+      "value": "以及另外 %d 条"
+    },
+    {
       "name": "added_rules_search_hint",
       "value": "搜索类型、内容或策略"
     },

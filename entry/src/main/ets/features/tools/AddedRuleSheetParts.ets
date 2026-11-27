@@ -103,32 +103,41 @@ export struct RuleSheetHeader {
   }
 }
 
-/** 通栏品牌色主按钮；进行中在按钮内转圈，不另加提示。 */
+/**
+ * 通栏主按钮；进行中在按钮内转圈，不另加提示。
+ * danger 用于删除这类不可撤销的操作：浅红底配红字，醒目但不刺眼。
+ */
 @ComponentV2
 export struct RulePrimaryButton {
   @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require label: ResourceStr;
+  @Param busyLabel: ResourceStr = $r('app.string.access_control_saving');
+  @Param danger: boolean = false;
   @Param busy: boolean = false;
   @Param available: boolean = true;
   @Event onPress: () => void = (): void => {};
+
+  private ink(): ResourceColor {
+    return this.danger ? $r('app.color.status_error') : this.appStyle.palette.onBrand;
+  }
 
   build() {
     Button({ type: ButtonType.Capsule, stateEffect: true }) {
       Row({ space: 8 }) {
         if (this.busy) {
-          LoadingProgress().width(20).height(20).color(this.appStyle.palette.onBrand)
+          LoadingProgress().width(20).height(20).color(this.ink())
         }
-        Text(this.busy ? $r('app.string.access_control_saving') : this.label)
+        Text(this.busy ? this.busyLabel : this.label)
           .fontFamily(this.appStyle.fontFamily)
           .fontSize(16)
           .fontWeight(600)
-          .fontColor(this.appStyle.palette.onBrand)
+          .fontColor(this.ink())
           .maxLines(1)
       }
     }
     .width('100%')
     .height(RULE_ACTION_HEIGHT)
-    .backgroundColor(this.appStyle.palette.brand)
+    .backgroundColor(this.danger ? $r('app.color.profile_expiry_error_tonal') : this.appStyle.palette.brand)
     // 进行中保持实色显示转圈，只是不再响应点击。
     .enabled(this.available || this.busy)
     .onClick((): void => {

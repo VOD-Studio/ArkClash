@@ -2761,6 +2761,14 @@
       "value": "Delete %d rules?"
     },
     {
+      "name": "added_rules_delete_hint",
+      "value": "This can't be undone."
+    },
+    {
+      "name": "added_rules_delete_more",
+      "value": "And %d more"
+    },
+    {
       "name": "added_rules_search_hint",
       "value": "Search type, content, or policy"
     },
