@@ -368,9 +368,7 @@ func applyProfileScript(ctx context.Context, request scriptApplyRequest) error {
 		if eng.tun != nil && !dnsListenerAvailable(inbounds.dnsListen, inbounds.dnsMark) {
 			return errScriptConfig
 		}
-		wait, err := applyReloadLocked(next, cfg, inbounds)
-		tx.deferUnlock(wait)
-		if err != nil {
+		if _, err := tx.CommitReload(reloadPlan{Next: next, Cfg: cfg, Inbound: inbounds}); err != nil {
 			return errScriptApply
 		}
 		return nil

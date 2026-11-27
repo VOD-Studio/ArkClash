@@ -293,8 +293,7 @@ func updateDNSOverrides(request dnsOverrideRequest) error {
 		}
 		next := eng.current
 		next.DNS = request.Settings
-		wait, err := applyProfileSettingsLocked(next, dnsOverridesPath(next.HomeDir), next.DNS)
-		tx.deferUnlock(wait)
+		err := tx.CommitSettingsFile(next, dnsOverridesPath(next.HomeDir), next.DNS)
 		switch err {
 		case nil:
 			return nil

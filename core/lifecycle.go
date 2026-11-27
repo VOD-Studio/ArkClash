@@ -286,53 +286,9 @@ func reload(path, profile string, expectedProfile *string) error {
 		if err != nil {
 			return err
 		}
-		waitDiagnostics, err := applyReloadLocked(next, cfg, nextInbound)
-		tx.deferUnlock(waitDiagnostics)
+		_, err = tx.CommitReload(reloadPlan{Next: next, Cfg: cfg, Inbound: nextInbound})
 		return err
 	})
-}
-
-func applyReloadLocked(next startOptions, cfg *config.Config, nextInbound inboundSettings) (func(), error) {
-	return reloadPreparedLocked(next, cfg, nextInbound, false)
-}
-
-func reloadPreparedLocked(next startOptions, cfg *config.Config, nextInbound inboundSettings, canRestore bool) (func(), error) {
-	cancelDelayTests()
-	eng.providers.Invalidate()
-	attached := eng.tun != nil
-	// 始终先屏蔽，避免 executor 接管平台 TUN，也避免失败时暴露部分入口。
-	if err := closeBusinessInbounds(); err != nil {
-		eng.cleanupFailure = errors.Join(eng.cleanupFailure, err, stopTun())
-		resolver.ResetConnection()
-		eng.publishRuntimeLocked()
-		return nil, eng.cleanupFailure
-	}
-	waitDiagnostics := reloadDiagnosticsLocked()
-	constant.SetConfig(next.ConfigPath)
-	executor.ApplyConfig(withoutBusinessInbounds(cfg), true)
-	eng.desiredInbound = nextInbound
-	eng.current = next
-	eng.configRevision++
-	ensureDiagnosticCaptureCollectorsLocked()
-	resetProxyIdentities()
-	watchRuntimeRoutes(cfg)
-	eng.providers.Reset(providers.Identity{
-		BootID: eng.bootID, ConfigRevision: eng.configRevision, Profile: eng.current.Profile, HomeDir: eng.current.HomeDir,
-	}, cfg)
-	log.Infoln("[ArkClash] reloaded profile %s", next.Profile)
-	var inboundErr error
-	if attached {
-		inboundErr = restoreBusinessInbounds()
-		if inboundErr != nil && canRestore {
-			return waitDiagnostics, inboundErr
-		}
-		if inboundErr != nil {
-			eng.cleanupFailure = errors.Join(eng.cleanupFailure, closeBusinessInbounds(), stopTun())
-		}
-	}
-	eng.publishRuntimeLocked()
-	emit(reloadedEvent{Type: "reloaded", Profile: next.Profile})
-	return waitDiagnostics, errors.Join(inboundErr, eng.cleanupFailure)
 }
 
 // 推给界面的「热切换完成」事件，格式和 entry/src/main/ets/client/ 里的解析一致。

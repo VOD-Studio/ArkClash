@@ -181,8 +181,7 @@ func applyBackup(req backupApplyRequest) error {
 		if err != nil {
 			return err
 		}
-		retired, err := applyReloadLocked(next, cfg, inbound)
-		tx.deferUnlock(retired)
+		_, err = tx.CommitReload(reloadPlan{Next: next, Cfg: cfg, Inbound: inbound})
 		if err == nil {
 			if panelErr := setPanelControllerLocked(next.General.ControllerSecret); panelErr != nil {
 				log.Warnln("[ArkClash] external controller port unavailable")

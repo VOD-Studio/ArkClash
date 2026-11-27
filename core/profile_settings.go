@@ -62,63 +62,60 @@ func profileSettingsCurrent(bootID, expected, previous, next string) bool {
 	return eng.running && bootID != "" && bootID == eng.bootID && expected == previous && next != expected
 }
 
-// 调用方持有 eng.mu。退役诊断任务的等待回调须在解锁后调用。
-func applyProfileSettingsLocked(next startOptions, path string, value any) (func(), error) {
-	if eng.cleanupFailure != nil {
-		return nil, errProfileSettingsApply
+// CommitSettingsFile 统一执行设置文件暂存、按需热切换、原子改名与失败回滚。
+func (tx *stateTx) CommitSettingsFile(next startOptions, path string, value any) error {
+	e := tx.e
+	if e.cleanupFailure != nil {
+		return errProfileSettingsApply
 	}
-	previous := eng.current
+	previous := e.current
+	previousInbound := e.desiredInbound
 	var nextInbound inboundSettings
 	var cfg *config.Config
 	if next.Profile != "" {
 		var err error
 		cfg, err = parseProfileSettingsConfig(&next, &nextInbound)
 		if errors.Is(err, errDNSProxyServersRequired) || errors.Is(err, errAddedRulesMatchTarget) {
-			return nil, err
+			return err
 		}
 		if err != nil {
-			return nil, errProfileSettingsInvalid
+			return errProfileSettingsInvalid
 		}
-		if eng.tun != nil && !dnsListenerAvailable(nextInbound.dnsListen, nextInbound.dnsMark) {
-			return nil, errProfileSettingsListen
+		if e.tun != nil && !dnsListenerAvailable(nextInbound.dnsListen, nextInbound.dnsMark) {
+			return errProfileSettingsListen
 		}
 	}
 	staged, err := stageProfileSettings(path, value)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer os.Remove(staged)
-	var wait func()
+	applied := false
 	if cfg != nil {
-		wait, err = applyReloadLocked(next, cfg, nextInbound)
+		applied, err = tx.CommitReload(reloadPlan{
+			Next:    next,
+			Cfg:     cfg,
+			Inbound: nextInbound,
+		})
 	}
 	if err == nil {
 		if err = os.Rename(staged, path); err == nil {
-			eng.setCurrentLocked(next)
-			return wait, nil
+			if !applied {
+				e.setCurrentLocked(next)
+			}
+			return nil
 		}
 		err = errProfileSettingsIO
 	} else {
 		err = errProfileSettingsApply
 	}
-	if wait == nil {
-		return nil, err
+	if !applied {
+		return err
 	}
-	var previousInbound inboundSettings
-	old, parseErr := parseProfileSettingsConfig(&previous, &previousInbound)
-	if parseErr != nil {
-		return wait, errProfileSettingsApply
+	if tx.RollbackReload(previous, previousInbound) != nil {
+		return errProfileSettingsApply
 	}
-	waitRollback, rollbackErr := applyReloadLocked(previous, old, previousInbound)
-	if rollbackErr != nil {
-		err = errProfileSettingsApply
-	}
-	return func() {
-		wait()
-		if waitRollback != nil {
-			waitRollback()
-		}
-	}, err
+	return err
 }
 
 func parseProfileSettingsConfig(options *startOptions, inbounds *inboundSettings) (*config.Config, error) {

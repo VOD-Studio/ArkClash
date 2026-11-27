@@ -391,9 +391,7 @@ func updateAddedRules(request profileSettingsRequest[addedRulesSettings]) error 
 			eng.setCurrentLocked(next)
 			return nil
 		}
-		wait, err := applyProfileSettingsLocked(next, addedRulesPath(next.HomeDir), next.AddedRules)
-		tx.deferUnlock(wait)
-		return err
+		return tx.CommitSettingsFile(next, addedRulesPath(next.HomeDir), next.AddedRules)
 	})
 }
 

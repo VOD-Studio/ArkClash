@@ -2,14 +2,19 @@ package main
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 
 	"github.com/VOD-Studio/ArkClash/core/internal/providers"
 	"github.com/metacubex/http"
+	"github.com/metacubex/mihomo/component/resolver"
+	"github.com/metacubex/mihomo/config"
 	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/hub/executor"
 	LC "github.com/metacubex/mihomo/listener/config"
 	"github.com/metacubex/mihomo/listener/sing_tun"
+	"github.com/metacubex/mihomo/log"
 	"github.com/metacubex/mihomo/tunnel"
 )
 
@@ -191,4 +196,75 @@ func (e *coreEngine) ConfigSpec() (configSpec, bool) {
 func (e *coreEngine) setCurrentLocked(next startOptions) {
 	e.current = next
 	e.publishRuntimeLocked()
+}
+
+type reloadPlan struct {
+	Next                 startOptions
+	Cfg                  *config.Config
+	Inbound              inboundSettings
+	AllowInboundRollback bool
+}
+
+// CommitReload 按固定 8 步顺序执行配置热切换，显式返回 applied 标记是否已应用新配置。
+// 若 closeBusinessInbounds 失败则返回 applied=false，不退休诊断采集器。
+func (tx *stateTx) CommitReload(plan reloadPlan) (bool, error) {
+	e := tx.e
+	cancelDelayTests()
+	e.providers.Invalidate()
+	attached := e.tun != nil
+	// 始终先屏蔽，避免 executor 接管平台 TUN，也避免失败时暴露部分入口。
+	if err := closeBusinessInbounds(); err != nil {
+		e.cleanupFailure = errors.Join(e.cleanupFailure, err, stopTun())
+		resolver.ResetConnection()
+		e.publishRuntimeLocked()
+		return false, e.cleanupFailure
+	}
+	tx.deferUnlock(reloadDiagnosticsLocked())
+	C.SetConfig(plan.Next.ConfigPath)
+	executor.ApplyConfig(withoutBusinessInbounds(plan.Cfg), true)
+	e.desiredInbound = plan.Inbound
+	e.current = plan.Next
+	e.configRevision++
+	ensureDiagnosticCaptureCollectorsLocked()
+	resetProxyIdentities()
+	watchRuntimeRoutes(plan.Cfg)
+	e.providers.Reset(providers.Identity{
+		BootID: e.bootID, ConfigRevision: e.configRevision, Profile: e.current.Profile, HomeDir: e.current.HomeDir,
+	}, plan.Cfg)
+	log.Infoln("[ArkClash] reloaded profile %s", plan.Next.Profile)
+	var inboundErr error
+	if attached {
+		inboundErr = restoreBusinessInbounds()
+		if inboundErr != nil && plan.AllowInboundRollback {
+			return true, inboundErr
+		}
+		if inboundErr != nil {
+			e.cleanupFailure = errors.Join(e.cleanupFailure, closeBusinessInbounds(), stopTun())
+		}
+	}
+	e.publishRuntimeLocked()
+	emit(reloadedEvent{Type: "reloaded", Profile: plan.Next.Profile})
+	return true, errors.Join(inboundErr, e.cleanupFailure)
+}
+
+// RollbackReload 在新配置已应用但后续原子改名或入口恢复失败时重解析并回滚至 previous。
+// 若重解析或回滚热切换也失败，统一进入失败状态（记 cleanupFailure、关闭入口并停掉 TUN、发布快照），
+// 避免运行配置与磁盘文件静默分叉。
+func (tx *stateTx) RollbackReload(previous startOptions, fallbackInbound inboundSettings) error {
+	e := tx.e
+	previousInbound := fallbackInbound
+	oldCfg, parseErr := parseProfileSettingsConfig(&previous, &previousInbound)
+	if parseErr == nil {
+		_, parseErr = tx.CommitReload(reloadPlan{
+			Next:    previous,
+			Cfg:     oldCfg,
+			Inbound: previousInbound,
+		})
+	}
+	if parseErr != nil {
+		e.cleanupFailure = errors.Join(e.cleanupFailure, closeBusinessInbounds(), stopTun(), parseErr)
+		e.setCurrentLocked(previous)
+		return parseErr
+	}
+	return nil
 }

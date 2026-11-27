@@ -410,9 +410,7 @@ func commitRuleSets(ctx context.Context, request ruleSetRequest, catalog ruleSet
 		if active && changed {
 			next := eng.current
 			next.RuleSets = catalog
-			wait, err := applyProfileSettingsLocked(next, path, catalog)
-			tx.deferUnlock(wait)
-			return err
+			return tx.CommitSettingsFile(next, path, catalog)
 		}
 		staged, err := stageProfileSettings(path, catalog)
 		if err != nil {

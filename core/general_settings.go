@@ -743,10 +743,14 @@ func updateGeneralSettings(request profileSettingsRequest[generalSettings]) erro
 		oldDNS := captureDNSRuntime()
 		appliedLive := false
 
-		var wait func()
+		appliedReload := false
 		if rebuild {
-			wait, err = reloadPreparedLocked(next, cfg, targetInbound, true)
-			tx.deferUnlock(wait)
+			appliedReload, err = tx.CommitReload(reloadPlan{
+				Next:                 next,
+				Cfg:                  cfg,
+				Inbound:              targetInbound,
+				AllowInboundRollback: true,
+			})
 		} else {
 			err = applyGeneralListenersLocked(targetInbound, s.Authentication)
 			if err == nil && liveGeneralChanged {
@@ -797,16 +801,8 @@ func updateGeneralSettings(request profileSettingsRequest[generalSettings]) erro
 			err = errGeneralPort
 		}
 
-		if rebuild && wait != nil {
-			previousConfig, parseErr := parseProfileSettingsConfig(&old, &previousInbound)
-			if parseErr == nil {
-				var rollback func()
-				rollback, parseErr = reloadPreparedLocked(old, previousConfig, previousInbound, false)
-				tx.deferUnlock(rollback)
-			}
-			if parseErr != nil {
-				eng.cleanupFailure = errors.Join(eng.cleanupFailure, closeBusinessInbounds(), stopTun(), parseErr)
-			}
+		if rebuild && appliedReload {
+			_ = tx.RollbackReload(old, previousInbound)
 		} else if !rebuild {
 			if appliedLive {
 				mihomoHttp.SetUA(oldUA)
@@ -832,17 +828,6 @@ func updateGeneralSettings(request profileSettingsRequest[generalSettings]) erro
 		log.SetLevel(old.General.level())
 		return err
 	})
-}
-
-func together(first, second func()) func() {
-	return func() {
-		if first != nil {
-			first()
-		}
-		if second != nil {
-			second()
-		}
-	}
 }
 
 func portsFromInbound(b config.Inbound) generalPorts {
