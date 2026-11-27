@@ -43,18 +43,18 @@ lint_go() {
     lint_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-lint.XXXXXX")" || exit 1
     trap 'rm -rf "$lint_deps"' EXIT
     bash "$ROOT/scripts/prepare-core-modfile.sh" "$lint_deps" || exit 1
-    cd core
+    cd core || exit 1
 
     # 校验构建标签隔离、Cgo 边界、backupstore 依赖、init() 白名单与 C ABI 导出位置。
-    go run "$ROOT/scripts/ci/check-core-arch/main.go" -core "$ROOT/core" -modfile "$lint_deps/go.mod"
+    go run "$ROOT/scripts/ci/check-core-arch/main.go" -core "$ROOT/core" -modfile "$lint_deps/go.mod" || exit 1
 
     # 无 NDK 时也能检查全部纯 Go 与宿主 cgo（QuickJS/backupstore）代码。
-    CGO_ENABLED=1 go vet -modfile "$lint_deps/go.mod" -tags with_gvisor ./...
+    CGO_ENABLED=1 go vet -modfile "$lint_deps/go.mod" -tags with_gvisor ./... || exit 1
 
     # 内核平台代码用 cgo 引用 OHOS NDK 的头文件，含 ohos 标签的 vet 仍需 NDK 编译器。
     if [[ -x "$clang" ]]; then
       CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" \
-        go vet -modfile "$lint_deps/go.mod" -tags with_gvisor,ohos ./...
+        go vet -modfile "$lint_deps/go.mod" -tags with_gvisor,ohos ./... || exit 1
     else
       echo "跳过 OHOS NDK go vet：找不到 OHOS NDK（${clang}）"
     fi
@@ -143,12 +143,12 @@ lint_vuln() {
       vuln_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-vuln.XXXXXX")" || exit 1
       trap 'rm -rf "$vuln_deps"' EXIT
       bash "$ROOT/scripts/prepare-core-modfile.sh" "$vuln_deps" || exit 1
-      cp -R core "$vuln_deps/core"
-      chmod -R u+w "$vuln_deps/core"
-      cp "$vuln_deps/go.mod" "$vuln_deps/go.sum" "$vuln_deps/core/"
-      cd "$vuln_deps/core"
+      cp -R core "$vuln_deps/core" || exit 1
+      chmod -R u+w "$vuln_deps/core" || exit 1
+      cp "$vuln_deps/go.mod" "$vuln_deps/go.sum" "$vuln_deps/core/" || exit 1
+      cd "$vuln_deps/core" || exit 1
       CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" \
-        "$ROOT/.toolchain/bin/govulncheck" -tags with_gvisor,ohos ./...
+        "$ROOT/.toolchain/bin/govulncheck" -tags with_gvisor,ohos ./... || exit 1
     ) || failed=1
   else
     echo "跳过：找不到 OHOS NDK（${clang}）"
