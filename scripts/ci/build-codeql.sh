@@ -13,18 +13,8 @@ fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+bash "$ROOT/scripts/prepare-core-modfile.sh" "$WORK"
 cd "$ROOT/core"
-cp go.mod go.sum "$WORK/"
-bash "$ROOT/scripts/prepare-mihomo.sh" "$WORK/mihomo"
-bash "$ROOT/scripts/prepare-tailscale.sh" "$WORK/tailscale" "$WORK/go.mod"
-go mod download github.com/metacubex/gvisor
-GVISOR_DIR="$(go list -m -f '{{.Dir}}' github.com/metacubex/gvisor)"
-cp -R "$GVISOR_DIR" "$WORK/gvisor"
-chmod -R u+w "$WORK/gvisor"
-patch -s -p1 -d "$WORK/gvisor" < "$ROOT/scripts/gvisor-fdbased.patch"
-go mod edit -modfile "$WORK/go.mod" \
-  "-replace=github.com/metacubex/mihomo=$WORK/mihomo" \
-  "-replace=github.com/metacubex/gvisor=$WORK/gvisor"
 
 quickjs_dir="$(bash "$ROOT/scripts/prepare-quickjs.sh")"
 export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$quickjs_dir\""

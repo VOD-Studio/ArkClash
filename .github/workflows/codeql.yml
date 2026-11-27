@@ -10,6 +10,7 @@ on:
       - core/**
       - scripts/build-core.sh
       - scripts/ci/build-codeql.sh
+      - scripts/prepare-core-modfile.sh
       - scripts/prepare-mihomo.sh
       - scripts/prepare-tailscale.sh
       - scripts/env.sh

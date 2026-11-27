@@ -39,11 +39,8 @@ lint_go() {
     (
       lint_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-lint.XXXXXX")" || exit 1
       trap 'rm -rf "$lint_deps"' EXIT
-      bash "$ROOT/scripts/prepare-mihomo.sh" "$lint_deps/mihomo" || exit 1
-      cp core/go.mod core/go.sum "$lint_deps/"
+      bash "$ROOT/scripts/prepare-core-modfile.sh" "$lint_deps" || exit 1
       cd core
-      go mod edit -modfile "$lint_deps/go.mod" "-replace=github.com/metacubex/mihomo=$lint_deps/mihomo"
-      bash "$ROOT/scripts/prepare-tailscale.sh" "$lint_deps/tailscale" "$lint_deps/go.mod" || exit 1
       CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" go vet -modfile "$lint_deps/go.mod" -tags with_gvisor ./...
     ) || failed=1
   else
@@ -132,12 +129,11 @@ lint_vuln() {
     (
       vuln_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-vuln.XXXXXX")" || exit 1
       trap 'rm -rf "$vuln_deps"' EXIT
-      bash "$ROOT/scripts/prepare-mihomo.sh" "$vuln_deps/mihomo" || exit 1
+      bash "$ROOT/scripts/prepare-core-modfile.sh" "$vuln_deps" || exit 1
       cp -R core "$vuln_deps/core"
       chmod -R u+w "$vuln_deps/core"
+      cp "$vuln_deps/go.mod" "$vuln_deps/go.sum" "$vuln_deps/core/"
       cd "$vuln_deps/core"
-      go mod edit "-replace=github.com/metacubex/mihomo=$vuln_deps/mihomo"
-      bash "$ROOT/scripts/prepare-tailscale.sh" "$vuln_deps/tailscale" "$vuln_deps/core/go.mod" || exit 1
       CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" \
         "$ROOT/.toolchain/bin/govulncheck" -tags with_gvisor ./...
     ) || failed=1

@@ -31,6 +31,11 @@ make hap
 ```
 
 - `make core` 第一次运行会在 `.toolchain/` 里准备打过补丁的 Go 工具链，需要几分钟。失败时先读 `docs/agents/platform-pitfalls.md`。
+- 在 `core/` 使用 `gopls` 或直接运行 `go` 命令时，先准备补丁依赖与临时 `go.mod`，再通过 `GOFLAGS` 指定 `-modfile`（不改动 `core/go.mod`）：
+  ```sh
+  scripts/prepare-core-modfile.sh .toolchain/dev
+  export GOFLAGS="-modfile=$(pwd)/.toolchain/dev/go.mod"
+  ```
 - **完成标准**：`dist/` 下出现 `ArkClash-<版本>-debug-unsigned.hap`。
 
 ## 4. 签名与真机 **【人工】**

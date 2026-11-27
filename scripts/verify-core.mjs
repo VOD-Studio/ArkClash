@@ -21,7 +21,11 @@ after(() => rm(sandbox, { recursive: true, force: true }));
 
 // 冷缓存的工具链、依赖下载和编译不占用用例执行时限。
 before(async () => {
-  for (const file of ['go.mod', 'go.sum', 'lifecycle.go', 'inbound.go', 'runtime.go', 'selection.go', 'delay.go', 'probe.go', 'probe_body.go', 'proxies.go',
+  const prepare = spawnSync('bash', [join(root, 'scripts/prepare-core-modfile.sh'), sandbox], {
+    encoding: 'utf8', timeout: 300000, env: goEnv
+  });
+  assert.equal(prepare.status, 0, `${prepare.error ?? ''}\n${prepare.stdout}\n${prepare.stderr}`);
+  for (const file of ['lifecycle.go', 'inbound.go', 'runtime.go', 'selection.go', 'delay.go', 'probe.go', 'probe_body.go', 'proxies.go',
     'providers.go', 'geo_settings.go', 'geo.go', 'geo_download.go', 'geo_events.go', 'diagnostics.go', 'dns_overrides.go',
     'added_rules.go', 'rule_set_data.go', 'rule_sets.go', 'profile_settings.go', 'profile_scripts.go', 'profile_preview.go', 'local_proxies.go', 'local_proxy_links.go',
     'proxy_filters.go', 'diagnostics_connections.go', 'diagnostics_dns.go', 'diagnostics_stream.go',
@@ -44,10 +48,6 @@ before(async () => {
   assert.equal(quickjs.status, 0, quickjs.stderr);
   goEnv.CGO_CPPFLAGS = `${process.env.CGO_CPPFLAGS ?? ''} -I ${JSON.stringify(quickjs.stdout.trim())}`;
   await cp(join(root, 'scripts/testdata/geo'), join(sandbox, 'testdata/geo'), { recursive: true });
-  const prepare = spawnSync('bash', [join(root, 'scripts/prepare-mihomo.sh'), join(sandbox, 'mihomo')], {
-    encoding: 'utf8', timeout: 300000, env: goEnv
-  });
-  assert.equal(prepare.status, 0, `${prepare.error ?? ''}\n${prepare.stdout}\n${prepare.stderr}`);
   for (const [source, destination] of [
     ['observation-dns-host_test.go', 'dns/arkclash_observation_test.go'],
     ['observation-clear-host_test.go', 'dns/arkclash_observation_clear_test.go'],
@@ -57,11 +57,6 @@ before(async () => {
   ]) {
     await copyFile(join(root, 'scripts', source), join(sandbox, 'mihomo', destination));
   }
-  await writeFile(join(sandbox, 'go.mod'), await readFile(join(sandbox, 'go.mod'), 'utf8') +
-    `\nreplace github.com/metacubex/mihomo => ${JSON.stringify(join(sandbox, 'mihomo'))}\n`);
-  const tailscale = spawnSync('bash', [join(root, 'scripts/prepare-tailscale.sh'), join(sandbox, 'tailscale'),
-    join(sandbox, 'go.mod')], { encoding: 'utf8', timeout: 300000, env: goEnv });
-  assert.equal(tailscale.status, 0, `${tailscale.error ?? ''}\n${tailscale.stderr}`);
   const apiSource = await readFile(join(root, 'core/api.go'), 'utf8');
   const fetchDeclarations = ['fetchRequest', 'fetchResult'].map(name => {
     const declaration = apiSource.match(new RegExp(`^type ${name} struct \\{[\\s\\S]*?^\\}`, 'm'))?.[0];
