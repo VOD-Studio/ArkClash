@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -70,6 +71,19 @@ func beginRuntime() func() {
 	selectionOperations = make(map[string]selectionOperation)
 	selectionOrder = nil
 	return waitDiagnostics
+}
+
+// 供宿主（lib.go）更新平台 VPN 资源与转发状态；内部持核锁提交并发布快照。
+func setVpnStateFromHost(intent, forward string, vpnCreated bool) error {
+	mu.Lock()
+	defer mu.Unlock()
+	return updateVpnState(intent, forward, vpnCreated)
+}
+
+// 供宿主（lib.go）无锁读取当前运行快照的 JSON 编码。
+func runtimeStatusJSON() string {
+	data, _ := json.Marshal(runtimeSnapshot.Load())
+	return string(data)
 }
 
 // 调用方持有 mu；平台资源事实与转发状态在同一个提交点发布。

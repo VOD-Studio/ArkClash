@@ -87,15 +87,12 @@ func ArkClashDetachTun() *C.char {
 
 //export ArkClashUpdateVpnState
 func ArkClashUpdateVpnState(intent, forward *C.char, vpnCreated C.int) *C.char {
-	mu.Lock()
-	defer mu.Unlock()
-	return errorString(updateVpnState(C.GoString(intent), C.GoString(forward), vpnCreated != 0))
+	return errorString(setVpnStateFromHost(C.GoString(intent), C.GoString(forward), vpnCreated != 0))
 }
 
 //export ArkClashRuntimeStatus
 func ArkClashRuntimeStatus() *C.char {
-	data, _ := json.Marshal(runtimeSnapshot.Load())
-	return C.CString(string(data))
+	return C.CString(runtimeStatusJSON())
 }
 
 // ArkClashReload 热切换到 path 指向的配置，profile 是它的编号。成功返回 NULL，
