@@ -1,4 +1,4 @@
-// 检查 core/ 的 Go 架构边界：构建标签隔离、Cgo 范围、backupstore 依赖边界、init() 白名单、C ABI 导出位置及命名约束。
+// 检查 core/ 的 Go 架构边界：构建标签隔离、Cgo 范围、internal/* DAG 白名单（未登记即失败）、零 mihomo 边界、init() 白名单、C ABI 导出位置及命名约束。
 package main
 
 import (
@@ -20,9 +20,12 @@ import (
 
 const (
 	rootPkg        = "github.com/VOD-Studio/ArkClash/core"
-	backupStorePkg = "github.com/VOD-Studio/ArkClash/core/backupstore"
-	backupPkg      = "github.com/VOD-Studio/ArkClash/core/internal/backup"
-	scriptPkg      = "github.com/VOD-Studio/ArkClash/core/internal/script"
+	backupStorePkg = rootPkg + "/backupstore"
+	internalPrefix = rootPkg + "/internal/"
+	backupPkg      = internalPrefix + "backup"
+	scriptPkg      = internalPrefix + "script"
+	proxylinkPkg   = internalPrefix + "proxylink"
+	rulesetPkg     = internalPrefix + "ruleset"
 	mihomoPrefix   = "github.com/metacubex/mihomo"
 )
 
@@ -32,6 +35,14 @@ var (
 	hostCgoPkgs  = map[string]bool{
 		backupStorePkg: true,
 		scriptPkg:      true,
+	}
+	zeroMihomoPkgs = []string{backupStorePkg, backupPkg, scriptPkg}
+	// internal/* 包依赖白名单（未登记即失败）：只列出每个子包允许依赖的其他 core/internal/* 包。
+	allowedInternalDeps = map[string][]string{
+		backupPkg:    nil,
+		scriptPkg:    nil,
+		proxylinkPkg: nil,
+		rulesetPkg:   nil,
 	}
 	allowedInitFiles = map[string]bool{
 		"api.go":               true,
@@ -100,6 +111,55 @@ func hasMihomoDep(pkg listedPackage) (string, bool) {
 	return "", false
 }
 
+func checkPackageDAG(label string, pkgs map[string]listedPackage) []string {
+	var problems []string
+	var paths []string
+	for path := range pkgs {
+		paths = append(paths, path)
+	}
+	slices.Sort(paths)
+
+	for _, path := range paths {
+		pkg := pkgs[path]
+		switch {
+		case path == rootPkg:
+			// 根包可以装配全部已登记的 internal/* 包。
+		case path == backupStorePkg:
+			for _, imp := range pkg.Imports {
+				if strings.HasPrefix(imp, internalPrefix) && imp != backupPkg {
+					problems = append(problems, fmt.Sprintf("%s 构建下 %s 只允许依赖 %s，禁止依赖 %s", label, path, backupPkg, imp))
+				}
+			}
+		case strings.HasPrefix(path, internalPrefix):
+			allowed, registered := allowedInternalDeps[path]
+			if !registered {
+				problems = append(problems, fmt.Sprintf("%s 构建出现未登记的内部包 %s，先在 ADR/architecture.md 和 check-core-arch 白名单里登记", label, path))
+				continue
+			}
+			for _, imp := range pkg.Imports {
+				if strings.HasPrefix(imp, internalPrefix) && !slices.Contains(allowed, imp) {
+					problems = append(problems, fmt.Sprintf("%s 构建下 %s 不允许依赖 %s（允许列表：%v）", label, path, imp, allowed))
+				}
+			}
+		default:
+			problems = append(problems, fmt.Sprintf("%s 构建出现未登记的包路径 %s", label, path))
+		}
+	}
+
+	// 正向核对已登记的 internal/* 包全部存在，避免白名单陈旧。
+	var registered []string
+	for path := range allowedInternalDeps {
+		registered = append(registered, path)
+	}
+	slices.Sort(registered)
+	for _, path := range registered {
+		if _, ok := pkgs[path]; !ok {
+			problems = append(problems, fmt.Sprintf("%s 构建缺少已登记的内部包 %s", label, path))
+		}
+	}
+	return problems
+}
+
 func checkPackages(coreDir, modfile string) []string {
 	var problems []string
 
@@ -149,12 +209,13 @@ func checkPackages(coreDir, modfile string) []string {
 		}
 	}
 
-	// 3. 独立备份库与内部独立包严禁引入 mihomo（含传递依赖）。
+	// 3. internal/* DAG 白名单（未登记即失败）与零 mihomo 硬边界。
 	for label, pkgs := range map[string]map[string]listedPackage{"host": hostPkgs, "ohos": ohosPkgs} {
-		for _, isolated := range []string{backupStorePkg, backupPkg, scriptPkg} {
+		problems = append(problems, checkPackageDAG(label, pkgs)...)
+		for _, isolated := range zeroMihomoPkgs {
 			pkg, exists := pkgs[isolated]
 			if !exists {
-				problems = append(problems, fmt.Sprintf("%s 构建缺少独立包 %s", label, isolated))
+				problems = append(problems, fmt.Sprintf("%s 构建缺少零 mihomo 隔离包 %s", label, isolated))
 				continue
 			}
 			if dep, found := hasMihomoDep(pkg); found {
