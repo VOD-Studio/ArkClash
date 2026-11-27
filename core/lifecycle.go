@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/providers"
 	"github.com/metacubex/mihomo/adapter/inbound"
 	"github.com/metacubex/mihomo/component/process"
 	"github.com/metacubex/mihomo/component/resolver"
@@ -159,7 +160,9 @@ func start(opts startOptions) error {
 	}
 	resetProxyIdentities()
 	watchRuntimeRoutes(cfg)
-	resetProviderManagerLocked(cfg)
+	runtimeProviders.Reset(providers.Identity{
+		BootID: runtimeBootID, ConfigRevision: runtimeConfigRevision, Profile: current.Profile, HomeDir: current.HomeDir,
+	}, cfg)
 	publishRuntime()
 	log.Infoln("[ArkClash] core started")
 	return nil
@@ -322,7 +325,7 @@ func applyReloadLocked(next startOptions, cfg *config.Config, nextInbound inboun
 
 func reloadPreparedLocked(next startOptions, cfg *config.Config, nextInbound inboundSettings, canRestore bool) (func(), error) {
 	cancelDelayTests()
-	invalidateProviderManagerLocked()
+	runtimeProviders.Invalidate()
 	attached := tunListener != nil
 	// 始终先屏蔽，避免 executor 接管平台 TUN，也避免失败时暴露部分入口。
 	if err := closeBusinessInbounds(); err != nil {
@@ -342,7 +345,9 @@ func reloadPreparedLocked(next startOptions, cfg *config.Config, nextInbound inb
 	ensureDiagnosticCaptureCollectorsLocked()
 	resetProxyIdentities()
 	watchRuntimeRoutes(cfg)
-	resetProviderManagerLocked(cfg)
+	runtimeProviders.Reset(providers.Identity{
+		BootID: runtimeBootID, ConfigRevision: runtimeConfigRevision, Profile: current.Profile, HomeDir: current.HomeDir,
+	}, cfg)
 	log.Infoln("[ArkClash] reloaded profile %s", next.Profile)
 	var inboundErr error
 	if attached {
@@ -558,7 +563,7 @@ func stop() error {
 	if manager != nil {
 		manager.closeLocked()
 	}
-	providers := closeProviderManagerLocked()
+	waitProviders := runtimeProviders.Close()
 	resetProxyIdentities()
 	stopRuntimeRoutes()
 	cancelDelayTests()
@@ -583,8 +588,6 @@ func stop() error {
 	if manager != nil {
 		manager.wait()
 	}
-	if providers != nil {
-		providers.wait()
-	}
+	waitProviders()
 	return cleanupFailure
 }

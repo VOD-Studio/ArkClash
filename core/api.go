@@ -7,12 +7,15 @@ import (
 	"net"
 
 	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
+	"github.com/VOD-Studio/ArkClash/core/internal/providers"
 	"github.com/metacubex/mihomo/hub/route"
 
 	"github.com/metacubex/chi"
 	"github.com/metacubex/chi/render"
 	"github.com/metacubex/http"
 )
+
+var runtimeProviders = providers.NewHub()
 
 func init() {
 	// 关掉 mihomo 给独立进程用的接口：PUT/PATCH /configs 会绕过 applyOverrides，
@@ -24,10 +27,7 @@ func init() {
 			r.Get("/proxies", getProxySnapshot)
 			r.Post("/proxies/definition", postProxyDefinition)
 			r.Post("/proxies/tailscale-login", postTailscaleLogin)
-			r.Get("/providers", getRuntimeProviders)
-			r.Get("/providers/events", getRuntimeProviderEvents)
-			r.Post("/providers/update", postRuntimeProviderUpdate)
-			r.Post("/providers/replace", postRuntimeProviderReplace)
+			runtimeProviders.RegisterRoutes(r)
 			r.Get("/selections", getSelections)
 			r.Post("/selection", portableMutation(postSelection))
 			r.Get("/delay", getDelay)

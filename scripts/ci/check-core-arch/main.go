@@ -27,6 +27,7 @@ const (
 	ctrlPkg        = internalPrefix + "ctrl"
 	proxylinkPkg   = internalPrefix + "proxylink"
 	rulesetPkg     = internalPrefix + "ruleset"
+	providersPkg   = internalPrefix + "providers"
 	mihomoPrefix   = "github.com/metacubex/mihomo"
 )
 
@@ -45,6 +46,7 @@ var (
 		ctrlPkg:      nil,
 		proxylinkPkg: nil,
 		rulesetPkg:   nil,
+		providersPkg: {ctrlPkg, rulesetPkg},
 	}
 	allowedInitFiles = map[string]bool{
 		"api.go":               true,
