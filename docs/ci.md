@@ -30,7 +30,7 @@
 | 变更范围 | `scripts/ci/changes.py` 判断要不要构建、依赖有没有变 | — |
 | 快速检查 | shellcheck、actionlint、zizmor、ArkTS 分层规则。PR 另检查每个提交的信息格式 | — |
 | 内核 | `make core`、`make lint CHECKS=go`（含 Go 架构门禁与 `go vet`） | 文档 PR 或发版 PR 的合并提交 |
-| 内核宿主测试 | `make test TESTS=core`（原地运行 `core/` 宿主回归、mihomo 白盒回归与 Linux TUN fd 回归，不依赖 NDK 或 ohpm） | 文档 PR 或发版 PR 的合并提交 |
+| 内核宿主测试 | `make test TESTS=core`（全量宿主回归、mihomo 白盒回归与 Linux TUN fd 回归）与 `CORE_RACE=1` 竞态回归（覆盖全部 `internal/*`、6 个 mihomo 白盒包及除 2 项上游 mihomo 全局竞态外的根包用例），不依赖 NDK 或 ohpm | 文档 PR 或发版 PR 的合并提交 |
 | HAP | codelinter、`make hap`、HAP 内容与体积检查，签名包随 artifact 上传 | 内核任务跳过、未配置工具链仓库，或 PR 来自外部 fork |
 | 依赖漏洞 | govulncheck，只报告代码真正调用到的漏洞 | 不是改了 Go 依赖的 PR |
 | CI 通过 | 汇总以上（依赖漏洞除外）：有失败或取消就失败，跳过不算失败 | — |

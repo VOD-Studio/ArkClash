@@ -14,7 +14,9 @@ const raceFlag = race ? ['-race'] : [];
 const goEnv = { ...process.env, CGO_ENABLED: '1', GOTOOLCHAIN: process.env.GOTOOLCHAIN ?? `go${goVersion}` };
 const depsDir = await mkdtemp(join(tmpdir(), 'arkclash-core-host-'));
 const modfile = join(depsDir, 'go.mod');
-const linuxFdEnabled = process.platform === 'linux' || process.env.CORE_LINUX_FD === '1';
+const linuxFdEnabled = process.env.CORE_LINUX_FD === '0'
+  ? false
+  : (process.platform === 'linux' || process.env.CORE_LINUX_FD === '1');
 const linuxFdExecutable = join(depsDir, 'tun-fd.test');
 const mihomoPackages = ['dns', 'tunnel/statistic', 'adapter/inbound', 'listener/auth', 'log', 'adapter/outbound'];
 const maxBuffer = 16 * 1024 * 1024;
@@ -111,7 +113,8 @@ test('内部纯引擎与独立子系统', { timeout: 90000 }, () => {
 // 宿主只替换 TUN 构造器；其余内核逻辑与 QuickJS 脚本在 core/ 原地编译执行。
 test('核心选择持久化、回滚、规则探测与实际请求取消', { timeout: 240000 }, () => {
   const result = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-count=1', '-timeout=90s', '-v',
-    ...(process.env.CORE_TEST_RUN ? [`-run=${process.env.CORE_TEST_RUN}`] : []), '.'], {
+    ...(process.env.CORE_TEST_RUN ? [`-run=${process.env.CORE_TEST_RUN}`] : []),
+    ...(process.env.CORE_TEST_SKIP ? [`-skip=${process.env.CORE_TEST_SKIP}`] : []), '.'], {
     timeout: 230000
   });
   assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
