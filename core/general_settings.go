@@ -791,7 +791,7 @@ func updateGeneralSettings(request profileSettingsRequest[generalSettings]) erro
 			log.SetLevel(s.level())
 			if s.CaptureLogs {
 				ensureDiagnosticLogsLocked()
-			} else if diagnosticLogs != nil {
+			} else {
 				wait = together(wait, stopDiagnosticLogsLocked())
 			}
 			publishRuntime()

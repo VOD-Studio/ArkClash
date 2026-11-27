@@ -34,6 +34,7 @@ type statusResponse struct {
 	Revision              uint64 `json:"revision"`
 	ConfigRevision        uint64 `json:"configRevision"`
 	forwardRevision       uint64
+	homeDir               string
 	Version               string `json:"version"`
 	Mode                  string `json:"mode"`
 }
@@ -99,6 +100,7 @@ func publishRuntime() {
 		TunAttached:   tunListener != nil, VpnCreated: runtimeVpnCreated,
 		BootID: runtimeBootID, Revision: runtimeRevision, Version: constant.Version, Mode: tunnel.Mode().String(),
 		ConfigRevision: runtimeConfigRevision, ProfileExtension: current.Script.identity,
+		homeDir: current.HomeDir,
 	}
 	next.StandardRulesRevision = current.ProfileRules.Revision
 	if next.Forward == "running" && (!running || next.Intent != "started" || !next.TunAttached || !next.VpnCreated) ||

@@ -301,7 +301,7 @@ func reload(path, profile string, expectedProfile *string) error {
 		if path != "" || tunListener != nil || runtimeVpnCreated || businessListenersOpen() || cleanupFailure != nil {
 			return errors.New("empty profile requires a fully detached core")
 		}
-	} else if err := checkProfilePath(path); err != nil {
+	} else if err := checkProfilePath(current.HomeDir, path); err != nil {
 		return err
 	}
 	next := current
@@ -371,9 +371,12 @@ type reloadedEvent struct {
 }
 
 // 热切换只接受配置目录下的文件，见 entry/src/main/ets/shared/profiles/Store.ets。
-func checkProfilePath(path string) error {
+func checkProfilePath(home, path string) error {
+	if home == "" {
+		return errors.New("invalid_profile_path")
+	}
 	dir := filepath.Dir(filepath.Clean(path))
-	if dir != filepath.Join(current.HomeDir, "profiles") && dir != filepath.Join(current.HomeDir, "profile-work") {
+	if dir != filepath.Join(home, "profiles") && dir != filepath.Join(home, "profile-work") {
 		return errors.New("invalid_profile_path")
 	}
 	return nil

@@ -6,12 +6,12 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/metacubex/mihomo/config"
 	P "github.com/metacubex/mihomo/constant/provider"
 	"github.com/metacubex/mihomo/log"
 	R "github.com/metacubex/mihomo/rules"
 	RB "github.com/metacubex/mihomo/rules/bundle"
 	RP "github.com/metacubex/mihomo/rules/provider"
+	"go.yaml.in/yaml/v3"
 )
 
 // 同时下载的 rule-provider 数，和正在用的连接抢带宽时不至于太多。
@@ -28,18 +28,22 @@ type vehicleOwner interface {
 // 只处理 rule-provider：proxy-provider 的 Initial 会按节点名关掉正在用的连接，
 // 正在运行的配置里有同名节点时会误伤。
 func prefetch(path string) (int, error) {
-	if _, ok := runningProfile(); !ok {
+	status := runtimeSnapshot.Load()
+	if status == nil || !status.Running {
 		return 0, errors.New("core is not running")
 	}
-	if err := checkProfilePath(path); err != nil {
+	if err := checkProfilePath(status.homeDir, path); err != nil {
 		return 0, err
 	}
 	buf, err := os.ReadFile(path)
 	if err != nil {
 		return 0, err
 	}
-	rawCfg, err := config.UnmarshalRawConfig(buf)
-	if err != nil {
+	// 只解析 rule-providers，避免调用 config.DefaultRawConfig() 并发读取 mihomo 非同步全局 geodata 状态。
+	var rawCfg struct {
+		RuleProvider map[string]map[string]any `yaml:"rule-providers"`
+	}
+	if err := yaml.Unmarshal(buf, &rawCfg); err != nil {
 		return 0, err
 	}
 

@@ -53,7 +53,7 @@ func fetch(req fetchRequest) (result fetchResult) {
 			}
 		}()
 	}
-	if err := checkProfilePath(req.Path); err != nil {
+	if err := checkProfilePath(status.homeDir, req.Path); err != nil {
 		return fetchResult{Error: err.Error()}
 	}
 	if req.TimeoutMs <= 0 || req.TimeoutMs > 20000 {
