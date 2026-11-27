@@ -150,8 +150,9 @@ ZIP 快照与恢复机制、旧版目录兼容及 WebDAV 路由见 [ADR-0031](ad
 
 | 文件 | 职责 |
 |---|---|
-| `core/lib.go` | `//go:build ohos`：全部 16 个公开 C ABI（`arkclash.h`）与 `main()`，缺标签构建 `c-shared` 时 fail-closed |
-| `core/lifecycle.go` | 唯一核心状态、无 TUN 启动、attach/detach、热切换及 `applyOverrides`（按值同步 `internal/providers` 身份） |
+| `core/lib.go` | `//go:build ohos`：全部 16 个公开 C ABI（`arkclash.h`）纯转发入口与 `main()`，不直接访问核心状态或锁 |
+| `core/engine.go` | 唯一核心状态容器 `coreEngine`、`withState`/`withLifecycle` 锁原语、两层只读快照（`runtimeView`/`configSpec`）、`ReloadTx` 事务提交/回滚与 Geo 下推入口 |
+| `core/lifecycle.go` | 无 TUN 启动、attach/detach、热切换编排及 `applyOverrides`（按值同步下游子系统身份） |
 | `core/inbound.go` | 最小业务入口设置、应用前屏蔽、恢复与真实资源校验 |
 | `core/api.go` | 纯 Go：controller 上的 `/arkclash/` 路由装配与核心接口 |
 | `core/fetch.go` | 纯 Go：经内核下载与订阅正文落盘 |
@@ -183,7 +184,7 @@ ZIP 快照与恢复机制、旧版目录兼容及 WebDAV 路由见 [ADR-0031](ad
 
 TUN 由 `tun.go` 单独持有，不走配置文件，所以热切换不重建它。detached 启动和热切换在 `executor.ApplyConfig` 前屏蔽业务入口；连接时只恢复入口，不重新应用整个配置或重建 resolver。controller 只随完整宿主生命周期启停（[ADR-0010](adr/0010-hot-switch-reload-in-vpn.md)、[ADR-0017](adr/0017-core-ready-without-vpn.md)）。
 
-内核的 `ohos` 标签隔离、Cgo 边界、`core/backupstore` 与零 mihomo 内部包依赖、`core/internal/*` fail-closed DAG 依赖白名单、`init()` 白名单与 `//export` 收口由 `scripts/ci/check-core-arch/main.go` 在 `make lint CHECKS=go` 中强制校验；宿主回归直接在 `core/` 原地通过 `make test TESTS=core` 运行（[ADR-0040](adr/0040-core-build-tags-and-host-tests.md)、[ADR-0041](adr/0041-core-internal-deep-modules.md)）。
+内核的 `ohos` 标签隔离、Cgo 边界、`core/backupstore` 与零 mihomo 内部包依赖、`core/internal/*` fail-closed DAG 依赖白名单、`init()` 白名单、`//export` 收口、核心锁仅限 `core/engine.go` 访问、`core/lib.go` 纯转发及根包顶层变量白名单由 `scripts/ci/check-core-arch/main.go` 在 `make lint CHECKS=go` 中强制校验；全内核锁序严格单向为 `lifecycle -> eng.mu -> {providers.mu, geo.mu, diag.mu -> collector.mu -> statsMu}`。宿主回归与竞态检测直接在 `core/` 原地通过 `make test TESTS=core` 与 `CORE_RACE=1` 运行（[ADR-0040](adr/0040-core-build-tags-and-host-tests.md)、[ADR-0041](adr/0041-core-internal-deep-modules.md)、[ADR-0042](adr/0042-core-engine-and-reload-tx.md)）。
 
 ## 构建产物
 
