@@ -1,4 +1,4 @@
-package main
+package diagnostics
 
 import (
 	"encoding/json"
@@ -11,13 +11,14 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
 	"github.com/metacubex/http"
 	"github.com/metacubex/mihomo/log"
 )
 
 const diagnosticLogLimit = 5000
 
-var errDiagnosticLogsDisabled = errors.New("diagnostic_logs_disabled")
+var ErrLogsDisabled = errors.New("diagnostic_logs_disabled")
 
 var (
 	logTagPrefixPattern = regexp.MustCompile(`(?s)^\[([^\]]+)\] (.+)$`)
@@ -41,14 +42,14 @@ var (
 	logIPv6BarePattern    = regexp.MustCompile(`(?i)(?:(?:[0-9a-f]{1,4}:){3,}[0-9a-f:]*|[0-9a-f]{1,4}::[0-9a-f:]*|::[0-9a-f:]+)(?:%[a-z0-9_.-]+)?`)
 )
 
-type diagnosticLogRecord struct {
+type LogRecord struct {
 	ID    string `json:"id"`
 	Time  int64  `json:"time"`
 	Level string `json:"level"`
-	diagnosticLogText
+	LogText
 }
 
-type diagnosticLogText struct {
+type LogText struct {
 	Event   string `json:"event"`
 	Tag     string `json:"tag,omitempty"`
 	Message string `json:"message"`
@@ -60,9 +61,9 @@ type diagnosticLogText struct {
 	Detail  string `json:"detail,omitempty"`
 }
 
-type diagnosticLogsFrame struct {
-	diagnosticHeader
-	Logs []diagnosticLogRecord `json:"logs"`
+type LogsFrame struct {
+	Header
+	Logs []LogRecord `json:"logs"`
 }
 
 func truncateLogUTF8(s string, maxBytes int) string {
@@ -164,7 +165,7 @@ func normalizeDialRule(raw string) string {
 	return raw
 }
 
-func parseRouteDiagnosticLog(event log.Event, direct bool) diagnosticLogText {
+func parseRouteDiagnosticLog(event log.Event, direct bool) LogText {
 	fallbackEvent := "route_selected"
 	fallbackMsg := "Connection established through selected route"
 	if direct {
@@ -173,12 +174,12 @@ func parseRouteDiagnosticLog(event log.Event, direct bool) diagnosticLogText {
 	}
 	tagged := logTagPrefixPattern.FindStringSubmatch(event.Payload)
 	if len(tagged) != 3 {
-		return diagnosticLogText{Event: fallbackEvent, Message: fallbackMsg}
+		return LogText{Event: fallbackEvent, Message: fallbackMsg}
 	}
 	tag := cleanLogField(tagged[1], 24)
 	match := logRoutePattern.FindStringSubmatch(tagged[2])
 	if len(match) != 7 {
-		return diagnosticLogText{Event: fallbackEvent, Tag: tag, Message: fallbackMsg}
+		return LogText{Event: fallbackEvent, Tag: tag, Message: fallbackMsg}
 	}
 	source := cleanLogField(match[1], 96)
 	target := cleanLogField(match[3], 192)
@@ -204,7 +205,7 @@ func parseRouteDiagnosticLog(event log.Event, direct bool) diagnosticLogText {
 	}
 	msg.WriteString(" using ")
 	msg.WriteString(proxy)
-	return diagnosticLogText{
+	return LogText{
 		Event:   fallbackEvent,
 		Tag:     tag,
 		Message: msg.String(),
@@ -215,16 +216,16 @@ func parseRouteDiagnosticLog(event log.Event, direct bool) diagnosticLogText {
 	}
 }
 
-func parseDialDiagnosticLog(event log.Event) diagnosticLogText {
+func parseDialDiagnosticLog(event log.Event) LogText {
 	reason := diagnosticLogCause(event.Payload)
 	tagged := logTagPrefixPattern.FindStringSubmatch(event.Payload)
 	if len(tagged) != 3 {
-		return diagnosticLogText{Event: "dial_failed", Message: "Connection failed: " + reason, Reason: reason}
+		return LogText{Event: "dial_failed", Message: "Connection failed: " + reason, Reason: reason}
 	}
 	tag := cleanLogField(tagged[1], 24)
 	match := logDialPattern.FindStringSubmatch(tagged[2])
 	if len(match) != 7 {
-		return diagnosticLogText{Event: "dial_failed", Tag: tag, Message: "Connection failed: " + reason, Reason: reason}
+		return LogText{Event: "dial_failed", Tag: tag, Message: "Connection failed: " + reason, Reason: reason}
 	}
 	proxy := cleanLogField(match[1], 160)
 	rule := normalizeDialRule(match[2])
@@ -250,7 +251,7 @@ func parseDialDiagnosticLog(event log.Event) diagnosticLogText {
 	msg.WriteString(target)
 	msg.WriteString(" error: ")
 	msg.WriteString(detail)
-	return diagnosticLogText{
+	return LogText{
 		Event:   "dial_failed",
 		Tag:     tag,
 		Message: msg.String(),
@@ -263,13 +264,13 @@ func parseDialDiagnosticLog(event log.Event) diagnosticLogText {
 	}
 }
 
-func parseDNSDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
+func parseDNSDiagnosticLog(event log.Event) (LogText, bool) {
 	switch event.Template {
 	case "[DNS] hijack udp:%s from %s":
 		if m := logDNSUDPPattern.FindStringSubmatch(event.Payload); len(m) == 3 {
 			target := "udp:" + cleanLogField(m[1], 128)
 			source := cleanLogField(m[2], 96)
-			return diagnosticLogText{
+			return LogText{
 				Event:   "dns_udp",
 				Tag:     "DNS",
 				Target:  target,
@@ -277,18 +278,18 @@ func parseDNSDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 				Message: "[DNS] hijack " + target + " from " + source,
 			}, true
 		}
-		return diagnosticLogText{Event: "dns_udp", Tag: "DNS", Message: "[DNS] hijack udp:… from …"}, true
+		return LogText{Event: "dns_udp", Tag: "DNS", Message: "[DNS] hijack udp:… from …"}, true
 	case "[DNS] hijack tcp:%s":
 		if m := logDNSTCPPattern.FindStringSubmatch(event.Payload); len(m) == 2 {
 			target := "tcp:" + cleanLogField(m[1], 128)
-			return diagnosticLogText{
+			return LogText{
 				Event:   "dns_tcp",
 				Tag:     "DNS",
 				Target:  target,
 				Message: "[DNS] hijack " + target,
 			}, true
 		}
-		return diagnosticLogText{Event: "dns_tcp", Tag: "DNS", Message: "[DNS] hijack tcp:…"}, true
+		return LogText{Event: "dns_tcp", Tag: "DNS", Message: "[DNS] hijack tcp:…"}, true
 	case "[DNS] cache hit %s --> %s, expire at %s":
 		if body, ok := strings.CutPrefix(event.Payload, "[DNS] cache hit "); ok {
 			if domain, rest, ok := strings.Cut(body, " --> "); ok {
@@ -296,7 +297,7 @@ func parseDNSDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 				domain = cleanLogField(domain, 192)
 				answers = cleanLogField(answers, 192)
 				if domain != "" {
-					return diagnosticLogText{
+					return LogText{
 						Event:   "dns_cache",
 						Tag:     "DNS",
 						Target:  domain,
@@ -306,7 +307,7 @@ func parseDNSDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 				}
 			}
 		}
-		return diagnosticLogText{Event: "dns_cache", Tag: "DNS", Message: "[DNS] cache hit …"}, true
+		return LogText{Event: "dns_cache", Tag: "DNS", Message: "[DNS] cache hit …"}, true
 	case "[DNS] resolve %s %s from %s":
 		if m := logDNSQueryPattern.FindStringSubmatch(event.Payload); len(m) == 4 {
 			domain := cleanLogField(m[1], 192)
@@ -316,7 +317,7 @@ func parseDNSDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 			if upstream != "" {
 				detail = qtype + " · " + upstream
 			}
-			return diagnosticLogText{
+			return LogText{
 				Event:   "dns_query",
 				Tag:     "DNS",
 				Target:  domain,
@@ -324,7 +325,7 @@ func parseDNSDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 				Message: "[DNS] resolve " + domain + " " + qtype + " from " + upstream,
 			}, true
 		}
-		return diagnosticLogText{Event: "dns_query", Tag: "DNS", Message: "[DNS] resolve … from …"}, true
+		return LogText{Event: "dns_query", Tag: "DNS", Message: "[DNS] resolve … from …"}, true
 	case "[DNS] %s --> %s", "[DNS] %s --> %s from %s":
 		if body, ok := strings.CutPrefix(event.Payload, "[DNS] "); ok {
 			if domain, rest, ok := strings.Cut(body, " --> "); ok {
@@ -341,7 +342,7 @@ func parseDNSDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 					}
 				}
 				if domain != "" {
-					return diagnosticLogText{
+					return LogText{
 						Event:   "dns_answer",
 						Tag:     "DNS",
 						Target:  domain,
@@ -351,7 +352,7 @@ func parseDNSDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 				}
 			}
 		}
-		return diagnosticLogText{Event: "dns_answer", Tag: "DNS", Message: "[DNS] query answered"}, true
+		return LogText{Event: "dns_answer", Tag: "DNS", Message: "[DNS] query answered"}, true
 	case "[DNS] resolve %s error: %s":
 		if body, ok := strings.CutPrefix(event.Payload, "[DNS] resolve "); ok {
 			if domain, errText, ok := strings.Cut(body, " error: "); ok {
@@ -362,7 +363,7 @@ func parseDNSDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 					msg = "[DNS] resolve " + domain + " error: " + safeErr
 				}
 				if domain != "" {
-					return diagnosticLogText{
+					return LogText{
 						Event:   "dns_failed",
 						Tag:     "DNS",
 						Target:  domain,
@@ -372,15 +373,15 @@ func parseDNSDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 				}
 			}
 		}
-		return diagnosticLogText{Event: "dns_failed", Tag: "DNS", Message: "[DNS] resolve failed"}, true
+		return LogText{Event: "dns_failed", Tag: "DNS", Message: "[DNS] resolve failed"}, true
 	default:
-		return diagnosticLogText{}, false
+		return LogText{}, false
 	}
 }
 
-func parseSnifferDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
+func parseSnifferDiagnosticLog(event log.Event) (LogText, bool) {
 	if event.Template != "[Sniffer] Sniff %s [%s]-->[%s] success, replace domain [%s]-->[%s]" {
-		return diagnosticLogText{}, false
+		return LogText{}, false
 	}
 	if m := logSniffOKPattern.FindStringSubmatch(event.Payload); len(m) == 6 {
 		proto := cleanLogField(m[1], 32)
@@ -391,7 +392,7 @@ func parseSnifferDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 		if oldDomain != "" && oldDomain != newDomain {
 			detail = proto + " · " + oldDomain + " → " + newDomain
 		}
-		return diagnosticLogText{
+		return LogText{
 			Event:   "sniffer",
 			Tag:     "Sniffer",
 			Target:  newDomain,
@@ -400,10 +401,10 @@ func parseSnifferDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 			Message: "[Sniffer] " + proto + " " + oldDomain + " --> " + newDomain,
 		}, true
 	}
-	return diagnosticLogText{Event: "sniffer", Tag: "Sniffer", Message: "[Sniffer] Sniff success"}, true
+	return LogText{Event: "sniffer", Tag: "Sniffer", Message: "[Sniffer] Sniff success"}, true
 }
 
-func parseICMPDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
+func parseICMPDiagnosticLog(event log.Event) (LogText, bool) {
 	switch event.Template {
 	case "[ICMP] %s %s --> %s using fake ping echo", "[ICMP] %s %s --> %s using DIRECT":
 		if body, ok := strings.CutPrefix(event.Payload, "[ICMP] "); ok {
@@ -411,7 +412,7 @@ func parseICMPDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 				source := cleanLogField(m[2], 96)
 				target := cleanLogField(m[3], 192)
 				proxy := cleanLogField(m[4], 64)
-				return diagnosticLogText{
+				return LogText{
 					Event:   "route_direct",
 					Tag:     "ICMP",
 					Source:  source,
@@ -421,32 +422,32 @@ func parseICMPDiagnosticLog(event log.Event) (diagnosticLogText, bool) {
 				}, true
 			}
 		}
-		return diagnosticLogText{Event: "route_direct", Tag: "ICMP", Message: "Connection established via DIRECT"}, true
+		return LogText{Event: "route_direct", Tag: "ICMP", Message: "Connection established via DIRECT"}, true
 	default:
-		return diagnosticLogText{}, false
+		return LogText{}, false
 	}
 }
 
-func describeStaticTemplate(text string) diagnosticLogText {
+func describeStaticTemplate(text string) LogText {
 	if tagged := logTagPrefixPattern.FindStringSubmatch(text); len(tagged) == 3 && logSafeTagPattern.MatchString(tagged[1]) {
-		return diagnosticLogText{Event: "template", Tag: tagged[1], Message: text}
+		return LogText{Event: "template", Tag: tagged[1], Message: text}
 	}
-	return diagnosticLogText{Event: "template", Message: text}
+	return LogText{Event: "template", Message: text}
 }
 
-func describeComponentLog(payload string) diagnosticLogText {
+func describeComponentLog(payload string) LogText {
 	if payload == "" {
-		return diagnosticLogText{Event: "other", Message: "Core event"}
+		return LogText{Event: "other", Message: "Core event"}
 	}
 	if wg := logWGPattern.FindStringSubmatch(payload); len(wg) == 2 {
 		safe := sanitizeLogText(wg[1])
 		if safe == "" {
-			return diagnosticLogText{Event: "other", Tag: "WG", Message: "Core event"}
+			return LogText{Event: "other", Tag: "WG", Message: "Core event"}
 		}
-		return diagnosticLogText{Event: "component", Tag: "WG", Message: safe}
+		return LogText{Event: "component", Tag: "WG", Message: safe}
 	}
 	if strings.HasPrefix(payload, "Hopped to ") {
-		return diagnosticLogText{Event: "port_hop", Tag: "QUIC", Message: "Hopped to …"}
+		return LogText{Event: "port_hop", Tag: "QUIC", Message: "Hopped to …"}
 	}
 	tag := ""
 	body := payload
@@ -456,26 +457,26 @@ func describeComponentLog(payload string) diagnosticLogText {
 	}
 	safe := sanitizeLogText(body)
 	if safe == "" {
-		return diagnosticLogText{Event: "other", Tag: tag, Message: "Core event"}
+		return LogText{Event: "other", Tag: tag, Message: "Core event"}
 	}
-	return diagnosticLogText{Event: "component", Tag: tag, Message: safe}
+	return LogText{Event: "component", Tag: tag, Message: safe}
 }
 
-// 连接、拨号和 DNS 模板解析为结构化字段；自由错误正文与组件动态日志统一脱敏，不泄露凭据、链接或代理服务器地址。
-func describeDiagnosticLog(event log.Event) diagnosticLogText {
+// DescribeLog 将连接、拨号和 DNS 模板解析为结构化字段；自由错误正文与组件动态日志统一脱敏，不泄露凭据、链接或代理服务器地址。
+func DescribeLog(event log.Event) LogText {
 	switch event.Template {
 	case "[ArkClash] core started":
-		return diagnosticLogText{Event: "core_started", Tag: "ArkClash", Message: event.Template}
+		return LogText{Event: "core_started", Tag: "ArkClash", Message: event.Template}
 	case "[ArkClash] external controller port unavailable":
-		return diagnosticLogText{Event: "controller_unavailable", Tag: "ArkClash", Message: event.Template}
+		return LogText{Event: "controller_unavailable", Tag: "ArkClash", Message: event.Template}
 	case "[ArkClash] core stopped with pending VPN resources: %s":
 		detail := ""
 		if _, rest, ok := strings.Cut(event.Payload, ": "); ok {
 			detail = sanitizeLogText(rest)
 		}
-		return diagnosticLogText{Event: "vpn_cleanup", Tag: "ArkClash", Message: "[ArkClash] core stopped with pending VPN resources", Detail: detail}
+		return LogText{Event: "vpn_cleanup", Tag: "ArkClash", Message: "[ArkClash] core stopped with pending VPN resources", Detail: detail}
 	case "[ArkClash] reloaded profile %s":
-		return diagnosticLogText{Event: "profile_reloaded", Tag: "ArkClash", Message: "[ArkClash] profile reloaded"}
+		return LogText{Event: "profile_reloaded", Tag: "ArkClash", Message: "[ArkClash] profile reloaded"}
 	case "[%s] %s --> %s using DIRECT":
 		return parseRouteDiagnosticLog(event, true)
 	case "[%s] %s --> %s using GLOBAL", "[%s] %s --> %s using %s", "[%s] %s --> %s match %s using %s",
@@ -484,11 +485,11 @@ func describeDiagnosticLog(event log.Event) diagnosticLogText {
 	case "[%s] dial %s %s --> %s error: %s", "[%s] dial %s (match %s/%s) %s --> %s error: %s":
 		return parseDialDiagnosticLog(event)
 	case "[Rule] use default rules":
-		return diagnosticLogText{Event: "default_rules", Tag: "Rule", Message: event.Template}
+		return LogText{Event: "default_rules", Tag: "Rule", Message: event.Template}
 	case "[Rule] use %s rules":
-		return diagnosticLogText{Event: "named_rules", Tag: "Rule", Message: "[Rule] use named rules"}
+		return LogText{Event: "named_rules", Tag: "Rule", Message: "[Rule] use named rules"}
 	case "XTLS Vision direct read start", "XTLS Vision direct write start":
-		return diagnosticLogText{Event: "vision_direct", Tag: "XTLS", Message: event.Template}
+		return LogText{Event: "vision_direct", Tag: "XTLS", Message: event.Template}
 	}
 	if dnsLog, ok := parseDNSDiagnosticLog(event); ok {
 		return dnsLog
@@ -545,14 +546,14 @@ func (c *diagnosticCollector) collectLogs() {
 			case <-c.stop:
 				return
 			case event := <-input:
-				c.appendLog(diagnosticLogRecord{ID: diagnosticID(), Time: time.Now().UnixMilli(),
-					Level: event.Type(), diagnosticLogText: describeDiagnosticLog(event)})
+				c.appendLog(LogRecord{ID: diagnosticID(), Time: time.Now().UnixMilli(),
+					Level: event.Type(), LogText: DescribeLog(event)})
 			}
 		}
 	}()
 }
 
-func (c *diagnosticCollector) appendLog(record diagnosticLogRecord) {
+func (c *diagnosticCollector) appendLog(record LogRecord) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed {
@@ -568,15 +569,15 @@ func (c *diagnosticCollector) appendLog(record diagnosticLogRecord) {
 	c.broadcastLocked(diagnosticEvent{kind: "log", log: record})
 }
 
-func (c *diagnosticCollector) logsFrameLocked(s *diagnosticSession, kind string, now time.Time) diagnosticLogsFrame {
-	frame := diagnosticLogsFrame{diagnosticHeader: c.headerLocked(s, kind, now)}
+func (c *diagnosticCollector) logsFrameLocked(s *Session, kind string, now time.Time) LogsFrame {
+	frame := LogsFrame{Header: c.headerLocked(s, kind, now)}
 	if kind == "delta" {
-		frame.Logs = make([]diagnosticLogRecord, 0, len(s.queue))
+		frame.Logs = make([]LogRecord, 0, len(s.queue))
 		for _, event := range s.queue {
 			frame.Logs = append(frame.Logs, event.log)
 		}
 	} else {
-		frame.Logs = make([]diagnosticLogRecord, len(c.logs))
+		frame.Logs = make([]LogRecord, len(c.logs))
 		for i := range frame.Logs {
 			frame.Logs[i] = c.logs[(c.logHead+i)%len(c.logs)]
 		}
@@ -584,7 +585,7 @@ func (c *diagnosticCollector) logsFrameLocked(s *diagnosticSession, kind string,
 	return frame
 }
 
-func (h *diagnosticsHub) clearLogsLocked() {
+func (h *Hub) clearLogsLocked() {
 	c := h.logs
 	if c == nil {
 		return
@@ -637,13 +638,12 @@ func readDiagnosticLogClear(r *http.Request) (diagnosticLogClearRequest, error) 
 	return request, nil
 }
 
-func postDiagnosticLogsClear(w http.ResponseWriter, r *http.Request) {
+func (h *Hub) PostLogsClear(w http.ResponseWriter, r *http.Request) {
 	request, err := readDiagnosticLogClear(r)
 	if err != nil {
-		writeError(w, r, http.StatusBadRequest, err)
+		ctrl.WriteError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	h := eng.diag
 	h.mu.Lock()
 	status, err := h.bootErrorLocked(request.ExpectedBootID)
 	if err == nil {
@@ -651,7 +651,7 @@ func postDiagnosticLogsClear(w http.ResponseWriter, r *http.Request) {
 	}
 	h.mu.Unlock()
 	if err != nil {
-		writeError(w, r, status, err)
+		ctrl.WriteError(w, r, status, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

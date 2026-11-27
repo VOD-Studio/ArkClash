@@ -1,4 +1,4 @@
-package main
+package diagnostics
 
 import (
 	"net/netip"
@@ -9,7 +9,7 @@ import (
 	"github.com/metacubex/mihomo/tunnel/statistic"
 )
 
-type DiagnosticMetadata struct {
+type Metadata struct {
 	Network           string   `json:"network"`
 	Type              string   `json:"type"`
 	SourceIP          string   `json:"sourceIP"`
@@ -28,35 +28,35 @@ type DiagnosticMetadata struct {
 	DestinationGeoIP  []string `json:"destinationGeoIP"`
 }
 
-type DiagnosticConnection struct {
-	ID             string             `json:"id"`
-	Start          string             `json:"start"`
-	Metadata       DiagnosticMetadata `json:"metadata"`
-	Chains         []string           `json:"chains"`
-	ProviderChains []string           `json:"providerChains"`
-	Rule           string             `json:"rule"`
-	RulePayload    string             `json:"rulePayload"`
-	Upload         int64              `json:"upload"`
-	Download       int64              `json:"download"`
+type Connection struct {
+	ID             string   `json:"id"`
+	Start          string   `json:"start"`
+	Metadata       Metadata `json:"metadata"`
+	Chains         []string `json:"chains"`
+	ProviderChains []string `json:"providerChains"`
+	Rule           string   `json:"rule"`
+	RulePayload    string   `json:"rulePayload"`
+	Upload         int64    `json:"upload"`
+	Download       int64    `json:"download"`
 }
 
-type diagnosticTraffic struct {
+type Traffic struct {
 	ID       string `json:"id"`
 	Upload   int64  `json:"upload"`
 	Download int64  `json:"download"`
 }
 
-type diagnosticConnectionsFrame struct {
-	diagnosticHeader
-	Live    []DiagnosticConnection `json:"live"`
-	Recent  []DiagnosticConnection `json:"recent"`
-	Opened  []DiagnosticConnection `json:"opened"`
-	Traffic []diagnosticTraffic    `json:"traffic"`
-	Closed  []string               `json:"closed"`
+type ConnectionsFrame struct {
+	Header
+	Live    []Connection `json:"live"`
+	Recent  []Connection `json:"recent"`
+	Opened  []Connection `json:"opened"`
+	Traffic []Traffic    `json:"traffic"`
+	Closed  []string     `json:"closed"`
 }
 
 type diagnosticConnectionEntry struct {
-	dto    DiagnosticConnection
+	dto    Connection
 	info   *statistic.TrackerInfo
 	live   bool
 	recent bool
@@ -65,12 +65,14 @@ type diagnosticConnectionEntry struct {
 }
 
 func diagnosticStrings(values []string) []string { return append([]string{}, values...) }
+
 func diagnosticAddress(address netip.Addr) string {
 	if address.IsValid() {
 		return address.String()
 	}
 	return ""
 }
+
 func diagnosticCounter(value int64) int64 {
 	if value < 0 {
 		return 0
@@ -80,12 +82,12 @@ func diagnosticCounter(value int64) int64 {
 
 func newDiagnosticConnection(tracker statistic.Tracker) *diagnosticConnectionEntry {
 	info := tracker.Info()
-	dto := DiagnosticConnection{ID: tracker.ID(), Start: info.Start.Format(time.RFC3339Nano), Chains: diagnosticStrings(info.Chain),
+	dto := Connection{ID: tracker.ID(), Start: info.Start.Format(time.RFC3339Nano), Chains: diagnosticStrings(info.Chain),
 		ProviderChains: diagnosticStrings(info.ProviderChain), Rule: info.Rule, RulePayload: info.RulePayload,
 		Upload: diagnosticCounter(info.UploadTotal.Load()), Download: diagnosticCounter(info.DownloadTotal.Load()),
-		Metadata: DiagnosticMetadata{SourceGeoIP: []string{}, DestinationGeoIP: []string{}}}
+		Metadata: Metadata{SourceGeoIP: []string{}, DestinationGeoIP: []string{}}}
 	if m := info.Metadata; m != nil {
-		dto.Metadata = DiagnosticMetadata{Network: m.NetWork.String(), Type: m.Type.String(), SourceIP: diagnosticAddress(m.SrcIP),
+		dto.Metadata = Metadata{Network: m.NetWork.String(), Type: m.Type.String(), SourceIP: diagnosticAddress(m.SrcIP),
 			SourcePort: strconv.FormatUint(uint64(m.SrcPort), 10), DestinationIP: diagnosticAddress(m.DstIP), DestinationPort: strconv.FormatUint(uint64(m.DstPort), 10),
 			Host: m.Host, DNSMode: m.DNSMode.String(), RemoteDestination: m.RemoteDst, SourceIPASN: m.SrcIPASN, DestinationIPASN: m.DstIPASN,
 			SpecialProxy: m.SpecialProxy, SpecialRules: m.SpecialRules, SniffHost: m.SniffHost,
@@ -108,7 +110,7 @@ func (c *diagnosticCollector) baselineConnection(tracker statistic.Tracker) {
 	c.liveCount++
 	c.liveAtomic.Store(int64(c.liveCount))
 	c.connections[entry.dto.ID] = entry
-	notifyDiagnosticStats()
+	c.hub.notifyStats()
 }
 
 func (c *diagnosticCollector) openConnection(tracker statistic.Tracker) {
@@ -131,7 +133,7 @@ func (c *diagnosticCollector) openConnection(tracker statistic.Tracker) {
 	entry.recent = true
 	c.appendRecentLocked(entry)
 	c.recentAtomic.Store(int64(len(c.recent)))
-	notifyDiagnosticStats()
+	c.hub.notifyStats()
 	if len(c.sessions) != 0 {
 		c.broadcastLocked(diagnosticEvent{kind: "opened", connection: entry.dto})
 		c.scheduleSampleLocked(time.Now())
@@ -175,7 +177,7 @@ func (c *diagnosticCollector) closeConnection(tracker statistic.Tracker) {
 	if entry.live {
 		c.liveCount--
 		c.liveAtomic.Store(int64(c.liveCount))
-		notifyDiagnosticStats()
+		c.hub.notifyStats()
 	}
 	entry.live = false
 	visible := len(c.sessions) != 0
@@ -199,12 +201,12 @@ func (c *diagnosticCollector) readTrafficLocked(entry *diagnosticConnectionEntry
 	changed := entry.updateTraffic()
 	if changed || force {
 		c.broadcastLocked(diagnosticEvent{kind: "traffic", id: entry.dto.ID,
-			traffic: diagnosticTraffic{ID: entry.dto.ID, Upload: entry.dto.Upload, Download: entry.dto.Download}})
+			traffic: Traffic{ID: entry.dto.ID, Upload: entry.dto.Upload, Download: entry.dto.Download}})
 	}
 	return changed
 }
 
-func (entry *diagnosticConnectionEntry) withCurrentTraffic() DiagnosticConnection {
+func (entry *diagnosticConnectionEntry) withCurrentTraffic() Connection {
 	// 快照不能推进共享采样基线，否则其他已打开的页面会漏掉流量增量。
 	dto := entry.dto
 	if entry.info != nil {
@@ -297,16 +299,16 @@ func (c *diagnosticCollector) releaseUnreferencedLocked() {
 	}
 }
 
-func (c *diagnosticCollector) snapshotLocked(s *diagnosticSession, kind string, now time.Time) any {
+func (c *diagnosticCollector) snapshotLocked(s *Session, kind string, now time.Time) any {
 	if c.feed == "logs" {
 		return c.logsFrameLocked(s, kind, now)
 	}
 	if c.feed == "dns" {
 		return c.dnsSnapshotLocked(s, kind, now)
 	}
-	frame := diagnosticConnectionsFrame{diagnosticHeader: c.headerLocked(s, kind, now), Live: make([]DiagnosticConnection, 0, c.liveCount),
-		Recent: make([]DiagnosticConnection, len(c.recent)), Opened: []DiagnosticConnection{},
-		Traffic: []diagnosticTraffic{}, Closed: []string{}}
+	frame := ConnectionsFrame{Header: c.headerLocked(s, kind, now), Live: make([]Connection, 0, c.liveCount),
+		Recent: make([]Connection, len(c.recent)), Opened: []Connection{},
+		Traffic: []Traffic{}, Closed: []string{}}
 	for _, entry := range c.connections {
 		if entry.live {
 			frame.Live = append(frame.Live, entry.withCurrentTraffic())
@@ -324,15 +326,15 @@ func (c *diagnosticCollector) snapshotLocked(s *diagnosticSession, kind string, 
 	return frame
 }
 
-func (c *diagnosticCollector) deltaLocked(s *diagnosticSession, now time.Time) any {
+func (c *diagnosticCollector) deltaLocked(s *Session, now time.Time) any {
 	if c.feed == "logs" {
 		return c.logsFrameLocked(s, "delta", now)
 	}
 	if c.feed == "dns" {
 		return c.dnsDeltaLocked(s, now)
 	}
-	frame := diagnosticConnectionsFrame{diagnosticHeader: c.headerLocked(s, "delta", now), Live: []DiagnosticConnection{}, Recent: []DiagnosticConnection{},
-		Opened: []DiagnosticConnection{}, Traffic: []diagnosticTraffic{}, Closed: []string{}}
+	frame := ConnectionsFrame{Header: c.headerLocked(s, "delta", now), Live: []Connection{}, Recent: []Connection{},
+		Opened: []Connection{}, Traffic: []Traffic{}, Closed: []string{}}
 	for _, event := range s.queue {
 		switch event.kind {
 		case "opened":

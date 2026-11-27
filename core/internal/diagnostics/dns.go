@@ -1,4 +1,4 @@
-package main
+package diagnostics
 
 import (
 	"strings"
@@ -8,7 +8,7 @@ import (
 	D "github.com/miekg/dns"
 )
 
-type DiagnosticDnsRecord struct {
+type DNSRecord struct {
 	ID        string   `json:"id"`
 	Domain    string   `json:"domain"`
 	Type      string   `json:"type"`
@@ -22,13 +22,13 @@ type DiagnosticDnsRecord struct {
 	Time      string   `json:"time"`
 }
 
-type diagnosticDNSFrame struct {
-	diagnosticHeader
-	Records []DiagnosticDnsRecord `json:"records"`
-	Added   []DiagnosticDnsRecord `json:"added"`
+type DNSFrame struct {
+	Header
+	Records []DNSRecord `json:"records"`
+	Added   []DNSRecord `json:"added"`
 }
 
-func diagnosticDNSRecord(record dns.QueryRecord, id string, now time.Time) DiagnosticDnsRecord {
+func diagnosticDNSRecord(record dns.QueryRecord, id string, now time.Time) DNSRecord {
 	delay := now.Sub(record.Start).Milliseconds()
 	if delay < 0 {
 		delay = 0
@@ -39,7 +39,7 @@ func diagnosticDNSRecord(record dns.QueryRecord, id string, now time.Time) Diagn
 	default:
 		initiator = "other"
 	}
-	query := DiagnosticDnsRecord{ID: id, Domain: strings.TrimSuffix(record.Question.Name, "."), Type: D.Type(record.Question.Qtype).String(),
+	query := DNSRecord{ID: id, Domain: strings.TrimSuffix(record.Question.Name, "."), Type: D.Type(record.Question.Qtype).String(),
 		Initiator: initiator, Upstream: record.Upstream, Cached: record.Cached, Answers: []string{}, Delay: delay, Time: record.Start.Format(time.RFC3339Nano)}
 	if record.Err != nil {
 		query.Error = record.Err.Error()
@@ -80,23 +80,23 @@ func (c *diagnosticCollector) observeDNS(record dns.QueryRecord) {
 		c.dnsHead = (c.dnsHead + 1) % diagnosticDNSLimit
 	}
 	c.dnsAtomic.Store(int64(len(c.dnsRecords)))
-	notifyDiagnosticStats()
+	c.hub.notifyStats()
 	if len(c.sessions) != 0 {
 		c.broadcastLocked(diagnosticEvent{kind: "dns", dns: query})
 	}
 }
 
-func (c *diagnosticCollector) dnsSnapshotLocked(s *diagnosticSession, kind string, now time.Time) diagnosticDNSFrame {
-	frame := diagnosticDNSFrame{diagnosticHeader: c.headerLocked(s, kind, now),
-		Records: make([]DiagnosticDnsRecord, len(c.dnsRecords)), Added: []DiagnosticDnsRecord{}}
+func (c *diagnosticCollector) dnsSnapshotLocked(s *Session, kind string, now time.Time) DNSFrame {
+	frame := DNSFrame{Header: c.headerLocked(s, kind, now),
+		Records: make([]DNSRecord, len(c.dnsRecords)), Added: []DNSRecord{}}
 	for i := range c.dnsRecords {
 		frame.Records[i] = c.dnsRecords[(c.dnsHead+i)%len(c.dnsRecords)]
 	}
 	return frame
 }
 
-func (c *diagnosticCollector) dnsDeltaLocked(s *diagnosticSession, now time.Time) diagnosticDNSFrame {
-	frame := diagnosticDNSFrame{diagnosticHeader: c.headerLocked(s, "delta", now), Records: []DiagnosticDnsRecord{}, Added: []DiagnosticDnsRecord{}}
+func (c *diagnosticCollector) dnsDeltaLocked(s *Session, now time.Time) DNSFrame {
+	frame := DNSFrame{Header: c.headerLocked(s, "delta", now), Records: []DNSRecord{}, Added: []DNSRecord{}}
 	for _, event := range s.queue {
 		if event.kind == "dns" {
 			frame.Added = append(frame.Added, event.dns)

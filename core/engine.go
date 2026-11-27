@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
+	"github.com/VOD-Studio/ArkClash/core/internal/diagnostics"
 	"github.com/VOD-Studio/ArkClash/core/internal/probe"
 	"github.com/VOD-Studio/ArkClash/core/internal/providers"
 	"github.com/VOD-Studio/ArkClash/core/internal/subfetch"
@@ -125,7 +126,7 @@ type coreEngine struct {
 
 	// 5. 下游独立子系统与路线监听
 	providers *providers.Hub
-	diag      *diagnosticsHub
+	diag      *diagnostics.Hub
 	probe     *probe.Handler
 	geo       atomic.Pointer[geoManager]
 	routes    atomic.Pointer[runtimeRouteWatch]
@@ -152,7 +153,7 @@ func newCoreEngine() *coreEngine {
 		tunFactory: defaultTunFactory,
 		delays:     activeDelayRegistry{active: make(map[*http.Request]context.CancelFunc)},
 		providers:  providers.NewHub(),
-		diag:       newDiagnosticsHub(),
+		diag:       diagnostics.NewHub(),
 	}
 	e.probe = probe.NewHandler(e.probeToken)
 	return e
@@ -199,8 +200,8 @@ func (e *coreEngine) Prefetch(path string) (int, error) {
 	return subfetch.Prefetch(path, e.subfetchView)
 }
 
-func (e *coreEngine) diagIdentityLocked() diagIdentity {
-	return diagIdentity{
+func (e *coreEngine) diagIdentityLocked() diagnostics.Identity {
+	return diagnostics.Identity{
 		Running:        e.running,
 		BootID:         e.bootID,
 		ConfigRevision: e.configRevision,

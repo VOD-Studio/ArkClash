@@ -1,4 +1,4 @@
-package main
+package diagnostics
 
 import (
 	"bufio"
@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/metacubex/http"
@@ -21,16 +22,16 @@ import (
 
 const diagnosticWriteTimeout = 5 * time.Second
 
-func getDiagnosticConnections(w http.ResponseWriter, r *http.Request) {
-	getDiagnosticStream(w, r, "connections")
+func (h *Hub) GetConnections(w http.ResponseWriter, r *http.Request) {
+	h.getStream(w, r, "connections")
 }
 
-func getDiagnosticDns(w http.ResponseWriter, r *http.Request) {
-	getDiagnosticStream(w, r, "dns")
+func (h *Hub) GetDNS(w http.ResponseWriter, r *http.Request) {
+	h.getStream(w, r, "dns")
 }
 
-func getDiagnosticLogs(w http.ResponseWriter, r *http.Request) {
-	getDiagnosticStream(w, r, "logs")
+func (h *Hub) GetLogs(w http.ResponseWriter, r *http.Request) {
+	h.getStream(w, r, "logs")
 }
 
 func diagnosticStreamRuntime(r *http.Request, requireRevision bool) (string, uint64, error) {
@@ -79,23 +80,23 @@ func diagnosticStreamRuntime(r *http.Request, requireRevision bool) (string, uin
 	return boot[0], parsed, nil
 }
 
-func getDiagnosticCapture(w http.ResponseWriter, r *http.Request) {
+func (h *Hub) GetCapture(w http.ResponseWriter, r *http.Request) {
 	bootID, _, err := diagnosticStreamRuntime(r, false)
 	if err != nil {
-		writeError(w, r, http.StatusBadRequest, err)
+		ctrl.WriteError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	status, err := eng.diag.checkBoot(bootID)
+	status, err := h.checkBoot(bootID)
 	if err != nil {
-		writeError(w, r, status, err)
+		ctrl.WriteError(w, r, status, err)
 		return
 	}
-	conn, rw, err := upgradeWebSocket(w, r)
+	conn, rw, err := ctrl.UpgradeWebSocket(w, r)
 	if err != nil {
 		return
 	}
 	writer, readerDone, stop := startDiagnosticSocket(r, conn, rw.Reader)
-	lease, previous := acquireDiagnosticCapture(r.Context(), bootID, conn, readerDone)
+	lease, previous := h.acquireCapture(r.Context(), bootID, conn, readerDone)
 	if lease == nil {
 		stop()
 		return
@@ -112,21 +113,21 @@ func getDiagnosticCapture(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getDiagnosticStream(w http.ResponseWriter, r *http.Request, feed string) {
+func (h *Hub) getStream(w http.ResponseWriter, r *http.Request, feed string) {
 	bootID, revision, err := diagnosticStreamRuntime(r, feed != "logs")
 	if err != nil {
-		writeError(w, r, http.StatusBadRequest, err)
+		ctrl.WriteError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	session, status, err := subscribeDiagnostics(feed, bootID, revision)
+	session, status, err := h.Subscribe(feed, bootID, revision)
 	if err != nil {
-		writeError(w, r, status, err)
+		ctrl.WriteError(w, r, status, err)
 		return
 	}
 	// 握手失败也必须完成 worker；运行代次退休会等待这个通道。
 	defer close(session.workerDone)
-	defer session.close()
-	conn, rw, err := upgradeWebSocket(w, r)
+	defer session.Close()
+	conn, rw, err := ctrl.UpgradeWebSocket(w, r)
 	if err != nil {
 		return
 	}
@@ -150,7 +151,7 @@ func getDiagnosticStream(w http.ResponseWriter, r *http.Request, feed string) {
 				return
 			default:
 			}
-			frame := session.nextFrame()
+			frame := session.NextFrame()
 			if frame == nil {
 				continue
 			}
@@ -205,7 +206,7 @@ func (writer *diagnosticSocketWriter) text(data []byte) error {
 		return err
 	}
 	defer writer.mu.Unlock()
-	return writeTextFrame(writer.conn, data)
+	return ctrl.WriteTextFrame(writer.conn, data)
 }
 
 func (writer *diagnosticSocketWriter) protocolError() {

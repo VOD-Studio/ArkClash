@@ -17,6 +17,7 @@ import "C"
 import (
 	"unsafe"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/diagnostics"
 	"github.com/metacubex/mihomo/log"
 )
 
@@ -30,14 +31,14 @@ func init() {
 			case "[ArkClash] core started", "[ArkClash] reloaded profile %s",
 				"[ArkClash] core stopped with pending VPN resources: %s",
 				"[ArkClash] external controller port unavailable":
-				message = describeDiagnosticLog(event).Message
+				message = diagnostics.DescribeLog(event).Message
 			case "[%s] %s --> %s using DIRECT", "[%s] %s --> %s using GLOBAL",
 				"[%s] %s --> %s using %s", "[%s] %s --> %s match %s using %s",
 				"[%s] %s --> %s doesn't match any rule using %s":
 				if log.Level() > log.INFO {
 					continue
 				}
-				message = describeDiagnosticLog(event).Message
+				message = diagnostics.DescribeLog(event).Message
 			default:
 				continue
 			}

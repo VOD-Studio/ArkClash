@@ -1,4 +1,4 @@
-package main
+package diagnostics
 
 import (
 	"bytes"
@@ -24,14 +24,27 @@ import (
 	D "github.com/miekg/dns"
 )
 
-func diagnosticTestSubscribe(t *testing.T, feed string) (*diagnosticSession, func()) {
+var (
+	testHub            = NewHub()
+	testBootID         = "diag-test-boot"
+	testConfigRevision = uint64(1)
+)
+
+func diagFixture(t *testing.T) {
 	t.Helper()
-	s, status, err := subscribeDiagnostics(feed, eng.bootID, eng.configRevision)
+	testHub = NewHub()
+	testHub.Start(Identity{Running: true, BootID: testBootID, ConfigRevision: testConfigRevision})()
+	t.Cleanup(func() { testHub.Stop()() })
+}
+
+func diagnosticTestSubscribe(t *testing.T, feed string) (*Session, func()) {
+	t.Helper()
+	s, status, err := testHub.Subscribe(feed, testBootID, testConfigRevision)
 	if err != nil || status != 0 {
 		t.Fatalf("subscribe: %d %v", status, err)
 	}
 	var once sync.Once
-	release := func() { once.Do(func() { s.close(); close(s.workerDone) }) }
+	release := func() { once.Do(func() { s.Close(); close(s.workerDone) }) }
 	t.Cleanup(release)
 	return s, release
 }
@@ -48,18 +61,18 @@ func diagnosticTestReceive[T any](t *testing.T, channel <-chan T) T {
 	}
 }
 
-func diagnosticTestFrame(t *testing.T, s *diagnosticSession, now time.Time) diagnosticConnectionsFrame {
+func diagnosticTestFrame(t *testing.T, s *Session, now time.Time) ConnectionsFrame {
 	t.Helper()
-	frame, ok := s.nextFrameAt(now).(diagnosticConnectionsFrame)
+	frame, ok := s.NextFrameAt(now).(ConnectionsFrame)
 	if !ok {
 		t.Fatal("expected connection frame")
 	}
 	return frame
 }
 
-func diagnosticTestDNSFrame(t *testing.T, s *diagnosticSession, now time.Time) diagnosticDNSFrame {
+func diagnosticTestDNSFrame(t *testing.T, s *Session, now time.Time) DNSFrame {
 	t.Helper()
-	frame, ok := s.nextFrameAt(now).(diagnosticDNSFrame)
+	frame, ok := s.NextFrameAt(now).(DNSFrame)
 	if !ok {
 		t.Fatal("expected DNS frame")
 	}
@@ -67,10 +80,10 @@ func diagnosticTestDNSFrame(t *testing.T, s *diagnosticSession, now time.Time) d
 }
 
 func TestDiagnosticsShortConnectionBaselineAndSettling(t *testing.T) {
-	cfg := fixture(t)
+	diagFixture(t)
 	left, peer := net.Pipe()
 	defer peer.Close()
-	baseline := statistic.NewTCPTracker(outbound.NewConn(left, cfg.Proxies["DIRECT"].Adapter()), statistic.DefaultManager,
+	baseline := statistic.NewTCPTracker(outbound.NewConn(left, outbound.NewDirect()), statistic.DefaultManager,
 		&C.Metadata{NetWork: C.TCP, Host: "baseline.diag.test"}, nil, 0, 0, false)
 	defer baseline.Close()
 	s, _ := diagnosticTestSubscribe(t, "connections")
@@ -83,7 +96,7 @@ func TestDiagnosticsShortConnectionBaselineAndSettling(t *testing.T) {
 	defer peer.Close()
 	metadata := &C.Metadata{NetWork: C.TCP, Host: "short.diag.test", SrcIP: netip.MustParseAddr("::1"), DstPort: 80,
 		SrcGeoIP: []string{"ZZ"}, Process: "not exported", InUser: "not exported"}
-	tracker := statistic.NewTCPTracker(outbound.NewConn(left, cfg.Proxies["DIRECT"].Adapter()), statistic.DefaultManager, metadata, nil, 0, 0, false)
+	tracker := statistic.NewTCPTracker(outbound.NewConn(left, outbound.NewDirect()), statistic.DefaultManager, metadata, nil, 0, 0, false)
 	written := make(chan error, 1)
 	go func() { _, err := io.CopyN(io.Discard, peer, 7); written <- err }()
 	if _, err := tracker.Write([]byte("payload")); err != nil {
@@ -99,7 +112,7 @@ func TestDiagnosticsShortConnectionBaselineAndSettling(t *testing.T) {
 	if err := tracker.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if s.nextFrameAt(now.Add(500*time.Millisecond)) != nil {
+	if s.NextFrameAt(now.Add(500*time.Millisecond)) != nil {
 		t.Fatal("flushed before one second")
 	}
 	frame := diagnosticTestFrame(t, s, now.Add(time.Second))
@@ -142,7 +155,7 @@ func TestDiagnosticsShortConnectionBaselineAndSettling(t *testing.T) {
 }
 
 func TestDiagnosticsJoinBeforeStoreAndRangeCloseInterleaving(t *testing.T) {
-	cfg := fixture(t)
+	diagFixture(t)
 	s, _ := diagnosticTestSubscribe(t, "connections")
 	c := s.collector
 	now := time.Now()
@@ -154,7 +167,7 @@ func TestDiagnosticsJoinBeforeStoreAndRangeCloseInterleaving(t *testing.T) {
 	left, peer := net.Pipe()
 	defer peer.Close()
 	go func() {
-		joined <- statistic.NewTCPTracker(outbound.NewConn(left, cfg.Proxies["DIRECT"].Adapter()), statistic.DefaultManager, &C.Metadata{Host: "before-store.diag.test"}, nil, 0, 0, false)
+		joined <- statistic.NewTCPTracker(outbound.NewConn(left, outbound.NewDirect()), statistic.DefaultManager, &C.Metadata{Host: "before-store.diag.test"}, nil, 0, 0, false)
 	}()
 	tracker := diagnosticTestReceive(t, entered)
 	if statistic.DefaultManager.Get(tracker.ID()) != nil {
@@ -212,7 +225,7 @@ func TestDiagnosticsJoinBeforeStoreAndRangeCloseInterleaving(t *testing.T) {
 }
 
 func TestDiagnosticsAllLiveUnboundedHistoryAndOverflowReset(t *testing.T) {
-	cfg := fixture(t)
+	diagFixture(t)
 	s, _ := diagnosticTestSubscribe(t, "connections")
 	now := time.Now()
 	diagnosticTestFrame(t, s, now)
@@ -229,7 +242,7 @@ func TestDiagnosticsAllLiveUnboundedHistoryAndOverflowReset(t *testing.T) {
 	for range 2105 {
 		left, peer := net.Pipe()
 		peers = append(peers, peer)
-		trackers = append(trackers, statistic.NewTCPTracker(outbound.NewConn(left, cfg.Proxies["DIRECT"].Adapter()), statistic.DefaultManager, &C.Metadata{}, nil, 0, 0, false))
+		trackers = append(trackers, statistic.NewTCPTracker(outbound.NewConn(left, outbound.NewDirect()), statistic.DefaultManager, &C.Metadata{}, nil, 0, 0, false))
 	}
 	frame := diagnosticTestFrame(t, s, now.Add(time.Second))
 	if frame.Kind != "reset" || len(frame.Live) != 2105 || len(frame.Recent) != 2000 || frame.Evicted != 105 || frame.Dropped == 0 {
@@ -257,10 +270,10 @@ func TestDiagnosticsAllLiveUnboundedHistoryAndOverflowReset(t *testing.T) {
 }
 
 func TestDiagnosticsSharedSamplerHeartbeatAndLastUnsubscribe(t *testing.T) {
-	cfg := fixture(t)
+	diagFixture(t)
 	first, releaseFirst := diagnosticTestSubscribe(t, "connections")
 	second, releaseSecond := diagnosticTestSubscribe(t, "connections")
-	if first.collector != second.collector || eng.diag.dns != nil {
+	if first.collector != second.collector || testHub.dns != nil {
 		t.Fatal("collectors are not feed scoped and shared")
 	}
 	now := time.Now()
@@ -268,7 +281,7 @@ func TestDiagnosticsSharedSamplerHeartbeatAndLastUnsubscribe(t *testing.T) {
 	diagnosticTestFrame(t, second, now)
 	left, peer := net.Pipe()
 	defer peer.Close()
-	tracker := statistic.NewTCPTracker(outbound.NewConn(left, cfg.Proxies["DIRECT"].Adapter()), statistic.DefaultManager, &C.Metadata{}, nil, 0, 0, false)
+	tracker := statistic.NewTCPTracker(outbound.NewConn(left, outbound.NewDirect()), statistic.DefaultManager, &C.Metadata{}, nil, 0, 0, false)
 	defer tracker.Close()
 	diagnosticTestFrame(t, first, now.Add(time.Second))
 	diagnosticTestFrame(t, second, now.Add(time.Second))
@@ -285,9 +298,9 @@ func TestDiagnosticsSharedSamplerHeartbeatAndLastUnsubscribe(t *testing.T) {
 		t.Fatalf("heartbeat fabricated changes: %+v", frame)
 	}
 	releaseFirst()
-	eng.diag.mu.Lock()
-	stillActive := eng.diag.connections == c
-	eng.diag.mu.Unlock()
+	testHub.mu.Lock()
+	stillActive := testHub.connections == c
+	testHub.mu.Unlock()
 	if !stillActive {
 		t.Fatal("first unsubscribe detached shared observer")
 	}
@@ -297,12 +310,12 @@ func TestDiagnosticsSharedSamplerHeartbeatAndLastUnsubscribe(t *testing.T) {
 		t.Fatal("remaining subscriber lost Close")
 	}
 	releaseSecond()
-	eng.diag.mu.Lock()
-	if eng.diag.connections != nil {
-		eng.diag.mu.Unlock()
+	testHub.mu.Lock()
+	if testHub.connections != nil {
+		testHub.mu.Unlock()
 		t.Fatal("last unsubscribe retained registry")
 	}
-	eng.diag.mu.Unlock()
+	testHub.mu.Unlock()
 	c.mu.Lock()
 	if !c.closed || len(c.connections) != 0 || !c.sampleDue.IsZero() {
 		c.mu.Unlock()
@@ -325,11 +338,11 @@ func diagnosticTestRecord(index int) dns.QueryRecord {
 }
 
 func TestDiagnosticsDNSOverflowBoundaryConversionAndRetirement(t *testing.T) {
-	fixture(t)
+	diagFixture(t)
 	s, release := diagnosticTestSubscribe(t, "dns")
 	now := time.Now()
 	first := diagnosticTestDNSFrame(t, s, now)
-	if first.Kind != "snapshot" || len(first.Records) != 0 || first.Seq != 1 || eng.diag.connections != nil {
+	if first.Kind != "snapshot" || len(first.Records) != 0 || first.Seq != 1 || testHub.connections != nil {
 		t.Fatal("DNS baseline or feed isolation incorrect")
 	}
 	c := s.collector
@@ -379,12 +392,12 @@ func TestDiagnosticsDNSOverflowBoundaryConversionAndRetirement(t *testing.T) {
 		}
 	}
 	release()
-	eng.diag.mu.Lock()
-	if eng.diag.dns != c {
-		eng.diag.mu.Unlock()
+	testHub.mu.Lock()
+	if testHub.dns != c {
+		testHub.mu.Unlock()
 		t.Fatal("early DNS unsubscribe detached shared hook")
 	}
-	eng.diag.mu.Unlock()
+	testHub.mu.Unlock()
 	releaseLate()
 	c.observeDNS(diagnosticTestRecord(9999))
 	c.mu.Lock()
@@ -399,15 +412,15 @@ func diagnosticTestAction(t *testing.T, connections bool, body string) int {
 	request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	response := httptest.NewRecorder()
 	if connections {
-		postDiagnosticConnectionsClose(response, request)
+		testHub.PostConnectionsClose(response, request)
 	} else {
-		postDiagnosticDnsClearCache(response, request)
+		testHub.PostDNSClearCache(response, request)
 	}
 	return response.Code
 }
 
 func TestDiagnosticsActionsRejectStaleMalformedAndCloseIdempotently(t *testing.T) {
-	cfg := fixture(t)
+	diagFixture(t)
 	s, _ := diagnosticTestSubscribe(t, "connections")
 	now := time.Now()
 	diagnosticTestFrame(t, s, now)
@@ -424,9 +437,9 @@ func TestDiagnosticsActionsRejectStaleMalformedAndCloseIdempotently(t *testing.T
 	}
 	peer := diagnosticTestReceive(t, accepted)
 	defer peer.Close()
-	tracker := statistic.NewTCPTracker(outbound.NewConn(connection, cfg.Proxies["DIRECT"].Adapter()), statistic.DefaultManager, &C.Metadata{}, nil, 0, 0, false)
+	tracker := statistic.NewTCPTracker(outbound.NewConn(connection, outbound.NewDirect()), statistic.DefaultManager, &C.Metadata{}, nil, 0, 0, false)
 	defer tracker.Close()
-	identity := fmt.Sprintf(`"expectedBootId":%q,"expectedConfigRevision":%d`, eng.bootID, eng.configRevision)
+	identity := fmt.Sprintf(`"expectedBootId":%q,"expectedConfigRevision":%d`, testBootID, testConfigRevision)
 	for _, body := range []string{`{` + identity + `,"scope":"one"}`, `{` + identity + `,"scope":"one","id":""}`, `{` + identity + `,"scope":"all","id":"x"}`, `{` + identity + `,"scope":"all","id":null}`, `{` + identity + `,"scope":"all","extra":true}`, `{` + identity + `,"scope":"one","id":17}`} {
 		if status := diagnosticTestAction(t, true, body); status != 400 {
 			t.Fatalf("invalid request status=%d body=%s", status, body)
@@ -435,7 +448,7 @@ func TestDiagnosticsActionsRejectStaleMalformedAndCloseIdempotently(t *testing.T
 			t.Fatal("invalid one request closed all")
 		}
 	}
-	stale := fmt.Sprintf(`{"expectedBootId":%q,"expectedConfigRevision":%d,"scope":"all"}`, eng.bootID, eng.configRevision+1)
+	stale := fmt.Sprintf(`{"expectedBootId":%q,"expectedConfigRevision":%d,"scope":"all"}`, testBootID, testConfigRevision+1)
 	if status := diagnosticTestAction(t, true, stale); status != 409 || statistic.DefaultManager.Get(tracker.ID()) == nil {
 		t.Fatal("stale close-all changed current connections")
 	}
@@ -454,15 +467,15 @@ func TestDiagnosticsActionsRejectStaleMalformedAndCloseIdempotently(t *testing.T
 	if status := diagnosticTestAction(t, false, `{`+identity+`,"scope":""}`); status != 400 {
 		t.Fatal("DNS action accepted scope")
 	}
-	eng.diag.mu.Lock()
-	eng.diag.identity.Running = false
-	eng.diag.mu.Unlock()
+	testHub.mu.Lock()
+	testHub.identity.Running = false
+	testHub.mu.Unlock()
 	if status := diagnosticTestAction(t, true, `{`+identity+`,"scope":"all"}`); status != 503 {
 		t.Fatal("stopped action not rejected")
 	}
-	eng.diag.mu.Lock()
-	eng.diag.identity.Running = true
-	eng.diag.mu.Unlock()
+	testHub.mu.Lock()
+	testHub.identity.Running = true
+	testHub.mu.Unlock()
 }
 
 func newDiagnosticTestResolver(t *testing.T) dns.Resolvers {
@@ -500,7 +513,7 @@ func diagnosticTestQuery(t *testing.T, rs dns.Resolvers, name string) {
 }
 
 func TestDiagnosticsDNSRealMissHitClearAndStaleNoSideEffect(t *testing.T) {
-	fixture(t)
+	diagFixture(t)
 	s, _ := diagnosticTestSubscribe(t, "dns")
 	now := time.Now()
 	diagnosticTestDNSFrame(t, s, now)
@@ -511,8 +524,8 @@ func TestDiagnosticsDNSRealMissHitClearAndStaleNoSideEffect(t *testing.T) {
 	query := func(name string) { diagnosticTestQuery(t, rs, name) }
 	query("ok.diag.test.")
 	query("ok.diag.test.")
-	identity := fmt.Sprintf(`"expectedBootId":%q,"expectedConfigRevision":%d`, eng.bootID, eng.configRevision)
-	stale := fmt.Sprintf(`{"expectedBootId":%q,"expectedConfigRevision":%d}`, eng.bootID, eng.configRevision+1)
+	identity := fmt.Sprintf(`"expectedBootId":%q,"expectedConfigRevision":%d`, testBootID, testConfigRevision)
+	stale := fmt.Sprintf(`{"expectedBootId":%q,"expectedConfigRevision":%d}`, testBootID, testConfigRevision+1)
 	if diagnosticTestAction(t, false, stale) != 409 {
 		t.Fatal("stale clear not rejected")
 	}
@@ -538,7 +551,7 @@ func TestDiagnosticsDNSRealMissHitClearAndStaleNoSideEffect(t *testing.T) {
 }
 
 func TestDiagnosticsStopCancelsSocketsAndWaitsOutsideCoreLock(t *testing.T) {
-	fixture(t)
+	diagFixture(t)
 	connections, releaseConnections := diagnosticTestSubscribe(t, "connections")
 	dnsSession, releaseDNS := diagnosticTestSubscribe(t, "dns")
 	left, right := net.Pipe()
@@ -546,15 +559,13 @@ func TestDiagnosticsStopCancelsSocketsAndWaitsOutsideCoreLock(t *testing.T) {
 	if !connections.attach(left) {
 		t.Fatal("attach failed")
 	}
-	eng.mu.Lock()
-	wait := eng.diag.Stop()
-	eng.diag.mu.Lock()
-	if eng.diag.connections != nil || eng.diag.dns != nil {
-		eng.diag.mu.Unlock()
-		eng.mu.Unlock()
+	wait := testHub.Stop()
+	testHub.mu.Lock()
+	if testHub.connections != nil || testHub.dns != nil {
+		testHub.mu.Unlock()
 		t.Fatal("stop left observers registered")
 	}
-	eng.diag.mu.Unlock()
+	testHub.mu.Unlock()
 	select {
 	case <-connections.done:
 	default:
@@ -565,7 +576,6 @@ func TestDiagnosticsStopCancelsSocketsAndWaitsOutsideCoreLock(t *testing.T) {
 	default:
 		t.Fatal("DNS session not canceled synchronously")
 	}
-	eng.mu.Unlock()
 	joined := make(chan struct{})
 	go func() { wait(); close(joined) }()
 	select {
@@ -576,7 +586,7 @@ func TestDiagnosticsStopCancelsSocketsAndWaitsOutsideCoreLock(t *testing.T) {
 	releaseConnections()
 	releaseDNS()
 	diagnosticTestReceive(t, joined)
-	if connections.nextFrame() != nil || dnsSession.nextFrame() != nil {
+	if connections.NextFrame() != nil || dnsSession.NextFrame() != nil {
 		t.Fatal("canceled session emitted data")
 	}
 	late, peer := net.Pipe()
@@ -590,11 +600,11 @@ func TestDiagnosticsStopCancelsSocketsAndWaitsOutsideCoreLock(t *testing.T) {
 }
 
 func TestDiagnosticsInitializationReconcilesLifecycleAndSnapshot(t *testing.T) {
-	cfg := fixture(t)
+	diagFixture(t)
 	manager := new(statistic.Manager)
 	left, peer := net.Pipe()
 	defer peer.Close()
-	baseline := statistic.NewTCPTracker(outbound.NewConn(left, cfg.Proxies["DIRECT"].Adapter()), manager, &C.Metadata{Host: "baseline.diag.test"}, nil, 0, 0, false)
+	baseline := statistic.NewTCPTracker(outbound.NewConn(left, outbound.NewDirect()), manager, &C.Metadata{Host: "baseline.diag.test"}, nil, 0, 0, false)
 	defer baseline.Close()
 	s, _ := diagnosticTestSubscribe(t, "connections")
 	now := time.Now()
@@ -619,7 +629,7 @@ func TestDiagnosticsInitializationReconcilesLifecycleAndSnapshot(t *testing.T) {
 	}
 	left, peer = net.Pipe()
 	defer peer.Close()
-	short := statistic.NewTCPTracker(outbound.NewConn(left, cfg.Proxies["DIRECT"].Adapter()), manager, &C.Metadata{Host: "short.diag.test"}, nil, 0, 0, false)
+	short := statistic.NewTCPTracker(outbound.NewConn(left, outbound.NewDirect()), manager, &C.Metadata{Host: "short.diag.test"}, nil, 0, 0, false)
 	short.Info().UploadTotal.Add(19)
 	if err := short.Close(); err != nil {
 		t.Fatal(err)

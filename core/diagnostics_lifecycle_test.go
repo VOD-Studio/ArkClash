@@ -1,25 +1,327 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/diagnostics"
+	"github.com/gobwas/ws"
 	"github.com/metacubex/http"
 	"github.com/metacubex/http/httptest"
+	"github.com/metacubex/mihomo/adapter/outbound"
+	"github.com/metacubex/mihomo/component/resolver"
 	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/dns"
 	"github.com/metacubex/mihomo/tunnel"
 	"github.com/metacubex/mihomo/tunnel/statistic"
+	D "github.com/miekg/dns"
 )
+
+type diagnosticStreamExecution struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+type diagnosticStreamServer struct {
+	server  *httptest.Server
+	entered chan *diagnosticStreamExecution
+}
+
+type diagnosticStreamHijacker struct {
+	http.ResponseWriter
+	wrap func(net.Conn, *bufio.ReadWriter) (net.Conn, *bufio.ReadWriter)
+}
+
+func (w diagnosticStreamHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	conn, rw, err := w.ResponseWriter.(http.Hijacker).Hijack()
+	if err != nil {
+		return nil, nil, err
+	}
+	conn, rw = w.wrap(conn, rw)
+	return conn, rw, nil
+}
+
+func newDiagnosticStreamServer(t *testing.T, wrap func(net.Conn, *bufio.ReadWriter) (net.Conn, *bufio.ReadWriter)) *diagnosticStreamServer {
+	t.Helper()
+	s := &diagnosticStreamServer{entered: make(chan *diagnosticStreamExecution, 16)}
+	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithCancel(r.Context())
+		execution := &diagnosticStreamExecution{cancel: cancel, done: make(chan struct{})}
+		s.entered <- execution
+		defer close(execution.done)
+		defer cancel()
+		if wrap != nil {
+			w = diagnosticStreamHijacker{ResponseWriter: w, wrap: wrap}
+		}
+		switch r.URL.Path {
+		case "/capture":
+			eng.diag.GetCapture(w, r.WithContext(ctx))
+		case "/stats":
+			eng.diag.GetStats(w, r.WithContext(ctx))
+		case "/dns":
+			eng.diag.GetDNS(w, r.WithContext(ctx))
+		case "/logs":
+			eng.diag.GetLogs(w, r.WithContext(ctx))
+		case "/logs/clear":
+			eng.diag.PostLogsClear(w, r.WithContext(ctx))
+		default:
+			eng.diag.GetConnections(w, r.WithContext(ctx))
+		}
+	}))
+	t.Cleanup(s.server.Close)
+	return s
+}
+
+func diagnosticStreamTarget(feed string) string {
+	query := url.Values{"expectedBootId": {eng.bootID}}
+	if feed != "capture" && feed != "logs" {
+		query.Set("expectedConfigRevision", strconv.FormatUint(eng.configRevision, 10))
+	}
+	return "/" + feed + "?" + query.Encode()
+}
+
+func dialDiagnosticStream(t *testing.T, s *diagnosticStreamServer, feed string, smallReadBuffer bool) (net.Conn, *bufio.Reader, *diagnosticStreamExecution) {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", s.server.Listener.Addr().String(), 3*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	if smallReadBuffer {
+		if err := conn.(*net.TCPConn).SetReadBuffer(1024); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := conn.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	_, err = fmt.Fprintf(conn, "GET %s HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive, Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", diagnosticStreamTarget(feed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReader(conn)
+	response, err := http.ReadResponse(reader, &http.Request{Method: http.MethodGet})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusSwitchingProtocols || response.Header.Get("Sec-WebSocket-Accept") != "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=" {
+		t.Fatalf("upgrade status=%d headers=%v", response.StatusCode, response.Header)
+	}
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case execution := <-s.entered:
+		return conn, reader, execution
+	case <-time.After(3 * time.Second):
+		t.Fatal("handler did not start")
+		return nil, nil, nil
+	}
+}
+
+func waitDiagnosticStream(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("diagnostic worker did not exit")
+	}
+}
+
+func readDiagnosticWSFrame(t *testing.T, conn net.Conn, reader *bufio.Reader) ws.Frame {
+	t.Helper()
+	if err := conn.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	frame, err := ws.ReadFrame(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ws.CheckHeader(frame.Header, ws.StateClientSide); err != nil {
+		t.Fatal(err)
+	}
+	return frame
+}
+
+type diagnosticStreamWireFrame struct {
+	Type           string          `json:"type"`
+	Kind           string          `json:"kind"`
+	BootID         string          `json:"bootId"`
+	ConfigRevision uint64          `json:"configRevision"`
+	SessionID      string          `json:"sessionId"`
+	Seq            uint64          `json:"seq"`
+	Live           json.RawMessage `json:"live"`
+	Recent         json.RawMessage `json:"recent"`
+	Opened         json.RawMessage `json:"opened"`
+	Closed         []string        `json:"closed"`
+	Records        json.RawMessage `json:"records"`
+}
+
+func readDiagnosticCanonicalSnapshot(t *testing.T, conn net.Conn, reader *bufio.Reader, feed string) diagnosticStreamWireFrame {
+	t.Helper()
+	frame := readDiagnosticWSFrame(t, conn, reader)
+	var snapshot diagnosticStreamWireFrame
+	if frame.Header.OpCode != ws.OpText {
+		t.Fatalf("initial opcode=%d", frame.Header.OpCode)
+	}
+	if err := json.Unmarshal(frame.Payload, &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Type != feed || snapshot.Kind != "snapshot" || snapshot.Seq != 1 || snapshot.SessionID == "" || snapshot.BootID != eng.bootID || snapshot.ConfigRevision != eng.configRevision {
+		t.Fatalf("initial frame=%+v", snapshot)
+	}
+	return snapshot
+}
+
+func writeDiagnosticClientFrames(t *testing.T, conn net.Conn, frames ...ws.Frame) {
+	t.Helper()
+	var payload bytes.Buffer
+	for _, frame := range frames {
+		if err := ws.WriteFrame(&payload, ws.MaskFrame(frame)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := conn.SetWriteDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Write(payload.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func closeDiagnosticClient(t *testing.T, conn net.Conn, reader *bufio.Reader) {
+	t.Helper()
+	writeDiagnosticClientFrames(t, conn, ws.NewCloseFrame(ws.NewCloseFrameBody(ws.StatusNormalClosure, "done")))
+	frame := readDiagnosticWSFrame(t, conn, reader)
+	code, _ := ws.ParseCloseFrameData(frame.Payload)
+	if frame.Header.OpCode != ws.OpClose || code != ws.StatusNormalClosure {
+		t.Fatalf("close reply opcode=%d code=%d", frame.Header.OpCode, code)
+	}
+}
+
+func readDiagnosticCaptureReady(t *testing.T, conn net.Conn, reader *bufio.Reader) {
+	t.Helper()
+	if frame := readDiagnosticWSFrame(t, conn, reader); frame.Header.OpCode != ws.OpText || string(frame.Payload) != "ready" {
+		t.Fatalf("capture acknowledgement opcode=%d payload=%q", frame.Header.OpCode, frame.Payload)
+	}
+}
+
+func pingDiagnosticCapture(t *testing.T, conn net.Conn, reader *bufio.Reader) {
+	t.Helper()
+	writeDiagnosticClientFrames(t, conn, ws.NewPingFrame([]byte("capture")))
+	if frame := readDiagnosticWSFrame(t, conn, reader); frame.Header.OpCode != ws.OpPong || string(frame.Payload) != "capture" {
+		t.Fatalf("capture sent data instead of pong: opcode=%d payload=%q", frame.Header.OpCode, frame.Payload)
+	}
+}
+
+func diagnosticSnapshotRows[T any](t *testing.T, raw json.RawMessage) []T {
+	t.Helper()
+	var rows []T
+	if err := json.Unmarshal(raw, &rows); err != nil || rows == nil {
+		t.Fatalf("invalid snapshot rows: %s %v", raw, err)
+	}
+	return rows
+}
+
+func newDiagnosticStreamTracker(t *testing.T, host string) statistic.Tracker {
+	t.Helper()
+	conn, peer := net.Pipe()
+	tracker := statistic.NewTCPTracker(outbound.NewConn(conn, outbound.NewDirect()), statistic.DefaultManager,
+		&C.Metadata{NetWork: C.TCP, Type: C.HTTP, Host: host, DstPort: 80}, nil, 0, 0, false)
+	t.Cleanup(func() { _ = tracker.Close(); _ = peer.Close() })
+	return tracker
+}
+
+func newDiagnosticTestResolver(t *testing.T) dns.Resolvers {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{})
+	server := &D.Server{Listener: listener, NotifyStartedFunc: func() { close(started) }, Handler: D.HandlerFunc(func(w D.ResponseWriter, q *D.Msg) {
+		reply := new(D.Msg).SetReply(q)
+		if strings.HasPrefix(q.Question[0].Name, "missing.") {
+			reply.Rcode = D.RcodeNameError
+		} else {
+			reply.Answer = []D.RR{&D.A{Hdr: D.RR_Header{Name: q.Question[0].Name, Rrtype: D.TypeA, Class: D.ClassINET, Ttl: 60}, A: net.IPv4(192, 0, 2, 7)}}
+		}
+		_ = w.WriteMsg(reply)
+	})}
+	served := make(chan error, 1)
+	go func() { served <- server.ActivateAndServe() }()
+	waitDiagnosticStream(t, started)
+	t.Cleanup(func() {
+		_ = server.Shutdown()
+		select {
+		case <-served:
+		case <-time.After(5 * time.Second):
+			t.Fatal("DNS server shutdown deadlocked")
+		}
+	})
+	rs := dns.NewResolver(dns.Config{Main: []dns.NameServer{{Net: "tcp", Addr: listener.Addr().String()}}, IPv6: true})
+	t.Cleanup(rs.ResetConnection)
+	return rs
+}
+
+func diagnosticTestQuery(t *testing.T, rs dns.Resolvers, name string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(resolver.WithInitiator(context.Background(), "rule"), 5*time.Second)
+	defer cancel()
+	if _, err := rs.ExchangeContext(ctx, new(D.Msg).SetQuestion(name, D.TypeA)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func diagnosticTestRecord(index int) dns.QueryRecord {
+	question := D.Question{Name: fmt.Sprintf("request-%d.diag.test.", index), Qtype: D.TypeA, Qclass: D.ClassINET}
+	return dns.QueryRecord{Question: question, Start: time.Unix(1700000000, 0), Initiator: "direct", Msg: &D.Msg{MsgHdr: D.MsgHdr{Rcode: D.RcodeSuccess}, Answer: []D.RR{&D.A{Hdr: D.RR_Header{Name: question.Name, Rrtype: D.TypeA, Class: D.ClassINET, Ttl: 60}, A: net.IPv4(192, 0, 2, 7)}}}}
+}
+
+func diagnosticTestSubscribe(t *testing.T, feed string) (*diagnostics.Session, func()) {
+	t.Helper()
+	s, status, err := eng.diag.Subscribe(feed, eng.bootID, eng.configRevision)
+	if err != nil || status != 0 {
+		t.Fatalf("subscribe: %d %v", status, err)
+	}
+	var once sync.Once
+	release := func() { once.Do(func() { s.Close(); s.CloseWorkerDone() }) }
+	t.Cleanup(release)
+	return s, release
+}
+
+func diagnosticTestFrame(t *testing.T, s *diagnostics.Session, now time.Time) diagnostics.ConnectionsFrame {
+	t.Helper()
+	frame, ok := s.NextFrameAt(now).(diagnostics.ConnectionsFrame)
+	if !ok {
+		t.Fatal("expected connection frame")
+	}
+	return frame
+}
+
+func diagnosticTestDNSFrame(t *testing.T, s *diagnostics.Session, now time.Time) diagnostics.DNSFrame {
+	t.Helper()
+	frame, ok := s.NextFrameAt(now).(diagnostics.DNSFrame)
+	if !ok {
+		t.Fatal("expected DNS frame")
+	}
+	return frame
+}
 
 func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing.T) {
 	fixture(t)
@@ -27,9 +329,8 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 	rs := newDiagnosticTestResolver(t)
 	capture, captureReader, captureExecution := dialDiagnosticStream(t, server, "capture", false)
 	readDiagnosticCaptureReady(t, capture, captureReader)
-	eng.diag.mu.Lock()
-	lease, previousConnections, previousDNS := eng.diag.capture, eng.diag.connections, eng.diag.dns
-	eng.diag.mu.Unlock()
+	lease, previousConnections, previousDNS, _ := eng.diag.StateTokens()
+	previousConnDone, previousDNSDone := eng.diag.CollectorWorkerDones()
 	old := newDiagnosticStreamTracker(t, "old.diag.test")
 	if err := old.Close(); err != nil {
 		t.Fatal(err)
@@ -39,8 +340,8 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 	connectionSnapshot := readDiagnosticCanonicalSnapshot(t, connectionPage, connectionReader, "connections")
 	dnsPage, dnsReader, dnsExecution := dialDiagnosticStream(t, server, "dns", false)
 	dnsSnapshot := readDiagnosticCanonicalSnapshot(t, dnsPage, dnsReader, "dns")
-	oldRecent := diagnosticSnapshotRows[DiagnosticConnection](t, connectionSnapshot.Recent)
-	oldRecords := diagnosticSnapshotRows[DiagnosticDnsRecord](t, dnsSnapshot.Records)
+	oldRecent := diagnosticSnapshotRows[diagnostics.Connection](t, connectionSnapshot.Recent)
+	oldRecords := diagnosticSnapshotRows[diagnostics.DNSRecord](t, dnsSnapshot.Records)
 	if len(oldRecent) != 1 || oldRecent[0].ID != old.ID() || len(oldRecords) != 1 || oldRecords[0].Domain != "old.diag.test" {
 		t.Fatal("old boot lease did not populate both rings")
 	}
@@ -60,10 +361,8 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 		default:
 		}
 	}
-	eng.diag.mu.Lock()
-	untouched := eng.diag.capture == lease && eng.diag.connections == previousConnections && eng.diag.dns == previousDNS
-	eng.diag.mu.Unlock()
-	if !untouched {
+	curCapture, curConns, curDNS, _ := eng.diag.StateTokens()
+	if curCapture != lease || curConns != previousConnections || curDNS != previousDNS {
 		t.Fatal("failed parse cleared diagnostic state")
 	}
 	pingDiagnosticCapture(t, capture, captureReader)
@@ -78,13 +377,12 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 	}
 	waitDiagnosticStream(t, connectionExecution.done)
 	waitDiagnosticStream(t, dnsExecution.done)
-	waitDiagnosticStream(t, previousConnections.workerDone)
-	waitDiagnosticStream(t, previousDNS.workerDone)
+	waitDiagnosticStream(t, previousConnDone)
+	waitDiagnosticStream(t, previousDNSDone)
 	pingDiagnosticCapture(t, capture, captureReader)
-	eng.diag.mu.Lock()
-	fresh := eng.diag.capture == lease && eng.diag.connections != nil && eng.diag.connections != previousConnections &&
-		eng.diag.dns != nil && eng.diag.dns != previousDNS
-	eng.diag.mu.Unlock()
+	curCapture, curConns, curDNS, _ = eng.diag.StateTokens()
+	fresh := curCapture == lease && curConns != nil && curConns != previousConnections &&
+		curDNS != nil && curDNS != previousDNS
 	if !fresh || eng.bootID != oldBoot || eng.configRevision != oldRevision+1 || eng.current.Profile != "next" {
 		t.Fatal("successful reload did not advance configuration identity")
 	}
@@ -101,8 +399,8 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 	connectionSnapshot = readDiagnosticCanonicalSnapshot(t, connectionPage, connectionReader, "connections")
 	dnsPage, dnsReader, dnsExecution = dialDiagnosticStream(t, server, "dns", false)
 	dnsSnapshot = readDiagnosticCanonicalSnapshot(t, dnsPage, dnsReader, "dns")
-	recent := diagnosticSnapshotRows[DiagnosticConnection](t, connectionSnapshot.Recent)
-	records := diagnosticSnapshotRows[DiagnosticDnsRecord](t, dnsSnapshot.Records)
+	recent := diagnosticSnapshotRows[diagnostics.Connection](t, connectionSnapshot.Recent)
+	records := diagnosticSnapshotRows[diagnostics.DNSRecord](t, dnsSnapshot.Records)
 	if len(recent) != 1 || recent[0].ID != next.ID() || len(records) != 1 || records[0].Domain != "next.diag.test" ||
 		records[0].ID == oldRecords[0].ID || eng.bootID != oldBoot || eng.configRevision != oldRevision+1 {
 		t.Fatal("reload leaked old history or detach cleared the new generation")
@@ -129,10 +427,8 @@ func TestDiagnosticsReloadKeepsCollectorsOnForwardingSuspensionFailure(t *testin
 	eng.mu.Lock()
 	oldRevision := eng.configRevision
 	eng.mu.Unlock()
-	eng.diag.mu.Lock()
-	dns := eng.diag.dns
-	eng.diag.mu.Unlock()
-	dns.observeDNS(diagnosticTestRecord(1))
+	_, _, dnsToken, _ := eng.diag.StateTokens()
+	eng.diag.ObserveDNS(diagnosticTestRecord(1))
 
 	sentinel := errors.New("fixture forwarding close uncertainty")
 	socksPort, entered, _ := forwardingBlockedSocks(t)
@@ -156,7 +452,7 @@ func TestDiagnosticsReloadKeepsCollectorsOnForwardingSuspensionFailure(t *testin
 		t.Fatalf("reload did not fail at forwarding suspension: %v", err)
 	}
 	select {
-	case <-session.done:
+	case <-session.Done():
 		t.Fatal("failed suspension canceled the existing stream")
 	default:
 	}
@@ -164,15 +460,13 @@ func TestDiagnosticsReloadKeepsCollectorsOnForwardingSuspensionFailure(t *testin
 	eng.mu.Lock()
 	rev := eng.configRevision
 	eng.mu.Unlock()
-	eng.diag.mu.Lock()
-	intact := eng.diag.connections == session.collector && eng.diag.dns == dns && rev == oldRevision
-	eng.diag.mu.Unlock()
-	if !intact {
+	_, curConns, curDNS, _ := eng.diag.StateTokens()
+	if curConns != session.CollectorToken() || curDNS != dnsToken || rev != oldRevision {
 		t.Fatal("failed suspension replaced canonical diagnostic state")
 	}
 	late, releaseLate := diagnosticTestSubscribe(t, "connections")
 	recent := diagnosticTestFrame(t, late, time.Now()).Recent
-	if !slices.ContainsFunc(recent, func(c DiagnosticConnection) bool { return c.ID == old.ID() }) {
+	if !slices.ContainsFunc(recent, func(c diagnostics.Connection) bool { return c.ID == old.ID() }) {
 		t.Fatal("connection ring was cleared by failed suspension")
 	}
 	releaseLate()
@@ -206,15 +500,15 @@ func TestDiagnosticsMetadataSnapshotExcludesPrivateTrackerFields(t *testing.T) {
 	conn := &lifecycleDiagnosticConn{chain: C.Chain{"DIRECT"}}
 	tracker := statistic.NewTCPTracker(conn, statistic.DefaultManager, metadata, nil, 12, 34, false)
 	defer tracker.Close()
-	session, status, err := subscribeDiagnostics("connections", eng.bootID, eng.configRevision)
+	session, status, err := eng.diag.Subscribe("connections", eng.bootID, eng.configRevision)
 	if err != nil {
 		t.Fatalf("subscribe status=%d err=%v", status, err)
 	}
-	go func() { <-session.done; close(session.workerDone) }()
-	defer session.close()
+	go func() { <-session.Done(); session.CloseWorkerDone() }()
+	defer session.Close()
 	metadata.SrcGeoIP[0] = "mutated-after-ingress"
 	conn.chain[0] = "mutated-after-ingress"
-	data, err := json.Marshal(session.nextFrame())
+	data, err := json.Marshal(session.NextFrame())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,9 +593,7 @@ func TestBackupRestoreSynchronizesDiagnosticLogsCollector(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = stop() })
 
-	eng.diag.mu.Lock()
-	initialLogs := eng.diag.logs
-	eng.diag.mu.Unlock()
+	_, _, _, initialLogs := eng.diag.StateTokens()
 	if initialLogs == nil {
 		t.Fatal("start with CaptureLogs=true did not start log collector")
 	}
@@ -314,13 +606,12 @@ func TestBackupRestoreSynchronizesDiagnosticLogsCollector(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	eng.diag.mu.Lock()
-	afterOff, identityOff := eng.diag.logs, eng.diag.identity
-	eng.diag.mu.Unlock()
+	_, _, _, afterOff := eng.diag.StateTokens()
+	identityOff := eng.diag.Identity()
 	if afterOff != nil || identityOff.CaptureLogs {
 		t.Fatalf("backup restore off leaked log collector: logs=%v identity=%+v", afterOff, identityOff)
 	}
-	if _, status, _ := subscribeDiagnostics("logs", eng.Status().BootID, 0); status != http.StatusForbidden {
+	if _, status, _ := eng.diag.Subscribe("logs", eng.Status().BootID, 0); status != http.StatusForbidden {
 		t.Fatalf("expected 403 after backup disabled logs, got %d", status)
 	}
 
@@ -332,9 +623,8 @@ func TestBackupRestoreSynchronizesDiagnosticLogsCollector(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	eng.diag.mu.Lock()
-	afterOn, identityOn := eng.diag.logs, eng.diag.identity
-	eng.diag.mu.Unlock()
+	_, _, _, afterOn := eng.diag.StateTokens()
+	identityOn := eng.diag.Identity()
 	if afterOn == nil || !identityOn.CaptureLogs {
 		t.Fatalf("backup restore on did not start log collector: logs=%v identity=%+v", afterOn, identityOn)
 	}
@@ -373,13 +663,13 @@ func TestDiagnosticsConcurrentSubscribeAndActionsWithReload(t *testing.T) {
 			if st == nil {
 				continue
 			}
-			if s, _, err := subscribeDiagnostics("connections", st.BootID, st.ConfigRevision); err == nil {
-				s.close()
-				close(s.workerDone)
+			if s, _, err := eng.diag.Subscribe("connections", st.BootID, st.ConfigRevision); err == nil {
+				s.Close()
+				s.CloseWorkerDone()
 			}
-			if stSession, _, err := subscribeDiagnosticStats(st.BootID, st.ConfigRevision); err == nil {
-				stSession.close()
-				close(stSession.workerDone)
+			if stSession, _, err := eng.diag.SubscribeStats(st.BootID, st.ConfigRevision); err == nil {
+				stSession.Close()
+				stSession.CloseWorkerDone()
 			}
 		}
 	}()
@@ -392,7 +682,7 @@ func TestDiagnosticsConcurrentSubscribeAndActionsWithReload(t *testing.T) {
 			}
 			body := fmt.Sprintf(`{"expectedBootId":%q,"expectedConfigRevision":%d}`, st.BootID, st.ConfigRevision)
 			req := httptest.NewRequest(http.MethodPost, "/arkclash/diagnostics/dns/clear-cache", strings.NewReader(body))
-			postDiagnosticDnsClearCache(httptest.NewRecorder(), req)
+			eng.diag.PostDNSClearCache(httptest.NewRecorder(), req)
 		}
 	}()
 	wg.Wait()

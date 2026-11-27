@@ -1,17 +1,18 @@
-package main
+package diagnostics
 
 import (
 	"encoding/json"
 	"net"
 	"time"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
 	"github.com/metacubex/http"
 )
 
-// 仪表盘统计流默认最多每秒推送一次，无变化时不发帧；测试可调小间隔加速验证。
-var diagnosticStatsInterval = time.Second
+// StatsInterval 是仪表盘统计流推送最小间隔，默认每秒一次，无变化时不发帧；测试可调小加速验证。
+var StatsInterval = time.Second
 
-type diagnosticStatsFrame struct {
+type StatsFrame struct {
 	Type           string `json:"type"`
 	BootID         string `json:"bootId"`
 	ConfigRevision uint64 `json:"configRevision"`
@@ -20,8 +21,8 @@ type diagnosticStatsFrame struct {
 	DNS            int    `json:"dns"`
 }
 
-type diagnosticStatsSession struct {
-	hub         *diagnosticsHub
+type StatsSession struct {
+	hub         *Hub
 	bootID      string
 	revision    uint64
 	connections *diagnosticCollector
@@ -33,18 +34,16 @@ type diagnosticStatsSession struct {
 	closed      bool
 }
 
-func (h *diagnosticsHub) hasStats() bool {
+func (s *StatsSession) CloseWorkerDone() { close(s.workerDone) }
+
+func (h *Hub) hasStats() bool {
 	h.statsMu.Lock()
 	active := len(h.stats) != 0
 	h.statsMu.Unlock()
 	return active
 }
 
-func notifyDiagnosticStats() {
-	eng.diag.notifyStats()
-}
-
-func (h *diagnosticsHub) notifyStats() {
+func (h *Hub) notifyStats() {
 	h.statsMu.Lock()
 	for s := range h.stats {
 		select {
@@ -55,11 +54,7 @@ func (h *diagnosticsHub) notifyStats() {
 	h.statsMu.Unlock()
 }
 
-func subscribeDiagnosticStats(expectedBootID string, expectedConfigRevision uint64) (*diagnosticStatsSession, int, error) {
-	return eng.diag.subscribeStats(expectedBootID, expectedConfigRevision)
-}
-
-func (h *diagnosticsHub) subscribeStats(expectedBootID string, expectedConfigRevision uint64) (*diagnosticStatsSession, int, error) {
+func (h *Hub) SubscribeStats(expectedBootID string, expectedConfigRevision uint64) (*StatsSession, int, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if status, err := h.runtimeErrorLocked(expectedBootID, expectedConfigRevision); err != nil {
@@ -68,7 +63,7 @@ func (h *diagnosticsHub) subscribeStats(expectedBootID string, expectedConfigRev
 	// 仅挂观察器而不向 collector.sessions 注册，避免仪表盘触发连接页的 1Hz 流量采样。
 	connections := h.ensureCollectorLocked(&h.connections, "connections")
 	queries := h.ensureCollectorLocked(&h.dns, "dns")
-	s := &diagnosticStatsSession{
+	s := &StatsSession{
 		hub:         h,
 		bootID:      expectedBootID,
 		revision:    expectedConfigRevision,
@@ -84,8 +79,8 @@ func (h *diagnosticsHub) subscribeStats(expectedBootID string, expectedConfigRev
 	return s, 0, nil
 }
 
-func (s *diagnosticStatsSession) snapshot() diagnosticStatsFrame {
-	return diagnosticStatsFrame{
+func (s *StatsSession) snapshot() StatsFrame {
+	return StatsFrame{
 		Type:           "stats",
 		BootID:         s.bootID,
 		ConfigRevision: s.revision,
@@ -95,7 +90,7 @@ func (s *diagnosticStatsSession) snapshot() diagnosticStatsFrame {
 	}
 }
 
-func (s *diagnosticStatsSession) attach(conn net.Conn) bool {
+func (s *StatsSession) attach(conn net.Conn) bool {
 	h := s.hub
 	h.statsMu.Lock()
 	if s.closed {
@@ -108,7 +103,7 @@ func (s *diagnosticStatsSession) attach(conn net.Conn) bool {
 	return true
 }
 
-func (s *diagnosticStatsSession) close() {
+func (s *StatsSession) Close() {
 	h := s.hub
 	h.mu.Lock()
 	h.statsMu.Lock()
@@ -135,7 +130,7 @@ func (s *diagnosticStatsSession) close() {
 	waitDiagnosticWorkers(workers)
 }
 
-func (h *diagnosticsHub) retireStatsLocked() []<-chan struct{} {
+func (h *Hub) retireStatsLocked() []<-chan struct{} {
 	h.statsMu.Lock()
 	workers := make([]<-chan struct{}, 0, len(h.stats))
 	conns := make([]net.Conn, 0, len(h.stats))
@@ -158,7 +153,7 @@ func (h *diagnosticsHub) retireStatsLocked() []<-chan struct{} {
 	return workers
 }
 
-func writeDiagnosticStatsFrame(writer *diagnosticSocketWriter, frame diagnosticStatsFrame) error {
+func writeDiagnosticStatsFrame(writer *diagnosticSocketWriter, frame StatsFrame) error {
 	data, err := json.Marshal(frame)
 	if err != nil {
 		return err
@@ -166,20 +161,20 @@ func writeDiagnosticStatsFrame(writer *diagnosticSocketWriter, frame diagnosticS
 	return writer.text(data)
 }
 
-func getDiagnosticStats(w http.ResponseWriter, r *http.Request) {
+func (h *Hub) GetStats(w http.ResponseWriter, r *http.Request) {
 	bootID, revision, err := diagnosticStreamRuntime(r, true)
 	if err != nil {
-		writeError(w, r, http.StatusBadRequest, err)
+		ctrl.WriteError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	session, status, err := subscribeDiagnosticStats(bootID, revision)
+	session, status, err := h.SubscribeStats(bootID, revision)
 	if err != nil {
-		writeError(w, r, status, err)
+		ctrl.WriteError(w, r, status, err)
 		return
 	}
 	defer close(session.workerDone)
-	defer session.close()
-	conn, rw, err := upgradeWebSocket(w, r)
+	defer session.Close()
+	conn, rw, err := ctrl.UpgradeWebSocket(w, r)
 	if err != nil {
 		return
 	}
@@ -213,7 +208,7 @@ func getDiagnosticStats(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-session.dirty:
 			now := time.Now()
-			wait := lastSent.Add(diagnosticStatsInterval).Sub(now)
+			wait := lastSent.Add(StatsInterval).Sub(now)
 			if wait <= 0 {
 				if pending && timer != nil {
 					if !timer.Stop() {
