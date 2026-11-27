@@ -1095,7 +1095,6 @@ export struct ConnectionRecordList {
 
 @ComponentV2
 export struct DnsRecordList {
-  @Local private appStyle: AppearanceState = appAppearance;
   @Param @Require store: DnsRecordsStore;
   @Param active: boolean = false;
   @Param reduceMotion: boolean = true;
@@ -1144,12 +1143,6 @@ export struct DnsRecordList {
 
   private saveWidths(widths: Record<string, number>): void {
     this.store.saveColumnWidths(widths).catch((): void => {});
-  }
-
-  private backToLatest(): void {
-    if (!this.active) { return; }
-    this.store.setFollowing(true);
-    this.viewport.reconcile<DnsListRow>(this.getUIContext(), this.store.source, true, '');
   }
 
   @Builder
@@ -1205,14 +1198,6 @@ export struct DnsRecordList {
           this.store.setFollowing(false);
         }
       })
-      if (!this.store.following && this.store.visibleRecords > 0) {
-        Button($r('app.string.diagnostics_latest'), { buttonStyle: ButtonStyleMode.TEXTUAL })
-          .fontFamily(this.appStyle.fontFamily)
-          .margin({ top: 8, bottom: 8 })
-          .accessibilityDescription($r('app.string.diagnostics_paused'))
-          .enabled(this.active)
-          .onClick((): void => this.backToLatest())
-      }
     }
   }
 }
