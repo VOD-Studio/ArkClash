@@ -186,8 +186,8 @@ func applyBackup(req backupApplyRequest) error {
 			if panelErr := setPanelControllerLocked(next.General.ControllerSecret); panelErr != nil {
 				log.Warnln("[ArkClash] external controller port unavailable")
 			}
-			if manager := activeGeo.Load(); manager != nil {
-				err = manager.applySettingsLocked(next.Geo)
+			if manager := eng.geo.Load(); manager != nil {
+				err = manager.applySettings(next.Geo)
 			}
 			eng.publishRuntimeLocked()
 		}

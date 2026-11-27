@@ -129,7 +129,7 @@ func start(opts startOptions) error {
 			eng.publishRuntimeLocked()
 			return errors.Join(err, eng.cleanupFailure)
 		}
-		activeGeo.Store(manager)
+		eng.geo.Store(manager)
 		if opts.General.ControllerSecret != "" {
 			if err := setPanelControllerLocked(opts.General.ControllerSecret); err != nil {
 				log.Warnln("[ArkClash] external controller port unavailable")
@@ -478,10 +478,10 @@ func stop() error {
 			return eng.cleanupFailure
 		}
 		tx.deferUnlock(eng.diag.Stop())
-		manager := activeGeo.Swap(nil)
+		manager := eng.geo.Swap(nil)
 		if manager != nil {
-			manager.closeLocked()
-			// worker 的取消清理可能需要核心锁，且下一次 start 不得越过本次 join。
+			manager.close()
+			// worker 的热换提交可能需要核心锁，且下一次 start 不得越过本次 join。
 			tx.deferUnlock(manager.wait)
 		}
 		tx.deferUnlock(eng.providers.Close())

@@ -248,7 +248,7 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 	if state := eng.Status(); state.Running || state.TunAttached || state.ListenersOpen || state.Forward != "stopped" {
 		t.Fatalf("full stop retained forwarding resources: %+v", state)
 	}
-	if activeGeo.Load() != nil || eng.routes.Load() != nil || len(tunnel.Proxies()) != 0 {
+	if eng.geo.Load() != nil || eng.routes.Load() != nil || len(tunnel.Proxies()) != 0 {
 		t.Fatal("full stop retained core-owned workers or proxies")
 	}
 }

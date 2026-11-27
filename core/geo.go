@@ -78,8 +78,6 @@ type geoManager struct {
 	startupFloor time.Time
 }
 
-var activeGeo atomic.Pointer[geoManager]
-
 func newGeoManager(home, bootID string, settings geoSettings) (*geoManager, error) {
 	return newGeoManagerWithClock(home, bootID, settings, time.Now, func(delay time.Duration, callback func()) geoTimer {
 		return time.AfterFunc(delay, callback)
@@ -177,7 +175,7 @@ func (m *geoManager) publishLocked() {
 	}
 }
 
-func (m *geoManager) enqueueLocked(ids []geoResourceID, automatic bool) (*geoSnapshot, error) {
+func (m *geoManager) enqueue(ids []geoResourceID, automatic bool) (*geoSnapshot, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
@@ -196,6 +194,30 @@ func (m *geoManager) enqueueLocked(ids []geoResourceID, automatic bool) (*geoSna
 	}
 	m.scheduleLocked()
 	return m.snapshot.Load(), nil
+}
+
+func (m *geoManager) enqueueForBoot(expectedBootID string, ids []geoResourceID) (*geoSnapshot, int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return nil, http.StatusServiceUnavailable, errors.New("geo_canceled")
+	}
+	if expectedBootID != m.bootID {
+		return nil, http.StatusConflict, errors.New("geo_stale_boot")
+	}
+	if len(ids) < 1 || len(ids) > 4 {
+		return nil, http.StatusBadRequest, errors.New("geo_invalid_settings")
+	}
+	for _, id := range ids {
+		if geoIndex(id) < 0 {
+			return nil, http.StatusBadRequest, errors.New("geo_invalid_settings")
+		}
+	}
+	if m.enqueueItemsLocked(ids, false) {
+		m.publishLocked()
+	}
+	m.scheduleLocked()
+	return m.snapshot.Load(), http.StatusAccepted, nil
 }
 
 func (m *geoManager) enqueueItemsLocked(ids []geoResourceID, automatic bool) bool {
@@ -231,7 +253,7 @@ func (m *geoManager) enqueueItemsLocked(ids []geoResourceID, automatic bool) boo
 	return changed
 }
 
-func (m *geoManager) applySettingsLocked(settings geoSettings) error {
+func (m *geoManager) applySettings(settings geoSettings) error {
 	if err := validateGeoSettings(settings); err != nil {
 		return err
 	}
@@ -241,10 +263,6 @@ func (m *geoManager) applySettingsLocked(settings geoSettings) error {
 		return errors.New("geo_canceled")
 	}
 	m.settings = settings
-	next := eng.current
-	next.Geo = settings
-	eng.setCurrentLocked(next)
-	setGeoURLs(settings)
 	kept := m.queue[:0]
 	for _, job := range m.queue {
 		if job.source != settings.source(job.id) || (job.automatic && !settings.AutoUpdate) {
@@ -306,8 +324,6 @@ func (m *geoManager) scheduleLocked() {
 	}
 	version := m.timerVersion
 	m.timer = m.afterFunc(delay, func() {
-		eng.mu.Lock()
-		defer eng.mu.Unlock()
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		if m.closed || !m.settings.AutoUpdate || version != m.timerVersion {
@@ -328,7 +344,7 @@ func (m *geoManager) scheduleLocked() {
 	})
 }
 
-func (m *geoManager) closeLocked() {
+func (m *geoManager) close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {
@@ -380,7 +396,6 @@ func (m *geoManager) run() {
 		m.mu.Unlock()
 		outcome, err := m.update(job)
 		job.cancel()
-		eng.mu.Lock()
 		m.mu.Lock()
 		m.active = nil
 		delete(m.jobs, job.id)
@@ -394,7 +409,6 @@ func (m *geoManager) run() {
 			m.scheduleLocked()
 		}
 		m.mu.Unlock()
-		eng.mu.Unlock()
 	}
 }
 
@@ -407,7 +421,7 @@ func readGeoRequest(r *http.Request, value any, fields ...string) error {
 }
 
 func getGeo(w http.ResponseWriter, r *http.Request) {
-	manager := activeGeo.Load()
+	manager := eng.geo.Load()
 	if manager == nil || manager.ctx.Err() != nil {
 		writeError(w, r, http.StatusServiceUnavailable, errors.New("geo_canceled"))
 		return
@@ -424,31 +438,7 @@ func postGeoSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, errors.New("geo_invalid_settings"))
 		return
 	}
-	eng.mu.Lock()
-	manager := activeGeo.Load()
-	if manager == nil {
-		eng.mu.Unlock()
-		writeError(w, r, http.StatusServiceUnavailable, errors.New("geo_canceled"))
-		return
-	}
-	if body.ExpectedBootID != manager.bootID {
-		eng.mu.Unlock()
-		writeError(w, r, http.StatusConflict, errors.New("geo_stale_boot"))
-		return
-	}
-	settings, err := readGeoSettings(manager.home)
-	status := http.StatusBadRequest
-	if err == nil && settings.Revision != body.Revision {
-		err, status = errors.New("geo_invalid_settings"), http.StatusConflict
-	}
-	if err == nil {
-		err = manager.applySettingsLocked(settings)
-		if err != nil {
-			status = http.StatusServiceUnavailable
-		}
-	}
-	snapshot := manager.snapshot.Load()
-	eng.mu.Unlock()
+	snapshot, status, err := eng.ApplyGeoSettings(body.ExpectedBootID, body.Revision)
 	if err != nil {
 		writeError(w, r, status, err)
 		return
@@ -471,24 +461,16 @@ func postGeoUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	eng.mu.Lock()
-	manager := activeGeo.Load()
+	manager := eng.geo.Load()
 	if manager == nil {
-		eng.mu.Unlock()
 		writeError(w, r, http.StatusServiceUnavailable, errors.New("geo_canceled"))
 		return
 	}
-	if body.ExpectedBootID != manager.bootID {
-		eng.mu.Unlock()
-		writeError(w, r, http.StatusConflict, errors.New("geo_stale_boot"))
-		return
-	}
-	snapshot, err := manager.enqueueLocked(body.IDs, false)
-	eng.mu.Unlock()
+	snapshot, status, err := manager.enqueueForBoot(body.ExpectedBootID, body.IDs)
 	if err != nil {
-		writeError(w, r, http.StatusServiceUnavailable, err)
+		writeError(w, r, status, err)
 		return
 	}
-	render.Status(r, http.StatusAccepted)
+	render.Status(r, status)
 	render.JSON(w, r, snapshot)
 }

@@ -121,6 +121,7 @@ type coreEngine struct {
 	// 5. 下游独立子系统与路线监听
 	providers *providers.Hub
 	diag      *diagnosticsHub
+	geo       atomic.Pointer[geoManager]
 	routes    atomic.Pointer[runtimeRouteWatch]
 }
 
@@ -278,4 +279,62 @@ func (tx *stateTx) RollbackReload(previous startOptions, fallbackInbound inbound
 		return parseErr
 	}
 	return nil
+}
+
+// ApplyGeoSettings 在核心提交锁下读取并校验 geo-settings.json，按向下锁序
+// e.mu -> m.mu 下推给运行中的 geoManager，并同步 mihomo 全局 URL 与 current.Geo。
+func (e *coreEngine) ApplyGeoSettings(expectedBootID, revision string) (*geoSnapshot, int, error) {
+	var (
+		snapshot *geoSnapshot
+		status   = http.StatusOK
+	)
+	err := e.withState(func(tx *stateTx) error {
+		manager := e.geo.Load()
+		if manager == nil {
+			status = http.StatusServiceUnavailable
+			return errors.New("geo_canceled")
+		}
+		if expectedBootID != manager.bootID {
+			status = http.StatusConflict
+			return errors.New("geo_stale_boot")
+		}
+		settings, err := readGeoSettings(manager.home)
+		if err != nil {
+			status = http.StatusBadRequest
+			return err
+		}
+		if settings.Revision != revision {
+			status = http.StatusConflict
+			return errors.New("geo_invalid_settings")
+		}
+		if err := manager.applySettings(settings); err != nil {
+			status = http.StatusServiceUnavailable
+			return err
+		}
+		setGeoURLs(settings)
+		next := e.current
+		next.Geo = settings
+		e.setCurrentLocked(next)
+		snapshot = manager.snapshot.Load()
+		return nil
+	})
+	return snapshot, status, err
+}
+
+// CommitGeoSwap 在核心提交锁下串行执行 Geo 候选落盘与 reader/缓存热换，
+// 避免与配置解析期间 mihomo 的 geodata.Init* 并发写盘，并在内容更新后推进运行快照代次。
+// 锁序：e.mu -> m.mu。
+func (e *coreEngine) CommitGeoSwap(ctx context.Context, m *geoManager, req geoSwapCommit) (outcome string, installed bool, err error) {
+	err = e.withState(func(tx *stateTx) error {
+		var commitErr error
+		outcome, installed, commitErr = m.commitSwap(ctx, req)
+		if commitErr != nil {
+			return commitErr
+		}
+		if outcome == "updated" {
+			e.publishRuntimeLocked()
+		}
+		return nil
+	})
+	return outcome, installed, err
 }

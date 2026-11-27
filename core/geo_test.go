@@ -70,15 +70,11 @@ func geoStartFixture(t *testing.T, settings geoSettings, clock *geoTestClock) *g
 		t.Fatal(err)
 	}
 	eng.current.Geo = settings
-	activeGeo.Store(manager)
+	eng.geo.Store(manager)
 	eng.mu.Unlock()
 	t.Cleanup(func() {
-		eng.mu.Lock()
-		manager.closeLocked()
-		if activeGeo.Load() == manager {
-			activeGeo.Store(nil)
-		}
-		eng.mu.Unlock()
+		manager.close()
+		eng.geo.CompareAndSwap(manager, nil)
 		manager.wait()
 	})
 	return manager
@@ -554,9 +550,7 @@ func TestGeoStrictHTTPAndSettingsRevision(t *testing.T) {
 	if status != 200 || snapshot.SettingsRevision != settings.Revision || eng.current.Geo.IntervalHours != 48 {
 		t.Fatal("saved settings not applied")
 	}
-	eng.mu.Lock()
-	manager.closeLocked()
-	eng.mu.Unlock()
+	manager.close()
 	manager.wait()
 	if status, _ := geoHTTP(t, postGeoUpdate, fmt.Sprintf(`{"expectedBootId":%q,"ids":["mmdb"]}`, boot)); status != 503 {
 		t.Fatalf("stopped manager accepted operation: %d", status)
@@ -589,9 +583,7 @@ func TestGeoURLChangeAndStopCancelActualRequest(t *testing.T) {
 					t.Fatal("URL change rejected")
 				}
 			} else {
-				eng.mu.Lock()
-				manager.closeLocked()
-				eng.mu.Unlock()
+				manager.close()
 				manager.wait()
 			}
 			receiveProbeSignal(t, canceled, "actual HTTP request did not receive cancellation")
@@ -621,9 +613,7 @@ func TestGeoMetadataCorruptionProtectsAutomaticUpdatesAndManualRepairs(t *testin
 	if item := geoItem(t, manager.snapshot.Load(), geoSite); item.Error != "geo_metadata_invalid" {
 		t.Fatal("corrupt metadata hidden")
 	}
-	eng.mu.Lock()
-	_, err := manager.enqueueLocked([]geoResourceID{geoSite}, true)
-	eng.mu.Unlock()
+	_, err := manager.enqueue([]geoResourceID{geoSite}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -829,9 +819,7 @@ func TestGeoAutomaticTimerStartupGuardAndAttemptBackoff(t *testing.T) {
 	settings.AutoUpdate = true
 	settings.IntervalHours = 1
 	settings.Revision = "auto"
-	eng.mu.Lock()
-	err := manager.applySettingsLocked(settings)
-	eng.mu.Unlock()
+	err := manager.applySettings(settings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -852,9 +840,7 @@ func TestGeoAutomaticTimerStartupGuardAndAttemptBackoff(t *testing.T) {
 		t.Fatal("failure retried before full interval")
 	}
 	settings.AutoUpdate = false
-	eng.mu.Lock()
-	err = manager.applySettingsLocked(settings)
-	eng.mu.Unlock()
+	err = manager.applySettings(settings)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -890,9 +876,7 @@ func TestGeoStopWaitsForActualRuleDialCleanup(t *testing.T) {
 	manager := geoStartFixture(t, settings, nil)
 	geoAdmit(t, manager, geoSite)
 	receiveProbeSignal(t, entered, "Geo request never entered real proxy dial")
-	eng.mu.Lock()
-	manager.closeLocked()
-	eng.mu.Unlock()
+	manager.close()
 	joined := make(chan struct{})
 	go func() { manager.wait(); close(joined) }()
 	receiveProbeSignal(t, closed, "Geo stop did not cancel actual proxy dial")
@@ -900,4 +884,91 @@ func TestGeoStopWaitsForActualRuleDialCleanup(t *testing.T) {
 	if active.Load() != 0 {
 		t.Fatal("Geo worker released before actual dial closed")
 	}
+}
+
+func TestGeoConcurrentUpdatesSettingsAndReload(t *testing.T) {
+	payloadA := geoSiteData(t, "a.example", false)
+	payloadB := geoSiteData(t, "b.example", false)
+	var toggle atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if toggle.Swap(!toggle.Load()) {
+			_, _ = w.Write(payloadA)
+		} else {
+			_, _ = w.Write(payloadB)
+		}
+	}))
+	defer server.Close()
+
+	settings := geoTestSettings(server.URL)
+	manager := geoFixture(t, settings)
+	home := eng.current.HomeDir
+	boot := manager.snapshot.Load().BootID
+	profilePath := filepath.Join(home, "profiles", "concurrent-geo.yaml")
+	if err := os.MkdirAll(filepath.Dir(profilePath), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(profilePath, []byte("mode: rule\nlog-level: silent\nrules:\n  - MATCH,DIRECT\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(4)
+	go func() {
+		defer wg.Done()
+		for i := range 12 {
+			body, _ := json.Marshal(map[string]any{"expectedBootId": boot, "ids": []geoResourceID{geoSite}})
+			recorder := httptest.NewRecorder()
+			postGeoUpdate(recorder, httptest.NewRequest(http.MethodPost, "/arkclash/geo/update", strings.NewReader(string(body))))
+			if i%3 == 0 {
+				time.Sleep(time.Millisecond)
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := range 10 {
+			next := settings
+			next.Revision = fmt.Sprintf("rev-%d", i)
+			next.IntervalHours = 12 + i
+			data, _ := json.Marshal(next)
+			_ = os.WriteFile(filepath.Join(home, "geo-settings.json"), data, 0600)
+			body := fmt.Sprintf(`{"expectedBootId":%q,"revision":%q}`, boot, next.Revision)
+			recorder := httptest.NewRecorder()
+			postGeoSettings(recorder, httptest.NewRequest(http.MethodPost, "/arkclash/geo/settings", strings.NewReader(body)))
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 20 {
+			recorder := httptest.NewRecorder()
+			getGeo(recorder, httptest.NewRequest(http.MethodGet, "/arkclash/geo", nil))
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 20 {
+			_ = eng.withState(func(tx *stateTx) error {
+				eng.publishRuntimeLocked()
+				return nil
+			})
+			_, _ = eng.ConfigSpec()
+			_ = eng.View()
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	wg.Wait()
+	// 等待队列排空后再执行热切换，避免上游 mihomo 的 ApplyConfig 与在途 Direct.DialContext 竞态。
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if geoItem(t, manager.snapshot.Load(), geoSite).Phase == "idle" {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := reload(profilePath, "concurrent-geo", nil); err != nil {
+		t.Fatalf("reload after concurrent geo updates failed: %v", err)
+	}
+	geoAssertNoTemps(t, home)
 }

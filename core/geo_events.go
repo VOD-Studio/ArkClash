@@ -15,7 +15,7 @@ func getGeoEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, errors.New("geo_invalid_settings"))
 		return
 	}
-	manager := activeGeo.Load()
+	manager := eng.geo.Load()
 	if manager == nil {
 		writeError(w, r, http.StatusServiceUnavailable, errors.New("geo_canceled"))
 		return

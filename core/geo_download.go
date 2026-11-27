@@ -68,8 +68,6 @@ func (m *geoManager) jobValidLocked(job *geoJob) bool {
 
 // 开始尝试先落盘时间戳；下载失败也不能令调度器立即再次唤醒。
 func (m *geoManager) beginAttempt(job *geoJob) error {
-	eng.mu.Lock()
-	defer eng.mu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.jobValidLocked(job) {
@@ -225,44 +223,65 @@ func (m *geoManager) update(job *geoJob) (outcome string, resultErr error) {
 		return "", errors.New("geo_io")
 	}
 
-	eng.mu.Lock()
-	defer eng.mu.Unlock()
+	outcome, installed, err := eng.CommitGeoSwap(ctx, m, geoSwapCommit{
+		job:       job,
+		tempPath:  path,
+		candidate: candidate,
+		info:      info,
+		unchanged: unchanged,
+	})
+	if installed {
+		candidate = nil
+	}
+	return outcome, err
+}
+
+type geoSwapCommit struct {
+	job       *geoJob
+	tempPath  string
+	candidate *maxminddb.Reader
+	info      os.FileInfo
+	unchanged bool
+}
+
+// commitSwap 由 eng.CommitGeoSwap 在持有核心锁时向下调用，内部只锁 m.mu。
+func (m *geoManager) commitSwap(ctx context.Context, req geoSwapCommit) (string, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !m.jobValidLocked(job) || ctx.Err() != nil {
-		return "", geoContextError(ctx)
+	if !m.jobValidLocked(req.job) || ctx.Err() != nil {
+		return "", false, geoContextError(ctx)
 	}
-	metadata := m.metadata[job.id]
+	metadata := m.metadata[req.job.id]
 	metadata.Managed = true
-	if err := writeGeoMetadata(m.home, job.id, metadata); err != nil {
-		return "", err
+	if err := writeGeoMetadata(m.home, req.job.id, metadata); err != nil {
+		return "", false, err
 	}
-	m.metadata[job.id] = metadata
+	m.metadata[req.job.id] = metadata
 	if ctx.Err() != nil {
-		return "", geoContextError(ctx)
+		return "", false, geoContextError(ctx)
 	}
-	if unchanged {
-		return "unchanged", nil
+	if req.unchanged {
+		return "unchanged", false, nil
 	}
-	if err := os.Rename(path, job.path); err != nil {
-		return "", errors.New("geo_io")
+	if err := os.Rename(req.tempPath, req.job.path); err != nil {
+		return "", false, errors.New("geo_io")
 	}
-	switch job.id {
+	installed := false
+	switch req.job.id {
 	case geoMMDB:
-		mmdb.InstallIPReader(candidate)
-		candidate = nil
+		mmdb.InstallIPReader(req.candidate)
+		installed = true
 	case geoASN:
-		mmdb.InstallASNReader(candidate)
-		candidate = nil
+		mmdb.InstallASNReader(req.candidate)
+		installed = true
 	case geoIP:
 		geodata.ClearGeoIPCache()
 	case geoSite:
 		geodata.ClearGeoSiteCache()
 	}
-	item := &m.items[geoIndex(job.id)]
-	item.Exists, item.Size, item.ModifiedAt = true, info.Size(), info.ModTime().UnixMilli()
-	publishRuntime()
-	return "updated", nil
+	item := &m.items[geoIndex(req.job.id)]
+	item.Exists, item.Size, item.ModifiedAt = true, req.info.Size(), req.info.ModTime().UnixMilli()
+	return "updated", installed, nil
 }
 
 func geoSameContent(ctx context.Context, path string, candidateHash []byte) (bool, error) {
