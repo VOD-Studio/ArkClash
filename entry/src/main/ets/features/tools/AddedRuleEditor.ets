@@ -251,12 +251,9 @@ export struct AddedRuleEditor {
   }
 
   @Builder
-  Tile(icon: Resource, swap: boolean) {
+  Tile(icon: Resource) {
     Stack() {
-      SymbolGlyph(icon)
-        .fontSize(20)
-        .fontColor([this.appStyle.palette.brand])
-        .symbolEffect(this.iconSwap, swap && this.motion ? this.groupIndex : 0)
+      SymbolGlyph(icon).fontSize(20).fontColor([this.appStyle.palette.brand])
     }
     .width(RULE_TILE_SIZE)
     .height(RULE_TILE_SIZE)
@@ -276,7 +273,6 @@ export struct AddedRuleEditor {
         MenuItemGroup({ header: group.label }) {
           ForEach(group.kinds, (kind: string) => {
             MenuItem({ content: kind })
-              .contentFont({ family: 'monospace', size: 15 })
               .selected(kind === this.draft.kind)
               .selectIcon(true)
               .onClick((): void => this.pickKind(kind))
@@ -302,7 +298,17 @@ export struct AddedRuleEditor {
   KindRow() {
     Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.TEXTUAL }) {
       Row({ space: 12 }) {
-        this.Tile(KIND_GROUPS[this.groupIndex].icon, true)
+        // 图标随类型分组切换。@Builder 按值传参不会随状态刷新，这里直接读 groupIndex。
+        Stack() {
+          SymbolGlyph(KIND_GROUPS[this.groupIndex].icon)
+            .fontSize(20)
+            .fontColor([this.appStyle.palette.brand])
+            .symbolEffect(this.iconSwap, this.motion ? this.groupIndex : 0)
+        }
+        .width(RULE_TILE_SIZE)
+        .height(RULE_TILE_SIZE)
+        .borderRadius(RULE_TILE_SIZE / 2)
+        .backgroundColor(this.appStyle.palette.brandSoft)
         Column({ space: 2 }) {
           this.Caption($r('app.string.added_rules_type'))
           Text(this.draft.kind)
@@ -340,7 +346,7 @@ export struct AddedRuleEditor {
     if (this.draft.kind === 'RULE-SET') {
       Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.TEXTUAL }) {
         Row({ space: 12 }) {
-          this.Tile($r('sys.symbol.rectangle_stack'), false)
+          this.Tile($r('sys.symbol.rectangle_stack'))
           Column({ space: 2 }) {
             this.Caption($r('app.string.rule_set_title'))
             Text(this.ruleSets.length === 0 ? $r('app.string.rule_set_empty') :
@@ -370,7 +376,7 @@ export struct AddedRuleEditor {
       .bindMenu(this.RuleSetMenu)
     } else {
       Row({ space: 12 }) {
-        this.Tile($r('sys.symbol.character_textbox'), false)
+        this.Tile($r('sys.symbol.character_textbox'))
         Column({ space: 2 }) {
           this.Caption($r('app.string.added_rules_content'))
           TextInput({ text: this.draft.payloadText,
@@ -474,7 +480,7 @@ export struct AddedRuleEditor {
   @Builder
   ToggleRow(icon: Resource, label: Resource, on: boolean, apply: (on: boolean) => void) {
     Row({ space: 12 }) {
-      this.Tile(icon, false)
+      this.Tile(icon)
       Text(label)
         .fontFamily(this.appStyle.fontFamily)
         .fontSize(16)
@@ -496,7 +502,7 @@ export struct AddedRuleEditor {
       this.ToggleRow($r('sys.symbol.link_slash'), $r('app.string.added_rules_no_resolve'), this.draft.noResolve,
         (on: boolean): void => { this.draft.noResolve = on; })
       Divider().color(this.appStyle.palette.divider).margin({ left: RULE_TEXT_INSET, right: 16 })
-      this.ToggleRow($r('sys.symbol.arrowshape_turn_up_left'), $r('app.string.added_rules_source_ip'),
+      this.ToggleRow($r('sys.symbol.smallcircle_filled_circle'), $r('app.string.added_rules_source_ip'),
         this.draft.source, (on: boolean): void => { this.draft.source = on; })
     }
     .width('100%')

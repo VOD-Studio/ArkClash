@@ -489,6 +489,8 @@ export struct AddedRulesPage {
           // 预设列表超过一屏，直接用大尺寸，按钮固定在底部。
           .bindSheet($$this.editShown, this.EditorSheet, {
             height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
+            // 键盘弹起时整个抽屉抬到键盘上方并压缩高度，保存按钮滚动可达，不被键盘挡住。
+            keyboardAvoidMode: SheetKeyboardAvoidMode.TRANSLATE_AND_RESIZE,
             systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
             onWillDismiss: (action: DismissSheetAction): void =>
               this.requestCloseEditor((): void => action.dismiss())

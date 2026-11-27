@@ -16,10 +16,15 @@ export const RULE_ENTER_OFFSET = 16;
 const ENTER_SPRING: ICurve = curves.springMotion(0.5, 0.92);
 // 选择、展开这类即时反馈用响应式弹簧：跟手、不拖尾，中途反向时从当前值接着走。
 export const RULE_SETTLE_SPRING: ICurve = curves.responsiveSpringMotion(0.36, 0.86);
-export const RULE_SECTION_TRANSITION: TransitionEffect = TransitionEffect.OPACITY
-  .combine(TransitionEffect.translate({ y: -8 }))
-  .combine(TransitionEffect.scale({ x: 0.98, y: 0.98 }))
-  .animation({ curve: RULE_SETTLE_SPRING });
+// 新区块晚一拍再浮现，先让下方内容让出位置，避免和正在下移的按钮叠在一起；移除时直接淡出。
+const SECTION_APPEAR_DELAY_MS = 70;
+export const RULE_SECTION_TRANSITION: TransitionEffect = TransitionEffect.asymmetric(
+  TransitionEffect.OPACITY
+    .combine(TransitionEffect.translate({ y: -8 }))
+    .combine(TransitionEffect.scale({ x: 0.98, y: 0.98 }))
+    .animation({ curve: RULE_SETTLE_SPRING, delay: SECTION_APPEAR_DELAY_MS }),
+  TransitionEffect.OPACITY.animation({ duration: 120, curve: Curve.Sharp })
+);
 const PRESS_EFFECT: ClickEffect = { level: ClickEffectLevel.LIGHT, scale: 0.95 };
 
 export type RuleTone = 'brand' | 'success' | 'error' | 'neutral';
@@ -215,8 +220,12 @@ export struct RuleChip {
       if (this.icon !== undefined) {
         SymbolGlyph(this.icon).fontSize(14).fontColor([this.ink()])
       } else {
-        Circle({ width: 7, height: 7 })
-          .fill(this.ink())
+        // 用背景色画圆点：Circle 的 fill 不参与属性动画，选中切换时会跳色。
+        Row()
+          .width(7)
+          .height(7)
+          .borderRadius(3.5)
+          .backgroundColor(this.ink())
           .animation(this.motion ? { curve: RULE_SETTLE_SPRING } : { duration: 0 })
       }
       Text(this.label)

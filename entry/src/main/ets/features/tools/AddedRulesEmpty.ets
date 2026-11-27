@@ -53,41 +53,47 @@ export struct AddedRulesEmpty {
     Row().width(width).height(height).borderRadius(height / 2).backgroundColor(color)
   }
 
-  /** 插画里的一张规则卡：左侧圆点或图标、两道文字骨架、右侧着色的策略胶囊。 */
+  /** 插画最前面的规则卡：分流图标、两道文字骨架和绿色的直连胶囊。 */
   @Builder
-  ArtCard(style: ArtCardStyle, order: number, accent: ResourceColor, accentSoft: ResourceColor, front: boolean) {
+  FrontContent() {
     Row({ space: 12 }) {
-      if (front) {
-        Stack() {
-          SymbolGlyph($r('sys.symbol.arrow_triangle_divide')).fontSize(18).fontColor([this.appStyle.palette.brand])
-        }
-        .width(34)
-        .height(34)
-        .borderRadius(17)
-        .backgroundColor(this.appStyle.palette.brandSoft)
-      } else {
-        Circle({ width: 10, height: 10 }).fill(this.appStyle.palette.track)
+      Stack() {
+        SymbolGlyph($r('sys.symbol.arrow_triangle_divide')).fontSize(18).fontColor([this.appStyle.palette.brand])
       }
+      .width(34)
+      .height(34)
+      .borderRadius(17)
+      .backgroundColor(this.appStyle.palette.brandSoft)
       Column({ space: 6 }) {
-        this.Bar(front ? 86 : 64, front ? 8 : 7, this.appStyle.palette.track)
-        if (front) {
-          this.Bar(52, 6, this.appStyle.palette.divider)
-        }
+        this.Bar(86, 8, this.appStyle.palette.track)
+        this.Bar(52, 6, this.appStyle.palette.divider)
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
       Row() {
-        Circle({ width: 6, height: 6 }).fill(accent)
+        Circle({ width: 6, height: 6 }).fill($r('app.color.status_connected'))
       }
-      .width(front ? 40 : 32)
-      .height(front ? 20 : 16)
+      .width(40)
+      .height(20)
       .borderRadius(10)
       .justifyContent(FlexAlign.Center)
-      .backgroundColor(accentSoft)
+      .backgroundColor($r('app.color.success_soft'))
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  /** 插画里的一张规则卡。后面两张只露出上沿，只画卡面，不画会被挡掉一半的内容。 */
+  @Builder
+  ArtCard(style: ArtCardStyle, order: number, front: boolean) {
+    Column() {
+      if (front) {
+        this.FrontContent()
+      }
     }
     .width(style.width)
     .height(style.height)
-    .padding({ left: front ? 13 : 16, right: 14 })
+    .padding({ left: 13, right: 14 })
     .borderRadius(front ? 18 : 15)
     .backgroundColor(this.appStyle.palette.cardBackground)
     .shadow(front ? FRONT_SHADOW : BACK_SHADOW)
@@ -97,11 +103,15 @@ export struct AddedRulesEmpty {
     .animation(this.fan(order))
   }
 
+  // 光晕和最前那张卡一起淡入，避免卡片出现前先剩一团色块。
   @Builder
-  Glow(size: number) {
+  Glow(size: number, shiftY: number) {
     Column()
       .width(size)
       .height(size)
+      .offset({ x: 0, y: shiftY })
+      .opacity(this.entered ? 1 : 0)
+      .animation(this.fan(0))
       .radialGradient({
         center: ['50%', '50%'],
         radius: size / 2,
@@ -111,13 +121,13 @@ export struct AddedRulesEmpty {
 
   @Builder
   RuleStack() {
-    // 光晕比插画大，居中铺在卡片后面，超出部分不裁剪。
+    // 光晕比插画大，压在最前那张卡后面，超出部分不裁剪。
     Stack() {
-      this.Glow(260)
+      this.Glow(240, 28)
       Stack({ alignContent: Alignment.Bottom }) {
-        this.ArtCard(BACK, 2, this.appStyle.palette.brand, this.appStyle.palette.brandSoft, false)
-        this.ArtCard(MIDDLE, 1, $r('app.color.status_error'), $r('app.color.error_soft'), false)
-        this.ArtCard(FRONT, 0, $r('app.color.status_connected'), $r('app.color.success_soft'), true)
+        this.ArtCard(BACK, 2, false)
+        this.ArtCard(MIDDLE, 1, false)
+        this.ArtCard(FRONT, 0, true)
       }
       .width(ART_WIDTH)
       .height(ART_HEIGHT)
@@ -130,7 +140,7 @@ export struct AddedRulesEmpty {
   @Builder
   Badge(icon: Resource, error: boolean) {
     Stack() {
-      this.Glow(200)
+      this.Glow(200, 0)
       Stack() {
         SymbolGlyph(icon)
           .fontSize(30)

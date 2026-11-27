@@ -2810,7 +2810,7 @@
     },
     {
       "name": "added_rules_empty_hint",
-      "value": "Added rules are checked before the profile's own rules, top to bottom."
+      "value": "Checked before the profile's own rules, top to bottom."
     },
     {
       "name": "added_rules_no_matches",
@@ -2846,31 +2846,31 @@
     },
     {
       "name": "added_rules_quic_hint",
-      "value": "Drop UDP 443 so HTTP/3 falls back to TCP"
+      "value": "Fall back from HTTP/3 to TCP"
     },
     {
       "name": "added_rules_stun_hint",
-      "value": "Keep WebRTC from revealing your IP over STUN"
+      "value": "Keep WebRTC from leaking your IP"
     },
     {
       "name": "added_rules_dot_hint",
-      "value": "Reject port 853 so DNS lookups go through the core"
+      "value": "Send DNS lookups through the core"
     },
     {
       "name": "added_rules_loopback_hint",
-      "value": "Reject connections to this device so traffic can't loop back"
+      "value": "Reject connections to this device"
     },
     {
       "name": "added_rules_lan_hint",
-      "value": "Keep private and LAN addresses off the proxy"
+      "value": "Keep LAN addresses off the proxy"
     },
     {
       "name": "added_rules_system_hint",
-      "value": "Reach system updates and services directly"
+      "value": "Connect system services directly"
     },
     {
       "name": "added_rules_tracker_hint",
-      "value": "Reach BT and PT trackers directly"
+      "value": "Connect BT and PT trackers directly"
     },
     {
       "name": "added_rules_presets_count",
