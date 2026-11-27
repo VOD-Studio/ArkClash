@@ -586,7 +586,7 @@ func (c *diagnosticCollector) logsFrameLocked(s *diagnosticSession, kind string,
 }
 
 func ensureDiagnosticLogsLocked() {
-	if running && current.General.CaptureLogs {
+	if eng.running && eng.current.General.CaptureLogs {
 		ensureDiagnosticCollectorLocked(&diagnosticLogs, "logs")
 	}
 }
@@ -650,12 +650,12 @@ func postDiagnosticLogsClear(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	status, err := diagnosticBootError(request.ExpectedBootID)
 	if err == nil {
 		clearDiagnosticLogsLocked()
 	}
-	mu.Unlock()
+	eng.mu.Unlock()
 	if err != nil {
 		writeError(w, r, status, err)
 		return

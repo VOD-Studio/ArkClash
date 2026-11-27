@@ -320,87 +320,81 @@ func postAddedRules(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateAddedRules(request profileSettingsRequest[addedRulesSettings]) error {
-	mu.Lock()
-	var wait func()
-	defer func() {
-		mu.Unlock()
-		if wait != nil {
-			wait()
-		}
-	}()
-	if !profileSettingsCurrent(request.BootID, request.ExpectedRevision, current.AddedRules.Revision, request.Settings.Revision) {
-		return errProfileSettingsConflict
-	}
-	if err := request.Settings.validate(); err != nil {
-		return err
-	}
-	next := current
-	next.AddedRules = request.Settings
-	if next.AddedRules.Profiles == nil {
-		next.AddedRules.Profiles = slices.Clone(current.AddedRules.Profiles)
-	}
-	if len(next.AddedRules.Profiles) > 0 {
-		types, err := readProfileTypes(next.HomeDir)
-		if err != nil {
-			return err
-		}
-		if types != nil {
-			for _, entry := range next.AddedRules.Profiles {
-				kind, exists := types[entry.Profile]
-				if (!exists || kind == "custom") &&
-					entry.Revision != current.AddedRules.forProfile(entry.Profile).Revision {
-					return errProfileSettingsConflict
-				}
-			}
-			next.AddedRules.Profiles = slices.DeleteFunc(next.AddedRules.Profiles, func(entry profileAddedRules) bool {
-				kind, exists := types[entry.Profile]
-				return !exists || kind == "custom"
-			})
-		}
-	}
-	globalIDs := make(map[string]bool, len(next.AddedRules.Rules))
-	for _, rule := range next.AddedRules.Rules {
-		globalIDs[rule.ID] = true
-	}
-	for i := range next.AddedRules.Profiles {
-		entry := &next.AddedRules.Profiles[i]
-		entry.Disabled = slices.DeleteFunc(slices.Clone(entry.Disabled), func(id string) bool { return !globalIDs[id] })
-		prior := current.AddedRules.forProfile(entry.Profile)
-		if entry.Revision == prior.Revision &&
-			(!slices.Equal(entry.Rules, prior.Rules) || entry.MatchTarget != prior.MatchTarget ||
-				!slices.Equal(entry.ExitTargets, prior.ExitTargets) ||
-				!slices.Equal(entry.Disabled, slices.DeleteFunc(slices.Clone(prior.Disabled), func(id string) bool {
-					return !globalIDs[id]
-				}))) {
+	return eng.withState(func(tx *stateTx) error {
+		if !profileSettingsCurrent(request.BootID, request.ExpectedRevision, eng.current.AddedRules.Revision, request.Settings.Revision) {
 			return errProfileSettingsConflict
 		}
-		if err := validateAddedRuleContent(entry.Rules, prior.Rules, next.RuleSets); err != nil {
+		if err := request.Settings.validate(); err != nil {
 			return err
 		}
-	}
-	if err := validateAddedRuleContent(next.AddedRules.Rules, current.AddedRules.Rules, next.RuleSets); err != nil {
+		next := eng.current
+		next.AddedRules = request.Settings
+		if next.AddedRules.Profiles == nil {
+			next.AddedRules.Profiles = slices.Clone(eng.current.AddedRules.Profiles)
+		}
+		if len(next.AddedRules.Profiles) > 0 {
+			types, err := readProfileTypes(next.HomeDir)
+			if err != nil {
+				return err
+			}
+			if types != nil {
+				for _, entry := range next.AddedRules.Profiles {
+					kind, exists := types[entry.Profile]
+					if (!exists || kind == "custom") &&
+						entry.Revision != eng.current.AddedRules.forProfile(entry.Profile).Revision {
+						return errProfileSettingsConflict
+					}
+				}
+				next.AddedRules.Profiles = slices.DeleteFunc(next.AddedRules.Profiles, func(entry profileAddedRules) bool {
+					kind, exists := types[entry.Profile]
+					return !exists || kind == "custom"
+				})
+			}
+		}
+		globalIDs := make(map[string]bool, len(next.AddedRules.Rules))
+		for _, rule := range next.AddedRules.Rules {
+			globalIDs[rule.ID] = true
+		}
+		for i := range next.AddedRules.Profiles {
+			entry := &next.AddedRules.Profiles[i]
+			entry.Disabled = slices.DeleteFunc(slices.Clone(entry.Disabled), func(id string) bool { return !globalIDs[id] })
+			prior := eng.current.AddedRules.forProfile(entry.Profile)
+			if entry.Revision == prior.Revision &&
+				(!slices.Equal(entry.Rules, prior.Rules) || entry.MatchTarget != prior.MatchTarget ||
+					!slices.Equal(entry.ExitTargets, prior.ExitTargets) ||
+					!slices.Equal(entry.Disabled, slices.DeleteFunc(slices.Clone(prior.Disabled), func(id string) bool {
+						return !globalIDs[id]
+					}))) {
+				return errProfileSettingsConflict
+			}
+			if err := validateAddedRuleContent(entry.Rules, prior.Rules, next.RuleSets); err != nil {
+				return err
+			}
+		}
+		if err := validateAddedRuleContent(next.AddedRules.Rules, eng.current.AddedRules.Rules, next.RuleSets); err != nil {
+			return err
+		}
+		next.ProfileRules.Disabled = slices.DeleteFunc(slices.Clone(eng.current.ProfileRules.Disabled), func(id string) bool {
+			return !globalIDs[id]
+		})
+		if next.Profile == "" || next.CustomRules ||
+			slices.Equal(eng.current.AddedRules.effective(eng.current.ProfileRules), next.AddedRules.effective(next.ProfileRules)) {
+			path := addedRulesPath(next.HomeDir)
+			staged, err := stageProfileSettings(path, next.AddedRules)
+			if err != nil {
+				return err
+			}
+			defer os.Remove(staged)
+			if err := os.Rename(staged, path); err != nil {
+				return errProfileSettingsIO
+			}
+			eng.setCurrentLocked(next)
+			return nil
+		}
+		wait, err := applyProfileSettingsLocked(next, addedRulesPath(next.HomeDir), next.AddedRules)
+		tx.deferUnlock(wait)
 		return err
-	}
-	next.ProfileRules.Disabled = slices.DeleteFunc(slices.Clone(current.ProfileRules.Disabled), func(id string) bool {
-		return !globalIDs[id]
 	})
-	if next.Profile == "" || next.CustomRules ||
-		slices.Equal(current.AddedRules.effective(current.ProfileRules), next.AddedRules.effective(next.ProfileRules)) {
-		path := addedRulesPath(next.HomeDir)
-		staged, err := stageProfileSettings(path, next.AddedRules)
-		if err != nil {
-			return err
-		}
-		defer os.Remove(staged)
-		if err := os.Rename(staged, path); err != nil {
-			return errProfileSettingsIO
-		}
-		current = next
-		return nil
-	}
-	var err error
-	wait, err = applyProfileSettingsLocked(next, addedRulesPath(next.HomeDir), next.AddedRules)
-	return err
 }
 
 func validateAddedRuleContent(rules, previous []addedRule, catalog ruleSetCatalog) error {

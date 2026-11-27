@@ -41,9 +41,6 @@ type selectionOperation struct {
 	Result  selectionResult
 }
 
-var selectionOperations map[string]selectionOperation
-var selectionOrder []string
-
 func selectionPath(home, profile string) string {
 	return filepath.Join(home, "profiles", profile+".selected.json")
 }
@@ -122,19 +119,23 @@ func checkSelectionNode(req selectionRequest, group outboundgroup.ProxyGroup) er
 }
 
 func commitSelection(req selectionRequest) (selectionResult, error) {
-	mu.Lock()
-	defer mu.Unlock()
-	return commitSelectionLocked(req)
+	var res selectionResult
+	err := eng.withState(func(tx *stateTx) error {
+		var err error
+		res, err = commitSelectionLocked(req)
+		return err
+	})
+	return res, err
 }
 
 func commitSelectionLocked(req selectionRequest) (selectionResult, error) {
-	if !running || current.Profile == "" || req.Profile != current.Profile {
+	if !eng.running || eng.current.Profile == "" || req.Profile != eng.current.Profile {
 		return selectionResult{}, errors.New("selection_profile_changed")
 	}
 	if req.OperationID == "" || len(req.OperationID) > 96 || req.Group == "" || len(req.Group) > 1024 || len(req.Name) > 1024 {
 		return selectionResult{}, errors.New("invalid_selection")
 	}
-	if req.ExpectedBootID != runtimeBootID || req.ExpectedRevision != runtimeConfigRevision {
+	if req.ExpectedBootID != eng.bootID || req.ExpectedRevision != eng.configRevision {
 		return selectionResult{}, errors.New("selection_revision_changed")
 	}
 	proxy := tunnel.Proxies()[req.Group]
@@ -152,13 +153,13 @@ func commitSelectionLocked(req selectionRequest) (selectionResult, error) {
 	if err := checkSelectionNode(req, group); err != nil {
 		return selectionResult{}, err
 	}
-	if prior, ok := selectionOperations[req.OperationID]; ok {
+	if prior, ok := eng.selections.ops[req.OperationID]; ok {
 		if prior.Request != req {
 			return selectionResult{}, errors.New("selection_operation_conflict")
 		}
 		return prior.Result, nil
 	}
-	selected, err := readSelections(current.HomeDir, current.Profile)
+	selected, err := readSelections(eng.current.HomeDir, eng.current.Profile)
 	if err != nil {
 		return selectionResult{}, err
 	}
@@ -181,7 +182,7 @@ func commitSelectionLocked(req selectionRequest) (selectionResult, error) {
 	}
 	if err := checkSelectionNode(req, group); err != nil {
 		selectable.ForceSet(priorTarget)
-		publishRuntime()
+		eng.publishRuntimeLocked()
 		return selectionResult{}, err
 	}
 	if target == "" {
@@ -190,11 +191,11 @@ func commitSelectionLocked(req selectionRequest) (selectionResult, error) {
 		selected[req.Group] = target
 	}
 	if priorPin != target {
-		if err := saveSelections(current.HomeDir, current.Profile, selected); err != nil {
+		if err := saveSelections(eng.current.HomeDir, eng.current.Profile, selected); err != nil {
 			if changed {
 				selectable.ForceSet(priorTarget)
 				if proxy.Type() == C.Selector && group.Now() != priorTarget {
-					publishRuntime()
+					eng.publishRuntimeLocked()
 					return selectionResult{}, errors.New("selection_inconsistent")
 				}
 			}
@@ -209,12 +210,12 @@ func commitSelectionLocked(req selectionRequest) (selectionResult, error) {
 			} else {
 				delete(selected, req.Group)
 			}
-			if saveSelections(current.HomeDir, current.Profile, selected) != nil {
-				publishRuntime()
+			if saveSelections(eng.current.HomeDir, eng.current.Profile, selected) != nil {
+				eng.publishRuntimeLocked()
 				return selectionResult{}, errors.New("selection_inconsistent")
 			}
 		}
-		publishRuntime()
+		eng.publishRuntimeLocked()
 		return selectionResult{}, err
 	}
 	graph := currentProxyGraph()
@@ -224,8 +225,8 @@ func commitSelectionLocked(req selectionRequest) (selectionResult, error) {
 	}
 	if changed {
 		closeConnections := req.CloseConnections
-		if current.General.CloseConnections != nil {
-			closeConnections = *current.General.CloseConnections
+		if eng.current.General.CloseConnections != nil {
+			closeConnections = *eng.current.General.CloseConnections
 		}
 		if closeConnections {
 			statistic.DefaultManager.Range(func(connection statistic.Tracker) bool {
@@ -238,17 +239,17 @@ func commitSelectionLocked(req selectionRequest) (selectionResult, error) {
 			resolver.ResetConnection()
 		}
 	}
-	if selectionOperations == nil {
-		selectionOperations = make(map[string]selectionOperation)
+	if eng.selections.ops == nil {
+		eng.selections.ops = make(map[string]selectionOperation)
 	}
-	if len(selectionOrder) >= 128 {
-		delete(selectionOperations, selectionOrder[0])
-		selectionOrder = selectionOrder[1:]
+	if len(eng.selections.order) >= 128 {
+		delete(eng.selections.ops, eng.selections.order[0])
+		eng.selections.order = eng.selections.order[1:]
 	}
-	selectionOperations[req.OperationID] = selectionOperation{Request: req, Result: result}
-	selectionOrder = append(selectionOrder, req.OperationID)
+	eng.selections.ops[req.OperationID] = selectionOperation{Request: req, Result: result}
+	eng.selections.order = append(eng.selections.order, req.OperationID)
 	if changed {
-		publishRuntime()
+		eng.publishRuntimeLocked()
 	}
 	return result, nil
 }
@@ -268,15 +269,25 @@ func postSelection(w http.ResponseWriter, r *http.Request) {
 }
 
 func getSelections(w http.ResponseWriter, r *http.Request) {
-	mu.Lock()
-	if !running || current.Profile == "" {
-		mu.Unlock()
+	var (
+		profile  string
+		selected map[string]string
+		notReady bool
+	)
+	err := eng.withState(func(tx *stateTx) error {
+		if !eng.running || eng.current.Profile == "" {
+			notReady = true
+			return nil
+		}
+		profile = eng.current.Profile
+		var err error
+		selected, err = readSelections(eng.current.HomeDir, profile)
+		return err
+	})
+	if notReady {
 		writeError(w, r, http.StatusConflict, errors.New("selection_profile_changed"))
 		return
 	}
-	profile := current.Profile
-	selected, err := readSelections(current.HomeDir, profile)
-	mu.Unlock()
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, err)
 		return

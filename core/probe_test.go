@@ -47,24 +47,24 @@ func installProbeConfig(t *testing.T, text string) *config.Config {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	stopRuntimeRoutes()
 	cfg, err := config.ParseRawConfig(raw)
 	if err != nil {
-		mu.Unlock()
+		eng.mu.Unlock()
 		t.Fatal(err)
 	}
 	tunnel.UpdateProxies(cfg.Proxies, cfg.Providers)
 	tunnel.UpdateRules(cfg.Rules, cfg.SubRules, cfg.RuleProviders)
 	tunnel.SetMode(cfg.General.Mode)
-	runtimeConfigRevision++
+	eng.configRevision++
 	watchRuntimeRoutes(cfg)
 	publishRuntime()
-	mu.Unlock()
+	eng.mu.Unlock()
 	t.Cleanup(func() {
-		mu.Lock()
+		eng.mu.Lock()
 		stopRuntimeRoutes()
-		mu.Unlock()
+		eng.mu.Unlock()
 		for _, provider := range cfg.Providers {
 			if closer, ok := provider.(interface{ Close() error }); ok {
 				if err := closer.Close(); err != nil {
@@ -159,7 +159,7 @@ func TestRuleFetchDeadlineClosesActualProxyHandshake(t *testing.T) {
 	installProbeConfig(t, "mode: rule\nlog-level: silent\nproxies:\n"+probeProxyConfig(t, "Slow", address)+"rules: ['MATCH,Slow']\n")
 	done := make(chan fetchResult, 1)
 	go func() {
-		done <- fetch(fetchRequest{URL: "http://127.0.0.1:1/subscription", Path: filepath.Join(current.HomeDir, "profiles", "download.yaml"), TimeoutMs: 100})
+		done <- fetch(fetchRequest{URL: "http://127.0.0.1:1/subscription", Path: filepath.Join(eng.current.HomeDir, "profiles", "download.yaml"), TimeoutMs: 100})
 	}()
 	receiveProbeSignal(t, entered, "fetch did not use the real rule-selected proxy")
 	select {
@@ -181,8 +181,8 @@ func TestSubscriptionFetchUsesForwardingState(t *testing.T) {
 	installProbeConfig(t, "mode: rule\nlog-level: silent\nrules: ['MATCH,REJECT']\n")
 	setForward := func(forward string) {
 		t.Helper()
-		mu.Lock()
-		defer mu.Unlock()
+		eng.mu.Lock()
+		defer eng.mu.Unlock()
 		intent := "started"
 		setHostTun(false)
 		if forward == "stopped" {
@@ -190,7 +190,7 @@ func TestSubscriptionFetchUsesForwardingState(t *testing.T) {
 		} else if forward == "running" {
 			setHostTun(true)
 		}
-		if err := updateVpnState(intent, forward, tunListener != nil); err != nil {
+		if err := updateVpnState(intent, forward, eng.tun != nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -203,9 +203,9 @@ func TestSubscriptionFetchUsesForwardingState(t *testing.T) {
 			close(entered)
 			<-release
 		} else {
-			mu.Lock()
+			eng.mu.Lock()
 			publishRuntime()
-			mu.Unlock()
+			eng.mu.Unlock()
 		}
 		_, _ = io.WriteString(w, content)
 	}))
@@ -226,7 +226,7 @@ func TestSubscriptionFetchUsesForwardingState(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setForward(tc.forward)
-			target := filepath.Join(current.HomeDir, "profiles", tc.name+".yaml")
+			target := filepath.Join(eng.current.HomeDir, "profiles", tc.name+".yaml")
 			got := fetch(fetchRequest{URL: server.URL, Path: target, AgeSecretKey: tc.key, TimeoutMs: 1000})
 			data, err := os.ReadFile(target)
 			if tc.success {
@@ -243,7 +243,7 @@ func TestSubscriptionFetchUsesForwardingState(t *testing.T) {
 	}
 
 	setForward("stopped")
-	target := filepath.Join(current.HomeDir, "profiles", "pending.yaml")
+	target := filepath.Join(eng.current.HomeDir, "profiles", "pending.yaml")
 	done := make(chan fetchResult, 1)
 	go func() {
 		done <- fetch(fetchRequest{URL: server.URL + "/pending", Path: target, AgeSecretKey: &key})
@@ -277,7 +277,7 @@ func TestSubscriptionSlowTLSUsesRequestDeadline(t *testing.T) {
 	}
 	defer ca.ResetCertificate()
 	key := ""
-	target := filepath.Join(current.HomeDir, "profiles", "slow-tls.yaml")
+	target := filepath.Join(eng.current.HomeDir, "profiles", "slow-tls.yaml")
 	got := fetch(fetchRequest{URL: server.URL, Path: target, AgeSecretKey: &key, TimeoutMs: 9000})
 	if got.Status != http.StatusOK || got.Error != "" {
 		t.Fatalf("subscription handshake within the request deadline: %+v", got)
@@ -401,7 +401,7 @@ func awaitAutomaticProbeRoute(t *testing.T, events <-chan []byte, group outbound
 				Type   string         `json:"type"`
 				Status statusResponse `json:"status"`
 			}
-			watch := runtimeRoutes.Load()
+			watch := eng.routes.Load()
 			changes := watch.changes.Load()
 			if json.Unmarshal(raw, &event) == nil && event.Type == "runtime" && event.Status.Revision > previous && group.Now() == name && watch.changes.Load() == changes {
 				return
@@ -434,7 +434,7 @@ func TestAutomaticHealthChangePushesRuntimeAndDiscardsOldProbe(t *testing.T) {
 				// 使用上游真实十秒缓存，旧请求在到期前进入，保留五秒请求预算。
 				<-time.After(7 * time.Second)
 			}
-			before := runtimeSnapshot.Load().Revision
+			before := eng.Status().Revision
 			result := httptest.NewRecorder()
 			done := make(chan struct{})
 			go func() {
@@ -456,7 +456,7 @@ func TestAutomaticHealthChangePushesRuntimeAndDiscardsOldProbe(t *testing.T) {
 				<-time.After(100 * time.Millisecond)
 				cached := httptest.NewRecorder()
 				postProbe(cached, probeRequest(context.Background(), "http://probe.invalid/result", http.MethodGet))
-				if group.Now() != "A" || cached.Code != http.StatusOK || !strings.Contains(cached.Body.String(), `"body":"A"`) || runtimeSnapshot.Load().Revision != before {
+				if group.Now() != "A" || cached.Code != http.StatusOK || !strings.Contains(cached.Body.String(), `"body":"A"`) || eng.Status().Revision != before {
 					t.Fatalf("health completion bypassed the real ten-second route cache: now=%s response=%d %s", group.Now(), cached.Code, cached.Body.String())
 				}
 			}
@@ -485,11 +485,11 @@ func TestAutomaticHealthChangePushesRuntimeAndDiscardsOldProbe(t *testing.T) {
 func TestOldConfigurationHealthCannotPublishIntoReplacement(t *testing.T) {
 	old := fixture(t)
 	installProbeConfig(t, "mode: direct\nlog-level: silent\nrules: ['MATCH,DIRECT']\n")
-	before := runtimeSnapshot.Load()
+	before := eng.Status()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	_, _ = old.Proxies["REJECT"].URLTest(ctx, "http://127.0.0.1:1/", nil)
-	if after := runtimeSnapshot.Load(); after != before {
+	if after := eng.Status(); after != before {
 		t.Fatal("old configuration health callback changed the replacement runtime")
 	}
 }
@@ -1006,15 +1006,15 @@ func installRetiringProbeProvider(t *testing.T, vehicle P.Vehicle, parses *atomi
 	}
 	cfg.Proxies["Auto"] = adapter.NewProxy(group)
 	cfg.Providers["Retiring"] = remote
-	mu.Lock()
+	eng.mu.Lock()
 	stopRuntimeRoutes()
 	tunnel.UpdateProxies(cfg.Proxies, cfg.Providers)
 	tunnel.UpdateRules(cfg.Rules, cfg.SubRules, cfg.RuleProviders)
 	tunnel.SetMode(cfg.General.Mode)
-	runtimeConfigRevision++
+	eng.configRevision++
 	watchRuntimeRoutes(cfg)
 	publishRuntime()
-	mu.Unlock()
+	eng.mu.Unlock()
 	return weak.Make(remote)
 }
 
@@ -1028,7 +1028,7 @@ func TestHTTPAndFileProviderRetirementReleasesBackgroundResources(t *testing.T) 
 			payload := func() string {
 				return fmt.Sprintf(`{"proxies":[{"name":"Remote%d","type":"direct"}]}`, generation.Load())
 			}
-			path := filepath.Join(current.HomeDir, "retiring.json")
+			path := filepath.Join(eng.current.HomeDir, "retiring.json")
 			var vehicle P.Vehicle
 			if kind == "http" {
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1059,7 +1059,7 @@ func TestHTTPAndFileProviderRetirementReleasesBackgroundResources(t *testing.T) 
 			// 等 finalizer 和已有回调退出后，真实拉取/文件监听都应保持静止。
 			<-time.After(300 * time.Millisecond)
 			beforeRequests, beforeParses := requests.Load(), parses.Load()
-			beforeRuntime := runtimeSnapshot.Load()
+			beforeRuntime := eng.Status()
 			generation.Store(3)
 			if kind == "file" {
 				if err := os.WriteFile(path, []byte(payload()), 0600); err != nil {
@@ -1067,7 +1067,7 @@ func TestHTTPAndFileProviderRetirementReleasesBackgroundResources(t *testing.T) 
 				}
 			}
 			<-time.After(500 * time.Millisecond)
-			if requests.Load() != beforeRequests || parses.Load() != beforeParses || runtimeSnapshot.Load() != beforeRuntime {
+			if requests.Load() != beforeRequests || parses.Load() != beforeParses || eng.Status() != beforeRuntime {
 				t.Fatalf("retired provider remained active: HTTP %d→%d parses %d→%d", beforeRequests, requests.Load(), beforeParses, parses.Load())
 			}
 		})

@@ -77,7 +77,7 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
-	boot, tun := runtimeSnapshot.Load().BootID, tunListener
+	boot, tun := eng.Status().BootID, eng.tun
 	global := []addedRule{
 		{ID: "global-one", Kind: "DOMAIN", Payload: "global.test", Target: "REJECT"},
 		{ID: "global-two", Kind: "DOMAIN", Payload: "second.test", Target: "MATCH"},
@@ -87,7 +87,7 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)
 	}
-	before := runtimeSnapshot.Load().ConfigRevision
+	before := eng.Status().ConfigRevision
 	first := profileAddedRules{Profile: "first", Revision: "local", Disabled: []string{"global-one"}, MatchTarget: "DIRECT",
 		Rules: []addedRule{{ID: "local", Kind: "DOMAIN", Payload: "global.test", Target: "MATCH"},
 			{ID: "local-two", Kind: "DOMAIN", Payload: "local.test", Target: "REJECT"}}}
@@ -96,7 +96,7 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)
 	}
-	if got := runtimeSnapshot.Load(); got.ConfigRevision != before || got.StandardRulesRevision != "" {
+	if got := eng.Status(); got.ConfigRevision != before || got.StandardRulesRevision != "" {
 		t.Fatal("saving a profile rule changed the runtime")
 	}
 	apply := scriptApplyRequest{BootID: boot, Profile: "first", StandardRevision: new("local")}
@@ -104,13 +104,13 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	rules := tunnel.Rules()
-	if got := runtimeSnapshot.Load(); got.StandardRulesRevision != "local" || tunListener != tun ||
+	if got := eng.Status(); got.StandardRulesRevision != "local" || eng.tun != tun ||
 		len(rules) != 4 || rules[0].Adapter() != "DIRECT" || rules[1].Adapter() != "REJECT" ||
 		rules[2].Adapter() != "DIRECT" || rules[3].Adapter() != "GLOBAL" {
 		t.Fatal("profile override order, MATCH target or TUN changed unexpectedly")
 	}
-	before = runtimeSnapshot.Load().ConfigRevision
-	if err := applyProfileScript(context.Background(), apply); err != nil || runtimeSnapshot.Load().ConfigRevision != before {
+	before = eng.Status().ConfigRevision
+	if err := applyProfileScript(context.Background(), apply); err != nil || eng.Status().ConfigRevision != before {
 		t.Fatalf("replaying the same apply changed runtime: %v", err)
 	}
 	request.ExpectedRevision = "local"
@@ -119,7 +119,7 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	saved, err := readAddedRules(opts.HomeDir)
-	if err != nil || len(saved.forProfile("first").Disabled) != 0 || runtimeSnapshot.Load().ConfigRevision != before {
+	if err != nil || len(saved.forProfile("first").Disabled) != 0 || eng.Status().ConfigRevision != before {
 		t.Fatalf("deleting a disabled rule should clean its references without reloading: %v", err)
 	}
 	scriptPath := filepath.Join(opts.HomeDir, "profiles", "scripts.json")
@@ -135,8 +135,7 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 	if err := applyProfileScript(context.Background(), scriptApplyRequest{BootID: boot, Profile: "first", Identity: identity}); err != nil {
 		t.Fatal(err)
 	}
-	if rules := tunnel.Rules(); len(rules) != 4 || rules[0].Adapter() != "DIRECT" || rules[3].Adapter() != "REJECT" ||
-		runtimeSnapshot.Load().StandardRulesRevision != "local" || tunListener != tun {
+	if rules := tunnel.Rules(); len(rules) != 4 || rules[0].Adapter() != "DIRECT" || rules[3].Adapter() != "REJECT" || eng.Status().StandardRulesRevision != "local" || eng.tun != tun {
 		t.Fatal("script and added rules did not apply together")
 	}
 	named := saved.forProfile("first")
@@ -149,7 +148,7 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := applyProfileScript(t.Context(), scriptApplyRequest{BootID: boot, Profile: "first", Identity: identity,
-		StandardRevision: &named.Revision}); err != nil || tunnel.Rules()[0].Adapter() != "Script Exit" || tunListener != tun {
+		StandardRevision: &named.Revision}); err != nil || tunnel.Rules()[0].Adapter() != "Script Exit" || eng.tun != tun {
 		t.Fatalf("named target was not applied to the scripted outbound: %v", err)
 	}
 	if err := os.Remove(scriptPath); err != nil {
@@ -169,10 +168,9 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 	if err := applyProfileScript(context.Background(), apply); !errors.Is(err, errProfileSettingsConflict) {
 		t.Fatalf("a stale standard revision was accepted: %v", err)
 	}
-	before = runtimeSnapshot.Load().ConfigRevision
+	before = eng.Status().ConfigRevision
 	apply.StandardRevision = &invalid.Revision
-	if err := applyProfileScript(context.Background(), apply); !errors.Is(err, errAddedRulesMatchTarget) ||
-		runtimeSnapshot.Load().ConfigRevision != before || runtimeSnapshot.Load().ProfileExtension != identity || tunListener != tun {
+	if err := applyProfileScript(context.Background(), apply); !errors.Is(err, errAddedRulesMatchTarget) || eng.Status().ConfigRevision != before || eng.Status().ProfileExtension != identity || eng.tun != tun {
 		t.Fatalf("a missing target changed the runtime: %v", err)
 	}
 	fixed := saved.forProfile("first")
@@ -183,8 +181,7 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	apply.StandardRevision = &fixed.Revision
-	if err := applyProfileScript(context.Background(), apply); err != nil || len(tunnel.Rules()) != 4 ||
-		runtimeSnapshot.Load().StandardRulesRevision != fixed.Revision || tunListener != tun {
+	if err := applyProfileScript(context.Background(), apply); err != nil || len(tunnel.Rules()) != 4 || eng.Status().StandardRulesRevision != fixed.Revision || eng.tun != tun {
 		t.Fatalf("switching back did not restore saved standard rules: %v", err)
 	}
 	if err := reload(second, "second", new("first")); err != nil {
@@ -196,7 +193,7 @@ func TestProfileAddedRulesSaveAndApplyRespectScope(t *testing.T) {
 	if err := reload(custom, "custom", new("second")); err != nil {
 		t.Fatal(err)
 	}
-	if rules := tunnel.Rules(); len(rules) != 1 || rules[0].Adapter() != "REJECT" || tunListener != tun {
+	if rules := tunnel.Rules(); len(rules) != 1 || rules[0].Adapter() != "REJECT" || eng.tun != tun {
 		t.Fatal("custom configuration inherited standard rules")
 	}
 }
@@ -214,8 +211,8 @@ func TestAddedRulesLiveApplyAndSwitchPreserveTun(t *testing.T) {
 	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
-	boot := runtimeSnapshot.Load().BootID
-	active := tunListener
+	boot := eng.Status().BootID
+	active := eng.tun
 	request := profileSettingsRequest[addedRulesSettings]{BootID: boot, ExpectedRevision: "default",
 		Settings: addedRulesSettings{Revision: "rules.1", Rules: []addedRule{
 			{ID: "first", Kind: "DOMAIN", Payload: "example.test", Target: "MATCH"},
@@ -224,8 +221,8 @@ func TestAddedRulesLiveApplyAndSwitchPreserveTun(t *testing.T) {
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)
 	}
-	if rules := tunnel.Rules(); len(rules) != 4 || rules[0].Adapter() != "REJECT" || rules[1].Adapter() != "DIRECT" ||
-		tunListener != active || runtimeSnapshot.Load().BootID != boot {
+	if rules := tunnel.Rules(); len(rules) != 4 || rules[0].Adapter() != "REJECT" || rules[1].Adapter() != "DIRECT" || eng.tun !=
+		active || eng.Status().BootID != boot {
 		t.Fatal("live rule update did not prepend rules or preserve the live tunnel")
 	}
 	saved, err := readAddedRules(opts.HomeDir)
@@ -245,14 +242,14 @@ func TestAddedRulesLiveApplyAndSwitchPreserveTun(t *testing.T) {
 	if err := reload(second, "second", new("first")); err != nil {
 		t.Fatal(err)
 	}
-	if rules := tunnel.Rules(); len(rules) != 3 || rules[0].Adapter() != "GLOBAL" || tunListener != active {
+	if rules := tunnel.Rules(); len(rules) != 3 || rules[0].Adapter() != "GLOBAL" || eng.tun != active {
 		t.Fatal("profile switch did not recalculate MATCH-TARGET on the existing tunnel")
 	}
 	request.Settings = addedRulesSettings{Revision: "removed", Rules: []addedRule{}}
 	if err := updateAddedRules(request); err != nil {
 		t.Fatal(err)
 	}
-	if len(tunnel.Rules()) != 1 || tunListener != active {
+	if len(tunnel.Rules()) != 1 || eng.tun != active {
 		t.Fatal("deleting the added rules did not restore the original profile rules")
 	}
 }

@@ -34,7 +34,7 @@ func TestGeoAutomaticUpdatesOnlyDueResourcesAndRestoresAttemptAfterRestart(t *te
 		if id == geoSite {
 			attempted = attempted.Add(-2 * time.Hour)
 		}
-		geoTestMetadata(t, current.HomeDir, id, attempted)
+		geoTestMetadata(t, eng.current.HomeDir, id, attempted)
 	}
 	manager := geoStartFixture(t, settings, clock)
 	clock.Advance(10 * time.Second)
@@ -44,9 +44,9 @@ func TestGeoAutomaticUpdatesOnlyDueResourcesAndRestoresAttemptAfterRestart(t *te
 	if attempts.Load() != 1 {
 		t.Fatalf("updated non-due resources: %d", attempts.Load())
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	manager.closeLocked()
-	mu.Unlock()
+	eng.mu.Unlock()
 	manager.wait()
 	restartedClock := &geoTestClock{now: clock.Now().Add(time.Minute)}
 	geoStartFixture(t, settings, restartedClock)
@@ -70,10 +70,10 @@ func TestGeoAutomaticUnchangedWaitsFullInterval(t *testing.T) {
 	settings.IntervalHours = 1
 	clock := &geoTestClock{now: time.Now().Truncate(time.Millisecond)}
 	for _, id := range geoIDs {
-		geoTestMetadata(t, current.HomeDir, id, clock.Now())
+		geoTestMetadata(t, eng.current.HomeDir, id, clock.Now())
 	}
-	geoTestMetadata(t, current.HomeDir, geoSite, clock.Now().Add(-2*time.Hour))
-	path := filepath.Join(current.HomeDir, "geosite.dat")
+	geoTestMetadata(t, eng.current.HomeDir, geoSite, clock.Now().Add(-2*time.Hour))
+	path := filepath.Join(eng.current.HomeDir, "geosite.dat")
 	geoWrite(t, path, payload)
 	old := clock.Now().Add(-2 * time.Hour)
 	if err := os.Chtimes(path, old, old); err != nil {
@@ -111,21 +111,21 @@ func TestGeoDisableAutomaticCancelsOnlyAutomaticWork(t *testing.T) {
 			settings.AutoUpdate = true
 			clock := &geoTestClock{now: time.Now().Truncate(time.Millisecond)}
 			for _, id := range geoIDs {
-				geoTestMetadata(t, current.HomeDir, id, clock.Now())
+				geoTestMetadata(t, eng.current.HomeDir, id, clock.Now())
 			}
 			manager := geoStartFixture(t, settings, clock)
-			mu.Lock()
+			eng.mu.Lock()
 			_, err := manager.enqueueLocked([]geoResourceID{geoSite, geoIP}, automatic)
-			mu.Unlock()
+			eng.mu.Unlock()
 			if err != nil {
 				t.Fatal(err)
 			}
 			receiveProbeSignal(t, entered, "queued Geo task did not start")
 			settings.AutoUpdate = false
 			settings.Revision = "disabled"
-			mu.Lock()
+			eng.mu.Lock()
 			err = manager.applySettingsLocked(settings)
-			mu.Unlock()
+			eng.mu.Unlock()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -176,7 +176,7 @@ func TestGeoInvalidCandidatesAndMetadataWriteFailurePreserveOldFile(t *testing.T
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(candidate.data) }))
 			defer server.Close()
 			manager := geoFixture(t, geoTestSettings(server.URL))
-			path, err := geoPath(current.HomeDir, candidate.id)
+			path, err := geoPath(eng.current.HomeDir, candidate.id)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -190,7 +190,7 @@ func TestGeoInvalidCandidatesAndMetadataWriteFailurePreserveOldFile(t *testing.T
 			if !bytes.Equal(data, old) {
 				t.Fatal("invalid candidate changed old file")
 			}
-			geoAssertNoTemps(t, current.HomeDir)
+			geoAssertNoTemps(t, eng.current.HomeDir)
 		})
 	}
 	t.Run("metadata-io", func(t *testing.T) {
@@ -198,10 +198,10 @@ func TestGeoInvalidCandidatesAndMetadataWriteFailurePreserveOldFile(t *testing.T
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(payload) }))
 		defer server.Close()
 		fixture(t)
-		path := filepath.Join(current.HomeDir, "geosite.dat")
+		path := filepath.Join(eng.current.HomeDir, "geosite.dat")
 		old := geoSiteData(t, "old.example", false)
 		geoWrite(t, path, old)
-		if err := os.Mkdir(filepath.Join(current.HomeDir, "geo-geosite.json"), 0700); err != nil {
+		if err := os.Mkdir(filepath.Join(eng.current.HomeDir, "geo-geosite.json"), 0700); err != nil {
 			t.Fatal(err)
 		}
 		manager := geoStartFixture(t, geoTestSettings(server.URL), nil)
@@ -213,7 +213,7 @@ func TestGeoInvalidCandidatesAndMetadataWriteFailurePreserveOldFile(t *testing.T
 		if !bytes.Equal(data, old) {
 			t.Fatal("failed ownership persistence replaced old file")
 		}
-		geoAssertNoTemps(t, current.HomeDir)
+		geoAssertNoTemps(t, eng.current.HomeDir)
 	})
 }
 

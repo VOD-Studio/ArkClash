@@ -46,7 +46,7 @@ func providerTestStart(t *testing.T, home, profileID, yamlContent string) (strin
 	}
 	tunnel.ArkClashResumeForwarding()
 	t.Cleanup(func() { _ = stop() })
-	status := runtimeSnapshot.Load()
+	status := eng.Status()
 	if status == nil {
 		t.Fatal("missing runtime status after start")
 	}
@@ -121,7 +121,7 @@ rules:
 `, proxyFile, ruleFile)
 	bootID, rev := providerTestStart(t, home, "p-same", cfg)
 
-	rec := doJSONRequest(runtimeProviders.HandleList, http.MethodGet, "/arkclash/providers", nil)
+	rec := doJSONRequest(eng.providers.HandleList, http.MethodGet, "/arkclash/providers", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /arkclash/providers status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -222,7 +222,7 @@ rules:
 	proxyBody.Store("proxies:\n  - { name: Remote-1, type: ss, server: 10.0.0.1, port: 8388, cipher: aes-128-gcm, password: pass }\n  - { name: Remote-2, type: ss, server: 10.0.0.2, port: 8388, cipher: aes-128-gcm, password: pass }\n")
 	ruleBody.Store("payload:\n  - 'fresh.example.test'\n  - 'fresh2.example.test'\n")
 
-	rec := doJSONRequest(runtimeProviders.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
+	rec := doJSONRequest(eng.providers.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
 		BootID: bootID, ConfigRevision: rev, Kind: "proxy", Name: "remote-p",
 	})
 	if rec.Code != http.StatusOK {
@@ -239,7 +239,7 @@ rules:
 	}
 
 	// 重复更新同内容返回 unchanged。
-	rec = doJSONRequest(runtimeProviders.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
+	rec = doJSONRequest(eng.providers.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
 		BootID: bootID, ConfigRevision: rev, Kind: "proxy", Name: "remote-p",
 	})
 	if rec.Code != http.StatusOK {
@@ -250,7 +250,7 @@ rules:
 		t.Fatalf("expected unchanged outcome")
 	}
 
-	rec = doJSONRequest(runtimeProviders.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
+	rec = doJSONRequest(eng.providers.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
 		BootID: bootID, ConfigRevision: rev, Kind: "rule", Name: "remote-r",
 	})
 	if rec.Code != http.StatusOK {
@@ -263,7 +263,7 @@ rules:
 
 	// 2. 远程刷新失败不泄露上游错误且保持原有效资源。
 	failServer.Store(true)
-	rec = doJSONRequest(runtimeProviders.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
+	rec = doJSONRequest(eng.providers.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
 		BootID: bootID, ConfigRevision: rev, Kind: "rule", Name: "remote-r",
 	})
 	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "provider_update_failed") || strings.Contains(rec.Body.String(), "secret-upstream-token-leak") {
@@ -276,7 +276,7 @@ rules:
 	// 3. 本地文件替换（proxy + yaml rule + mrs rule），并验证损坏文件被拒绝且保留旧资源。
 	badProxyCand := filepath.Join(home, "profile-work", "bad-proxy.yaml")
 	_ = os.WriteFile(badProxyCand, []byte("not: valid-proxies\n"), 0o600)
-	rec = doJSONRequest(runtimeProviders.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
+	rec = doJSONRequest(eng.providers.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
 		BootID: bootID, ConfigRevision: rev, Kind: "proxy", Name: "remote-p", Candidate: badProxyCand,
 	})
 	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "provider_invalid_content") {
@@ -288,7 +288,7 @@ rules:
 
 	goodProxyCand := filepath.Join(home, "profile-work", "good-proxy.yaml")
 	_ = os.WriteFile(goodProxyCand, []byte("proxies:\n  - { name: Local-1, type: ss, server: 10.1.0.1, port: 8388, cipher: aes-128-gcm, password: pass }\n  - { name: Local-2, type: ss, server: 10.1.0.2, port: 8388, cipher: aes-128-gcm, password: pass }\n  - { name: Local-3, type: ss, server: 10.1.0.3, port: 8388, cipher: aes-128-gcm, password: pass }\n"), 0o600)
-	rec = doJSONRequest(runtimeProviders.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
+	rec = doJSONRequest(eng.providers.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
 		BootID: bootID, ConfigRevision: rev, Kind: "proxy", Name: "remote-p", Candidate: goodProxyCand,
 	})
 	if rec.Code != http.StatusOK {
@@ -301,7 +301,7 @@ rules:
 	// 坏 YAML 规则（即使末尾带换行也不能绕过校验！）
 	badRuleCand := filepath.Join(home, "profile-work", "bad-rule.yaml")
 	_ = os.WriteFile(badRuleCand, []byte("just random text\nsecond line\n"), 0o600)
-	rec = doJSONRequest(runtimeProviders.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
+	rec = doJSONRequest(eng.providers.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
 		BootID: bootID, ConfigRevision: rev, Kind: "rule", Name: "remote-r", Candidate: badRuleCand,
 	})
 	if rec.Code != http.StatusUnprocessableEntity {
@@ -313,7 +313,7 @@ rules:
 
 	goodRuleCand := filepath.Join(home, "profile-work", "good-rule.yaml")
 	_ = os.WriteFile(goodRuleCand, []byte("payload:\n  - 'replaced.example.test'\n"), 0o600)
-	rec = doJSONRequest(runtimeProviders.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
+	rec = doJSONRequest(eng.providers.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
 		BootID: bootID, ConfigRevision: rev, Kind: "rule", Name: "remote-r", Candidate: goodRuleCand,
 	})
 	if rec.Code != http.StatusOK {
@@ -330,7 +330,7 @@ rules:
 	}
 	wrongMrsCand := filepath.Join(home, "profile-work", "wrong.mrs")
 	_ = os.WriteFile(wrongMrsCand, wrongMrs.Bytes(), 0o600)
-	rec = doJSONRequest(runtimeProviders.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
+	rec = doJSONRequest(eng.providers.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
 		BootID: bootID, ConfigRevision: rev, Kind: "rule", Name: "local-mrs", Candidate: wrongMrsCand,
 	})
 	if rec.Code != http.StatusUnprocessableEntity {
@@ -343,7 +343,7 @@ rules:
 	}
 	goodMrsCand := filepath.Join(home, "profile-work", "good.mrs")
 	_ = os.WriteFile(goodMrsCand, goodMrs.Bytes(), 0o600)
-	rec = doJSONRequest(runtimeProviders.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
+	rec = doJSONRequest(eng.providers.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
 		BootID: bootID, ConfigRevision: rev, Kind: "rule", Name: "local-mrs", Candidate: goodMrsCand,
 	})
 	if rec.Code != http.StatusOK {
@@ -356,7 +356,7 @@ rules:
 	// 沙箱外路径被拒绝。
 	outside := filepath.Join(t.TempDir(), "outside.yaml")
 	_ = os.WriteFile(outside, []byte("payload:\n  - 'outside.example.test'\n"), 0o600)
-	rec = doJSONRequest(runtimeProviders.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
+	rec = doJSONRequest(eng.providers.HandleReplace, http.MethodPost, "/arkclash/providers/replace", providers.ReplaceRequest{
 		BootID: bootID, ConfigRevision: rev, Kind: "rule", Name: "remote-r", Candidate: outside,
 	})
 	if rec.Code != http.StatusBadRequest {
@@ -418,7 +418,7 @@ rules:
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		rec := doJSONRequest(runtimeProviders.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
+		rec := doJSONRequest(eng.providers.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
 			BootID: bootID, ConfigRevision: revA, Kind: "proxy", Name: "same",
 		})
 		firstCode = rec.Code
@@ -432,7 +432,7 @@ rules:
 	}
 
 	// 同名同 kind 互斥返回 409 provider_busy。
-	busyRec := doJSONRequest(runtimeProviders.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
+	busyRec := doJSONRequest(eng.providers.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
 		BootID: bootID, ConfigRevision: revA, Kind: "proxy", Name: "same",
 	})
 	if busyRec.Code != http.StatusConflict || !strings.Contains(busyRec.Body.String(), "provider_busy") {
@@ -440,7 +440,7 @@ rules:
 	}
 
 	// 同名不同 kind（rule vs proxy）互不阻塞！
-	ruleRec := doJSONRequest(runtimeProviders.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
+	ruleRec := doJSONRequest(eng.providers.HandleUpdate, http.MethodPost, "/arkclash/providers/update", providers.UpdateRequest{
 		BootID: bootID, ConfigRevision: revA, Kind: "rule", Name: "same",
 	})
 	if ruleRec.Code != http.StatusOK {
@@ -471,7 +471,7 @@ rules:
 	if firstCode != http.StatusConflict || !strings.Contains(firstBody, "provider_stale_config") {
 		t.Fatalf("expected stale config rejection after reload, got %d %s", firstCode, firstBody)
 	}
-	snapRec := doJSONRequest(runtimeProviders.HandleList, http.MethodGet, "/arkclash/providers", nil)
+	snapRec := doJSONRequest(eng.providers.HandleList, http.MethodGet, "/arkclash/providers", nil)
 	var snap providers.Snapshot
 	_ = json.Unmarshal(snapRec.Body.Bytes(), &snap)
 	if snap.Profile != "p-b" || snap.ConfigRevision == revA || len(snap.Items) != 0 {

@@ -284,42 +284,36 @@ func postDNSOverrides(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateDNSOverrides(request dnsOverrideRequest) error {
-	mu.Lock()
-	var wait func()
-	defer func() {
-		mu.Unlock()
-		if wait != nil {
-			wait()
+	return eng.withState(func(tx *stateTx) error {
+		if !profileSettingsCurrent(request.BootID, request.ExpectedRevision, eng.current.DNS.Revision, request.Settings.Revision) {
+			return errDNSConflict
 		}
-	}()
-	if !profileSettingsCurrent(request.BootID, request.ExpectedRevision, current.DNS.Revision, request.Settings.Revision) {
-		return errDNSConflict
-	}
-	if err := request.Settings.validate(); err != nil {
-		return err
-	}
-	next := current
-	next.DNS = request.Settings
-	var err error
-	wait, err = applyProfileSettingsLocked(next, dnsOverridesPath(next.HomeDir), next.DNS)
-	switch err {
-	case nil:
-		return nil
-	case errProfileSettingsInvalid:
-		return errDNSInvalid
-	case errProfileSettingsIO:
-		return errDNSIO
-	case errProfileSettingsListen:
-		return errDNSListen
-	case errDNSProxyServersRequired:
-		return errDNSProxyServersRequired
-	default:
-		return errDNSApply
-	}
+		if err := request.Settings.validate(); err != nil {
+			return err
+		}
+		next := eng.current
+		next.DNS = request.Settings
+		wait, err := applyProfileSettingsLocked(next, dnsOverridesPath(next.HomeDir), next.DNS)
+		tx.deferUnlock(wait)
+		switch err {
+		case nil:
+			return nil
+		case errProfileSettingsInvalid:
+			return errDNSInvalid
+		case errProfileSettingsIO:
+			return errDNSIO
+		case errProfileSettingsListen:
+			return errDNSListen
+		case errDNSProxyServersRequired:
+			return errDNSProxyServersRequired
+		default:
+			return errDNSApply
+		}
+	})
 }
 
 func dnsListenerAvailable(address string, mark int) bool {
-	if address == "" || address == desiredInbound.dnsListen {
+	if address == "" || address == eng.desiredInbound.dnsListen {
 		return true
 	}
 	lc := inbound.NewListenConfig()

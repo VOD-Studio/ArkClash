@@ -200,8 +200,8 @@ func postProbe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	snapshot := runtimeSnapshot.Load()
-	routes := runtimeRoutes.Load()
+	snapshot := eng.Status()
+	routes := eng.routes.Load()
 	var routeRevision uint64
 	if routes != nil {
 		routeRevision = routes.changes.Load()
@@ -277,9 +277,9 @@ func postProbe(w http.ResponseWriter, r *http.Request) {
 	if r.Context().Err() != nil {
 		return
 	}
-	current := runtimeSnapshot.Load()
+	current := eng.Status()
 	if current == nil || !current.Running || current.BootID != snapshot.BootID || current.Revision != snapshot.Revision ||
-		runtimeRoutes.Load() != routes || (routes != nil && routes.changes.Load() != routeRevision) {
+		eng.routes.Load() != routes || (routes != nil && routes.changes.Load() != routeRevision) {
 		writeError(w, r, http.StatusConflict, errors.New("probe_runtime_changed"))
 		return
 	}

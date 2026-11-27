@@ -241,17 +241,14 @@ func getScriptOutbounds(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, errScriptConflict)
 		return
 	}
-	mu.Lock()
-	home := current.HomeDir
-	ready := running
-	mu.Unlock()
-	if !ready {
+	view := eng.View()
+	if view == nil || !view.Status.Running {
 		writeError(w, r, http.StatusServiceUnavailable, errScriptConflict)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	outbounds, err := readScriptOutbounds(ctx, home, profile)
+	outbounds, err := readScriptOutbounds(ctx, view.HomeDir, profile)
 	if err != nil {
 		writeError(w, r, http.StatusBadRequest, err)
 		return
@@ -295,13 +292,22 @@ func postProfileScript(w http.ResponseWriter, r *http.Request) {
 }
 
 func applyProfileScript(ctx context.Context, request scriptApplyRequest) error {
-	mu.Lock()
-	if !running || runtimeBootID != request.BootID || current.Profile != request.Profile || current.CustomRules || cleanupFailure != nil {
-		mu.Unlock()
+	var (
+		next     startOptions
+		revision uint64
+		conflict bool
+	)
+	_ = eng.withState(func(tx *stateTx) error {
+		if !eng.running || eng.bootID != request.BootID || eng.current.Profile != request.Profile || eng.current.CustomRules || eng.cleanupFailure != nil {
+			conflict = true
+			return nil
+		}
+		next, revision = eng.current, eng.configRevision
+		return nil
+	})
+	if conflict {
 		return errScriptConflict
 	}
-	next, revision := current, runtimeConfigRevision
-	mu.Unlock()
 
 	selection, err := readProfileScript(next.HomeDir, request.Profile)
 	if err != nil {
@@ -332,46 +338,41 @@ func applyProfileScript(ctx context.Context, request scriptApplyRequest) error {
 		return errScriptConfig
 	}
 
-	mu.Lock()
-	var wait func()
-	defer func() {
-		mu.Unlock()
-		if wait != nil {
-			wait()
+	return eng.withState(func(tx *stateTx) error {
+		if ctx.Err() != nil || !eng.running || eng.bootID != request.BootID || revision != eng.configRevision || eng.cleanupFailure != nil {
+			return errScriptConflict
 		}
-	}()
-	if ctx.Err() != nil || !running || runtimeBootID != request.BootID || revision != runtimeConfigRevision || cleanupFailure != nil {
-		return errScriptConflict
-	}
-	latest, err := readProfileScript(next.HomeDir, request.Profile)
-	if err != nil || latest.identity != selection.identity {
-		return errScriptConflict
-	}
-	standard, err = request.selectedRules(current)
-	if err != nil {
-		return err
-	}
-	// 模式和局域网开关可以在脚本执行时变化，但不会增加配置版本。
-	next = current
-	next.ConfigPath, next.Script, next.ContentHash = path, selection, hash
-	next.ProfileRules = standard
-	var inbounds inboundSettings
-	cfg, err := prepareRawConfig(raw, next, &inbounds)
-	if err != nil {
-		if errors.Is(err, errAddedRulesMatchTarget) || errors.Is(err, errDNSProxyServersRequired) {
+		latest, err := readProfileScript(next.HomeDir, request.Profile)
+		if err != nil || latest.identity != selection.identity {
+			return errScriptConflict
+		}
+		standard, err = request.selectedRules(eng.current)
+		if err != nil {
 			return err
 		}
-		if !selection.enabled() {
-			return errProfileSettingsInvalid
+		// 模式和局域网开关可以在脚本执行时变化，但不会增加配置版本。
+		next = eng.current
+		next.ConfigPath, next.Script, next.ContentHash = path, selection, hash
+		next.ProfileRules = standard
+		var inbounds inboundSettings
+		cfg, err := prepareRawConfig(raw, next, &inbounds)
+		if err != nil {
+			if errors.Is(err, errAddedRulesMatchTarget) || errors.Is(err, errDNSProxyServersRequired) {
+				return err
+			}
+			if !selection.enabled() {
+				return errProfileSettingsInvalid
+			}
+			return errScriptConfig
 		}
-		return errScriptConfig
-	}
-	if tunListener != nil && !dnsListenerAvailable(inbounds.dnsListen, inbounds.dnsMark) {
-		return errScriptConfig
-	}
-	wait, err = applyReloadLocked(next, cfg, inbounds)
-	if err != nil {
-		return errScriptApply
-	}
-	return nil
+		if eng.tun != nil && !dnsListenerAvailable(inbounds.dnsListen, inbounds.dnsMark) {
+			return errScriptConfig
+		}
+		wait, err := applyReloadLocked(next, cfg, inbounds)
+		tx.deferUnlock(wait)
+		if err != nil {
+			return errScriptApply
+		}
+		return nil
+	})
 }

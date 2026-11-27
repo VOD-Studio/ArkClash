@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -48,17 +49,63 @@ func hostNewTunListener(options LC.Tun) (tunHandle, error) {
 
 // 绕过 startTun/stopTun 直接设置宿主 TUN 状态时，必须同步复位一次性关闭标记。
 func setHostTun(attached bool) {
-	tunCloseAttempted = false
-	tunCloseErr = nil
+	eng.tunCloseAttempted = false
+	eng.tunCloseErr = nil
 	if attached {
-		tunListener = &stubTunHandle{fd: 1}
+		eng.tun = &stubTunHandle{fd: 1}
 		return
 	}
-	tunListener = nil
+	eng.tun = nil
+}
+
+func assertEngineViewInvariant(e *coreEngine) {
+	v := e.view.Load()
+	if v == nil {
+		if e.running {
+			panic("engine invariant: running=true with nil runtimeView")
+		}
+		return
+	}
+	if v.Status.Running != e.running ||
+		v.Status.Profile != e.current.Profile ||
+		v.Status.BootID != e.bootID ||
+		v.Status.ConfigRevision != e.configRevision ||
+		v.Status.Revision != e.revision ||
+		v.Status.Intent != e.intent ||
+		v.Status.Forward != e.forward ||
+		v.Status.TunAttached != (e.tun != nil) ||
+		v.Status.VpnCreated != e.vpnCreated ||
+		v.Status.PanelOpen != (e.panel != nil) ||
+		v.Status.ProfileExtension != e.current.Script.identity ||
+		v.Status.StandardRulesRevision != e.current.ProfileRules.Revision ||
+		v.HomeDir != e.current.HomeDir ||
+		v.StoreGeneration != e.current.StoreGeneration ||
+		v.CaptureLogs != e.current.General.CaptureLogs ||
+		v.DelayTimeout != e.current.General.DelayTimeout {
+		panic(fmt.Sprintf("engine invariant violated: view=%+v running=%v profile=%q boot=%q rev=%d cfgRev=%d home=%q logs=%v delay=%d",
+			v, e.running, e.current.Profile, e.bootID, e.revision, e.configRevision, e.current.HomeDir, e.current.General.CaptureLogs, e.current.General.DelayTimeout))
+	}
+}
+
+func (e *coreEngine) resetForTestLocked() {
+	stopRuntimeRoutes()
+	cancelDelayTests()
+	e.running = false
+	e.current = startOptions{}
+	setHostTun(false)
+	e.vpnCreated = false
+	e.intent = "stopped"
+	e.forward = "stopped"
+	e.startedAt = 0
+	e.desiredInbound = inboundSettings{}
+	e.cleanupFailure = nil
+	e.view.Store(nil)
+	resetProxyIdentities()
 }
 
 func TestMain(m *testing.M) {
-	newTunListener = hostNewTunListener
+	eng.tunFactory = hostNewTunListener
+	engineUnlockCheck = assertEngineViewInvariant
 	os.Exit(m.Run())
 }
 func fixture(t *testing.T) *config.Config {
@@ -92,53 +139,40 @@ rules: ['MATCH,DIRECT']
 	if err != nil {
 		t.Fatal(err)
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	tunnel.UpdateProxies(cfg.Proxies, cfg.Providers)
 	tunnel.SetMode(tunnel.ModeMapping["direct"])
 	inner.New(tunnel.Tunnel)
 	tunnel.OnRunning()
-	current = startOptions{HomeDir: home, Profile: "fixture", Geo: defaultGeoSettings()}
-	running = true
-	runningID.Store(&current.Profile)
+	eng.current = startOptions{HomeDir: home, Profile: "fixture", Geo: defaultGeoSettings()}
+	eng.running = true
 	setHostTun(true)
 	waitDiagnostics := beginRuntime()
 	if err := updateVpnState("started", "running", true); err != nil {
-		mu.Unlock()
+		eng.mu.Unlock()
 		t.Fatal(err)
 	}
 	watchRuntimeRoutes(cfg)
 	resetProxyIdentities()
 	publishRuntime()
 	tunnel.ArkClashResumeForwarding()
-	mu.Unlock()
+	eng.mu.Unlock()
 	waitDiagnostics()
 	t.Cleanup(func() {
 		if err := tunnel.ArkClashSuspendForwarding(); err != nil {
 			t.Error(err)
 		}
-		mu.Lock()
+		eng.mu.Lock()
 		waitDiagnostics := stopDiagnosticsLocked()
 		defer func() {
-			mu.Unlock()
+			eng.mu.Unlock()
 			waitDiagnostics()
 		}()
-		stopRuntimeRoutes()
-		cancelDelayTests()
-		running = false
-		runningID.Store(nil)
-		setHostTun(false)
-		runtimeVpnCreated = false
-		runtimeIntent = "stopped"
-		runtimeForward = "stopped"
-		runtimeStartedAt = 0
 		hostTunStartError = nil
 		hostTunStopError = nil
-		desiredInbound = inboundSettings{}
-		cleanupFailure = nil
-		runtimeSnapshot.Store(nil)
+		eng.resetForTestLocked()
 		tunnel.OnSuspend()
 		tunnel.UpdateProxies(nil, nil)
-		resetProxyIdentities()
 	})
 	return cfg
 }
@@ -161,22 +195,22 @@ func snapshotNodeID(t *testing.T, group, name string) string {
 func TestSelectionPersistsAndReplaysOnce(t *testing.T) {
 	cfg := fixture(t)
 	request := selectionRequest{Profile: "fixture", Group: "Manual", Name: "REJECT", NodeID: snapshotNodeID(t, "Manual", "REJECT"), OperationID: "one",
-		ExpectedBootID: runtimeBootID, ExpectedRevision: runtimeConfigRevision}
+		ExpectedBootID: eng.bootID, ExpectedRevision: eng.configRevision}
 	first, err := commitSelection(request)
 	if err != nil || !first.Changed || first.Selected != "REJECT" {
 		t.Fatalf("first=%+v err=%v", first, err)
 	}
-	revision := runtimeRevision
+	revision := eng.revision
 	replay, err := commitSelection(request)
-	if err != nil || replay != first || runtimeRevision != revision {
-		t.Fatalf("replay=%+v err=%v revision=%d", replay, err, runtimeRevision)
+	if err != nil || replay != first || eng.revision != revision {
+		t.Fatalf("replay=%+v err=%v revision=%d", replay, err, eng.revision)
 	}
-	selected, err := readSelections(current.HomeDir, "fixture")
+	selected, err := readSelections(eng.current.HomeDir, "fixture")
 	if err != nil || selected["Manual"] != "REJECT" {
 		t.Fatalf("selected=%v err=%v", selected, err)
 	}
 	cfg.Proxies["Manual"].Adapter().(outboundgroup.SelectAble).ForceSet("DIRECT")
-	if err := restoreSelections(cfg, current); err != nil {
+	if err := restoreSelections(cfg, eng.current); err != nil {
 		t.Fatal(err)
 	}
 	if got := cfg.Proxies["Manual"].Adapter().(outboundgroup.ProxyGroup).Now(); got != "REJECT" {
@@ -203,13 +237,13 @@ func (selector *movedSelector) Set(name string) error {
 
 func TestSelectionPersistenceFailureRestoresForwarding(t *testing.T) {
 	cfg := fixture(t)
-	dir := filepath.Join(current.HomeDir, "profiles")
+	dir := filepath.Join(eng.current.HomeDir, "profiles")
 	moved := dir + ".held"
 	original := cfg.Proxies["Manual"].Adapter().(*outboundgroup.Selector)
 	cfg.Proxies["Manual"] = adapter.NewProxy(&movedSelector{Selector: original, move: func() error { return os.Rename(dir, moved) }})
 	tunnel.UpdateProxies(cfg.Proxies, cfg.Providers)
 	_, err := commitSelection(selectionRequest{Profile: "fixture", Group: "Manual", Name: "REJECT", NodeID: snapshotNodeID(t, "Manual", "REJECT"), OperationID: "rollback",
-		ExpectedBootID: runtimeBootID, ExpectedRevision: runtimeConfigRevision})
+		ExpectedBootID: eng.bootID, ExpectedRevision: eng.configRevision})
 	if restore := os.Rename(moved, dir); restore != nil {
 		t.Fatal(restore)
 	}
@@ -219,7 +253,7 @@ func TestSelectionPersistenceFailureRestoresForwarding(t *testing.T) {
 	if got := original.Now(); got != "DIRECT" {
 		t.Fatalf("forwarding remained %s after persistence failure", got)
 	}
-	selected, err := readSelections(current.HomeDir, "fixture")
+	selected, err := readSelections(eng.current.HomeDir, "fixture")
 	if err != nil || selected["Manual"] != "" {
 		t.Fatalf("selected=%v err=%v", selected, err)
 	}
@@ -228,7 +262,7 @@ func TestSelectionPersistenceFailureRestoresForwarding(t *testing.T) {
 func TestAutomaticGroupClearsPinAndRejectsStaleProfile(t *testing.T) {
 	fixture(t)
 	request := selectionRequest{Profile: "fixture", Group: "Auto", Name: "REJECT", NodeID: snapshotNodeID(t, "Auto", "REJECT"), OperationID: "pin",
-		ExpectedBootID: runtimeBootID, ExpectedRevision: runtimeConfigRevision}
+		ExpectedBootID: eng.bootID, ExpectedRevision: eng.configRevision}
 	result, err := commitSelection(request)
 	if err != nil || result.Pinned != "REJECT" {
 		t.Fatalf("pin=%+v err=%v", result, err)
@@ -240,7 +274,7 @@ func TestAutomaticGroupClearsPinAndRejectsStaleProfile(t *testing.T) {
 	if err != nil || result.Pinned != "" {
 		t.Fatalf("unpin=%+v err=%v", result, err)
 	}
-	selected, err := readSelections(current.HomeDir, "fixture")
+	selected, err := readSelections(eng.current.HomeDir, "fixture")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,8 +290,8 @@ func TestAutomaticGroupClearsPinAndRejectsStaleProfile(t *testing.T) {
 func TestSelectionRejectsOldConfigurationWithSameProfileAndMembers(t *testing.T) {
 	cfg := fixture(t)
 	request := selectionRequest{Profile: "fixture", Group: "Manual", Name: "REJECT", NodeID: snapshotNodeID(t, "Manual", "REJECT"), OperationID: "stale-config",
-		ExpectedBootID: runtimeBootID, ExpectedRevision: runtimeConfigRevision}
-	runtimeConfigRevision++
+		ExpectedBootID: eng.bootID, ExpectedRevision: eng.configRevision}
+	eng.configRevision++
 	publishRuntime()
 	if _, err := commitSelection(request); err == nil || err.Error() != "selection_revision_changed" {
 		t.Fatalf("old configuration request=%v", err)
@@ -293,7 +327,7 @@ func TestRuleProbePreservesTargetStatusWithoutLocalProxyPort(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if recorder.Code != 200 || result.Status != 403 || result.Body != "fixture body" || result.BootID != runtimeBootID {
+	if recorder.Code != 200 || result.Status != 403 || result.Body != "fixture body" || result.BootID != eng.bootID {
 		t.Fatalf("response=%d %+v", recorder.Code, result)
 	}
 }
@@ -351,9 +385,9 @@ func TestRuleProbeDiscardsReplyFromPreviousRevision(t *testing.T) {
 		close(release)
 		t.Fatal("target never received request")
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	publishRuntime()
-	mu.Unlock()
+	eng.mu.Unlock()
 	close(release)
 	select {
 	case <-done:
@@ -436,15 +470,15 @@ rules: ['MATCH,DIRECT']
 		t.Fatal(err)
 	}
 	raw.Profile.StoreSelected = true
-	applyOverrides(raw, current)
+	applyOverrides(raw, eng.current)
 	cfg, err := config.ParseRawConfig(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := saveSelections(current.HomeDir, current.Profile, map[string]string{"Manual": "REJECT"}); err != nil {
+	if err := saveSelections(eng.current.HomeDir, eng.current.Profile, map[string]string{"Manual": "REJECT"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := restoreSelections(cfg, current); err != nil {
+	if err := restoreSelections(cfg, eng.current); err != nil {
 		t.Fatal(err)
 	}
 	legacy := cachefile.Cache()
@@ -472,25 +506,25 @@ func TestStartTunValidatesOptionsAndClearsStateOnFailure(t *testing.T) {
 		hostTunStopError = nil
 		setHostTun(false)
 	})
-	if err := startTun(11, tunNetworkOptions{Stack: "invalid", MTU: 1500}); err == nil || tunListener != nil {
-		t.Fatalf("invalid stack accepted: err=%v tun=%v", err, tunListener)
+	if err := startTun(11, tunNetworkOptions{Stack: "invalid", MTU: 1500}); err == nil || eng.tun != nil {
+		t.Fatalf("invalid stack accepted: err=%v tun=%v", err, eng.tun)
 	}
-	if err := startTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 575}); err == nil || tunListener != nil {
-		t.Fatalf("too small IPv4 MTU accepted: err=%v tun=%v", err, tunListener)
+	if err := startTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 575}); err == nil || eng.tun != nil {
+		t.Fatalf("too small IPv4 MTU accepted: err=%v tun=%v", err, eng.tun)
 	}
-	if err := startTun(11, tunNetworkOptions{Stack: "gvisor", IPv6: true, MTU: 1279}); err == nil || tunListener != nil {
-		t.Fatalf("too small IPv6 MTU accepted: err=%v tun=%v", err, tunListener)
+	if err := startTun(11, tunNetworkOptions{Stack: "gvisor", IPv6: true, MTU: 1279}); err == nil || eng.tun != nil {
+		t.Fatalf("too small IPv6 MTU accepted: err=%v tun=%v", err, eng.tun)
 	}
 	wantErr := errors.New("constructor failure")
 	hostTunStartError = wantErr
-	if err := startTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500}); !errors.Is(err, wantErr) || tunListener != nil {
-		t.Fatalf("constructor failure left non-nil tunListener: err=%v tun=%v", err, tunListener)
+	if err := startTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500}); !errors.Is(err, wantErr) || eng.tun != nil {
+		t.Fatalf("constructor failure left non-nil tunListener: err=%v tun=%v", err, eng.tun)
 	}
 	hostTunStartError = nil
-	if err := startTun(11, tunNetworkOptions{Stack: "gvisor", IPv6: true, MTU: 1500}); err != nil || tunListener == nil {
-		t.Fatalf("valid startTun failed: err=%v tun=%v", err, tunListener)
+	if err := startTun(11, tunNetworkOptions{Stack: "gvisor", IPv6: true, MTU: 1500}); err != nil || eng.tun == nil {
+		t.Fatalf("valid startTun failed: err=%v tun=%v", err, eng.tun)
 	}
-	if err := stopTun(); err != nil || tunListener != nil {
-		t.Fatalf("stopTun failed: err=%v tun=%v", err, tunListener)
+	if err := stopTun(); err != nil || eng.tun != nil {
+		t.Fatalf("stopTun failed: err=%v tun=%v", err, eng.tun)
 	}
 }

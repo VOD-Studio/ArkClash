@@ -121,9 +121,9 @@ rules: ['MATCH,Blocked']
 	}
 	t.Cleanup(func() {
 		_ = detachTun()
-		mu.Lock()
+		eng.mu.Lock()
 		_ = updateVpnState("stopped", "stopped", false)
-		mu.Unlock()
+		eng.mu.Unlock()
 		_ = stop()
 	})
 	lifecycleVpnState(t, "started", "preparing", true)
@@ -228,7 +228,7 @@ func TestForwardingReloadJoinsOldDialBeforeReplacingConfig(t *testing.T) {
 	}
 	defer client.Close()
 	forwardingAwait(t, entered, "old forwarding dial never reached SOCKS fixture")
-	before := *runtimeSnapshot.Load()
+	before := *eng.Status()
 	done := make(chan error, 1)
 	go func() { done <- reload(options.ConfigPath, options.Profile, new(options.Profile)) }()
 	select {
@@ -240,7 +240,7 @@ func TestForwardingReloadJoinsOldDialBeforeReplacingConfig(t *testing.T) {
 		t.Fatal("reload retained an old forwarding dial")
 	}
 	forwardingAwait(t, closed, "reload returned with old upstream handshake still open")
-	after := runtimeSnapshot.Load()
+	after := eng.Status()
 	if after.BootID != before.BootID || after.ConfigRevision != before.ConfigRevision+1 || !after.TunAttached {
 		t.Fatal("forwarding quiescence rebuilt TUN or lost configuration identity")
 	}
@@ -259,12 +259,12 @@ func TestForwardingCompletedCloseErrorAllowsReloadAndReconnect(t *testing.T) {
 		t.Fatalf("connection still open before reload: %v", err)
 	}
 
-	before, originalTun := *runtimeSnapshot.Load(), tunListener
+	before, originalTun := *eng.Status(), eng.tun
 	if err := reload(options.ConfigPath, options.Profile, &options.Profile); err != nil {
 		t.Fatalf("completed connection prevented reload: %v", err)
 	}
-	after := runtimeSnapshot.Load()
-	if tunListener != originalTun || !after.TunAttached || after.Forward != "running" ||
+	after := eng.Status()
+	if eng.tun != originalTun || !after.TunAttached || after.Forward != "running" ||
 		after.BootID != before.BootID || after.ConfigRevision != before.ConfigRevision+1 {
 		t.Fatal("reload did not keep the running TUN and advance the configuration")
 	}
@@ -316,9 +316,9 @@ func TestLifecycleReloadCancelsOldConfigurationURLTest(t *testing.T) {
 	if response.Code != http.StatusConflict {
 		t.Fatalf("old configuration URLTest returned a usable result: %d", response.Code)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	if len(activeDelayTests) != 0 || len(delaySlots) != 0 {
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
+	if len(eng.delays.active) != 0 || len(delaySlots) != 0 {
 		t.Fatal("reloaded URLTest retained execution capacity")
 	}
 }

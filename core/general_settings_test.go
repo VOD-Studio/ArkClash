@@ -35,8 +35,8 @@ func generalTestStart(t *testing.T) startOptions {
 }
 
 func saveGeneralTestSettings(settings generalSettings) error {
-	return updateGeneralSettings(profileSettingsRequest[generalSettings]{BootID: runtimeBootID,
-		ExpectedRevision: current.General.Revision, Settings: settings})
+	return updateGeneralSettings(profileSettingsRequest[generalSettings]{BootID: eng.bootID,
+		ExpectedRevision: eng.current.General.Revision, Settings: settings})
 }
 
 func reserveGeneralPort(t *testing.T) net.Listener {
@@ -57,7 +57,7 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	free := reserveGeneralPort(t)
 	port := free.Addr().(*net.TCPAddr).Port
 	free.Close()
-	next := current.General
+	next := eng.current.General
 	next.Revision = "inbound-configured"
 	next.Ports = &generalPorts{Mixed: port}
 	next.Authentication = &generalAuthentication{Enabled: true, Username: "test-user", Password: "test-pass"}
@@ -70,7 +70,7 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
-	tun := tunListener
+	tun := eng.tun
 	proxyStatus := func(credentials string) int {
 		conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 		if err != nil {
@@ -99,18 +99,18 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 		t.Fatalf("expected bind conflict: %v", err)
 	}
 	inboundReachable(t, port, true)
-	if tunListener != tun || current.General.Revision != "inbound-configured" {
+	if eng.tun != tun || eng.current.General.Revision != "inbound-configured" {
 		t.Fatal("conflict changed live configuration")
 	}
-	beforeRevision := runtimeConfigRevision
+	beforeRevision := eng.configRevision
 	next.Revision = "hosts-configured"
 	next.Hosts = map[string][]string{"general.test": {"192.0.2.21"}}
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	if tunListener != tun || runtimeConfigRevision != beforeRevision {
+	if eng.tun != tun || eng.configRevision != beforeRevision {
 		t.Fatalf("Hosts update rebuilt runtime or replaced platform TUN: rev=%d->%d tunSame=%v",
-			beforeRevision, runtimeConfigRevision, tunListener == tun)
+			beforeRevision, eng.configRevision, eng.tun == tun)
 	}
 	host, ok := resolver.DefaultHosts.Search("general.test", false)
 	if !ok || host.IPs[0].String() != "192.0.2.21" {
@@ -122,8 +122,8 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	if runtimeConfigRevision != beforeRevision {
-		t.Fatalf("UA update rebuilt runtime: rev=%d->%d", beforeRevision, runtimeConfigRevision)
+	if eng.configRevision != beforeRevision {
+		t.Fatalf("UA update rebuilt runtime: rev=%d->%d", beforeRevision, eng.configRevision)
 	}
 	if mihomoHttp.UA() != "ArkClash-Test-v2" {
 		t.Fatalf("expected live UA ArkClash-Test-v2, got %q", mihomoHttp.UA())
@@ -140,14 +140,14 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 		t.Fatal(err)
 	}
 	stored, err = readGeneralSettings(opts.HomeDir)
-	if err != nil || !stored.AppendSystemDNS || tunListener != tun || runtimeConfigRevision != beforeRevision {
+	if err != nil || !stored.AppendSystemDNS || eng.tun != tun || eng.configRevision != beforeRevision {
 		t.Fatalf("system DNS toggle rebuilt runtime or replaced TUN: rev=%d->%d err=%v",
-			beforeRevision, runtimeConfigRevision, err)
+			beforeRevision, eng.configRevision, err)
 	}
 	if resolver.DefaultService == serviceBeforeSystemDNS {
 		t.Fatal("system DNS toggle did not refresh live DNS service")
 	}
-	serversWithSystem := desiredInbound.baseline.dnsServers(current.Profile, true)
+	serversWithSystem := eng.desiredInbound.baseline.dnsServers(eng.current.Profile, true)
 	if len(serversWithSystem) == 0 || serversWithSystem[len(serversWithSystem)-1].Net != "system" {
 		t.Fatalf("expected trailing system nameserver, got %+v", serversWithSystem)
 	}
@@ -158,10 +158,10 @@ func TestGeneralSettingsApplyWithoutReplacingTun(t *testing.T) {
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	if tunListener != tun || runtimeConfigRevision != beforeRevision || resolver.DefaultService == serviceWithSystemDNS {
-		t.Fatalf("disabling system DNS did not live-update cleanly: rev=%d->%d", beforeRevision, runtimeConfigRevision)
+	if eng.tun != tun || eng.configRevision != beforeRevision || resolver.DefaultService == serviceWithSystemDNS {
+		t.Fatalf("disabling system DNS did not live-update cleanly: rev=%d->%d", beforeRevision, eng.configRevision)
 	}
-	for _, server := range desiredInbound.baseline.dnsServers(current.Profile, false) {
+	for _, server := range eng.desiredInbound.baseline.dnsServers(eng.current.Profile, false) {
 		if server.Net == "system" {
 			t.Fatalf("unexpected system nameserver after disabling: %+v", server)
 		}
@@ -217,18 +217,18 @@ func TestGeneralPanelControllerIsolationAndRotation(t *testing.T) {
 
 func TestLogPageCaptureThresholdRedactionAndRetirement(t *testing.T) {
 	opts := generalTestStart(t)
-	if _, status, _ := subscribeDiagnostics("logs", runtimeBootID, 0); status != 403 {
+	if _, status, _ := subscribeDiagnostics("logs", eng.bootID, 0); status != 403 {
 		t.Fatal("capture was enabled by default")
 	}
-	next := current.General
+	next := eng.current.General
 	next.Revision = "logs-on"
 	next.CaptureLogs = true
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	collector := diagnosticLogs
-	mu.Unlock()
+	eng.mu.Unlock()
 	if collector == nil {
 		t.Fatal("enabling capture did not start boot-scoped log collector")
 	}
@@ -277,7 +277,7 @@ func TestLogPageCaptureThresholdRedactionAndRetirement(t *testing.T) {
 
 	// 清空日志会重置核心缓冲并向已打开的订阅推送空 reset。
 	clearReq, err := http.NewRequest(http.MethodPost, server.server.URL+"/logs/clear",
-		strings.NewReader(fmt.Sprintf(`{"expectedBootId":%q}`, runtimeBootID)))
+		strings.NewReader(fmt.Sprintf(`{"expectedBootId":%q}`, eng.bootID)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,9 +294,9 @@ func TestLogPageCaptureThresholdRedactionAndRetirement(t *testing.T) {
 	// 最后一个日志页面离开后，采集器在捕获开启期间继续存活。
 	closeDiagnosticClient(t, conn, reader)
 	waitDiagnosticStream(t, worker.done)
-	mu.Lock()
+	eng.mu.Lock()
 	stillRunning := diagnosticLogs == collector
-	mu.Unlock()
+	eng.mu.Unlock()
 	if !stillRunning {
 		t.Fatal("closing log page retired continuous capture")
 	}
@@ -307,9 +307,9 @@ func TestLogPageCaptureThresholdRedactionAndRetirement(t *testing.T) {
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	afterOff := diagnosticLogs
-	mu.Unlock()
+	eng.mu.Unlock()
 	if afterOff != nil {
 		t.Fatal("disabling capture did not retire log collector")
 	}
@@ -439,24 +439,24 @@ rules: ['MATCH,DIRECT']
 	if err := attachTun(12, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
-	tun := tunListener
+	tun := eng.tun
 	if adapter.UnifiedDelay.Load() || dialer.GetTcpConcurrent() || resolver.DisableIPv6 || geodata.LoaderName() != "standard" {
 		t.Fatalf("unexpected profile baseline: unified=%v tcp=%v disableIPv6=%v loader=%q",
 			adapter.UnifiedDelay.Load(), dialer.GetTcpConcurrent(), resolver.DisableIPv6, geodata.LoaderName())
 	}
 
 	// 仅设置全局测速链接时，不应触发配置重建或更换 TUN。
-	beforeRevision := runtimeConfigRevision
+	beforeRevision := eng.configRevision
 	testURL := "https://cp.cloudflare.com/generate_204"
-	next := current.General
+	next := eng.current.General
 	next.Revision = "core-test-url"
 	next.CoreOverrides = &generalCoreOverrides{TestURL: &testURL}
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	if runtimeConfigRevision != beforeRevision || tunListener != tun {
+	if eng.configRevision != beforeRevision || eng.tun != tun {
 		t.Fatalf("testUrl-only update rebuilt runtime: revision=%d->%d tunSame=%v",
-			beforeRevision, runtimeConfigRevision, tunListener == tun)
+			beforeRevision, eng.configRevision, eng.tun == tun)
 	}
 
 	// 逐项开启其余四项内核覆写：unified-delay、tcp-concurrent、ipv6、geodata-loader。
@@ -473,9 +473,9 @@ rules: ['MATCH,DIRECT']
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	if tunListener != tun || runtimeConfigRevision != beforeRevision {
+	if eng.tun != tun || eng.configRevision != beforeRevision {
 		t.Fatalf("core overrides rebuilt runtime or replaced TUN: rev=%d->%d tunSame=%v",
-			beforeRevision, runtimeConfigRevision, tunListener == tun)
+			beforeRevision, eng.configRevision, eng.tun == tun)
 	}
 	if !adapter.UnifiedDelay.Load() || !dialer.GetTcpConcurrent() || !resolver.DisableIPv6 || geodata.LoaderName() != "memconservative" {
 		t.Fatalf("core overrides did not apply: unified=%v tcp=%v disableIPv6=%v loader=%q",
@@ -488,9 +488,9 @@ rules: ['MATCH,DIRECT']
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	if tunListener != tun || runtimeConfigRevision != beforeRevision {
+	if eng.tun != tun || eng.configRevision != beforeRevision {
 		t.Fatalf("clearing core overrides rebuilt runtime or replaced TUN: rev=%d->%d tunSame=%v",
-			beforeRevision, runtimeConfigRevision, tunListener == tun)
+			beforeRevision, eng.configRevision, eng.tun == tun)
 	}
 	if adapter.UnifiedDelay.Load() || dialer.GetTcpConcurrent() || resolver.DisableIPv6 || geodata.LoaderName() != "standard" {
 		t.Fatalf("clearing core overrides did not restore profile values: unified=%v tcp=%v disableIPv6=%v loader=%q",
@@ -508,7 +508,7 @@ rules: ['MATCH,DIRECT']
 		{TestURL: ptrString("https://")},
 		{GeodataLoader: ptrString("fast")},
 	} {
-		invalid := current.General
+		invalid := eng.current.General
 		invalid.Revision = "core-bad"
 		invalid.CoreOverrides = bad
 		if err := saveGeneralTestSettings(invalid); !errors.Is(err, errGeneralInvalid) {
@@ -549,9 +549,9 @@ rules: ['MATCH,DIRECT']
 		t.Fatal(err)
 	}
 
-	beforeRevision := runtimeConfigRevision
+	beforeRevision := eng.configRevision
 	// 覆盖 UA 与 Hosts 后再清空，应原地恢复到配置自身的值，且 DNS 监听地址保持不重建。
-	next := current.General
+	next := eng.current.General
 	next.Revision = "override-ua-hosts"
 	next.UserAgent = "Custom-UA"
 	next.Hosts = map[string][]string{"profile.test": {"192.0.2.99"}, "extra.test": {"192.0.2.88"}}
@@ -559,8 +559,8 @@ rules: ['MATCH,DIRECT']
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	if runtimeConfigRevision != beforeRevision {
-		t.Fatalf("unexpected rebuild: %d -> %d", beforeRevision, runtimeConfigRevision)
+	if eng.configRevision != beforeRevision {
+		t.Fatalf("unexpected rebuild: %d -> %d", beforeRevision, eng.configRevision)
 	}
 	if mihomoHttp.UA() != "Custom-UA" {
 		t.Fatalf("expected Custom-UA, got %q", mihomoHttp.UA())
@@ -602,7 +602,7 @@ rules: ['MATCH,DIRECT']
 	prevService := resolver.DefaultService
 	yes, no := true, false
 	memc := "memconservative"
-	failing := current.General
+	failing := eng.current.General
 	failing.Revision = "should-rollback"
 	failing.UserAgent = "Broken-UA"
 	failing.AppendSystemDNS = true

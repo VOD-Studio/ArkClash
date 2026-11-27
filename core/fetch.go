@@ -32,10 +32,11 @@ type fetchResult struct {
 
 // 待机和暂停的订阅请求指定 DIRECT，转发时沿用规则。正文直接写入候选文件。
 func fetch(req fetchRequest) (result fetchResult) {
-	status := runtimeSnapshot.Load()
-	if status == nil || !status.Running {
+	view := eng.View()
+	if view == nil || !view.Status.Running {
 		return fetchResult{Error: "core is not running"}
 	}
+	status := &view.Status
 	var subscription *statusResponse
 	if req.AgeSecretKey != nil {
 		switch status.Forward {
@@ -53,7 +54,7 @@ func fetch(req fetchRequest) (result fetchResult) {
 			}
 		}()
 	}
-	if err := checkProfilePath(status.homeDir, req.Path); err != nil {
+	if err := checkProfilePath(view.HomeDir, req.Path); err != nil {
 		return fetchResult{Error: err.Error()}
 	}
 	if req.TimeoutMs <= 0 || req.TimeoutMs > 20000 {

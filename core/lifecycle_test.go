@@ -31,7 +31,7 @@ func lifecycleOptions(t *testing.T) startOptions {
 		hostTunStartError = nil
 		hostTunStopError = nil
 		setHostTun(false)
-		cleanupFailure = nil
+		eng.cleanupFailure = nil
 	})
 	home := t.TempDir()
 	if err := os.Mkdir(filepath.Join(home, "profiles"), 0700); err != nil {
@@ -68,9 +68,9 @@ func lifecycleController(t *testing.T, address string, wantOpen bool) {
 
 func lifecycleVpnState(t *testing.T, intent, forward string, created bool) {
 	t.Helper()
-	mu.Lock()
+	eng.mu.Lock()
 	err := updateVpnState(intent, forward, created)
-	mu.Unlock()
+	eng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func lifecycleWriteProfile(t *testing.T, options startOptions, name, content str
 }
 
 func hostAttachIdentity() attachIdentity {
-	state := runtimeSnapshot.Load()
+	state := eng.Status()
 	if state == nil {
 		return attachIdentity{}
 	}
@@ -110,7 +110,7 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 		lifecycleController(t, options.Controller, false)
 	})
 	lifecycleController(t, options.Controller, true)
-	warm := *runtimeSnapshot.Load()
+	warm := *eng.Status()
 	if !warm.Running || warm.Profile != "" || warm.TunAttached || warm.VpnCreated || warm.ListenersOpen ||
 		warm.Intent != "stopped" || warm.Forward != "stopped" || warm.StartedAt != 0 || warm.BootID == "" {
 		t.Fatalf("invalid warm state: %+v", warm)
@@ -135,7 +135,7 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 	if err := reload(path, "one", new("")); err != nil {
 		t.Fatal(err)
 	}
-	loaded := *runtimeSnapshot.Load()
+	loaded := *eng.Status()
 	if loaded.BootID != warm.BootID || loaded.ConfigRevision != warm.ConfigRevision+1 || loaded.Profile != "one" || loaded.TunAttached {
 		t.Fatalf("first profile did not activate warm core: %+v", loaded)
 	}
@@ -155,7 +155,7 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 	}
 	attachFailure := errors.New("fixture attach failure")
 	hostTunStartError = attachFailure
-	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); !errors.Is(err, attachFailure) || tunListener != nil {
+	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); !errors.Is(err, attachFailure) || eng.tun != nil {
 		t.Fatalf("failed attach changed resource facts: %v", err)
 	}
 	hostTunStartError = nil
@@ -168,22 +168,22 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
-	attached := tunListener
+	attached := eng.tun
 	if attached == nil {
 		t.Fatal("successful attach did not publish a TUN")
 	}
-	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil || tunListener != attached {
+	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil || eng.tun != attached {
 		t.Fatal("duplicate attach rebuilt the TUN")
 	}
 	lifecycleVpnState(t, "started", "running", true)
-	if state := runtimeSnapshot.Load(); !state.TunAttached || !state.VpnCreated || state.Forward != "running" || state.StartedAt == 0 {
+	if state := eng.Status(); !state.TunAttached || !state.VpnCreated || state.Forward != "running" || state.StartedAt == 0 {
 		t.Fatalf("attached state is not forwarding: %+v", state)
 	}
 
 	if err := detachTun(); err != nil {
 		t.Fatal(err)
 	}
-	pending := runtimeSnapshot.Load()
+	pending := eng.Status()
 	if pending.TunAttached || !pending.VpnCreated || pending.Forward == "stopped" {
 		t.Fatalf("detach hid the platform VPN resource: %+v", pending)
 	}
@@ -196,10 +196,9 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 		!reflect.DeepEqual(before.Actual, after.Actual) || resolver.DefaultHostMapper != mapper {
 		t.Fatal("attach/detach changed identities, selection or fake-IP mapper")
 	}
-	detached := runtimeSnapshot.Load()
+	detached := eng.Status()
 	if detached.BootID != loaded.BootID || detached.ConfigRevision != loaded.ConfigRevision || detached.Revision <= loaded.Revision ||
-		!detached.Running || detached.Forward != "stopped" || detached.StartedAt != 0 || detached.Mode != "global" ||
-		current.AllowLan == nil || !*current.AllowLan {
+		!detached.Running || detached.Forward != "stopped" || detached.StartedAt != 0 || detached.Mode != "global" || eng.current.AllowLan == nil || !*eng.current.AllowLan {
 		t.Fatalf("detach restarted or reconfigured core: %+v", detached)
 	}
 
@@ -207,23 +206,23 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 	if err := attachTun(12, tunNetworkOptions{Stack: "system", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
-	attached = tunListener
+	attached = eng.tun
 	lifecycleVpnState(t, "started", "running", true)
 	badPath := lifecycleWriteProfile(t, options, "broken", "proxy-groups: [")
 	if err := reload(badPath, "broken", new("one")); err == nil {
 		t.Fatal("invalid selected profile fell back to empty core")
 	}
-	if state := runtimeSnapshot.Load(); state.Profile != "one" || state.ConfigRevision != loaded.ConfigRevision || tunListener != attached {
+	if state := eng.Status(); state.Profile != "one" || state.ConfigRevision != loaded.ConfigRevision || eng.tun != attached {
 		t.Fatal("failed reload altered the live core")
 	}
 	if err := reload(path, "one", new("one")); err != nil {
 		t.Fatal(err)
 	}
-	if state := runtimeSnapshot.Load(); state.BootID != loaded.BootID || state.ConfigRevision != loaded.ConfigRevision+1 || tunListener != attached {
+	if state := eng.Status(); state.BootID != loaded.BootID || state.ConfigRevision != loaded.ConfigRevision+1 || eng.tun != attached {
 		t.Fatal("connected reload rebuilt the platform TUN")
 	}
 	stale := attachIdentity{BootID: loaded.BootID, Profile: "one", ConfigRevision: loaded.ConfigRevision}
-	if err := attachTun(12, tunNetworkOptions{Stack: "system", MTU: 1500, DNSHijacking: true}, stale); err == nil || tunListener != attached {
+	if err := attachTun(12, tunNetworkOptions{Stack: "system", MTU: 1500, DNSHijacking: true}, stale); err == nil || eng.tun != attached {
 		t.Fatal("same-profile reload accepted stale attach identity")
 	}
 	if err := detachTun(); err != nil {
@@ -235,7 +234,7 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 	}
 	lifecycleVpnState(t, "started", "preparing", true)
 	stop()
-	if state := runtimeSnapshot.Load(); !state.VpnCreated || state.Forward != "failed" {
+	if state := eng.Status(); !state.VpnCreated || state.Forward != "failed" {
 		t.Fatalf("full stop hid the platform VPN resource: %+v", state)
 	}
 	if err := start(options); err == nil {
@@ -246,10 +245,10 @@ func TestLifecycleWarmReloadAttachDetachPreservesCore(t *testing.T) {
 	if profile, online := runningProfile(); profile != "" || online {
 		t.Fatal("full stop retained the active profile")
 	}
-	if state := runtimeSnapshot.Load(); state.Running || state.TunAttached || state.ListenersOpen || state.Forward != "stopped" {
+	if state := eng.Status(); state.Running || state.TunAttached || state.ListenersOpen || state.Forward != "stopped" {
 		t.Fatalf("full stop retained forwarding resources: %+v", state)
 	}
-	if activeGeo.Load() != nil || runtimeRoutes.Load() != nil || len(tunnel.Proxies()) != 0 {
+	if activeGeo.Load() != nil || eng.routes.Load() != nil || len(tunnel.Proxies()) != 0 {
 		t.Fatal("full stop retained core-owned workers or proxies")
 	}
 }
@@ -265,10 +264,10 @@ func TestLifecycleUncertainCloseCannotBecomeSuccessfulRetry(t *testing.T) {
 	if err := detachTun(); !errors.Is(err, closeFailure) {
 		t.Fatalf("retry lost the cleanup uncertainty: %v", err)
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	err := updateVpnState("stopped", "stopped", false)
-	state := *runtimeSnapshot.Load()
-	mu.Unlock()
+	state := *eng.Status()
+	eng.mu.Unlock()
 	if err == nil || state.Forward != "failed" {
 		t.Fatal("platform cleanup concealed an uncertain Go release")
 	}
@@ -301,7 +300,7 @@ func TestLifecycleSelectedConfigurationErrorsDoNotWarmFallback(t *testing.T) {
 				stop()
 				t.Fatal("selected configuration error started an empty core")
 			}
-			if _, online := runningProfile(); online || running || tunListener != nil {
+			if _, online := runningProfile(); online || eng.running || eng.tun != nil {
 				t.Fatal("failed start published a running core")
 			}
 		})
@@ -352,7 +351,7 @@ func TestLifecycleSelectedStartWithoutTunRestoresChoice(t *testing.T) {
 	if graph.Actual["Manual"] != graph.Proxies["REJECT"].ID {
 		t.Fatal("selected start did not restore the profile choice")
 	}
-	if state := runtimeSnapshot.Load(); !state.Running || state.Profile != options.Profile ||
+	if state := eng.Status(); !state.Running || state.Profile != options.Profile ||
 		state.TunAttached || state.VpnCreated || state.Forward != "stopped" || state.StartedAt != 0 {
 		t.Fatalf("selected start unexpectedly attached forwarding: %+v", state)
 	}
@@ -368,18 +367,18 @@ func TestLifecycleEmptyProfileExpectationCannotOverwriteNewSelection(t *testing.
 	if err := reload(path, "first", new("")); err != nil {
 		t.Fatal(err)
 	}
-	before := *runtimeSnapshot.Load()
+	before := *eng.Status()
 	if err := reload(path, "first", new("")); err == nil {
 		t.Fatal("late empty-core activation overwrote an already loaded profile")
 	}
-	after := *runtimeSnapshot.Load()
+	after := *eng.Status()
 	if before != after {
 		t.Fatal("rejected empty-core activation changed runtime state")
 	}
 	if err := reload("", "", new("first")); err != nil {
 		t.Fatal(err)
 	}
-	empty := runtimeSnapshot.Load()
+	empty := eng.Status()
 	if !empty.Running || empty.Profile != "" || empty.BootID != before.BootID ||
 		empty.ConfigRevision != before.ConfigRevision+1 || empty.TunAttached || empty.VpnCreated || empty.ListenersOpen {
 		t.Fatalf("clearing last detached profile did not retain warm core: %+v", empty)

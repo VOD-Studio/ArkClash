@@ -94,21 +94,23 @@ func TestScriptFailureCannotAdvanceRuntime(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(home, "profiles", "scripts.json"), []byte(contents), 0600); err != nil {
 		t.Fatal(err)
 	}
-	mu.Lock()
-	previous, wasRunning, boot, revision := current, running, runtimeBootID, runtimeConfigRevision
-	current, running, runtimeBootID, runtimeConfigRevision = startOptions{HomeDir: home, Profile: "a", ConfigPath: file}, true, "scripts-test", 27
-	mu.Unlock()
+	eng.mu.Lock()
+	previous, wasRunning, boot, revision, prevView := eng.current, eng.running, eng.bootID, eng.configRevision, eng.view.Load()
+	eng.current, eng.running, eng.bootID, eng.configRevision = startOptions{HomeDir: home, Profile: "a", ConfigPath: file}, true, "scripts-test", 27
+	eng.publishRuntimeLocked()
+	eng.mu.Unlock()
 	t.Cleanup(func() {
-		mu.Lock()
-		current, running, runtimeBootID, runtimeConfigRevision = previous, wasRunning, boot, revision
-		mu.Unlock()
+		eng.mu.Lock()
+		eng.current, eng.running, eng.bootID, eng.configRevision = previous, wasRunning, boot, revision
+		eng.view.Store(prevView)
+		eng.mu.Unlock()
 	})
 	if err := applyProfileScript(context.Background(), scriptApplyRequest{
 		BootID: "scripts-test", Profile: "a", Identity: "script:one:broken",
 	}); err == nil {
 		t.Fatal("broken script was applied")
 	}
-	if runtimeConfigRevision != 27 || current.Script.enabled() {
+	if eng.configRevision != 27 || eng.current.Script.enabled() {
 		t.Fatal("failed script altered applied identity")
 	}
 }
@@ -124,8 +126,8 @@ func TestScriptApplyAndCorrectionPreserveTunAndRoutes(t *testing.T) {
 	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
-	before := runtimeSnapshot.Load()
-	active := tunListener
+	before := eng.Status()
+	active := eng.tun
 	save := func(revision, source string) string {
 		t.Helper()
 		data, err := json.Marshal(scriptStore{Version: 1, Scripts: []scriptRecord{{ID: "one", Revision: revision, Source: source}},
@@ -145,22 +147,21 @@ func TestScriptApplyAndCorrectionPreserveTunAndRoutes(t *testing.T) {
 	if err := apply(good); err != nil {
 		t.Fatal(err)
 	}
-	applied := runtimeSnapshot.Load()
+	applied := eng.Status()
 	if got := tunnel.Rules(); len(got) != 2 || got[0].Adapter() != "REJECT" || applied.ProfileExtension != good ||
-		applied.ConfigRevision != before.ConfigRevision+1 || applied.BootID != before.BootID || tunListener != active {
+		applied.ConfigRevision != before.ConfigRevision+1 || applied.BootID != before.BootID || eng.tun != active {
 		t.Fatal("valid transform did not publish the new rules using the existing TUN")
 	}
-	if err := apply(good); err != nil || runtimeSnapshot.Load().ConfigRevision != applied.ConfigRevision {
+	if err := apply(good); err != nil || eng.Status().ConfigRevision != applied.ConfigRevision {
 		t.Fatalf("reapplying the same revision reloaded the runtime: %v", err)
 	}
 	broken := save("broken", `const main = () => { throw new Error('synthetic') }`)
-	if err := apply(broken); err == nil || runtimeSnapshot.Load().ProfileExtension != good ||
-		runtimeSnapshot.Load().ConfigRevision != applied.ConfigRevision || tunListener != active || len(tunnel.Rules()) != 2 {
+	if err := apply(broken); err == nil || eng.Status().ProfileExtension != good || eng.Status().ConfigRevision != applied.ConfigRevision || eng.tun != active || len(tunnel.Rules()) != 2 {
 		t.Fatalf("broken draft disturbed the running routes: %v", err)
 	}
 	repaired := save("repaired", `const main = c => ({...c, rules: ['MATCH,REJECT'] })`)
-	if err := apply(repaired); err != nil || runtimeSnapshot.Load().ProfileExtension != repaired ||
-		len(tunnel.Rules()) != 1 || tunListener != active {
+	if err := apply(repaired); err != nil || eng.Status().ProfileExtension != repaired ||
+		len(tunnel.Rules()) != 1 || eng.tun != active {
 		t.Fatalf("corrected revision could not be applied: %v", err)
 	}
 }

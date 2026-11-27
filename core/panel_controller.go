@@ -24,19 +24,17 @@ type panelController struct {
 	server   *http.Server
 }
 
-var activePanel *panelController
-
 func setPanelControllerLocked(secret string) error {
 	return changePanelControllerLocked(net.JoinHostPort("127.0.0.1", strconv.Itoa(panelPort)), secret)
 }
 
 func changePanelControllerLocked(address, secret string) error {
-	if activePanel != nil {
-		if activePanel.secret == secret {
+	if eng.panel != nil {
+		if eng.panel.secret == secret {
 			return nil
 		}
-		old := activePanel
-		activePanel = nil
+		old := eng.panel
+		eng.panel = nil
 		// 被 HTTP 劫持的 WebSocket 也由监听器持有，换密钥时一起关闭。
 		_ = old.listener.Close()
 		_ = old.server.Close()
@@ -61,7 +59,7 @@ func startPanelControllerLocked(address, secret string) error {
 		return errGeneralPanel
 	}
 	server := &http.Server{Handler: panelHandler(secret), ReadHeaderTimeout: 5 * time.Second, MaxHeaderBytes: 16 << 10}
-	activePanel = &panelController{secret: secret, listener: socket, server: server}
+	eng.panel = &panelController{secret: secret, listener: socket, server: server}
 	go func() { _ = server.Serve(socket) }()
 	return nil
 }
@@ -133,26 +131,35 @@ func selectPanelProxy(w http.ResponseWriter, r *http.Request, group string) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	mu.Lock()
-	if activePanel == nil || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")),
-		[]byte("Bearer "+activePanel.secret)) != 1 {
-		mu.Unlock()
+	var (
+		unauthorized bool
+		result       selectionResult
+		err          error
+	)
+	_ = eng.withState(func(tx *stateTx) error {
+		if eng.panel == nil || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")),
+			[]byte("Bearer "+eng.panel.secret)) != 1 {
+			unauthorized = true
+			return nil
+		}
+		request := selectionRequest{Profile: eng.current.Profile, Group: group, Name: body.Name, ClearPin: clear,
+			CloseConnections: true, OperationID: "panel-" + strconv.FormatUint(eng.panelOpSeq.Add(1), 16),
+			ExpectedBootID: eng.bootID, ExpectedRevision: eng.configRevision}
+		if !clear {
+			for _, member := range currentProxyGraph().Members[group] {
+				if member.Name == body.Name && member.Selectable {
+					request.NodeID = member.ID
+					break
+				}
+			}
+		}
+		result, err = commitSelectionLocked(request)
+		return nil
+	})
+	if unauthorized {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	request := selectionRequest{Profile: current.Profile, Group: group, Name: body.Name, ClearPin: clear,
-		CloseConnections: true, OperationID: "panel-" + diagnosticID(),
-		ExpectedBootID: runtimeBootID, ExpectedRevision: runtimeConfigRevision}
-	if !clear {
-		for _, member := range currentProxyGraph().Members[group] {
-			if member.Name == body.Name && member.Selectable {
-				request.NodeID = member.ID
-				break
-			}
-		}
-	}
-	result, err := commitSelectionLocked(request)
-	mu.Unlock()
 	if err != nil {
 		writeError(w, r, http.StatusConflict, err)
 		return

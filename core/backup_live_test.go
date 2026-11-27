@@ -22,7 +22,7 @@ func TestBackupApplyKeepsAttachedTunAndUsesRestoredRevision(t *testing.T) {
 	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
-	before, originalTun := runtimeSnapshot.Load(), tunListener
+	before, originalTun := eng.Status(), eng.tun
 	dir := filepath.Join(opts.HomeDir, "profiles")
 	for name, body := range map[string]string{
 		backup.StoreMarker:      "restored",
@@ -42,10 +42,10 @@ func TestBackupApplyKeepsAttachedTunAndUsesRestoredRevision(t *testing.T) {
 	if err := applyBackup(req); err != nil {
 		t.Fatal(err)
 	}
-	after := runtimeSnapshot.Load()
-	if after.BootID != before.BootID || after.ConfigRevision != before.ConfigRevision+1 || tunListener != originalTun ||
-		tunnel.Rules()[0].Adapter() != "REJECT" || current.StoreGeneration != "restored" ||
-		activePanel == nil || activePanel.secret != "restored-panel-secret" {
+	after := eng.Status()
+	if after.BootID != before.BootID || after.ConfigRevision != before.ConfigRevision+1 || eng.tun != originalTun ||
+		tunnel.Rules()[0].Adapter() != "REJECT" || eng.current.StoreGeneration != "restored" || eng.panel ==
+		nil || eng.panel.secret != "restored-panel-secret" {
 		t.Fatalf("应用恢复配置后，内核或 TUN 未保留预期状态 %+v", after)
 	}
 }

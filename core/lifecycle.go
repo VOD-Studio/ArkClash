@@ -9,8 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-	"sync/atomic"
 
 	"github.com/VOD-Studio/ArkClash/core/internal/providers"
 	"github.com/metacubex/mihomo/adapter/inbound"
@@ -49,123 +47,104 @@ type startOptions struct {
 	ContentHash     string              `json:"-"`
 }
 
-var (
-	mu        sync.Mutex
-	lifecycle sync.Mutex
-	running   bool
-	// 本次启动的参数，热切换和 PATCH /arkclash/configs 会更新其中的配置路径、编号、模式和局域网代理。
-	current startOptions
-	// 正在运行的配置编号，nil = 没在运行。ArkTS 主线程会同步读它，不能等 mu（热切换可能要几秒）。
-	runningID atomic.Pointer[string]
-)
-
 func start(opts startOptions) error {
-	lifecycle.Lock()
-	defer lifecycle.Unlock()
-	mu.Lock()
-	var waitDiagnostics func()
-	defer func() {
-		mu.Unlock()
-		if waitDiagnostics != nil {
-			waitDiagnostics()
+	return eng.withLifecycle(func(tx *stateTx) error {
+		if eng.running {
+			return errors.New("core is already running")
 		}
-	}()
-
-	if running {
-		return errors.New("core is already running")
-	}
-	if tunListener != nil || runtimeVpnCreated {
-		return errors.New("previous VPN resources are not released")
-	}
-	if cleanupFailure != nil {
-		return cleanupFailure
-	}
-	inbound.EnableArkClashListenerOwnership()
-	if err := tunnel.ArkClashSuspendForwarding(); err != nil {
-		cleanupFailure = errors.Join(cleanupFailure, err)
-		return cleanupFailure
-	}
-	opts.StoreGeneration = portableGeneration(opts.HomeDir)
-	settings, err := readGeoSettings(opts.HomeDir)
-	if err != nil {
-		return err
-	}
-	opts.Geo = settings
-	opts.General, err = readGeneralSettings(opts.HomeDir)
-	if err != nil {
-		return err
-	}
-	opts.DNS, err = readDNSOverrides(opts.HomeDir)
-	if err != nil {
-		return err
-	}
-	opts.AddedRules, err = readAddedRules(opts.HomeDir)
-	if err != nil {
-		return err
-	}
-	opts.RuleSets, err = readRuleSets(opts.HomeDir)
-	if err != nil {
-		return err
-	}
-
-	if err := loadProfileExtension(&opts); err != nil {
-		return err
-	}
-
-	constant.SetHomeDir(opts.HomeDir)
-	constant.SetConfig(opts.ConfigPath)
-
-	var nextInbound inboundSettings
-	cfg, err := parseConfigWithInboundHash(opts.ConfigPath, &opts, &nextInbound)
-	if err != nil {
-		return err
-	}
-	desiredInbound = nextInbound
-	if err := route.ArkClashReCreateServer(&route.Config{
-		Addr: cfg.Controller.ExternalController, Secret: cfg.Controller.Secret,
-		RoutingMark: cfg.Controller.ExternalControllerRoutingMark,
-		DohServer:   cfg.Controller.ExternalDohServer,
-		Cors: route.Cors{AllowOrigins: cfg.Controller.Cors.AllowOrigins,
-			AllowPrivateNetwork: cfg.Controller.Cors.AllowPrivateNetwork},
-	}); err != nil {
-		return err
-	}
-	executor.ApplyConfig(withoutBusinessInbounds(cfg), true)
-
-	running = true
-	current = opts
-	runningID.Store(&opts.Profile)
-	waitDiagnostics = beginRuntime()
-	ensureDiagnosticLogsLocked()
-	manager, err := newGeoManager(opts.HomeDir, runtimeBootID, opts.Geo)
-	if err != nil {
-		waitDiagnostics = together(waitDiagnostics, stopDiagnosticsLocked())
-		closeCoreListeners()
-		executor.Shutdown()
-		cleanupFailure = errors.Join(cleanupFailure, route.ArkClashCloseServer())
-		tunnel.OnSuspend()
-		tunnel.UpdateProxies(nil, nil)
-		tunnel.UpdateRules(nil, nil, nil)
-		running = false
-		current = startOptions{}
-		runningID.Store(nil)
-		publishRuntime()
-		return errors.Join(err, cleanupFailure)
-	}
-	activeGeo.Store(manager)
-	if opts.General.ControllerSecret != "" {
-		if err := setPanelControllerLocked(opts.General.ControllerSecret); err != nil {
-			log.Warnln("[ArkClash] external controller port unavailable")
+		if eng.tun != nil || eng.vpnCreated {
+			return errors.New("previous VPN resources are not released")
 		}
-	}
-	resetProxyIdentities()
-	watchRuntimeRoutes(cfg)
-	runtimeProviders.Reset(providers.Identity{
-		BootID: runtimeBootID, ConfigRevision: runtimeConfigRevision, Profile: current.Profile, HomeDir: current.HomeDir,
-	}, cfg)
-	publishRuntime()
-	log.Infoln("[ArkClash] core started")
-	return nil
+		if eng.cleanupFailure != nil {
+			return eng.cleanupFailure
+		}
+		inbound.EnableArkClashListenerOwnership()
+		if err := tunnel.ArkClashSuspendForwarding(); err != nil {
+			eng.cleanupFailure = errors.Join(eng.cleanupFailure, err)
+			return eng.cleanupFailure
+		}
+		opts.StoreGeneration = portableGeneration(opts.HomeDir)
+		settings, err := readGeoSettings(opts.HomeDir)
+		if err != nil {
+			return err
+		}
+		opts.Geo = settings
+		opts.General, err = readGeneralSettings(opts.HomeDir)
+		if err != nil {
+			return err
+		}
+		opts.DNS, err = readDNSOverrides(opts.HomeDir)
+		if err != nil {
+			return err
+		}
+		opts.AddedRules, err = readAddedRules(opts.HomeDir)
+		if err != nil {
+			return err
+		}
+		opts.RuleSets, err = readRuleSets(opts.HomeDir)
+		if err != nil {
+			return err
+		}
+
+		if err := loadProfileExtension(&opts); err != nil {
+			return err
+		}
+
+		constant.SetHomeDir(opts.HomeDir)
+		constant.SetConfig(opts.ConfigPath)
+
+		var nextInbound inboundSettings
+		cfg, err := parseConfigWithInboundHash(opts.ConfigPath, &opts, &nextInbound)
+		if err != nil {
+			return err
+		}
+		eng.desiredInbound = nextInbound
+		if err := route.ArkClashReCreateServer(&route.Config{
+			Addr: cfg.Controller.ExternalController, Secret: cfg.Controller.Secret,
+			RoutingMark: cfg.Controller.ExternalControllerRoutingMark,
+			DohServer:   cfg.Controller.ExternalDohServer,
+			Cors: route.Cors{AllowOrigins: cfg.Controller.Cors.AllowOrigins,
+				AllowPrivateNetwork: cfg.Controller.Cors.AllowPrivateNetwork},
+		}); err != nil {
+			eng.desiredInbound = inboundSettings{}
+			return err
+		}
+		executor.ApplyConfig(withoutBusinessInbounds(cfg), true)
+
+		eng.running = true
+		eng.current = opts
+		tx.deferUnlock(beginRuntime())
+		ensureDiagnosticLogsLocked()
+		manager, err := newGeoManager(opts.HomeDir, eng.bootID, opts.Geo)
+		if err != nil {
+			tx.deferUnlock(stopDiagnosticsLocked())
+			closeCoreListeners()
+			executor.Shutdown()
+			eng.cleanupFailure = errors.Join(eng.cleanupFailure, route.ArkClashCloseServer())
+			tunnel.OnSuspend()
+			tunnel.UpdateProxies(nil, nil)
+			tunnel.UpdateRules(nil, nil, nil)
+			eng.running = false
+			eng.current = startOptions{}
+			eng.desiredInbound = inboundSettings{}
+			eng.publishRuntimeLocked()
+			return errors.Join(err, eng.cleanupFailure)
+		}
+		activeGeo.Store(manager)
+		if opts.General.ControllerSecret != "" {
+			if err := setPanelControllerLocked(opts.General.ControllerSecret); err != nil {
+				log.Warnln("[ArkClash] external controller port unavailable")
+			}
+		}
+		resetProxyIdentities()
+		watchRuntimeRoutes(cfg)
+		eng.providers.Reset(providers.Identity{
+			BootID: eng.bootID, ConfigRevision: eng.configRevision, Profile: eng.current.Profile, HomeDir: eng.current.HomeDir,
+		}, cfg)
+		eng.publishRuntimeLocked()
+		log.Infoln("[ArkClash] core started")
+		return nil
+	})
 }
 
 var errCustomTunUnsupported = errors.New("custom TUN listeners are not supported")
@@ -282,41 +261,35 @@ func prepareRawConfig(rawCfg *config.RawConfig, opts startOptions, settings *inb
 // 再重开，掐断发起热切换的请求和界面的 WebSocket（ADR-0010）。controller 的地址和 secret
 // 由 applyOverrides 固定，不需要重建。改 start 的解析和应用流程时，这里要一起看。
 func reload(path, profile string, expectedProfile *string) error {
-	mu.Lock()
-	var waitDiagnostics func()
-	defer func() {
-		mu.Unlock()
-		if waitDiagnostics != nil {
-			waitDiagnostics()
+	return eng.withState(func(tx *stateTx) error {
+		if !eng.running {
+			return errors.New("core is not running")
 		}
-	}()
-
-	if !running {
-		return errors.New("core is not running")
-	}
-	if expectedProfile != nil && current.Profile != *expectedProfile {
-		return errors.New("profile_changed")
-	}
-	if profile == "" {
-		if path != "" || tunListener != nil || runtimeVpnCreated || businessListenersOpen() || cleanupFailure != nil {
-			return errors.New("empty profile requires a fully detached core")
+		if expectedProfile != nil && eng.current.Profile != *expectedProfile {
+			return errors.New("profile_changed")
 		}
-	} else if err := checkProfilePath(current.HomeDir, path); err != nil {
+		if profile == "" {
+			if path != "" || eng.tun != nil || eng.vpnCreated || businessListenersOpen() || eng.cleanupFailure != nil {
+				return errors.New("empty profile requires a fully detached core")
+			}
+		} else if err := checkProfilePath(eng.current.HomeDir, path); err != nil {
+			return err
+		}
+		next := eng.current
+		next.Profile = profile
+		next.ConfigPath = path
+		if err := loadProfileExtension(&next); err != nil {
+			return err
+		}
+		var nextInbound inboundSettings
+		cfg, err := parseConfigWithInboundHash(path, &next, &nextInbound)
+		if err != nil {
+			return err
+		}
+		waitDiagnostics, err := applyReloadLocked(next, cfg, nextInbound)
+		tx.deferUnlock(waitDiagnostics)
 		return err
-	}
-	next := current
-	next.Profile = profile
-	next.ConfigPath = path
-	if err := loadProfileExtension(&next); err != nil {
-		return err
-	}
-	var nextInbound inboundSettings
-	cfg, err := parseConfigWithInboundHash(path, &next, &nextInbound)
-	if err != nil {
-		return err
-	}
-	waitDiagnostics, err = applyReloadLocked(next, cfg, nextInbound)
-	return err
+	})
 }
 
 func applyReloadLocked(next startOptions, cfg *config.Config, nextInbound inboundSettings) (func(), error) {
@@ -325,28 +298,26 @@ func applyReloadLocked(next startOptions, cfg *config.Config, nextInbound inboun
 
 func reloadPreparedLocked(next startOptions, cfg *config.Config, nextInbound inboundSettings, canRestore bool) (func(), error) {
 	cancelDelayTests()
-	runtimeProviders.Invalidate()
-	attached := tunListener != nil
+	eng.providers.Invalidate()
+	attached := eng.tun != nil
 	// 始终先屏蔽，避免 executor 接管平台 TUN，也避免失败时暴露部分入口。
 	if err := closeBusinessInbounds(); err != nil {
-		cleanupFailure = errors.Join(cleanupFailure, err, stopTun())
+		eng.cleanupFailure = errors.Join(eng.cleanupFailure, err, stopTun())
 		resolver.ResetConnection()
-		publishRuntime()
-		return nil, cleanupFailure
+		eng.publishRuntimeLocked()
+		return nil, eng.cleanupFailure
 	}
 	waitDiagnostics := reloadDiagnosticsLocked()
 	constant.SetConfig(next.ConfigPath)
 	executor.ApplyConfig(withoutBusinessInbounds(cfg), true)
-	desiredInbound = nextInbound
-	current = next
-	profile := next.Profile
-	runningID.Store(&profile)
-	runtimeConfigRevision++
+	eng.desiredInbound = nextInbound
+	eng.current = next
+	eng.configRevision++
 	ensureDiagnosticCaptureCollectorsLocked()
 	resetProxyIdentities()
 	watchRuntimeRoutes(cfg)
-	runtimeProviders.Reset(providers.Identity{
-		BootID: runtimeBootID, ConfigRevision: runtimeConfigRevision, Profile: current.Profile, HomeDir: current.HomeDir,
+	eng.providers.Reset(providers.Identity{
+		BootID: eng.bootID, ConfigRevision: eng.configRevision, Profile: eng.current.Profile, HomeDir: eng.current.HomeDir,
 	}, cfg)
 	log.Infoln("[ArkClash] reloaded profile %s", next.Profile)
 	var inboundErr error
@@ -356,12 +327,12 @@ func reloadPreparedLocked(next startOptions, cfg *config.Config, nextInbound inb
 			return waitDiagnostics, inboundErr
 		}
 		if inboundErr != nil {
-			cleanupFailure = errors.Join(cleanupFailure, closeBusinessInbounds(), stopTun())
+			eng.cleanupFailure = errors.Join(eng.cleanupFailure, closeBusinessInbounds(), stopTun())
 		}
 	}
-	publishRuntime()
+	eng.publishRuntimeLocked()
 	emit(reloadedEvent{Type: "reloaded", Profile: next.Profile})
-	return waitDiagnostics, errors.Join(inboundErr, cleanupFailure)
+	return waitDiagnostics, errors.Join(inboundErr, eng.cleanupFailure)
 }
 
 // 推给界面的「热切换完成」事件，格式和 entry/src/main/ets/client/ 里的解析一致。
@@ -383,37 +354,36 @@ func checkProfilePath(home, path string) error {
 }
 
 func runningProfile() (string, bool) {
-	p := runningID.Load()
-	if p == nil {
+	v := eng.View()
+	if v == nil || !v.Status.Running {
 		return "", false
 	}
-	return *p, true
+	return v.Status.Profile, true
 }
 
 // setRuntimeOptions 立即修改出站模式和局域网代理，并记下来供之后的热切换使用。
 func setRuntimeOptions(mode *string, allowLan *bool) error {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if !running {
-		return errors.New("core is not running")
-	}
-	if mode != nil {
-		m, ok := tunnel.ModeMapping[strings.ToLower(*mode)]
-		if !ok {
-			return fmt.Errorf("unknown mode %q", *mode)
+	return eng.withState(func(tx *stateTx) error {
+		if !eng.running {
+			return errors.New("core is not running")
 		}
-		tunnel.SetMode(m)
-		current.Mode = *mode
-	}
-	if allowLan != nil {
-		desiredInbound.inbound.AllowLan = *allowLan
-		listener.SetAllowLan(*allowLan)
-		v := *allowLan
-		current.AllowLan = &v
-	}
-	publishRuntime()
-	return nil
+		if mode != nil {
+			m, ok := tunnel.ModeMapping[strings.ToLower(*mode)]
+			if !ok {
+				return fmt.Errorf("unknown mode %q", *mode)
+			}
+			tunnel.SetMode(m)
+			eng.current.Mode = *mode
+		}
+		if allowLan != nil {
+			eng.desiredInbound.inbound.AllowLan = *allowLan
+			listener.SetAllowLan(*allowLan)
+			v := *allowLan
+			eng.current.AllowLan = &v
+		}
+		eng.publishRuntimeLocked()
+		return nil
+	})
 }
 
 // applyOverrides forces the settings ArkClash owns, whatever the profile says.
@@ -485,112 +455,98 @@ type tunNetworkOptions struct {
 }
 
 func attachTun(fd int, network tunNetworkOptions, expected attachIdentity) error {
-	lifecycle.Lock()
-	defer lifecycle.Unlock()
-	mu.Lock()
-	defer mu.Unlock()
-
-	if !running {
-		return errors.New("core is not running")
-	}
-	if expected.BootID != runtimeBootID || expected.Profile != current.Profile ||
-		expected.ConfigRevision != runtimeConfigRevision {
-		return errors.New("stale_attach_identity")
-	}
-	if current.Profile == "" || current.ConfigPath == "" {
-		return errors.New("no profile is loaded")
-	}
-	if fd <= 0 {
-		return errors.New("invalid tun fd")
-	}
-	if tunListener != nil {
-		if cleanupFailure != nil {
-			return cleanupFailure
+	return eng.withLifecycle(func(tx *stateTx) error {
+		if !eng.running {
+			return errors.New("core is not running")
 		}
+		if expected.BootID != eng.bootID || expected.Profile != eng.current.Profile ||
+			expected.ConfigRevision != eng.configRevision {
+			return errors.New("stale_attach_identity")
+		}
+		if eng.current.Profile == "" || eng.current.ConfigPath == "" {
+			return errors.New("no profile is loaded")
+		}
+		if fd <= 0 {
+			return errors.New("invalid tun fd")
+		}
+		if eng.tun != nil {
+			if eng.cleanupFailure != nil {
+				return eng.cleanupFailure
+			}
+			return nil
+		}
+		if eng.cleanupFailure != nil {
+			return eng.cleanupFailure
+		}
+		if err := startTun(fd, network); err != nil {
+			// 平台构造器必须自行回滚未发布资源；已发布的 listener 仍由这里收尾。
+			var cleanupErr error
+			if eng.tun != nil {
+				cleanupErr = stopTun()
+			}
+			eng.cleanupFailure = errors.Join(eng.cleanupFailure, cleanupErr)
+			eng.publishRuntimeLocked()
+			return errors.Join(err, eng.cleanupFailure)
+		}
+		if err := restoreBusinessInbounds(); err != nil {
+			eng.cleanupFailure = errors.Join(eng.cleanupFailure, closeBusinessInbounds(), stopTun())
+			eng.publishRuntimeLocked()
+			return errors.Join(err, eng.cleanupFailure)
+		}
+		eng.publishRuntimeLocked()
 		return nil
-	}
-	if cleanupFailure != nil {
-		return cleanupFailure
-	}
-	if err := startTun(fd, network); err != nil {
-		// 平台构造器必须自行回滚未发布资源；已发布的 listener 仍由这里收尾。
-		var cleanupErr error
-		if tunListener != nil {
-			cleanupErr = stopTun()
-		}
-		cleanupFailure = errors.Join(cleanupFailure, cleanupErr)
-		publishRuntime()
-		return errors.Join(err, cleanupFailure)
-	}
-	if err := restoreBusinessInbounds(); err != nil {
-		cleanupFailure = errors.Join(cleanupFailure, closeBusinessInbounds(), stopTun())
-		publishRuntime()
-		return errors.Join(err, cleanupFailure)
-	}
-	publishRuntime()
-	return nil
+	})
 }
 
 func detachTun() error {
-	lifecycle.Lock()
-	defer lifecycle.Unlock()
-	mu.Lock()
-	defer mu.Unlock()
-
-	err := errors.Join(closeBusinessInbounds(), stopTun())
-	cleanupFailure = errors.Join(cleanupFailure, err)
-	// URLTest 直接拨指定节点，不登记到转发 tracker，断开不能取消其上下文。
-	resolver.ResetConnection()
-	publishRuntime()
-	return cleanupFailure
+	return eng.withLifecycle(func(tx *stateTx) error {
+		err := errors.Join(closeBusinessInbounds(), stopTun())
+		eng.cleanupFailure = errors.Join(eng.cleanupFailure, err)
+		// URLTest 直接拨指定节点，不登记到转发 tracker，断开不能取消其上下文。
+		resolver.ResetConnection()
+		eng.publishRuntimeLocked()
+		return eng.cleanupFailure
+	})
 }
 
 func closeCoreListeners() {
-	cleanupFailure = errors.Join(cleanupFailure, closeBusinessInbounds())
+	eng.cleanupFailure = errors.Join(eng.cleanupFailure, closeBusinessInbounds())
 	ntp.ReCreateNTPService("", 0, "", nil, false)
 }
 
 func stop() error {
-	lifecycle.Lock()
-	defer lifecycle.Unlock()
-	mu.Lock()
-	_ = setPanelControllerLocked("")
-	closeCoreListeners()
-	if !running && tunListener == nil && !businessListenersOpen() {
-		_ = updateVpnState("stopped", "stopped", runtimeVpnCreated)
-		mu.Unlock()
-		return cleanupFailure
-	}
-	waitDiagnostics := stopDiagnosticsLocked()
-	manager := activeGeo.Swap(nil)
-	if manager != nil {
-		manager.closeLocked()
-	}
-	waitProviders := runtimeProviders.Close()
-	resetProxyIdentities()
-	stopRuntimeRoutes()
-	cancelDelayTests()
-	cleanupFailure = errors.Join(cleanupFailure, stopTun())
-	resolver.ResetConnection()
-	executor.Shutdown()
-	cleanupFailure = errors.Join(cleanupFailure, route.ArkClashCloseServer())
-	tunnel.OnSuspend()
-	tunnel.UpdateProxies(nil, nil)
-	tunnel.UpdateRules(nil, nil, nil)
-	tunnel.UpdateListeners(nil)
-	running = false
-	current = startOptions{}
-	runningID.Store(nil)
-	desiredInbound = inboundSettings{}
-	if err := updateVpnState("stopped", "stopped", runtimeVpnCreated); err != nil {
-		log.Errorln("[ArkClash] core stopped with pending VPN resources: %s", err)
-	}
-	mu.Unlock()
-	waitDiagnostics()
-	// worker 的取消清理可能需要核心锁，且下一次 start 不得越过本次 join。
-	if manager != nil {
-		manager.wait()
-	}
-	waitProviders()
-	return cleanupFailure
+	return eng.withLifecycle(func(tx *stateTx) error {
+		_ = setPanelControllerLocked("")
+		closeCoreListeners()
+		if !eng.running && eng.tun == nil && !businessListenersOpen() {
+			_ = updateVpnState("stopped", "stopped", eng.vpnCreated)
+			return eng.cleanupFailure
+		}
+		tx.deferUnlock(stopDiagnosticsLocked())
+		manager := activeGeo.Swap(nil)
+		if manager != nil {
+			manager.closeLocked()
+			// worker 的取消清理可能需要核心锁，且下一次 start 不得越过本次 join。
+			tx.deferUnlock(manager.wait)
+		}
+		tx.deferUnlock(eng.providers.Close())
+		resetProxyIdentities()
+		stopRuntimeRoutes()
+		cancelDelayTests()
+		eng.cleanupFailure = errors.Join(eng.cleanupFailure, stopTun())
+		resolver.ResetConnection()
+		executor.Shutdown()
+		eng.cleanupFailure = errors.Join(eng.cleanupFailure, route.ArkClashCloseServer())
+		tunnel.OnSuspend()
+		tunnel.UpdateProxies(nil, nil)
+		tunnel.UpdateRules(nil, nil, nil)
+		tunnel.UpdateListeners(nil)
+		eng.running = false
+		eng.current = startOptions{}
+		eng.desiredInbound = inboundSettings{}
+		if err := updateVpnState("stopped", "stopped", eng.vpnCreated); err != nil {
+			log.Errorln("[ArkClash] core stopped with pending VPN resources: %s", err)
+		}
+		return eng.cleanupFailure
+	})
 }

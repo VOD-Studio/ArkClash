@@ -28,11 +28,11 @@ type vehicleOwner interface {
 // 只处理 rule-provider：proxy-provider 的 Initial 会按节点名关掉正在用的连接，
 // 正在运行的配置里有同名节点时会误伤。
 func prefetch(path string) (int, error) {
-	status := runtimeSnapshot.Load()
-	if status == nil || !status.Running {
+	view := eng.View()
+	if view == nil || !view.Status.Running {
 		return 0, errors.New("core is not running")
 	}
-	if err := checkProfilePath(status.homeDir, path); err != nil {
+	if err := checkProfilePath(view.HomeDir, path); err != nil {
 		return 0, err
 	}
 	buf, err := os.ReadFile(path)

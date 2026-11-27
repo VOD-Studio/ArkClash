@@ -118,7 +118,7 @@ func TestLifecycleControllerServesArkClashStatusAndBlocksEmbedRoutes(t *testing.
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		t.Fatalf("decode status: %v", err)
 	}
-	want := runtimeSnapshot.Load()
+	want := eng.Status()
 	if !got.Running || got.BootID != want.BootID {
 		t.Fatalf("status=%+v, want boot=%s running=true", got, want.BootID)
 	}

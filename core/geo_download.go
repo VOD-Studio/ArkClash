@@ -68,8 +68,8 @@ func (m *geoManager) jobValidLocked(job *geoJob) bool {
 
 // 开始尝试先落盘时间戳；下载失败也不能令调度器立即再次唤醒。
 func (m *geoManager) beginAttempt(job *geoJob) error {
-	mu.Lock()
-	defer mu.Unlock()
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.jobValidLocked(job) {
@@ -225,8 +225,8 @@ func (m *geoManager) update(job *geoJob) (outcome string, resultErr error) {
 		return "", errors.New("geo_io")
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.jobValidLocked(job) || ctx.Err() != nil {

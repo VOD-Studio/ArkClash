@@ -22,9 +22,9 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 	rs := newDiagnosticTestResolver(t)
 	capture, captureReader, captureExecution := dialDiagnosticStream(t, server, "capture", false)
 	readDiagnosticCaptureReady(t, capture, captureReader)
-	mu.Lock()
+	eng.mu.Lock()
 	lease, previousConnections, previousDNS := diagnosticCapture, diagnosticConnections, diagnosticDNS
-	mu.Unlock()
+	eng.mu.Unlock()
 	old := newDiagnosticStreamTracker(t, "old.diag.test")
 	if err := old.Close(); err != nil {
 		t.Fatal(err)
@@ -39,9 +39,9 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 	if len(oldRecent) != 1 || oldRecent[0].ID != old.ID() || len(oldRecords) != 1 || oldRecords[0].Domain != "old.diag.test" {
 		t.Fatal("old boot lease did not populate both rings")
 	}
-	oldBoot := runtimeBootID
-	oldRevision := runtimeConfigRevision
-	path := filepath.Join(current.HomeDir, "profiles", "next.yaml")
+	oldBoot := eng.bootID
+	oldRevision := eng.configRevision
+	path := filepath.Join(eng.current.HomeDir, "profiles", "next.yaml")
 	if err := os.WriteFile(path, []byte("rules: [\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -55,14 +55,14 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 		default:
 		}
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	untouched := diagnosticCapture == lease && diagnosticConnections == previousConnections && diagnosticDNS == previousDNS
-	mu.Unlock()
+	eng.mu.Unlock()
 	if !untouched {
 		t.Fatal("failed parse cleared diagnostic state")
 	}
 	pingDiagnosticCapture(t, capture, captureReader)
-	if runtimeConfigRevision != oldRevision || current.Profile != "fixture" {
+	if eng.configRevision != oldRevision || eng.current.Profile != "fixture" {
 		t.Fatal("failed parse changed runtime identity")
 	}
 	if err := os.WriteFile(path, []byte("mode: direct\nlog-level: silent\nrules: ['MATCH,DIRECT']\n"), 0600); err != nil {
@@ -76,11 +76,11 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 	waitDiagnosticStream(t, previousConnections.workerDone)
 	waitDiagnosticStream(t, previousDNS.workerDone)
 	pingDiagnosticCapture(t, capture, captureReader)
-	mu.Lock()
+	eng.mu.Lock()
 	fresh := diagnosticCapture == lease && diagnosticConnections != nil && diagnosticConnections != previousConnections &&
 		diagnosticDNS != nil && diagnosticDNS != previousDNS
-	mu.Unlock()
-	if !fresh || runtimeBootID != oldBoot || runtimeConfigRevision != oldRevision+1 || current.Profile != "next" {
+	eng.mu.Unlock()
+	if !fresh || eng.bootID != oldBoot || eng.configRevision != oldRevision+1 || eng.current.Profile != "next" {
 		t.Fatal("successful reload did not advance configuration identity")
 	}
 	next := newDiagnosticStreamTracker(t, "next.diag.test")
@@ -99,7 +99,7 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 	recent := diagnosticSnapshotRows[DiagnosticConnection](t, connectionSnapshot.Recent)
 	records := diagnosticSnapshotRows[DiagnosticDnsRecord](t, dnsSnapshot.Records)
 	if len(recent) != 1 || recent[0].ID != next.ID() || len(records) != 1 || records[0].Domain != "next.diag.test" ||
-		records[0].ID == oldRecords[0].ID || runtimeBootID != oldBoot || runtimeConfigRevision != oldRevision+1 {
+		records[0].ID == oldRecords[0].ID || eng.bootID != oldBoot || eng.configRevision != oldRevision+1 {
 		t.Fatal("reload leaked old history or detach cleared the new generation")
 	}
 	closeDiagnosticClient(t, connectionPage, connectionReader)
@@ -121,10 +121,10 @@ func TestDiagnosticsReloadKeepsCollectorsOnForwardingSuspensionFailure(t *testin
 	if err := old.Close(); err != nil {
 		t.Fatal(err)
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	dns := diagnosticDNS
-	oldRevision := runtimeConfigRevision
-	mu.Unlock()
+	oldRevision := eng.configRevision
+	eng.mu.Unlock()
 	dns.observeDNS(diagnosticTestRecord(1))
 
 	sentinel := errors.New("fixture forwarding close uncertainty")
@@ -141,7 +141,7 @@ func TestDiagnosticsReloadKeepsCollectorsOnForwardingSuspensionFailure(t *testin
 		t.Fatal(err)
 	}
 	forwardingAwait(t, entered, "connection was not forwarding before suspension")
-	path := filepath.Join(current.HomeDir, "profiles", "next.yaml")
+	path := filepath.Join(eng.current.HomeDir, "profiles", "next.yaml")
 	if err := os.WriteFile(path, []byte("mode: direct\nrules: ['MATCH,DIRECT']\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -154,9 +154,9 @@ func TestDiagnosticsReloadKeepsCollectorsOnForwardingSuspensionFailure(t *testin
 	default:
 	}
 	pingDiagnosticCapture(t, capture, reader)
-	mu.Lock()
-	intact := diagnosticConnections == session.collector && diagnosticDNS == dns && runtimeConfigRevision == oldRevision
-	mu.Unlock()
+	eng.mu.Lock()
+	intact := diagnosticConnections == session.collector && diagnosticDNS == dns && eng.configRevision == oldRevision
+	eng.mu.Unlock()
 	if !intact {
 		t.Fatal("failed suspension replaced canonical diagnostic state")
 	}
@@ -196,7 +196,7 @@ func TestDiagnosticsMetadataSnapshotExcludesPrivateTrackerFields(t *testing.T) {
 	conn := &lifecycleDiagnosticConn{chain: C.Chain{"DIRECT"}}
 	tracker := statistic.NewTCPTracker(conn, statistic.DefaultManager, metadata, nil, 12, 34, false)
 	defer tracker.Close()
-	session, status, err := subscribeDiagnostics("connections", runtimeBootID, runtimeConfigRevision)
+	session, status, err := subscribeDiagnostics("connections", eng.bootID, eng.configRevision)
 	if err != nil {
 		t.Fatalf("subscribe status=%d err=%v", status, err)
 	}

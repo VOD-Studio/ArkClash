@@ -67,14 +67,14 @@ tunnels:
 	for _, p := range ports {
 		inboundReachable(t, p, false)
 	}
-	if runtimeSnapshot.Load().ListenersOpen {
+	if eng.Status().ListenersOpen {
 		t.Fatal("detached start exposed listeners")
 	}
 	mode, allow := "direct", true
 	if err := setRuntimeOptions(&mode, &allow); err != nil {
 		t.Fatal(err)
 	}
-	if !desiredInbound.inbound.AllowLan {
+	if !eng.desiredInbound.inbound.AllowLan {
 		t.Fatal("detached LAN setting lost")
 	}
 	if err := reload(opts.ConfigPath, opts.Profile, new(opts.Profile)); err != nil {
@@ -89,10 +89,10 @@ tunnels:
 	for _, p := range ports {
 		inboundReachable(t, p, true)
 	}
-	if !runtimeSnapshot.Load().ListenersOpen {
+	if !eng.Status().ListenersOpen {
 		t.Fatal("actual listeners not reported")
 	}
-	originalTun := tunListener
+	originalTun := eng.tun
 	query := new(D.Msg)
 	query.SetQuestion("inbound-test.example.", D.TypeA)
 	dnsClient := &D.Client{Net: "udp", Timeout: time.Second}
@@ -102,7 +102,7 @@ tunnels:
 	if err := reload(opts.ConfigPath, opts.Profile, new(opts.Profile)); err != nil {
 		t.Fatal(err)
 	}
-	if tunListener != originalTun {
+	if eng.tun != originalTun {
 		t.Fatal("connected reload replaced platform TUN")
 	}
 	for _, p := range ports {
@@ -165,7 +165,7 @@ tunnels:
 		t.Fatal("live forwarded connection was not tracked")
 	}
 	mapper, service := resolver.DefaultHostMapper, resolver.DefaultService
-	before := *runtimeSnapshot.Load()
+	before := *eng.Status()
 	if err := detachTun(); err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ tunnels:
 	if resolver.DefaultHostMapper != mapper || resolver.DefaultService != service {
 		t.Fatal("detach rebuilt resolver")
 	}
-	after := runtimeSnapshot.Load()
+	after := eng.Status()
 	if after.ListenersOpen || before.BootID != after.BootID || before.ConfigRevision != after.ConfigRevision {
 		t.Fatal("detach changed core identity or leaked listeners")
 	}
@@ -208,7 +208,7 @@ func TestInboundPartialAttachRollsBack(t *testing.T) {
 	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err == nil {
 		t.Fatal("partial bind failure accepted")
 	}
-	if tunListener != nil || businessListenersOpen() {
+	if eng.tun != nil || businessListenersOpen() {
 		t.Fatal("partial attach left resources open")
 	}
 	inboundReachable(t, free, false)

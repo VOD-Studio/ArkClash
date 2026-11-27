@@ -41,52 +41,43 @@ type statusResponse struct {
 }
 
 func (start *statusResponse) subscriptionRouteCurrent() bool {
-	now := runtimeSnapshot.Load()
+	now := eng.Status()
 	if now == nil || !now.Running || now.BootID != start.BootID || now.forwardRevision != start.forwardRevision {
 		return false
 	}
 	return start.Forward != "running" || now.Revision == start.Revision
 }
 
-var runtimeSnapshot atomic.Pointer[statusResponse]
-var runtimeBootID string
-var runtimeStartedAt int64
-var runtimeRevision uint64
-var runtimeConfigRevision uint64
-var runtimeIntent = "stopped"
-var runtimeForward = "stopped"
-var runtimeVpnCreated bool
-
 func beginRuntime() func() {
 	waitDiagnostics := stopDiagnosticsLocked()
 	stopRuntimeRoutes()
 	now := time.Now()
-	runtimeBootID = fmt.Sprintf("%x-%x", os.Getpid(), now.UnixNano())
-	runtimeStartedAt = 0
-	runtimeRevision = 0
-	runtimeConfigRevision = 1
-	runtimeIntent = "stopped"
-	runtimeForward = "stopped"
-	runtimeVpnCreated = false
-	selectionOperations = make(map[string]selectionOperation)
-	selectionOrder = nil
+	eng.bootID = fmt.Sprintf("%x-%x", os.Getpid(), now.UnixNano())
+	eng.startedAt = 0
+	eng.revision = 0
+	eng.configRevision = 1
+	eng.intent = "stopped"
+	eng.forward = "stopped"
+	eng.vpnCreated = false
+	eng.selections.ops = make(map[string]selectionOperation)
+	eng.selections.order = nil
 	return waitDiagnostics
 }
 
 // 供宿主（lib.go）更新平台 VPN 资源与转发状态；内部持核锁提交并发布快照。
 func setVpnStateFromHost(intent, forward string, vpnCreated bool) error {
-	mu.Lock()
-	defer mu.Unlock()
-	return updateVpnState(intent, forward, vpnCreated)
+	return eng.withState(func(tx *stateTx) error {
+		return updateVpnState(intent, forward, vpnCreated)
+	})
 }
 
 // 供宿主（lib.go）无锁读取当前运行快照的 JSON 编码。
 func runtimeStatusJSON() string {
-	data, _ := json.Marshal(runtimeSnapshot.Load())
+	data, _ := json.Marshal(eng.Status())
 	return string(data)
 }
 
-// 调用方持有 mu；平台资源事实与转发状态在同一个提交点发布。
+// 调用方持有 eng.mu；平台资源事实与转发状态在同一个提交点发布。
 func updateVpnState(intent, forward string, vpnCreated bool) error {
 	if intent != "started" && intent != "stopped" {
 		return fmt.Errorf("invalid_vpn_intent")
@@ -96,52 +87,63 @@ func updateVpnState(intent, forward string, vpnCreated bool) error {
 	default:
 		return fmt.Errorf("invalid_vpn_forward")
 	}
-	runtimeIntent = intent
-	runtimeForward = forward
-	runtimeVpnCreated = vpnCreated
-	publishRuntime()
-	if runtimeForward != forward {
+	eng.intent = intent
+	eng.forward = forward
+	eng.vpnCreated = vpnCreated
+	eng.publishRuntimeLocked()
+	if eng.forward != forward {
 		return fmt.Errorf("vpn_resources_inconsistent")
 	}
 	return nil
 }
 
 func publishRuntime() {
-	runtimeRevision++
-	next := &statusResponse{
-		Profile: current.Profile, PanelOpen: activePanel != nil, Running: running, Intent: runtimeIntent, Forward: runtimeForward, SessionMode: "tun",
+	eng.publishRuntimeLocked()
+}
+
+func (e *coreEngine) publishRuntimeLocked() {
+	e.revision++
+	next := statusResponse{
+		Profile: e.current.Profile, PanelOpen: e.panel != nil, Running: e.running, Intent: e.intent, Forward: e.forward, SessionMode: "tun",
 		ListenersOpen: businessListenersOpen(),
-		TunAttached:   tunListener != nil, VpnCreated: runtimeVpnCreated,
-		BootID: runtimeBootID, Revision: runtimeRevision, Version: constant.Version, Mode: tunnel.Mode().String(),
-		ConfigRevision: runtimeConfigRevision, ProfileExtension: current.Script.identity,
-		homeDir: current.HomeDir,
+		TunAttached:   e.tun != nil, VpnCreated: e.vpnCreated,
+		BootID: e.bootID, Revision: e.revision, Version: constant.Version, Mode: tunnel.Mode().String(),
+		ConfigRevision: e.configRevision, ProfileExtension: e.current.Script.identity,
+		homeDir: e.current.HomeDir,
 	}
-	next.StandardRulesRevision = current.ProfileRules.Revision
-	if next.Forward == "running" && (!running || next.Intent != "started" || !next.TunAttached || !next.VpnCreated) ||
+	next.StandardRulesRevision = e.current.ProfileRules.Revision
+	if next.Forward == "running" && (!e.running || next.Intent != "started" || !next.TunAttached || !next.VpnCreated) ||
 		next.Forward == "stopped" && (next.TunAttached || next.VpnCreated || next.ListenersOpen) ||
-		next.Forward == "preparing" && (!running || next.Intent != "started") || cleanupFailure != nil {
+		next.Forward == "preparing" && (!e.running || next.Intent != "started") || e.cleanupFailure != nil {
 		next.Forward = "failed"
-		runtimeForward = next.Forward
+		e.forward = next.Forward
 	}
 	if next.Forward == "running" {
-		if runtimeStartedAt == 0 {
-			runtimeStartedAt = time.Now().UnixMilli()
+		if e.startedAt == 0 {
+			e.startedAt = time.Now().UnixMilli()
 		}
 	} else {
-		runtimeStartedAt = 0
+		e.startedAt = 0
 	}
-	next.StartedAt = runtimeStartedAt
+	next.StartedAt = e.startedAt
 	// 固定走 DIRECT 的请求不受自动选组变化影响；转发状态或配置切换仍使旧请求失效。
 	next.forwardRevision = next.Revision
-	if prev := runtimeSnapshot.Load(); prev != nil && prev.BootID == next.BootID &&
+	if prev := e.Status(); prev != nil && prev.BootID == next.BootID &&
 		prev.ConfigRevision == next.ConfigRevision && prev.Forward == next.Forward {
 		next.forwardRevision = prev.forwardRevision
 	}
-	runtimeSnapshot.Store(next)
+	view := &runtimeView{
+		Status:          next,
+		HomeDir:         e.current.HomeDir,
+		StoreGeneration: e.current.StoreGeneration,
+		CaptureLogs:     e.current.General.CaptureLogs,
+		DelayTimeout:    e.current.General.DelayTimeout,
+	}
+	e.view.Store(view)
 	emit(struct {
 		Type   string          `json:"type"`
 		Status *statusResponse `json:"status"`
-	}{Type: "runtime", Status: next})
+	}{Type: "runtime", Status: &view.Status})
 }
 
 type automaticRuntimeGroup interface {
@@ -164,8 +166,6 @@ type runtimeRouteWatch struct {
 	subscriptions  []io.Closer
 }
 
-var runtimeRoutes atomic.Pointer[runtimeRouteWatch]
-
 func (watch *runtimeRouteWatch) notify() {
 	select {
 	case watch.wake <- struct{}{}:
@@ -177,7 +177,7 @@ func (watch *runtimeRouteWatch) notify() {
 func watchRuntimeRoutes(cfg *config.Config) {
 	stopRuntimeRoutes()
 	watch := &runtimeRouteWatch{
-		bootID: runtimeBootID, configRevision: runtimeConfigRevision,
+		bootID: eng.bootID, configRevision: eng.configRevision,
 		groups:    make(map[constant.ProxyAdapter]automaticRuntimeGroup),
 		providers: make(map[P.ProxyProvider]struct{}),
 		wake:      make(chan struct{}, 1), done: make(chan struct{}),
@@ -199,10 +199,10 @@ func watchRuntimeRoutes(cfg *config.Config) {
 		return
 	}
 	watch.updateMembers()
-	runtimeRoutes.Store(watch)
+	eng.routes.Store(watch)
 	watch.subscriptions = []io.Closer{
 		outboundgroup.RouteChangeCallback().Register(func(group constant.ProxyAdapter) {
-			if runtimeRoutes.Load() != watch {
+			if eng.routes.Load() != watch {
 				return
 			}
 			if _, ok := watch.groups[group]; !ok {
@@ -212,7 +212,7 @@ func watchRuntimeRoutes(cfg *config.Config) {
 			watch.notify()
 		}),
 		adapter.HealthCheckCallback().Register(func(proxy constant.Proxy) {
-			if runtimeRoutes.Load() != watch {
+			if eng.routes.Load() != watch {
 				return
 			}
 			if _, ok := (*watch.members.Load())[proxy]; !ok {
@@ -222,7 +222,7 @@ func watchRuntimeRoutes(cfg *config.Config) {
 			watch.notify()
 		}),
 		provider.ProxyUpdateCallback().Register(func(item P.ProxyProvider) {
-			if runtimeRoutes.Load() != watch {
+			if eng.routes.Load() != watch {
 				return
 			}
 			if _, ok := watch.providers[item]; !ok {
@@ -262,32 +262,39 @@ func (watch *runtimeRouteWatch) run() {
 		case <-watch.wake:
 		case <-expiry:
 		}
-		mu.Lock()
-		if runtimeRoutes.Load() != watch || !running || runtimeBootID != watch.bootID || runtimeConfigRevision != watch.configRevision {
-			mu.Unlock()
+		var (
+			stale bool
+			next  time.Duration
+		)
+		_ = eng.withState(func(tx *stateTx) error {
+			if eng.routes.Load() != watch || !eng.running || eng.bootID != watch.bootID || eng.configRevision != watch.configRevision {
+				stale = true
+				return nil
+			}
+			if watch.refresh.Swap(false) {
+				watch.updateMembers()
+				now := time.Now()
+				for adapter := range watch.groups {
+					pending[adapter] = now
+				}
+			}
+			for adapter, since := range pending {
+				wait := watch.groups[adapter].Refresh(since)
+				if wait <= 0 {
+					delete(pending, adapter)
+				} else if next == 0 || wait < next {
+					next = wait
+				}
+			}
+			if changes := watch.changes.Load(); changes != watch.published {
+				watch.published = changes
+				eng.publishRuntimeLocked()
+			}
+			return nil
+		})
+		if stale {
 			return
 		}
-		if watch.refresh.Swap(false) {
-			watch.updateMembers()
-			now := time.Now()
-			for adapter := range watch.groups {
-				pending[adapter] = now
-			}
-		}
-		var next time.Duration
-		for adapter, since := range pending {
-			wait := watch.groups[adapter].Refresh(since)
-			if wait <= 0 {
-				delete(pending, adapter)
-			} else if next == 0 || wait < next {
-				next = wait
-			}
-		}
-		if changes := watch.changes.Load(); changes != watch.published {
-			watch.published = changes
-			publishRuntime()
-		}
-		mu.Unlock()
 		// 每个健康批次只等真实缓存到期；没有待处理变化时不保留周期任务。
 		expiry = nil
 		if timer != nil && !timer.Stop() {
@@ -308,7 +315,7 @@ func (watch *runtimeRouteWatch) run() {
 }
 
 func stopRuntimeRoutes() {
-	watch := runtimeRoutes.Swap(nil)
+	watch := eng.routes.Swap(nil)
 	if watch == nil {
 		return
 	}

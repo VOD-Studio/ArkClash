@@ -36,9 +36,11 @@ func portableMutation(next http.HandlerFunc) http.HandlerFunc {
 
 func withPortableMutation(next http.HandlerFunc, restore bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		home := current.HomeDir
-		mu.Unlock()
+		view := eng.View()
+		home := ""
+		if view != nil {
+			home = view.HomeDir
+		}
 		if home == "" {
 			writeError(w, r, http.StatusServiceUnavailable, backup.ErrIO)
 			return
@@ -49,9 +51,8 @@ func withPortableMutation(next http.HandlerFunc, restore bool) http.HandlerFunc 
 			return
 		}
 		defer unlock()
-		mu.Lock()
-		upToDate := current.HomeDir == home && current.StoreGeneration == portableGeneration(home)
-		mu.Unlock()
+		latest := eng.View()
+		upToDate := latest != nil && latest.HomeDir == home && latest.StoreGeneration == portableGeneration(home)
 		if !restore && !upToDate {
 			writeError(w, r, http.StatusConflict, backup.ErrChanged)
 			return
@@ -80,14 +81,13 @@ func postBackupDAV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer backupDAVBusy.Store(false)
-	mu.Lock()
-	home := current.HomeDir
-	status := runtimeSnapshot.Load()
-	mu.Unlock()
-	if status == nil || !status.Running || status.BootID != req.BootID {
+	view := eng.View()
+	if view == nil || !view.Status.Running || view.Status.BootID != req.BootID {
 		writeError(w, r, http.StatusConflict, backup.ErrChanged)
 		return
 	}
+	home := view.HomeDir
+	status := &view.Status
 	file, err := backup.WorkspaceArchive(home, req.Work)
 	if err == nil {
 		ctx, stop := ruleRequestContext(r.Context(), nil)
@@ -135,67 +135,63 @@ func postBackupApply(w http.ResponseWriter, r *http.Request) {
 }
 
 func applyBackup(req backupApplyRequest) error {
-	mu.Lock()
-	var retired func()
-	defer func() {
-		mu.Unlock()
-		if retired != nil {
-			retired()
-		}
-	}()
-	if !running || req.BootID != runtimeBootID ||
-		(req.Profile != "" && (!addedRulesProfileID.MatchString(req.Profile) || filepath.Base(req.Profile) != req.Profile)) {
-		return backup.ErrChanged
-	}
-	if req.Profile == "" && (tunListener != nil || runtimeVpnCreated || businessListenersOpen()) {
-		return backup.ErrChanged
-	}
-	var list struct {
-		Current  string `json:"current"`
-		Revision string `json:"revision"`
-	}
-	if file, err := os.Open(filepath.Join(current.HomeDir, "profiles", "list.json")); err != nil {
-		return err
-	} else {
-		err := json.NewDecoder(file).Decode(&list)
-		_ = file.Close()
-		if err != nil || req.Profile != list.Current || req.Revision != list.Revision {
+	return eng.withState(func(tx *stateTx) error {
+		if !eng.running || req.BootID != eng.bootID ||
+			(req.Profile != "" && (!addedRulesProfileID.MatchString(req.Profile) || filepath.Base(req.Profile) != req.Profile)) {
 			return backup.ErrChanged
 		}
-	}
-	next := current
-	next.StoreGeneration = portableGeneration(next.HomeDir)
-	next.Mode, next.AllowLan = req.Mode, req.AllowLan
-	next.Profile, next.ConfigPath = req.Profile, ""
-	if req.Profile != "" {
-		next.ConfigPath = filepath.Join(current.HomeDir, "profiles", req.Profile+".yaml")
-	}
-	var err error
-	for _, read := range []func() error{
-		func() error { next.Geo, err = readGeoSettings(next.HomeDir); return err },
-		func() error { next.DNS, err = readDNSOverrides(next.HomeDir); return err },
-		func() error { next.General, err = readGeneralSettings(next.HomeDir); return err },
-		func() error { next.AddedRules, err = readAddedRules(next.HomeDir); return err },
-		func() error { next.RuleSets, err = readRuleSets(next.HomeDir); return err },
-		func() error { return loadProfileExtension(&next) },
-	} {
-		if err := read(); err != nil {
+		if req.Profile == "" && (eng.tun != nil || eng.vpnCreated || businessListenersOpen()) {
+			return backup.ErrChanged
+		}
+		var list struct {
+			Current  string `json:"current"`
+			Revision string `json:"revision"`
+		}
+		if file, err := os.Open(filepath.Join(eng.current.HomeDir, "profiles", "list.json")); err != nil {
+			return err
+		} else {
+			err := json.NewDecoder(file).Decode(&list)
+			_ = file.Close()
+			if err != nil || req.Profile != list.Current || req.Revision != list.Revision {
+				return backup.ErrChanged
+			}
+		}
+		next := eng.current
+		next.StoreGeneration = portableGeneration(next.HomeDir)
+		next.Mode, next.AllowLan = req.Mode, req.AllowLan
+		next.Profile, next.ConfigPath = req.Profile, ""
+		if req.Profile != "" {
+			next.ConfigPath = filepath.Join(eng.current.HomeDir, "profiles", req.Profile+".yaml")
+		}
+		var err error
+		for _, read := range []func() error{
+			func() error { next.Geo, err = readGeoSettings(next.HomeDir); return err },
+			func() error { next.DNS, err = readDNSOverrides(next.HomeDir); return err },
+			func() error { next.General, err = readGeneralSettings(next.HomeDir); return err },
+			func() error { next.AddedRules, err = readAddedRules(next.HomeDir); return err },
+			func() error { next.RuleSets, err = readRuleSets(next.HomeDir); return err },
+			func() error { return loadProfileExtension(&next) },
+		} {
+			if err := read(); err != nil {
+				return err
+			}
+		}
+		var inbound inboundSettings
+		cfg, err := parseConfigWithInboundHash(next.ConfigPath, &next, &inbound)
+		if err != nil {
 			return err
 		}
-	}
-	var inbound inboundSettings
-	cfg, err := parseConfigWithInboundHash(next.ConfigPath, &next, &inbound)
-	if err != nil {
+		retired, err := applyReloadLocked(next, cfg, inbound)
+		tx.deferUnlock(retired)
+		if err == nil {
+			if panelErr := setPanelControllerLocked(next.General.ControllerSecret); panelErr != nil {
+				log.Warnln("[ArkClash] external controller port unavailable")
+			}
+			if manager := activeGeo.Load(); manager != nil {
+				err = manager.applySettingsLocked(next.Geo)
+			}
+			eng.publishRuntimeLocked()
+		}
 		return err
-	}
-	retired, err = applyReloadLocked(next, cfg, inbound)
-	if err == nil {
-		if panelErr := setPanelControllerLocked(next.General.ControllerSecret); panelErr != nil {
-			log.Warnln("[ArkClash] external controller port unavailable")
-		}
-		if manager := activeGeo.Load(); manager != nil {
-			err = manager.applySettingsLocked(next.Geo)
-		}
-	}
-	return err
+	})
 }

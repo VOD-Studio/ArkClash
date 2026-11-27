@@ -14,11 +14,10 @@ import (
 )
 
 var delaySlots = make(chan struct{}, 8)
-var activeDelayTests = make(map[*http.Request]context.CancelFunc)
 
-// 调用方持有 mu，在替换配置或关闭内核之前同步取消真实测速，不等待网络清理。
+// 调用方持有 eng.mu，在替换配置或关闭内核之前同步取消真实测速，不等待网络清理。
 func cancelDelayTests() {
-	for _, cancel := range activeDelayTests {
+	for _, cancel := range eng.delays.active {
 		cancel()
 	}
 }
@@ -53,29 +52,39 @@ func getDelay(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusTooManyRequests, errors.New("delay_capacity"))
 		return
 	}
-	mu.Lock()
-	if timeout == 0 {
-		timeout = current.General.DelayTimeout
+	var (
+		profile  string
+		bootID   string
+		revision uint64
+		valid    bool
+		proxy    C.Proxy
+		ctx      context.Context
+		cancel   context.CancelFunc
+	)
+	_ = eng.withState(func(tx *stateTx) error {
 		if timeout == 0 {
-			timeout = 8000
+			timeout = eng.current.General.DelayTimeout
+			if timeout == 0 {
+				timeout = 8000
+			}
 		}
-	}
-	profile := current.Profile
-	bootID := runtimeBootID
-	revision := runtimeConfigRevision
-	valid := running && profile != "" && query.Get("profile") == profile && query.Get("expectedBootId") == bootID &&
-		query.Get("expectedRevision") == strconv.FormatUint(revision, 10)
-	var proxy C.Proxy
-	var ctx context.Context
-	var cancel context.CancelFunc
-	if valid {
-		proxy, err = findDelayProxy(query.Get("id"), query.Get("group"))
-		if err == nil {
-			ctx, cancel = context.WithTimeout(r.Context(), time.Duration(timeout)*time.Millisecond)
-			activeDelayTests[r] = cancel
+		profile = eng.current.Profile
+		bootID = eng.bootID
+		revision = eng.configRevision
+		valid = eng.running && profile != "" && query.Get("profile") == profile && query.Get("expectedBootId") == bootID &&
+			query.Get("expectedRevision") == strconv.FormatUint(revision, 10)
+		if valid {
+			proxy, err = findDelayProxy(query.Get("id"), query.Get("group"))
+			if err == nil {
+				ctx, cancel = context.WithTimeout(r.Context(), time.Duration(timeout)*time.Millisecond)
+				if eng.delays.active == nil {
+					eng.delays.active = make(map[*http.Request]context.CancelFunc)
+				}
+				eng.delays.active[r] = cancel
+			}
 		}
-	}
-	mu.Unlock()
+		return nil
+	})
 	if !valid {
 		writeError(w, r, http.StatusConflict, errors.New("delay_profile_changed"))
 		return
@@ -86,20 +95,22 @@ func getDelay(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		cancel()
-		mu.Lock()
-		delete(activeDelayTests, r)
-		mu.Unlock()
+		_ = eng.withState(func(tx *stateTx) error {
+			delete(eng.delays.active, r)
+			return nil
+		})
 	}()
 	expected, _ := utils.NewUnsignedRanges[uint16]("")
 	delay, err := proxy.URLTest(ctx, target.String(), expected)
 	if r.Context().Err() != nil {
 		return
 	}
-	mu.Lock()
-	member, present := currentProxyMember(query.Get("id"), query.Get("group"))
-	valid = running && profile != "" && current.Profile == profile && runtimeBootID == bootID && runtimeConfigRevision == revision &&
-		present && member == proxy
-	mu.Unlock()
+	_ = eng.withState(func(tx *stateTx) error {
+		member, present := currentProxyMember(query.Get("id"), query.Get("group"))
+		valid = eng.running && profile != "" && eng.current.Profile == profile && eng.bootID == bootID && eng.configRevision == revision &&
+			present && member == proxy
+		return nil
+	})
 	if !valid {
 		writeError(w, r, http.StatusConflict, errors.New("delay_profile_changed"))
 		return

@@ -111,11 +111,11 @@ rules: ['MATCH,DIRECT']
 	if err != nil {
 		t.Fatal(err)
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	tunnel.UpdateProxies(cfg.Proxies, cfg.Providers)
 	watchRuntimeRoutes(cfg)
 	resetProxyIdentities()
-	mu.Unlock()
+	eng.mu.Unlock()
 	return &accepted
 }
 

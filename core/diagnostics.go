@@ -108,25 +108,25 @@ func diagnosticRuntimeError(boot string, revision uint64) (int, error) {
 	if status, err := diagnosticBootError(boot); err != nil {
 		return status, err
 	}
-	if revision != runtimeConfigRevision {
+	if revision != eng.configRevision {
 		return http.StatusConflict, errors.New("diagnostics_stale_runtime")
 	}
 	return 0, nil
 }
 
 func diagnosticBootError(boot string) (int, error) {
-	if !running {
+	if !eng.running {
 		return http.StatusServiceUnavailable, errors.New("diagnostics_not_ready")
 	}
-	if boot != runtimeBootID {
+	if boot != eng.bootID {
 		return http.StatusConflict, errors.New("diagnostics_stale_runtime")
 	}
 	return 0, nil
 }
 
 func subscribeDiagnostics(feed, expectedBootID string, expectedConfigRevision uint64) (*diagnosticSession, int, error) {
-	mu.Lock()
-	defer mu.Unlock()
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
 	if feed != "connections" && feed != "dns" && feed != "logs" {
 		return nil, http.StatusBadRequest, errors.New("diagnostics_invalid_request")
 	}
@@ -134,7 +134,7 @@ func subscribeDiagnostics(feed, expectedBootID string, expectedConfigRevision ui
 		if status, err := diagnosticBootError(expectedBootID); err != nil {
 			return nil, status, err
 		}
-		if !current.General.CaptureLogs {
+		if !eng.current.General.CaptureLogs {
 			return nil, http.StatusForbidden, errDiagnosticLogsDisabled
 		}
 	} else if status, err := diagnosticRuntimeError(expectedBootID, expectedConfigRevision); err != nil {
@@ -167,12 +167,12 @@ func ensureDiagnosticCollectorLocked(owner **diagnosticCollector, feed string) *
 	if c := *owner; c != nil {
 		return c
 	}
-	revision := runtimeConfigRevision
+	revision := eng.configRevision
 	if feed == "logs" {
 		// 日志采集按内核 boot 生命周期存活，跨配置热切换保留历史。
 		revision = 0
 	}
-	c := &diagnosticCollector{feed: feed, bootID: runtimeBootID, revision: revision,
+	c := &diagnosticCollector{feed: feed, bootID: eng.bootID, revision: revision,
 		stop: make(chan struct{}), workerDone: make(chan struct{}), kick: make(chan struct{}, 1)}
 	if feed == "connections" {
 		c.connections = make(map[string]*diagnosticConnectionEntry)
@@ -202,8 +202,8 @@ func ensureDiagnosticCaptureCollectorsLocked() {
 }
 
 func acquireDiagnosticCapture(ctx context.Context, bootID string, conn net.Conn, readerDone <-chan struct{}) (*diagnosticCaptureLease, *diagnosticCaptureLease) {
-	mu.Lock()
-	defer mu.Unlock()
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
 	if _, err := diagnosticBootError(bootID); err != nil || ctx.Err() != nil {
 		return nil, nil
 	}
@@ -223,15 +223,15 @@ func acquireDiagnosticCapture(ctx context.Context, bootID string, conn net.Conn,
 }
 
 func (lease *diagnosticCaptureLease) release() {
-	mu.Lock()
+	eng.mu.Lock()
 	if diagnosticCapture != lease {
 		// 换手后旧连接退出不能注销新持有者。
-		mu.Unlock()
+		eng.mu.Unlock()
 		return
 	}
 	diagnosticCapture = nil
 	workers := retireDiagnosticCollectorsLocked(true)
-	mu.Unlock()
+	eng.mu.Unlock()
 	waitDiagnosticWorkers(workers)
 }
 
@@ -413,18 +413,18 @@ func (s *diagnosticSession) attach(conn net.Conn) bool {
 }
 
 func (s *diagnosticSession) close() {
-	mu.Lock()
+	eng.mu.Lock()
 	c := s.collector
 	c.mu.Lock()
 	if s.closed {
 		c.mu.Unlock()
-		mu.Unlock()
+		eng.mu.Unlock()
 		return
 	}
 	s.cancelLocked()
 	delete(c.sessions, s)
 	last := len(c.sessions) == 0
-	retire := last && ((c.feed == "logs" && (!running || !current.General.CaptureLogs)) ||
+	retire := last && ((c.feed == "logs" && (!eng.running || !eng.current.General.CaptureLogs)) ||
 		(c.feed != "logs" && diagnosticCapture == nil && !hasDiagnosticStats()))
 	if retire {
 		c.retireLocked()
@@ -435,7 +435,7 @@ func (s *diagnosticSession) close() {
 	if retire {
 		c.uninstallLocked()
 	}
-	mu.Unlock()
+	eng.mu.Unlock()
 	if retire {
 		<-c.workerDone
 		if c.logDone != nil {
@@ -592,7 +592,7 @@ func diagnosticAction(w http.ResponseWriter, r *http.Request, connections bool) 
 		writeError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	status, err := diagnosticRuntimeError(request.ExpectedBootID, request.ExpectedConfigRevision)
 	if err == nil {
 		if !connections {
@@ -610,7 +610,7 @@ func diagnosticAction(w http.ResponseWriter, r *http.Request, connections bool) 
 			}
 		}
 	}
-	mu.Unlock()
+	eng.mu.Unlock()
 	if err != nil {
 		if status == 0 {
 			status = http.StatusInternalServerError

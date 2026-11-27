@@ -163,10 +163,10 @@ func postRuleSet(w http.ResponseWriter, r *http.Request) {
 }
 
 func changeRuleSet(ctx context.Context, request ruleSetRequest) error {
-	mu.Lock()
-	home, catalog, generation := current.HomeDir, current.RuleSets, current.StoreGeneration
-	ok := profileSettingsCurrent(request.BootID, request.ExpectedRevision, catalog.Revision, request.Revision)
-	mu.Unlock()
+	spec, ready := eng.ConfigSpec()
+	home, catalog, generation := spec.Options.HomeDir, spec.Options.RuleSets, spec.Options.StoreGeneration
+	ok := ready && request.BootID != "" && request.BootID == spec.BootID &&
+		request.ExpectedRevision == catalog.Revision && request.Revision != request.ExpectedRevision
 	if !ok {
 		return errProfileSettingsConflict
 	}
@@ -382,55 +382,51 @@ func removeRuleSetFiles(home string, item ruleSetItem) {
 }
 
 func commitRuleSets(ctx context.Context, request ruleSetRequest, catalog ruleSetCatalog, changed bool) error {
-	mu.Lock()
-	var wait func()
-	defer func() {
-		mu.Unlock()
-		if wait != nil {
-			wait()
+	return eng.withState(func(tx *stateTx) error {
+		if ctx.Err() != nil || !profileSettingsCurrent(request.BootID, request.ExpectedRevision, eng.current.RuleSets.Revision, request.Revision) {
+			return errProfileSettingsConflict
 		}
-	}()
-	if ctx.Err() != nil || !profileSettingsCurrent(request.BootID, request.ExpectedRevision, current.RuleSets.Revision, request.Revision) {
-		return errProfileSettingsConflict
-	}
-	references := func(rule addedRule) bool { return rule.Kind == "RULE-SET" && rule.Payload == request.Item.ID }
-	active := current.Profile != "" && !current.CustomRules &&
-		slices.ContainsFunc(current.AddedRules.effective(current.ProfileRules), references)
-	if request.Action == "delete" {
-		if active || slices.ContainsFunc(current.AddedRules.Rules, references) {
-			return errRuleSetInUse
-		}
-		if len(current.AddedRules.Profiles) > 0 {
-			types, err := readProfileTypes(current.HomeDir)
-			if err != nil {
-				return err
+		references := func(rule addedRule) bool { return rule.Kind == "RULE-SET" && rule.Payload == request.Item.ID }
+		active := eng.current.Profile != "" && !eng.current.CustomRules &&
+			slices.ContainsFunc(eng.current.AddedRules.effective(eng.current.ProfileRules), references)
+		if request.Action == "delete" {
+			if active || slices.ContainsFunc(eng.current.AddedRules.Rules, references) {
+				return errRuleSetInUse
 			}
-			for _, profile := range current.AddedRules.Profiles {
-				kind, exists := types[profile.Profile]
-				if (types == nil || exists && kind != "custom") && slices.ContainsFunc(profile.Rules, references) {
-					return errRuleSetInUse
+			if len(eng.current.AddedRules.Profiles) > 0 {
+				types, err := readProfileTypes(eng.current.HomeDir)
+				if err != nil {
+					return err
+				}
+				for _, profile := range eng.current.AddedRules.Profiles {
+					kind, exists := types[profile.Profile]
+					if (types == nil || exists && kind != "custom") && slices.ContainsFunc(profile.Rules, references) {
+						return errRuleSetInUse
+					}
 				}
 			}
 		}
-	}
-	path := ruleSetCatalogPath(current.HomeDir)
-	if active && changed {
-		next := current
+		path := ruleSetCatalogPath(eng.current.HomeDir)
+		if active && changed {
+			next := eng.current
+			next.RuleSets = catalog
+			wait, err := applyProfileSettingsLocked(next, path, catalog)
+			tx.deferUnlock(wait)
+			return err
+		}
+		staged, err := stageProfileSettings(path, catalog)
+		if err != nil {
+			return err
+		}
+		defer os.Remove(staged)
+		if err := os.Rename(staged, path); err != nil {
+			return errProfileSettingsIO
+		}
+		next := eng.current
 		next.RuleSets = catalog
-		var err error
-		wait, err = applyProfileSettingsLocked(next, path, catalog)
-		return err
-	}
-	staged, err := stageProfileSettings(path, catalog)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(staged)
-	if err := os.Rename(staged, path); err != nil {
-		return errProfileSettingsIO
-	}
-	current.RuleSets = catalog
-	return nil
+		eng.setCurrentLocked(next)
+		return nil
+	})
 }
 
 func downloadRuleSet(ctx context.Context, source string) ([]byte, error) {

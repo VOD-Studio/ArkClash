@@ -25,9 +25,6 @@ type inboundSettings struct {
 	baseline  generalBaseline
 }
 
-var desiredInbound inboundSettings
-var cleanupFailure error
-
 func captureInbound(cfg *config.Config, mappings []map[string]any) inboundSettings {
 	return inboundSettings{inbound: cfg.General.Inbound, custom: mappings, tunnels: cfg.Tunnels,
 		dnsListen: cfg.DNS.Listen, dnsMark: cfg.DNS.ListenRoutingMark}
@@ -68,7 +65,7 @@ func closeBusinessInbounds() error {
 }
 
 func restoreBusinessInbounds() error {
-	s := desiredInbound
+	s := eng.desiredInbound
 	custom := make(map[string]C.InboundListener, len(s.custom))
 	for _, mapping := range s.custom {
 		// ParseListener 只读原始映射；JSON 往返会把整数端口变成浮点数。
@@ -105,7 +102,7 @@ func restoreBusinessInbounds() error {
 }
 
 func verifyBusinessInbounds(custom map[string]C.InboundListener) error {
-	b := desiredInbound.inbound
+	b := eng.desiredInbound.inbound
 	want := listener.Ports{Port: b.Port, SocksPort: b.SocksPort, RedirPort: b.RedirPort, TProxyPort: b.TProxyPort,
 		MixedPort: b.MixedPort, ShadowSocksConfig: b.ShadowSocksConfig, VmessConfig: b.VmessConfig}
 	if !reflect.DeepEqual(*listener.GetPorts(), want) {
@@ -124,7 +121,7 @@ func verifyBusinessInbounds(custom map[string]C.InboundListener) error {
 		}
 	}
 	tcpWant, udpWant := make(map[string]bool), make(map[string]bool)
-	for _, t := range desiredInbound.tunnels {
+	for _, t := range eng.desiredInbound.tunnels {
 		key := fmt.Sprintf("%s/%s/%s", t.Address, t.Target, t.Proxy)
 		for _, network := range t.Network {
 			if network == "tcp" {
@@ -138,10 +135,10 @@ func verifyBusinessInbounds(custom map[string]C.InboundListener) error {
 		return errors.New("tunnel binding failed")
 	}
 	tcp, udp := dns.ArkClashServerSnapshot()
-	if desiredInbound.dnsListen != "" && (tcp == "" || udp == "") {
+	if eng.desiredInbound.dnsListen != "" && (tcp == "" || udp == "") {
 		return errors.New("DNS binding failed")
 	}
-	if desiredInbound.dnsListen == "" && (tcp != "" || udp != "") {
+	if eng.desiredInbound.dnsListen == "" && (tcp != "" || udp != "") {
 		return errors.New("unexpected DNS listener")
 	}
 	return nil

@@ -188,10 +188,9 @@ func TestProfilePreviewMatchesComposedConfigAndCustomProfile(t *testing.T) {
 	if err := yaml.Unmarshal([]byte(preview.YAML), got); err != nil {
 		t.Fatalf("preview yaml did not unmarshal cleanly: %v", err)
 	}
-
-	mu.Lock()
-	expectedOpts := current
-	mu.Unlock()
+	eng.mu.Lock()
+	expectedOpts := eng.current
+	eng.mu.Unlock()
 	expected, err := buildRawConfig(t.Context(), expectedOpts.ConfigPath, expectedOpts)
 	if err != nil {
 		t.Fatal(err)
@@ -281,8 +280,8 @@ func TestProfilePreviewPreservesLiveForwardingAndSanitizesErrors(t *testing.T) {
 	if err := attachTun(19, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
-	before := runtimeSnapshot.Load()
-	beforeTun := tunListener
+	before := eng.Status()
+	beforeTun := eng.tun
 	beforeRules := len(tunnel.Rules())
 
 	// 正常预览、脚本报错、YAML 语法错误均不能打断现有转发或推进配置版本。
@@ -298,9 +297,9 @@ func TestProfilePreviewPreservesLiveForwardingAndSanitizesErrors(t *testing.T) {
 		t.Fatalf("yaml error was not sanitized: %v", err)
 	}
 
-	after := runtimeSnapshot.Load()
-	if after.BootID != before.BootID || after.ConfigRevision != before.ConfigRevision ||
-		tunListener != beforeTun || len(tunnel.Rules()) != beforeRules {
+	after := eng.Status()
+	if after.BootID != before.BootID || after.ConfigRevision != before.ConfigRevision || eng.tun !=
+		beforeTun || len(tunnel.Rules()) != beforeRules {
 		t.Fatalf("preview disturbed live runtime: before=%+v after=%+v", before, after)
 	}
 

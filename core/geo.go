@@ -241,7 +241,9 @@ func (m *geoManager) applySettingsLocked(settings geoSettings) error {
 		return errors.New("geo_canceled")
 	}
 	m.settings = settings
-	current.Geo = settings
+	next := eng.current
+	next.Geo = settings
+	eng.setCurrentLocked(next)
 	setGeoURLs(settings)
 	kept := m.queue[:0]
 	for _, job := range m.queue {
@@ -304,8 +306,8 @@ func (m *geoManager) scheduleLocked() {
 	}
 	version := m.timerVersion
 	m.timer = m.afterFunc(delay, func() {
-		mu.Lock()
-		defer mu.Unlock()
+		eng.mu.Lock()
+		defer eng.mu.Unlock()
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		if m.closed || !m.settings.AutoUpdate || version != m.timerVersion {
@@ -378,7 +380,7 @@ func (m *geoManager) run() {
 		m.mu.Unlock()
 		outcome, err := m.update(job)
 		job.cancel()
-		mu.Lock()
+		eng.mu.Lock()
 		m.mu.Lock()
 		m.active = nil
 		delete(m.jobs, job.id)
@@ -392,7 +394,7 @@ func (m *geoManager) run() {
 			m.scheduleLocked()
 		}
 		m.mu.Unlock()
-		mu.Unlock()
+		eng.mu.Unlock()
 	}
 }
 
@@ -422,15 +424,15 @@ func postGeoSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, errors.New("geo_invalid_settings"))
 		return
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	manager := activeGeo.Load()
 	if manager == nil {
-		mu.Unlock()
+		eng.mu.Unlock()
 		writeError(w, r, http.StatusServiceUnavailable, errors.New("geo_canceled"))
 		return
 	}
 	if body.ExpectedBootID != manager.bootID {
-		mu.Unlock()
+		eng.mu.Unlock()
 		writeError(w, r, http.StatusConflict, errors.New("geo_stale_boot"))
 		return
 	}
@@ -446,7 +448,7 @@ func postGeoSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	snapshot := manager.snapshot.Load()
-	mu.Unlock()
+	eng.mu.Unlock()
 	if err != nil {
 		writeError(w, r, status, err)
 		return
@@ -469,20 +471,20 @@ func postGeoUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	manager := activeGeo.Load()
 	if manager == nil {
-		mu.Unlock()
+		eng.mu.Unlock()
 		writeError(w, r, http.StatusServiceUnavailable, errors.New("geo_canceled"))
 		return
 	}
 	if body.ExpectedBootID != manager.bootID {
-		mu.Unlock()
+		eng.mu.Unlock()
 		writeError(w, r, http.StatusConflict, errors.New("geo_stale_boot"))
 		return
 	}
 	snapshot, err := manager.enqueueLocked(body.IDs, false)
-	mu.Unlock()
+	eng.mu.Unlock()
 	if err != nil {
 		writeError(w, r, http.StatusServiceUnavailable, err)
 		return

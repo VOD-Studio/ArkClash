@@ -58,8 +58,8 @@ func notifyDiagnosticStats() {
 }
 
 func subscribeDiagnosticStats(expectedBootID string, expectedConfigRevision uint64) (*diagnosticStatsSession, int, error) {
-	mu.Lock()
-	defer mu.Unlock()
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
 	if status, err := diagnosticRuntimeError(expectedBootID, expectedConfigRevision); err != nil {
 		return nil, status, err
 	}
@@ -105,11 +105,11 @@ func (s *diagnosticStatsSession) attach(conn net.Conn) bool {
 }
 
 func (s *diagnosticStatsSession) close() {
-	mu.Lock()
+	eng.mu.Lock()
 	diagnosticStatsMu.Lock()
 	if s.closed {
 		diagnosticStatsMu.Unlock()
-		mu.Unlock()
+		eng.mu.Unlock()
 		return
 	}
 	s.closed = true
@@ -123,7 +123,7 @@ func (s *diagnosticStatsSession) close() {
 	if last && diagnosticCapture == nil {
 		workers = retireDiagnosticCollectorsLocked(true)
 	}
-	mu.Unlock()
+	eng.mu.Unlock()
 	if conn != nil {
 		_ = conn.Close()
 	}

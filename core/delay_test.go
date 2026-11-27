@@ -66,17 +66,17 @@ rules: ['MATCH,DIRECT']
 	if err != nil {
 		t.Fatal(err)
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	cancelDelayTests()
 	tunnel.UpdateProxies(cfg.Proxies, cfg.Providers)
-	runtimeConfigRevision++
+	eng.configRevision++
 	resetProxyIdentities()
 	publishRuntime()
-	mu.Unlock()
+	eng.mu.Unlock()
 	t.Cleanup(func() {
-		mu.Lock()
+		eng.mu.Lock()
 		cancelDelayTests()
-		mu.Unlock()
+		eng.mu.Unlock()
 		for _, provider := range cfg.Providers {
 			if closer, ok := provider.(interface{ Close() error }); ok {
 				if err := closer.Close(); err != nil {
@@ -89,7 +89,7 @@ rules: ['MATCH,DIRECT']
 }
 
 func delayRequest(ctx context.Context, name, group, target string, timeout int) *http.Request {
-	mu.Lock()
+	eng.mu.Lock()
 	graph := currentProxyGraph()
 	id := ""
 	if group != "" {
@@ -115,15 +115,15 @@ func delayRequest(ctx context.Context, name, group, target string, timeout int) 
 			}
 		}
 	}
-	mu.Unlock()
+	eng.mu.Unlock()
 	return delayIDRequest(ctx, id, group, target, timeout)
 }
 
 func delayIDRequest(ctx context.Context, id, group, target string, timeout int) *http.Request {
-	mu.Lock()
-	query := url.Values{"profile": {current.Profile}, "id": {id}, "url": {target},
-		"expectedBootId": {runtimeBootID}, "expectedRevision": {strconv.FormatUint(runtimeConfigRevision, 10)}}
-	mu.Unlock()
+	eng.mu.Lock()
+	query := url.Values{"profile": {eng.current.Profile}, "id": {id}, "url": {target},
+		"expectedBootId": {eng.bootID}, "expectedRevision": {strconv.FormatUint(eng.configRevision, 10)}}
+	eng.mu.Unlock()
 	if group != "" {
 		query.Set("group", group)
 	}
@@ -185,9 +185,9 @@ func TestDelayFindsProviderNodesAndUsesActualGroupMembership(t *testing.T) {
 	if history := node.ExtraDelayHistories()[server.URL].History; len(history) != 1 || history[0].Delay == 0 {
 		t.Fatalf("real provider node was not tested: %+v", history)
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	cfg.Proxies["Shared"] = adapter.NewProxy(outbound.NewRejectWithOption(outbound.RejectOption{Name: "Shared"}))
-	mu.Unlock()
+	eng.mu.Unlock()
 	if recorder := requestDelay(t, "Shared", "", server.URL, 0); recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("global collision status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -247,11 +247,11 @@ func TestDelayCancellationPreservesHealthHistoryAndAutomaticConsumers(t *testing
 				if cancellation == "request" {
 					cancel()
 				} else {
-					mu.Lock()
+					eng.mu.Lock()
 					cancelDelayTests()
-					runtimeConfigRevision++
+					eng.configRevision++
 					publishRuntime()
-					mu.Unlock()
+					eng.mu.Unlock()
 				}
 				select {
 				case <-done:
@@ -282,9 +282,9 @@ func TestDelayCancellationPreservesHealthHistoryAndAutomaticConsumers(t *testing
 				if forwarding := group.Unwrap(nil, false).Name(); forwarding != selected {
 					t.Fatalf("cancellation moved forwarding to %s", forwarding)
 				}
-				mu.Lock()
-				active := len(activeDelayTests)
-				mu.Unlock()
+				eng.mu.Lock()
+				active := len(eng.delays.active)
+				eng.mu.Unlock()
 				if active != 0 || len(delaySlots) != 0 {
 					t.Fatalf("cancellation leaked active=%d slots=%d", active, len(delaySlots))
 				}

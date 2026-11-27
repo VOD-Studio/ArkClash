@@ -7,8 +7,6 @@ import (
 
 	"github.com/metacubex/mihomo/constant"
 	LC "github.com/metacubex/mihomo/listener/config"
-	"github.com/metacubex/mihomo/listener/sing_tun"
-	"github.com/metacubex/mihomo/tunnel"
 )
 
 // 地址和前缀长度须与 VpnConfig 一致。
@@ -21,20 +19,6 @@ const (
 
 type tunHandle interface {
 	Close() error
-}
-
-var tunListener tunHandle
-var tunCloseErr error
-var tunCloseAttempted bool
-
-// 宿主测试可替换该构造器以注入启动/关闭故障，同时保留真实参数校验与一次性关闭逻辑。
-var newTunListener = func(options LC.Tun) (tunHandle, error) {
-	l, err := sing_tun.New(options, tunnel.Tunnel)
-	if err != nil {
-		// 显式返回无类型 nil，避免 (*sing_tun.Listener)(nil) 落入 tunListener != nil 判断。
-		return nil, err
-	}
-	return l, nil
 }
 
 // startTun runs our own TUN listener instead of the profile's, so reloading or
@@ -75,28 +59,28 @@ func startTun(fd int, network tunNetworkOptions) error {
 		options.CongestionController = network.CongestionController
 	}
 
-	l, err := newTunListener(options)
+	l, err := eng.tunFactory(options)
 	if err != nil {
 		return err
 	}
-	tunListener = l
-	tunCloseErr = nil
-	tunCloseAttempted = false
+	eng.tun = l
+	eng.tunCloseErr = nil
+	eng.tunCloseAttempted = false
 	return nil
 }
 
 func stopTun() error {
-	if tunListener == nil {
+	if eng.tun == nil {
 		return nil
 	}
 	// 清理失败保留资源不确定事实，但绝不重试可能已复用的 fd。
-	if tunCloseAttempted {
-		return tunCloseErr
+	if eng.tunCloseAttempted {
+		return eng.tunCloseErr
 	}
-	tunCloseAttempted = true
-	tunCloseErr = tunListener.Close()
-	if tunCloseErr == nil {
-		tunListener = nil
+	eng.tunCloseAttempted = true
+	eng.tunCloseErr = eng.tun.Close()
+	if eng.tunCloseErr == nil {
+		eng.tun = nil
 	}
-	return tunCloseErr
+	return eng.tunCloseErr
 }

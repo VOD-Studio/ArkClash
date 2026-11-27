@@ -41,13 +41,13 @@ func loginProxyFixture(t *testing.T, login func(context.Context) (string, string
 	t.Helper()
 	cfg := fixture(t)
 	proxy := adapter.NewProxy(&loginTestAdapter{cfg.Proxies["DIRECT"].Adapter(), login})
-	mu.Lock()
-	defer mu.Unlock()
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
 	proxies := maps.Clone(cfg.Proxies)
 	proxies["login"] = proxy
 	tunnel.UpdateProxies(proxies, cfg.Providers)
 	graph := currentProxyGraph()
-	return proxyDefinitionRequest{BootID: runtimeBootID, ConfigRevision: runtimeConfigRevision, ID: graph.Proxies["login"].ID}
+	return proxyDefinitionRequest{BootID: eng.bootID, ConfigRevision: eng.configRevision, ID: graph.Proxies["login"].ID}
 }
 
 func TestTailscaleLoginStatesAndPrivateErrors(t *testing.T) {
@@ -129,9 +129,10 @@ func TestTailscaleLoginDiscardsResponseAfterConfigChange(t *testing.T) {
 		close(done)
 	}()
 	<-started
-	mu.Lock()
-	runtimeConfigRevision++
-	mu.Unlock()
+	eng.mu.Lock()
+	eng.configRevision++
+	publishRuntime()
+	eng.mu.Unlock()
 	close(release)
 	<-done
 	if code != http.StatusConflict || response.AuthURL != "" {
@@ -256,8 +257,8 @@ func TestSameNameAutomaticSecondInstanceHasExactSnapshotAndDelay(t *testing.T) {
 			if after := len(second.ExtraDelayHistories()[server.URL].History); after != beforeSecond+index {
 				t.Fatalf("second instance history=%d before=%d index=%d", after, beforeSecond, index)
 			}
-			request := selectionRequest{Profile: current.Profile, Group: groupName, Name: "Shared", NodeID: member.ID,
-				OperationID: groupName + strconv.Itoa(index), ExpectedBootID: runtimeBootID, ExpectedRevision: runtimeConfigRevision}
+			request := selectionRequest{Profile: eng.current.Profile, Group: groupName, Name: "Shared", NodeID: member.ID,
+				OperationID: groupName + strconv.Itoa(index), ExpectedBootID: eng.bootID, ExpectedRevision: eng.configRevision}
 			if _, err := commitSelection(request); err == nil || err.Error() != "selection_node_not_addressable" {
 				t.Fatalf("unaddressable instance selection=%v", err)
 			}
@@ -266,7 +267,7 @@ func TestSameNameAutomaticSecondInstanceHasExactSnapshotAndDelay(t *testing.T) {
 	if graph.Members["AutoShared"][1].ID != graph.Members["FallbackShared"][1].ID {
 		t.Fatal("one shared C.Proxy acquired different IDs across groups")
 	}
-	selected, err := readSelections(current.HomeDir, current.Profile)
+	selected, err := readSelections(eng.current.HomeDir, eng.current.Profile)
 	if err != nil || len(selected) != 0 {
 		t.Fatalf("unaddressable buttons wrote selected state: %v %v", selected, err)
 	}
@@ -275,17 +276,17 @@ func TestSameNameAutomaticSecondInstanceHasExactSnapshotAndDelay(t *testing.T) {
 	if wrongGroup.Code != http.StatusConflict {
 		t.Fatal("same display name bypassed exact current group membership")
 	}
-	if err := saveSelections(current.HomeDir, current.Profile, map[string]string{"AutoShared": "Shared", "FallbackShared": "Shared"}); err != nil {
+	if err := saveSelections(eng.current.HomeDir, eng.current.Profile, map[string]string{"AutoShared": "Shared", "FallbackShared": "Shared"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, groupName := range []string{"AutoShared", "FallbackShared"} {
-		result, err := commitSelection(selectionRequest{Profile: current.Profile, Group: groupName, ClearPin: true,
-			OperationID: groupName + ".clear", ExpectedBootID: runtimeBootID, ExpectedRevision: runtimeConfigRevision})
+		result, err := commitSelection(selectionRequest{Profile: eng.current.Profile, Group: groupName, ClearPin: true,
+			OperationID: groupName + ".clear", ExpectedBootID: eng.bootID, ExpectedRevision: eng.configRevision})
 		if err != nil || result.Pinned != "" || result.SelectedID != graph.Members[groupName][1].ID {
 			t.Fatalf("explicit same-name group unpin=%+v err=%v", result, err)
 		}
 	}
-	selected, err = readSelections(current.HomeDir, current.Profile)
+	selected, err = readSelections(eng.current.HomeDir, eng.current.Profile)
 	if err != nil || len(selected) != 0 {
 		t.Fatalf("explicit group unpin left persisted state: %v %v", selected, err)
 	}
@@ -297,14 +298,15 @@ func TestProxyIdentitiesRejectOldBootAndConfiguration(t *testing.T) {
 			fixture(t)
 			id := snapshotNodeID(t, "Manual", "DIRECT")
 			oldRequest := delayIDRequest(context.Background(), id, "Manual", "http://127.0.0.1/", 0)
-			mu.Lock()
+			eng.mu.Lock()
 			if change == "boot" {
-				runtimeBootID += ".next"
+				eng.bootID += ".next"
 			} else {
-				runtimeConfigRevision++
+				eng.configRevision++
 			}
 			resetProxyIdentities()
-			mu.Unlock()
+			publishRuntime()
+			eng.mu.Unlock()
 			fresh := snapshotNodeID(t, "Manual", "DIRECT")
 			if fresh == id {
 				t.Fatal("new lifecycle reused an old node ID")
@@ -322,7 +324,7 @@ func TestProxyIdentitiesRejectOldBootAndConfiguration(t *testing.T) {
 
 func TestRetiredFileProviderInstanceRejectsDelayAndSelection(t *testing.T) {
 	fixture(t)
-	providerPath := filepath.Join(current.HomeDir, "nodes.yaml")
+	providerPath := filepath.Join(eng.current.HomeDir, "nodes.yaml")
 	if err := os.WriteFile(providerPath, []byte("proxies:\n  - {name: Shared, type: direct}\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -345,11 +347,12 @@ rules: ['MATCH,DIRECT']
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = remote.(interface{ Close() error }).Close() })
-	mu.Lock()
+	eng.mu.Lock()
 	tunnel.UpdateProxies(cfg.Proxies, cfg.Providers)
-	runtimeConfigRevision++
+	eng.configRevision++
 	resetProxyIdentities()
-	mu.Unlock()
+	publishRuntime()
+	eng.mu.Unlock()
 	id := snapshotNodeID(t, "Provider", "Shared")
 	entered := make(chan struct{})
 	release := make(chan struct{})
@@ -395,8 +398,8 @@ rules: ['MATCH,DIRECT']
 	if response.Code != http.StatusConflict {
 		t.Fatal("retired ID tested the new same-name node")
 	}
-	if _, err := commitSelection(selectionRequest{Profile: current.Profile, Group: "Provider", Name: "Shared", NodeID: id,
-		OperationID: "retired", ExpectedBootID: runtimeBootID, ExpectedRevision: runtimeConfigRevision}); err == nil {
+	if _, err := commitSelection(selectionRequest{Profile: eng.current.Profile, Group: "Provider", Name: "Shared", NodeID: id,
+		OperationID: "retired", ExpectedBootID: eng.bootID, ExpectedRevision: eng.configRevision}); err == nil {
 		t.Fatal("retired provider ID selected a new same-name instance")
 	}
 	original := cfg.Proxies["Provider"].Adapter().(*outboundgroup.Selector)
@@ -407,15 +410,15 @@ rules: ['MATCH,DIRECT']
 		return remote.Update()
 	}})
 	tunnel.UpdateProxies(cfg.Proxies, cfg.Providers)
-	requestSelection := selectionRequest{Profile: current.Profile, Group: "Provider", Name: "Shared", NodeID: fresh,
-		OperationID: "retired-during-set", ExpectedBootID: runtimeBootID, ExpectedRevision: runtimeConfigRevision}
+	requestSelection := selectionRequest{Profile: eng.current.Profile, Group: "Provider", Name: "Shared", NodeID: fresh,
+		OperationID: "retired-during-set", ExpectedBootID: eng.bootID, ExpectedRevision: eng.configRevision}
 	if _, err := commitSelection(requestSelection); err == nil || err.Error() != "selection_node_unavailable" {
 		t.Fatalf("provider retirement during Set accepted: %v", err)
 	}
 	if original.Now() != "DIRECT" {
 		t.Fatal("retired request was not rolled back to the prior forwarding selection")
 	}
-	selected, err := readSelections(current.HomeDir, current.Profile)
+	selected, err := readSelections(eng.current.HomeDir, eng.current.Profile)
 	if err != nil || len(selected) != 0 {
 		t.Fatalf("retired request wrote selected.json: %v %v", selected, err)
 	}
@@ -429,7 +432,7 @@ func TestURLTestSnapshotPreservesRetiredActualDuringProviderCache(t *testing.T) 
 				w.WriteHeader(http.StatusNoContent)
 			}))
 			defer target.Close()
-			providerPath := filepath.Join(current.HomeDir, "cached-actual.yaml")
+			providerPath := filepath.Join(eng.current.HomeDir, "cached-actual.yaml")
 			const originalPayload = "proxies:\n  - {name: Shared, type: direct}\n"
 			const replacementPayload = "proxies:\n  - {name: Shared, type: reject}\n"
 			definition := fmt.Sprintf("{type: file, path: %s}", strconv.Quote(providerPath))
@@ -473,15 +476,15 @@ rules: ['MATCH,DIRECT']
 			if _, err := old.URLTest(context.Background(), target.URL, expected); err != nil {
 				t.Fatal(err)
 			}
-			mu.Lock()
+			eng.mu.Lock()
 			stopRuntimeRoutes()
 			tunnel.UpdateProxies(cfg.Proxies, cfg.Providers)
-			runtimeConfigRevision++
+			eng.configRevision++
 			resetProxyIdentities()
 			cacheStarted := time.Now()
 			watchRuntimeRoutes(cfg)
 			publishRuntime()
-			mu.Unlock()
+			eng.mu.Unlock()
 			group := cfg.Proxies["Auto"].Adapter().(*outboundgroup.URLTest)
 			if group.Unwrap(nil, false) != old {
 				t.Fatal("real URLTest did not initially adopt the original provider instance")
@@ -542,11 +545,11 @@ rules: ['MATCH,DIRECT']
 					t.Fatalf("retired actual accepted a new delay request: %d %s", response.Code, response.Body.String())
 				}
 			}
-			if _, err := commitSelection(selectionRequest{Profile: current.Profile, Group: "Auto", Name: "Shared", NodeID: oldID,
-				OperationID: "retired-cached-actual", ExpectedBootID: runtimeBootID, ExpectedRevision: runtimeConfigRevision}); err == nil {
+			if _, err := commitSelection(selectionRequest{Profile: eng.current.Profile, Group: "Auto", Name: "Shared", NodeID: oldID,
+				OperationID: "retired-cached-actual", ExpectedBootID: eng.bootID, ExpectedRevision: eng.configRevision}); err == nil {
 				t.Fatal("cached retired actual became selectable again")
 			}
-			selected, err := readSelections(current.HomeDir, current.Profile)
+			selected, err := readSelections(eng.current.HomeDir, eng.current.Profile)
 			if err != nil || len(selected) != 0 {
 				t.Fatalf("retired actual request wrote selected state: %v %v", selected, err)
 			}

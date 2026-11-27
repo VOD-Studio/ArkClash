@@ -27,7 +27,7 @@ func TestRuleSetRemoteSyncRejectsBadContent(t *testing.T) {
 	}))
 	defer server.Close()
 	catalog := ruleSetRequest{
-		BootID:           runtimeSnapshot.Load().BootID,
+		BootID:           eng.Status().BootID,
 		ExpectedRevision: "default", Revision: "imported", Action: "save",
 		Item: ruleSetItem{ID: "remote", Name: "Remote", URL: server.URL, Behavior: "auto", Format: "auto"},
 	}
@@ -62,8 +62,8 @@ func TestRuleSetLiveUpdateKeepsTunnelAndLastGoodData(t *testing.T) {
 	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
-	active := tunListener
-	boot := runtimeSnapshot.Load().BootID
+	active := eng.tun
+	boot := eng.Status().BootID
 	item := ruleSetItem{ID: "demo", Name: "Imported", Behavior: "auto", Format: "auto"}
 	save := func(expected, revision, source string) error {
 		t.Helper()
@@ -106,7 +106,7 @@ func TestRuleSetLiveUpdateKeepsTunnelAndLastGoodData(t *testing.T) {
 	if err := save("initial", "updated", "payload: [second.test]\n"); err != nil {
 		t.Fatal(err)
 	}
-	if matches("first.test") || !matches("second.test") || active != tunListener || runtimeSnapshot.Load().BootID != boot {
+	if matches("first.test") || !matches("second.test") || active != eng.tun || eng.Status().BootID != boot {
 		t.Fatal("rule set update failed to preserve the tunnel or replace the matcher")
 	}
 	if err := changeRuleSet(context.Background(), ruleSetRequest{

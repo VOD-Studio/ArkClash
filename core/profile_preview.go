@@ -109,13 +109,11 @@ func getProfilePreview(w http.ResponseWriter, r *http.Request) {
 }
 
 func buildProfilePreview(ctx context.Context, profile string) (profilePreviewResponse, error) {
-	mu.Lock()
-	if !running {
-		mu.Unlock()
+	spec, ready := eng.ConfigSpec()
+	if !ready {
 		return profilePreviewResponse{}, errPreviewCoreUnavailable
 	}
-	base := current
-	mu.Unlock()
+	base := spec.Options
 
 	home := base.HomeDir
 	meta, err := readPreviewProfileMeta(home, profile)
@@ -176,16 +174,24 @@ func buildProfilePreview(ctx context.Context, profile string) (profilePreviewRes
 		return profilePreviewResponse{}, errPreviewTooLarge
 	}
 
-	mu.Lock()
-	if !running {
-		mu.Unlock()
-		return profilePreviewResponse{}, errPreviewCoreUnavailable
+	var (
+		applied        bool
+		bootID         string
+		configRevision uint64
+		runningProfile string
+	)
+	if err := eng.withState(func(tx *stateTx) error {
+		if !eng.running {
+			return errPreviewCoreUnavailable
+		}
+		applied = previewMatchesCurrentLocked(previewOpts, hash)
+		bootID = eng.bootID
+		configRevision = eng.configRevision
+		runningProfile = eng.current.Profile
+		return nil
+	}); err != nil {
+		return profilePreviewResponse{}, err
 	}
-	applied := previewMatchesCurrentLocked(previewOpts, hash)
-	bootID := runtimeBootID
-	configRevision := runtimeConfigRevision
-	runningProfile := current.Profile
-	mu.Unlock()
 
 	shortHash := hash
 	if len(shortHash) > 12 {
@@ -205,28 +211,28 @@ func buildProfilePreview(ctx context.Context, profile string) (profilePreviewRes
 	}, nil
 }
 
-// 调用方持有 mu。核对已保存版本、脚本、规则与设置是否与当前运行内核一致。
+// 调用方持有 eng.mu。核对已保存版本、脚本、规则与设置是否与当前运行内核一致。
 func previewMatchesCurrentLocked(preview startOptions, previewHash string) bool {
-	if !running || current.Profile == "" || current.Profile != preview.Profile {
+	if !eng.running || eng.current.Profile == "" || eng.current.Profile != preview.Profile {
 		return false
 	}
-	if current.ContentHash != "" && previewHash != "" && current.ContentHash != previewHash {
+	if eng.current.ContentHash != "" && previewHash != "" && eng.current.ContentHash != previewHash {
 		return false
 	}
-	if current.CustomRules != preview.CustomRules {
+	if eng.current.CustomRules != preview.CustomRules {
 		return false
 	}
 	if !preview.CustomRules {
-		if current.Script.identity != preview.Script.identity ||
-			current.ProfileRules.Revision != preview.ProfileRules.Revision ||
-			current.AddedRules.Revision != preview.AddedRules.Revision ||
-			current.RuleSets.Revision != preview.RuleSets.Revision {
+		if eng.current.Script.identity != preview.Script.identity ||
+			eng.current.ProfileRules.Revision != preview.ProfileRules.Revision ||
+			eng.current.AddedRules.Revision != preview.AddedRules.Revision ||
+			eng.current.RuleSets.Revision != preview.RuleSets.Revision {
 			return false
 		}
 	}
-	return current.DNS.Revision == preview.DNS.Revision &&
-		current.General.Revision == preview.General.Revision &&
-		current.Geo == preview.Geo
+	return eng.current.DNS.Revision == preview.DNS.Revision &&
+		eng.current.General.Revision == preview.General.Revision &&
+		eng.current.Geo == preview.Geo
 }
 
 func sanitizePreviewBuildError(err error, scriptEnabled bool) error {

@@ -96,7 +96,7 @@ func TestProfileSettingsContract(t *testing.T) {
 	}
 	requireContractJSON(t, bad.Body.Bytes(), cases.SettingsError)
 
-	request.BootID = runtimeSnapshot.Load().BootID
+	request.BootID = eng.Status().BootID
 	encoded, err = json.Marshal(request)
 	if err != nil {
 		t.Fatal(err)

@@ -34,9 +34,15 @@ func validTailscaleAuthURL(raw string) bool {
 }
 
 func requestTailscaleLogin(ctx context.Context, req proxyDefinitionRequest) (tailscaleLoginResponse, int, error) {
-	mu.Lock()
-	proxy, code, err := lookupProxyLocked(req)
-	mu.Unlock()
+	var (
+		proxy C.Proxy
+		code  int
+		err   error
+	)
+	_ = eng.withState(func(tx *stateTx) error {
+		proxy, code, err = lookupProxyLocked(req)
+		return nil
+	})
 	if err != nil {
 		return tailscaleLoginResponse{}, code, err
 	}
@@ -47,9 +53,11 @@ func requestTailscaleLogin(ctx context.Context, req proxyDefinitionRequest) (tai
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	state, authURL, loginErr := target.ArkClashTailscaleLogin(ctx)
-	mu.Lock()
-	active, code, err := lookupProxyLocked(req)
-	mu.Unlock()
+	var active C.Proxy
+	_ = eng.withState(func(tx *stateTx) error {
+		active, code, err = lookupProxyLocked(req)
+		return nil
+	})
 	if err != nil {
 		return tailscaleLoginResponse{}, code, err
 	}

@@ -113,9 +113,9 @@ func TestDNSOverridesLiveApplyAndBindConflictPreserveTun(t *testing.T) {
 	if err := attachTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500, DNSHijacking: true}, hostAttachIdentity()); err != nil {
 		t.Fatal(err)
 	}
-	originalTun := tunListener
+	originalTun := eng.tun
 	originalResolver := resolver.DefaultService
-	bootID := runtimeSnapshot.Load().BootID
+	bootID := eng.Status().BootID
 
 	occupied, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -129,7 +129,7 @@ func TestDNSOverridesLiveApplyAndBindConflictPreserveTun(t *testing.T) {
 	if err := updateDNSOverrides(next); !errors.Is(err, errDNSListen) {
 		t.Fatalf("expected bind conflict, got %v", err)
 	}
-	if current.DNS.Revision != "default" || tunListener != originalTun || resolver.DefaultService != originalResolver {
+	if eng.current.DNS.Revision != "default" || eng.tun != originalTun || resolver.DefaultService != originalResolver {
 		t.Fatal("failed validation changed the active DNS configuration or TUN")
 	}
 
@@ -145,7 +145,7 @@ func TestDNSOverridesLiveApplyAndBindConflictPreserveTun(t *testing.T) {
 		t.Fatalf("expected persistence failure, got %v", err)
 	}
 	tcp, udp := dns.ArkClashServerSnapshot()
-	if current.DNS.Revision != "default" || tcp != "" || udp != "" || tunListener != originalTun {
+	if eng.current.DNS.Revision != "default" || tcp != "" || udp != "" || eng.tun != originalTun {
 		t.Fatal("persistence failure left the candidate DNS override active")
 	}
 	if err := os.Remove(path); err != nil {
@@ -153,8 +153,7 @@ func TestDNSOverridesLiveApplyAndBindConflictPreserveTun(t *testing.T) {
 	}
 	next.Settings.Revision = "missing-proxy-dns"
 	next.Settings.Entries.RespectRules = new(true)
-	if err := updateDNSOverrides(next); !errors.Is(err, errDNSProxyServersRequired) ||
-		current.DNS.Revision != "default" || tunListener != originalTun {
+	if err := updateDNSOverrides(next); !errors.Is(err, errDNSProxyServersRequired) || eng.current.DNS.Revision != "default" || eng.tun != originalTun {
 		t.Fatalf("missing proxy DNS did not preserve the running configuration: %v", err)
 	}
 	next.Settings.Revision = "committed"
@@ -171,8 +170,8 @@ func TestDNSOverridesLiveApplyAndBindConflictPreserveTun(t *testing.T) {
 	}
 	tcp, udp = dns.ArkClashServerSnapshot()
 	saved, err := readDNSOverrides(opts.HomeDir)
-	if err != nil || saved.Revision != "committed" || current.ConfigPath != formal || tcp != address || udp != address ||
-		tunListener != originalTun || resolver.DefaultService == originalResolver || runtimeSnapshot.Load().BootID != bootID {
+	if err != nil || saved.Revision != "committed" || eng.current.ConfigPath != formal || tcp != address || udp != address || eng.tun !=
+		originalTun || resolver.DefaultService == originalResolver || eng.Status().BootID != bootID {
 		t.Fatalf("live apply did not replace the resolver and persist the same settings: %v", err)
 	}
 	if err := updateDNSOverrides(next); !errors.Is(err, errDNSConflict) {
@@ -184,7 +183,7 @@ func TestDNSOverridesLiveApplyAndBindConflictPreserveTun(t *testing.T) {
 		t.Fatal(err)
 	}
 	tcp, udp = dns.ArkClashServerSnapshot()
-	if tcp != "" || udp != "" || tunListener != originalTun {
+	if tcp != "" || udp != "" || eng.tun != originalTun {
 		t.Fatal("removing the override did not restore the profile's listener setting")
 	}
 }

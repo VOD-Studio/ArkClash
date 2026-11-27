@@ -51,34 +51,34 @@ func geoTestSettings(source string) geoSettings {
 func geoFixture(t *testing.T, settings geoSettings) *geoManager {
 	t.Helper()
 	fixture(t)
-	geoDiskSettings(t, current.HomeDir, settings)
+	geoDiskSettings(t, eng.current.HomeDir, settings)
 	return geoStartFixture(t, settings, nil)
 }
 
 func geoStartFixture(t *testing.T, settings geoSettings, clock *geoTestClock) *geoManager {
 	t.Helper()
-	mu.Lock()
+	eng.mu.Lock()
 	var manager *geoManager
 	var err error
 	if clock == nil {
-		manager, err = newGeoManager(current.HomeDir, runtimeBootID, settings)
+		manager, err = newGeoManager(eng.current.HomeDir, eng.bootID, settings)
 	} else {
-		manager, err = newGeoManagerWithClock(current.HomeDir, runtimeBootID, settings, clock.Now, clock.AfterFunc)
+		manager, err = newGeoManagerWithClock(eng.current.HomeDir, eng.bootID, settings, clock.Now, clock.AfterFunc)
 	}
 	if err != nil {
-		mu.Unlock()
+		eng.mu.Unlock()
 		t.Fatal(err)
 	}
-	current.Geo = settings
+	eng.current.Geo = settings
 	activeGeo.Store(manager)
-	mu.Unlock()
+	eng.mu.Unlock()
 	t.Cleanup(func() {
-		mu.Lock()
+		eng.mu.Lock()
 		manager.closeLocked()
 		if activeGeo.Load() == manager {
 			activeGeo.Store(nil)
 		}
-		mu.Unlock()
+		eng.mu.Unlock()
 		manager.wait()
 	})
 	return manager
@@ -269,7 +269,7 @@ func TestGeoDATUpdateRefreshesExistingRulesWithoutRuntimeRestart(t *testing.T) {
 	}))
 	defer server.Close()
 	fixture(t)
-	home := current.HomeDir
+	home := eng.current.HomeDir
 	oldMode, oldLoader := geodata.GeodataMode(), geodata.LoaderName()
 	oldIPName, oldSiteName := C.GeoipName, C.GeositeName
 	geodata.SetGeodataMode(true)
@@ -300,7 +300,7 @@ func TestGeoDATUpdateRefreshesExistingRulesWithoutRuntimeRestart(t *testing.T) {
 	settings := geoTestSettings(server.URL)
 	geoDiskSettings(t, home, settings)
 	manager := geoStartFixture(t, settings, nil)
-	boot, revision, configRevision, tun := runtimeBootID, runtimeRevision, runtimeConfigRevision, tunListener
+	boot, revision, configRevision, tun := eng.bootID, eng.revision, eng.configRevision, eng.tun
 	geoAdmit(t, manager, geoSite, geoIP)
 	snapshot := geoWait(t, manager, geoSite, geoIP)
 	for _, id := range []geoResourceID{geoSite, geoIP} {
@@ -311,9 +311,9 @@ func TestGeoDATUpdateRefreshesExistingRulesWithoutRuntimeRestart(t *testing.T) {
 	if !siteRule.MatchDomain("new.example") || siteRule.MatchDomain("old.example") || !ipRule.MatchIp(netip.MustParseAddr("198.51.100.1")) || ipRule.MatchIp(netip.MustParseAddr("192.0.2.1")) {
 		t.Fatal("existing rules retained stale Geo matchers")
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	if runtimeBootID != boot || runtimeConfigRevision != configRevision || tunListener != tun || runtimeRevision <= revision {
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
+	if eng.bootID != boot || eng.configRevision != configRevision || eng.tun != tun || eng.revision <= revision {
 		t.Fatal("Geo update restarted forwarding or failed to invalidate runtime probes")
 	}
 	geoAssertNoTemps(t, home)
@@ -348,7 +348,7 @@ func TestGeoDownloadFailuresPreserveDataAndTimestamp(t *testing.T) {
 			}))
 			defer server.Close()
 			manager := geoFixture(t, geoTestSettings(server.URL))
-			path := filepath.Join(current.HomeDir, "geosite.dat")
+			path := filepath.Join(eng.current.HomeDir, "geosite.dat")
 			old := geoSiteData(t, "old.example", true)
 			geoWrite(t, path, old)
 			stamp := time.Now().Add(-2 * time.Hour).Truncate(time.Millisecond)
@@ -379,7 +379,7 @@ func TestGeoDownloadFailuresPreserveDataAndTimestamp(t *testing.T) {
 			if err != nil || !stat.ModTime().Equal(stamp) {
 				t.Fatal("failed Geo update changed mtime")
 			}
-			geoAssertNoTemps(t, current.HomeDir)
+			geoAssertNoTemps(t, eng.current.HomeDir)
 		})
 	}
 }
@@ -391,20 +391,20 @@ func TestGeoUnchangedValidatesAndPreservesModificationTime(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(*response.Load()) }))
 	defer server.Close()
 	manager := geoFixture(t, geoTestSettings(server.URL))
-	path := filepath.Join(current.HomeDir, "geosite.dat")
+	path := filepath.Join(eng.current.HomeDir, "geosite.dat")
 	geoWrite(t, path, payload)
 	stamp := time.Now().Add(-time.Hour).Truncate(time.Millisecond)
 	if err := os.Chtimes(path, stamp, stamp); err != nil {
 		t.Fatal(err)
 	}
-	runtimeBefore := runtimeSnapshot.Load().Revision
+	runtimeBefore := eng.Status().Revision
 	geoAdmit(t, manager, geoSite)
 	item := geoItem(t, geoWait(t, manager, geoSite), geoSite)
 	stat, _ := os.Stat(path)
 	if item.Outcome != "unchanged" || !stat.ModTime().Equal(stamp) {
 		t.Fatalf("identical file changed: %+v", item)
 	}
-	if runtimeSnapshot.Load().Revision != runtimeBefore {
+	if eng.Status().Revision != runtimeBefore {
 		t.Fatal("unchanged content invalidated runtime generation")
 	}
 	var metadata struct {
@@ -412,11 +412,11 @@ func TestGeoUnchangedValidatesAndPreservesModificationTime(t *testing.T) {
 		Managed       bool
 		LastAttemptAt int64
 	}
-	data, err := os.ReadFile(filepath.Join(current.HomeDir, "geo-geosite.json"))
+	data, err := os.ReadFile(filepath.Join(eng.current.HomeDir, "geo-geosite.json"))
 	if err != nil || json.Unmarshal(data, &metadata) != nil || !metadata.Managed || metadata.LastAttemptAt <= stamp.UnixMilli() {
 		t.Fatal("unchanged update omitted durable attempt/ownership")
 	}
-	geoAssertNoTemps(t, current.HomeDir)
+	geoAssertNoTemps(t, eng.current.HomeDir)
 	invalid := []byte("invalid existing bytes")
 	response.Store(&invalid)
 	geoWrite(t, path, invalid)
@@ -447,7 +447,7 @@ func TestGeoMMDBCandidateSwitchRetainsActiveReaders(t *testing.T) {
 	}))
 	defer server.Close()
 	manager := geoFixture(t, geoTestSettings(server.URL))
-	home := current.HomeDir
+	home := eng.current.HomeDir
 	geoWrite(t, filepath.Join(home, "geoip.metadb"), country)
 	candidate := geoReaderOpen(t, filepath.Join(home, "geoip.metadb"))
 	mmdb.InstallIPReader(candidate)
@@ -546,17 +546,17 @@ func TestGeoStrictHTTPAndSettingsRevision(t *testing.T) {
 	settings := defaultGeoSettings()
 	settings.Revision = "new-revision"
 	settings.IntervalHours = 48
-	geoDiskSettings(t, current.HomeDir, settings)
+	geoDiskSettings(t, eng.current.HomeDir, settings)
 	if status, _ := geoHTTP(t, postGeoSettings, fmt.Sprintf(`{"expectedBootId":%q,"revision":"old-revision"}`, boot)); status != 409 {
 		t.Fatalf("stale settings status=%d", status)
 	}
 	status, snapshot := geoHTTP(t, postGeoSettings, fmt.Sprintf(`{"expectedBootId":%q,"revision":%q}`, boot, settings.Revision))
-	if status != 200 || snapshot.SettingsRevision != settings.Revision || current.Geo.IntervalHours != 48 {
+	if status != 200 || snapshot.SettingsRevision != settings.Revision || eng.current.Geo.IntervalHours != 48 {
 		t.Fatal("saved settings not applied")
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	manager.closeLocked()
-	mu.Unlock()
+	eng.mu.Unlock()
 	manager.wait()
 	if status, _ := geoHTTP(t, postGeoUpdate, fmt.Sprintf(`{"expectedBootId":%q,"ids":["mmdb"]}`, boot)); status != 503 {
 		t.Fatalf("stopped manager accepted operation: %d", status)
@@ -575,7 +575,7 @@ func TestGeoURLChangeAndStopCancelActualRequest(t *testing.T) {
 			defer server.Close()
 			settings := geoTestSettings(server.URL)
 			manager := geoFixture(t, settings)
-			path := filepath.Join(current.HomeDir, "geosite.dat")
+			path := filepath.Join(eng.current.HomeDir, "geosite.dat")
 			old := geoSiteData(t, "old.example", false)
 			geoWrite(t, path, old)
 			geoAdmit(t, manager, geoSite)
@@ -583,15 +583,15 @@ func TestGeoURLChangeAndStopCancelActualRequest(t *testing.T) {
 			if action == "url" {
 				settings.URLs.GeoSite = server.URL + "/changed"
 				settings.Revision = "changed"
-				geoDiskSettings(t, current.HomeDir, settings)
+				geoDiskSettings(t, eng.current.HomeDir, settings)
 				status, _ := geoHTTP(t, postGeoSettings, fmt.Sprintf(`{"expectedBootId":%q,"revision":"changed"}`, manager.snapshot.Load().BootID))
 				if status != 200 {
 					t.Fatal("URL change rejected")
 				}
 			} else {
-				mu.Lock()
+				eng.mu.Lock()
 				manager.closeLocked()
-				mu.Unlock()
+				eng.mu.Unlock()
 				manager.wait()
 			}
 			receiveProbeSignal(t, canceled, "actual HTTP request did not receive cancellation")
@@ -604,7 +604,7 @@ func TestGeoURLChangeAndStopCancelActualRequest(t *testing.T) {
 			if !bytes.Equal(data, old) {
 				t.Fatal("canceled download replaced old data")
 			}
-			geoAssertNoTemps(t, current.HomeDir)
+			geoAssertNoTemps(t, eng.current.HomeDir)
 		})
 	}
 }
@@ -616,14 +616,14 @@ func TestGeoMetadataCorruptionProtectsAutomaticUpdatesAndManualRepairs(t *testin
 	defer server.Close()
 	fixture(t)
 	settings := geoTestSettings(server.URL)
-	geoWrite(t, filepath.Join(current.HomeDir, "geo-geosite.json"), []byte("corrupt"))
+	geoWrite(t, filepath.Join(eng.current.HomeDir, "geo-geosite.json"), []byte("corrupt"))
 	manager := geoStartFixture(t, settings, nil)
 	if item := geoItem(t, manager.snapshot.Load(), geoSite); item.Error != "geo_metadata_invalid" {
 		t.Fatal("corrupt metadata hidden")
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	_, err := manager.enqueueLocked([]geoResourceID{geoSite}, true)
-	mu.Unlock()
+	eng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -829,9 +829,9 @@ func TestGeoAutomaticTimerStartupGuardAndAttemptBackoff(t *testing.T) {
 	settings.AutoUpdate = true
 	settings.IntervalHours = 1
 	settings.Revision = "auto"
-	mu.Lock()
+	eng.mu.Lock()
 	err := manager.applySettingsLocked(settings)
-	mu.Unlock()
+	eng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -852,9 +852,9 @@ func TestGeoAutomaticTimerStartupGuardAndAttemptBackoff(t *testing.T) {
 		t.Fatal("failure retried before full interval")
 	}
 	settings.AutoUpdate = false
-	mu.Lock()
+	eng.mu.Lock()
 	err = manager.applySettingsLocked(settings)
-	mu.Unlock()
+	eng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -865,7 +865,7 @@ func TestGeoAutomaticTimerStartupGuardAndAttemptBackoff(t *testing.T) {
 
 func TestGeoTemporaryCleanupOnlyRemovesOwnedNames(t *testing.T) {
 	fixture(t)
-	home := current.HomeDir
+	home := eng.current.HomeDir
 	for _, name := range []string{"arkclash-geo-mmdb-crash.tmp", "arkclash-geo-geosite-crash.tmp", "other.tmp", "arkclash-geo-unknown-crash.tmp", "arkclash-geo-mmdb-keep.txt"} {
 		geoWrite(t, filepath.Join(home, name), []byte("fixture"))
 	}
@@ -890,9 +890,9 @@ func TestGeoStopWaitsForActualRuleDialCleanup(t *testing.T) {
 	manager := geoStartFixture(t, settings, nil)
 	geoAdmit(t, manager, geoSite)
 	receiveProbeSignal(t, entered, "Geo request never entered real proxy dial")
-	mu.Lock()
+	eng.mu.Lock()
 	manager.closeLocked()
-	mu.Unlock()
+	eng.mu.Unlock()
 	joined := make(chan struct{})
 	go func() { manager.wait(); close(joined) }()
 	receiveProbeSignal(t, closed, "Geo stop did not cancel actual proxy dial")

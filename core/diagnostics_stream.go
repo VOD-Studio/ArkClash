@@ -85,9 +85,9 @@ func getDiagnosticCapture(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	status, err := diagnosticBootError(bootID)
-	mu.Unlock()
+	eng.mu.Unlock()
 	if err != nil {
 		writeError(w, r, status, err)
 		return

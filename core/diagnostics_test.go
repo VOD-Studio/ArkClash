@@ -26,7 +26,7 @@ import (
 
 func diagnosticTestSubscribe(t *testing.T, feed string) (*diagnosticSession, func()) {
 	t.Helper()
-	s, status, err := subscribeDiagnostics(feed, runtimeBootID, runtimeConfigRevision)
+	s, status, err := subscribeDiagnostics(feed, eng.bootID, eng.configRevision)
 	if err != nil || status != 0 {
 		t.Fatalf("subscribe: %d %v", status, err)
 	}
@@ -285,9 +285,9 @@ func TestDiagnosticsSharedSamplerHeartbeatAndLastUnsubscribe(t *testing.T) {
 		t.Fatalf("heartbeat fabricated changes: %+v", frame)
 	}
 	releaseFirst()
-	mu.Lock()
+	eng.mu.Lock()
 	stillActive := diagnosticConnections == c
-	mu.Unlock()
+	eng.mu.Unlock()
 	if !stillActive {
 		t.Fatal("first unsubscribe detached shared observer")
 	}
@@ -297,12 +297,12 @@ func TestDiagnosticsSharedSamplerHeartbeatAndLastUnsubscribe(t *testing.T) {
 		t.Fatal("remaining subscriber lost Close")
 	}
 	releaseSecond()
-	mu.Lock()
+	eng.mu.Lock()
 	if diagnosticConnections != nil {
-		mu.Unlock()
+		eng.mu.Unlock()
 		t.Fatal("last unsubscribe retained registry")
 	}
-	mu.Unlock()
+	eng.mu.Unlock()
 	c.mu.Lock()
 	if !c.closed || len(c.connections) != 0 || !c.sampleDue.IsZero() {
 		c.mu.Unlock()
@@ -379,11 +379,11 @@ func TestDiagnosticsDNSOverflowBoundaryConversionAndRetirement(t *testing.T) {
 		}
 	}
 	release()
-	mu.Lock()
+	eng.mu.Lock()
 	if diagnosticDNS != c {
 		t.Fatal("early DNS unsubscribe detached shared hook")
 	}
-	mu.Unlock()
+	eng.mu.Unlock()
 	releaseLate()
 	c.observeDNS(diagnosticTestRecord(9999))
 	c.mu.Lock()
@@ -425,7 +425,7 @@ func TestDiagnosticsActionsRejectStaleMalformedAndCloseIdempotently(t *testing.T
 	defer peer.Close()
 	tracker := statistic.NewTCPTracker(outbound.NewConn(connection, cfg.Proxies["DIRECT"].Adapter()), statistic.DefaultManager, &C.Metadata{}, nil, 0, 0, false)
 	defer tracker.Close()
-	identity := fmt.Sprintf(`"expectedBootId":%q,"expectedConfigRevision":%d`, runtimeBootID, runtimeConfigRevision)
+	identity := fmt.Sprintf(`"expectedBootId":%q,"expectedConfigRevision":%d`, eng.bootID, eng.configRevision)
 	for _, body := range []string{`{` + identity + `,"scope":"one"}`, `{` + identity + `,"scope":"one","id":""}`, `{` + identity + `,"scope":"all","id":"x"}`, `{` + identity + `,"scope":"all","id":null}`, `{` + identity + `,"scope":"all","extra":true}`, `{` + identity + `,"scope":"one","id":17}`} {
 		if status := diagnosticTestAction(t, true, body); status != 400 {
 			t.Fatalf("invalid request status=%d body=%s", status, body)
@@ -434,7 +434,7 @@ func TestDiagnosticsActionsRejectStaleMalformedAndCloseIdempotently(t *testing.T
 			t.Fatal("invalid one request closed all")
 		}
 	}
-	stale := fmt.Sprintf(`{"expectedBootId":%q,"expectedConfigRevision":%d,"scope":"all"}`, runtimeBootID, runtimeConfigRevision+1)
+	stale := fmt.Sprintf(`{"expectedBootId":%q,"expectedConfigRevision":%d,"scope":"all"}`, eng.bootID, eng.configRevision+1)
 	if status := diagnosticTestAction(t, true, stale); status != 409 || statistic.DefaultManager.Get(tracker.ID()) == nil {
 		t.Fatal("stale close-all changed current connections")
 	}
@@ -453,15 +453,15 @@ func TestDiagnosticsActionsRejectStaleMalformedAndCloseIdempotently(t *testing.T
 	if status := diagnosticTestAction(t, false, `{`+identity+`,"scope":""}`); status != 400 {
 		t.Fatal("DNS action accepted scope")
 	}
-	mu.Lock()
-	running = false
-	mu.Unlock()
+	eng.mu.Lock()
+	eng.running = false
+	eng.mu.Unlock()
 	if status := diagnosticTestAction(t, true, `{`+identity+`,"scope":"all"}`); status != 503 {
 		t.Fatal("stopped action not rejected")
 	}
-	mu.Lock()
-	running = true
-	mu.Unlock()
+	eng.mu.Lock()
+	eng.running = true
+	eng.mu.Unlock()
 }
 
 func newDiagnosticTestResolver(t *testing.T) dns.Resolvers {
@@ -510,8 +510,8 @@ func TestDiagnosticsDNSRealMissHitClearAndStaleNoSideEffect(t *testing.T) {
 	query := func(name string) { diagnosticTestQuery(t, rs, name) }
 	query("ok.diag.test.")
 	query("ok.diag.test.")
-	identity := fmt.Sprintf(`"expectedBootId":%q,"expectedConfigRevision":%d`, runtimeBootID, runtimeConfigRevision)
-	stale := fmt.Sprintf(`{"expectedBootId":%q,"expectedConfigRevision":%d}`, runtimeBootID, runtimeConfigRevision+1)
+	identity := fmt.Sprintf(`"expectedBootId":%q,"expectedConfigRevision":%d`, eng.bootID, eng.configRevision)
+	stale := fmt.Sprintf(`{"expectedBootId":%q,"expectedConfigRevision":%d}`, eng.bootID, eng.configRevision+1)
 	if diagnosticTestAction(t, false, stale) != 409 {
 		t.Fatal("stale clear not rejected")
 	}
@@ -545,7 +545,7 @@ func TestDiagnosticsStopCancelsSocketsAndWaitsOutsideCoreLock(t *testing.T) {
 	if !connections.attach(left) {
 		t.Fatal("attach failed")
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	wait := stopDiagnosticsLocked()
 	if diagnosticConnections != nil || diagnosticDNS != nil {
 		t.Fatal("stop left observers registered")
@@ -560,7 +560,7 @@ func TestDiagnosticsStopCancelsSocketsAndWaitsOutsideCoreLock(t *testing.T) {
 	default:
 		t.Fatal("DNS session not canceled synchronously")
 	}
-	mu.Unlock()
+	eng.mu.Unlock()
 	joined := make(chan struct{})
 	go func() { wait(); close(joined) }()
 	select {

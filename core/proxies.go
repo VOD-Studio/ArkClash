@@ -28,22 +28,16 @@ type proxySnapshotResponse struct {
 	Retired map[string]bool             `json:"retired"`
 }
 
-var proxyIdentityBoot string
-var proxyIdentityRevision uint64
-var proxyIdentitySequence uint64
-var proxyIdentities map[C.Proxy]string
-var identifiedProxies map[string]C.Proxy
-
-// 调用方持有 mu；实例不再被当前成员或实际出站引用后，旧 ID 不会复用。
+// 调用方持有 eng.mu；实例不再被当前成员或实际出站引用后，旧 ID 不会复用。
 func resetProxyIdentities() {
-	proxyIdentityBoot = runtimeBootID
-	proxyIdentityRevision = runtimeConfigRevision
-	proxyIdentities = make(map[C.Proxy]string)
-	identifiedProxies = make(map[string]C.Proxy)
+	eng.proxies.boot = eng.bootID
+	eng.proxies.revision = eng.configRevision
+	eng.proxies.byProxy = make(map[C.Proxy]string)
+	eng.proxies.byID = make(map[string]C.Proxy)
 }
 
 func currentProxyGraph() proxySnapshotResponse {
-	if proxyIdentities == nil || proxyIdentityBoot != runtimeBootID || proxyIdentityRevision != runtimeConfigRevision {
+	if eng.proxies.byProxy == nil || eng.proxies.boot != eng.bootID || eng.proxies.revision != eng.configRevision {
 		resetProxyIdentities()
 	}
 	proxies := tunnel.Proxies()
@@ -61,11 +55,11 @@ func currentProxyGraph() proxySnapshotResponse {
 	}
 	live := make(map[C.Proxy]string)
 	reference := func(node C.Proxy) proxyReference {
-		id, exists := proxyIdentities[node]
+		id, exists := eng.proxies.byProxy[node]
 		if !exists {
-			proxyIdentitySequence++
-			id = runtimeBootID + "." + strconv.FormatUint(runtimeConfigRevision, 36) + "." + strconv.FormatUint(proxyIdentitySequence, 36)
-			proxyIdentities[node] = id
+			eng.proxies.sequence++
+			id = eng.bootID + "." + strconv.FormatUint(eng.configRevision, 36) + "." + strconv.FormatUint(eng.proxies.sequence, 36)
+			eng.proxies.byProxy[node] = id
 		}
 		live[node] = id
 		result.Nodes[id] = node
@@ -112,29 +106,32 @@ func currentProxyGraph() proxySnapshotResponse {
 			result.Retired[ref.ID] = true
 		}
 	}
-	proxyIdentities = live
-	identifiedProxies = result.Nodes
+	eng.proxies.byProxy = live
+	eng.proxies.byID = result.Nodes
 	return result
 }
 
 func captureProxySnapshot() (proxySnapshotResponse, error) {
-	mu.Lock()
-	defer mu.Unlock()
-	if !running {
-		return proxySnapshotResponse{}, errors.New("core_not_running")
-	}
-	if current.Profile == "" {
-		return proxySnapshotResponse{}, errors.New("core_profile_unavailable")
-	}
-	return currentProxyGraph(), nil
+	var snapshot proxySnapshotResponse
+	err := eng.withState(func(tx *stateTx) error {
+		if !eng.running {
+			return errors.New("core_not_running")
+		}
+		if eng.current.Profile == "" {
+			return errors.New("core_profile_unavailable")
+		}
+		snapshot = currentProxyGraph()
+		return nil
+	})
+	return snapshot, err
 }
 
 // ID 必须同时属于当前实例与当前组；不能退回按显示名查找。
 func currentProxyMember(id, groupName string) (C.Proxy, bool) {
-	if !running || current.Profile == "" || proxyIdentityBoot != runtimeBootID || proxyIdentityRevision != runtimeConfigRevision {
+	if !eng.running || eng.current.Profile == "" || eng.proxies.boot != eng.bootID || eng.proxies.revision != eng.configRevision {
 		return nil, false
 	}
-	proxy := identifiedProxies[id]
+	proxy := eng.proxies.byID[id]
 	if proxy == nil {
 		return nil, false
 	}
@@ -207,18 +204,18 @@ func isBuiltinProxyType(kind C.AdapterType) bool {
 	}
 }
 
-// 调用方持有 mu，身份必须同时匹配宿主、配置修订和组内成员。
+// 调用方持有 eng.mu，身份必须同时匹配宿主、配置修订和组内成员。
 func lookupProxyLocked(req proxyDefinitionRequest) (C.Proxy, int, error) {
 	if req.BootID == "" || req.ConfigRevision == 0 || req.ID == "" {
 		return nil, http.StatusBadRequest, errors.New("proxy_invalid_request")
 	}
-	if !running {
+	if !eng.running {
 		return nil, http.StatusConflict, errors.New("core_not_running")
 	}
-	if current.Profile == "" {
+	if eng.current.Profile == "" {
 		return nil, http.StatusConflict, errors.New("core_profile_unavailable")
 	}
-	if req.BootID != runtimeBootID || req.ConfigRevision != runtimeConfigRevision {
+	if req.BootID != eng.bootID || req.ConfigRevision != eng.configRevision {
 		return nil, http.StatusConflict, errors.New("proxy_stale_config")
 	}
 	proxy, ok := currentProxyMember(req.ID, req.Group)
@@ -229,47 +226,59 @@ func lookupProxyLocked(req proxyDefinitionRequest) (C.Proxy, int, error) {
 }
 
 func lookupProxyDefinition(req proxyDefinitionRequest) (proxyDefinitionResponse, int, error) {
-	mu.Lock()
-	defer mu.Unlock()
-	proxy, status, err := lookupProxyLocked(req)
-	if err != nil {
-		return proxyDefinitionResponse{}, status, err
-	}
-	if _, isGroup := proxy.Adapter().(outboundgroup.ProxyGroup); isGroup || isBuiltinProxyType(proxy.Type()) {
-		return proxyDefinitionResponse{}, http.StatusBadRequest, errors.New("proxy_not_exportable")
-	}
-	exporter, ok := proxy.(rawDefinitionProvider)
-	if !ok {
-		return proxyDefinitionResponse{}, http.StatusBadRequest, errors.New("proxy_not_exportable")
-	}
-	definition := exporter.ArkClashRawDefinition()
-	if len(definition) == 0 {
-		return proxyDefinitionResponse{}, http.StatusBadRequest, errors.New("proxy_not_exportable")
-	}
-	if name, _ := definition["name"].(string); name == "" {
-		definition["name"] = proxy.Name()
-	}
-	providerName := proxy.ProxyInfo().ProviderName
-	if providerName == "" {
-		for name, item := range tunnel.Providers() {
-			if item.VehicleType() == P.Compatible {
-				continue
-			}
-			for _, candidate := range item.Proxies() {
-				if candidate == proxy && (providerName == "" || name < providerName) {
-					providerName = name
+	var (
+		res    proxyDefinitionResponse
+		status int
+	)
+	err := eng.withState(func(tx *stateTx) error {
+		var err error
+		proxy, code, err := lookupProxyLocked(req)
+		if err != nil {
+			status = code
+			return err
+		}
+		if _, isGroup := proxy.Adapter().(outboundgroup.ProxyGroup); isGroup || isBuiltinProxyType(proxy.Type()) {
+			status = http.StatusBadRequest
+			return errors.New("proxy_not_exportable")
+		}
+		exporter, ok := proxy.(rawDefinitionProvider)
+		if !ok {
+			status = http.StatusBadRequest
+			return errors.New("proxy_not_exportable")
+		}
+		definition := exporter.ArkClashRawDefinition()
+		if len(definition) == 0 {
+			status = http.StatusBadRequest
+			return errors.New("proxy_not_exportable")
+		}
+		if name, _ := definition["name"].(string); name == "" {
+			definition["name"] = proxy.Name()
+		}
+		providerName := proxy.ProxyInfo().ProviderName
+		if providerName == "" {
+			for name, item := range tunnel.Providers() {
+				if item.VehicleType() == P.Compatible {
+					continue
+				}
+				for _, candidate := range item.Proxies() {
+					if candidate == proxy && (providerName == "" || name < providerName) {
+						providerName = name
+					}
 				}
 			}
 		}
-	}
-	return proxyDefinitionResponse{
-		BootID:         runtimeBootID,
-		ConfigRevision: runtimeConfigRevision,
-		ID:             req.ID,
-		Name:           proxy.Name(),
-		Provider:       providerName,
-		Definition:     definition,
-	}, http.StatusOK, nil
+		res = proxyDefinitionResponse{
+			BootID:         eng.bootID,
+			ConfigRevision: eng.configRevision,
+			ID:             req.ID,
+			Name:           proxy.Name(),
+			Provider:       providerName,
+			Definition:     definition,
+		}
+		status = http.StatusOK
+		return nil
+	})
+	return res, status, err
 }
 
 func postProxyDefinition(w http.ResponseWriter, r *http.Request) {

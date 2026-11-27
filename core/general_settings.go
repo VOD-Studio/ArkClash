@@ -557,7 +557,7 @@ func applyLiveDNSLocked(c *config.DNS, generalIPv6 bool, target inboundSettings)
 		resolver.DefaultService = nil
 		resolver.ProxyServerHostResolver = nil
 		resolver.DirectHostResolver = nil
-		if tunListener != nil && target.dnsListen != "" {
+		if eng.tun != nil && target.dnsListen != "" {
 			dns.ReCreateServer("", nil, nil)
 		}
 		return
@@ -615,7 +615,7 @@ func applyLiveDNSLocked(c *config.DNS, generalIPv6 bool, target inboundSettings)
 		resolver.DirectHostResolver = r.Resolver
 	}
 
-	if tunListener != nil && target.dnsListen != "" {
+	if eng.tun != nil && target.dnsListen != "" {
 		lc := inbound.NewListenConfig()
 		lc.SetRouteMark(target.dnsMark)
 		dns.ReCreateServer(target.dnsListen, lc, s)
@@ -629,7 +629,7 @@ func restoreDNSRuntimeLocked(snap dnsRuntimeSnapshot, target inboundSettings) {
 	resolver.UseSystemHosts = snap.useSystemHosts
 	resolver.ProxyServerHostResolver = snap.proxyHostResolver
 	resolver.DirectHostResolver = snap.directHostResolver
-	if tunListener != nil && target.dnsListen != "" {
+	if eng.tun != nil && target.dnsListen != "" {
 		lc := inbound.NewListenConfig()
 		lc.SetRouteMark(target.dnsMark)
 		dns.ReCreateServer(target.dnsListen, lc, snap.defaultService)
@@ -637,206 +637,201 @@ func restoreDNSRuntimeLocked(snap dnsRuntimeSnapshot, target inboundSettings) {
 }
 
 func updateGeneralSettings(request profileSettingsRequest[generalSettings]) error {
-	mu.Lock()
-	var wait func()
-	defer func() {
-		mu.Unlock()
-		if wait != nil {
-			wait()
+	return eng.withState(func(tx *stateTx) error {
+		old := eng.current
+		s := request.Settings
+		if !profileSettingsCurrent(request.BootID, request.ExpectedRevision, old.General.Revision, s.Revision) {
+			return errGeneralConflict
 		}
-	}()
-	old := current
-	s := request.Settings
-	if !profileSettingsCurrent(request.BootID, request.ExpectedRevision, old.General.Revision, s.Revision) {
-		return errGeneralConflict
-	}
-	if err := s.validate(); err != nil {
-		return err
-	}
-	next := old
-	next.General = s
-	previousInbound := desiredInbound
-	targetInbound := previousInbound
-	baseline := previousInbound.baseline
+		if err := s.validate(); err != nil {
+			return err
+		}
+		next := old
+		next.General = s
+		previousInbound := eng.desiredInbound
+		targetInbound := previousInbound
+		baseline := previousInbound.baseline
 
-	hostsChanged := !reflect.DeepEqual(old.General.Hosts, s.Hosts)
-	uaChanged := old.General.UserAgent != s.UserAgent
-	appendDNSChanged := old.General.AppendSystemDNS != s.AppendSystemDNS
-	var oldOverrides, nextOverrides generalCoreOverrides
-	if old.General.CoreOverrides != nil {
-		oldOverrides = *old.General.CoreOverrides
-	}
-	if s.CoreOverrides != nil {
-		nextOverrides = *s.CoreOverrides
-	}
-	unifiedChanged := !sameBoolPtr(oldOverrides.UnifiedDelay, nextOverrides.UnifiedDelay)
-	tcpChanged := !sameBoolPtr(oldOverrides.TCPConcurrent, nextOverrides.TCPConcurrent)
-	ipv6Changed := !sameBoolPtr(oldOverrides.IPv6, nextOverrides.IPv6)
-	loaderChanged := !sameStringPtr(oldOverrides.GeodataLoader, nextOverrides.GeodataLoader)
-	liveGeneralChanged := hostsChanged || uaChanged || appendDNSChanged ||
-		unifiedChanged || tcpChanged || ipv6Changed || loaderChanged
+		hostsChanged := !reflect.DeepEqual(old.General.Hosts, s.Hosts)
+		uaChanged := old.General.UserAgent != s.UserAgent
+		appendDNSChanged := old.General.AppendSystemDNS != s.AppendSystemDNS
+		var oldOverrides, nextOverrides generalCoreOverrides
+		if old.General.CoreOverrides != nil {
+			oldOverrides = *old.General.CoreOverrides
+		}
+		if s.CoreOverrides != nil {
+			nextOverrides = *s.CoreOverrides
+		}
+		unifiedChanged := !sameBoolPtr(oldOverrides.UnifiedDelay, nextOverrides.UnifiedDelay)
+		tcpChanged := !sameBoolPtr(oldOverrides.TCPConcurrent, nextOverrides.TCPConcurrent)
+		ipv6Changed := !sameBoolPtr(oldOverrides.IPv6, nextOverrides.IPv6)
+		loaderChanged := !sameStringPtr(oldOverrides.GeodataLoader, nextOverrides.GeodataLoader)
+		liveGeneralChanged := hostsChanged || uaChanged || appendDNSChanged ||
+			unifiedChanged || tcpChanged || ipv6Changed || loaderChanged
 
-	rebuild := s.Ports == nil && old.General.Ports != nil ||
-		s.Authentication == nil && old.General.Authentication != nil ||
-		(liveGeneralChanged && !baseline.ready)
-	if !rebuild && baseline.ready && baseline.dnsConfig != nil {
-		nextIPv6 := baseline.effectiveIPv6(s)
-		// 开启 IPv6 且原配置因禁用 IPv6 跳过了 fake-ip-range6 初始化时，走完整重建以交由内核校验 IPv6 环境。
-		if ipv6Changed && nextIPv6 && baseline.dnsHasFakeIPRange6 && !baseline.dnsConfig.FakeIPRange6.IsValid() {
-			rebuild = true
+		rebuild := s.Ports == nil && old.General.Ports != nil ||
+			s.Authentication == nil && old.General.Authentication != nil ||
+			(liveGeneralChanged && !baseline.ready)
+		if !rebuild && baseline.ready && baseline.dnsConfig != nil {
+			nextIPv6 := baseline.effectiveIPv6(s)
+			// 开启 IPv6 且原配置因禁用 IPv6 跳过了 fake-ip-range6 初始化时，走完整重建以交由内核校验 IPv6 环境。
+			if ipv6Changed && nextIPv6 && baseline.dnsHasFakeIPRange6 && !baseline.dnsConfig.FakeIPRange6.IsValid() {
+				rebuild = true
+			}
+			if ipv6Changed && !nextIPv6 && baseline.dnsConfig.EnhancedMode == C.DNSFakeIP && !baseline.dnsConfig.FakeIPRange.IsValid() {
+				rebuild = true
+			}
+			if (appendDNSChanged || ipv6Changed) && baseline.dnsConfig.Enable && len(baseline.dnsServers(next.Profile, s.AppendSystemDNS)) == 0 {
+				rebuild = true
+			}
 		}
-		if ipv6Changed && !nextIPv6 && baseline.dnsConfig.EnhancedMode == C.DNSFakeIP && !baseline.dnsConfig.FakeIPRange.IsValid() {
-			rebuild = true
-		}
-		if (appendDNSChanged || ipv6Changed) && baseline.dnsConfig.Enable && len(baseline.dnsServers(next.Profile, s.AppendSystemDNS)) == 0 {
-			rebuild = true
-		}
-	}
 
-	var (
-		cfg       *config.Config
-		nextHosts *trie.DomainTrie[resolver.HostValue]
-		nextDNS   *config.DNS
-	)
-	if rebuild {
-		var err error
-		cfg, err = parseProfileSettingsConfig(&next, &targetInbound)
-		if err != nil {
-			return errGeneralApply
-		}
-	} else {
-		if s.Ports != nil {
-			p := s.Ports
-			b := &targetInbound.inbound
-			b.MixedPort, b.Port, b.SocksPort, b.RedirPort, b.TProxyPort = p.Mixed, p.HTTP, p.SOCKS, p.Redir, p.TProxy
-		}
-		if hostsChanged {
+		var (
+			cfg       *config.Config
+			nextHosts *trie.DomainTrie[resolver.HostValue]
+			nextDNS   *config.DNS
+		)
+		if rebuild {
 			var err error
-			nextHosts, err = buildMergedHosts(baseline.rawHosts, s.Hosts)
+			cfg, err = parseProfileSettingsConfig(&next, &targetInbound)
 			if err != nil {
 				return errGeneralApply
 			}
-		}
-		dnsChanged := (appendDNSChanged && next.Profile != "" && !baseline.dnsAlreadyHasSystem) || ipv6Changed
-		if dnsChanged && baseline.dnsConfig != nil {
-			var err error
-			nextDNS, err = buildLiveDNSConfig(baseline, next.Profile, s.AppendSystemDNS, baseline.effectiveIPv6(s))
-			if err != nil {
-				return errGeneralApply
-			}
-		}
-	}
-	if err := preflightGeneralPorts(targetInbound, s.ControllerSecret != ""); err != nil {
-		return err
-	}
-	path := generalSettingsPath(old.HomeDir)
-	staged, err := stageProfileSettings(path, s)
-	if err != nil {
-		return errGeneralIO
-	}
-	defer os.Remove(staged)
-	if err := setPanelControllerLocked(s.ControllerSecret); err != nil {
-		publishRuntime()
-		return errGeneralPanel
-	}
-
-	oldAuth := authStore.Default.Authenticator()
-	oldUA := mihomoHttp.UA()
-	oldUnified := adapter.UnifiedDelay.Load()
-	oldTCP := dialer.GetTcpConcurrent()
-	oldDisableIPv6 := resolver.DisableIPv6
-	oldLoader := geodata.LoaderName()
-	oldHosts := resolver.DefaultHosts
-	oldDNS := captureDNSRuntime()
-	appliedLive := false
-
-	if rebuild {
-		wait, err = reloadPreparedLocked(next, cfg, targetInbound, true)
-	} else {
-		err = applyGeneralListenersLocked(targetInbound, s.Authentication)
-		if err == nil && liveGeneralChanged {
-			appliedLive = true
-			if uaChanged {
-				mihomoHttp.SetUA(baseline.effectiveUA(s))
-			}
-			if unifiedChanged {
-				adapter.UnifiedDelay.Store(baseline.effectiveUnifiedDelay(s))
-			}
-			if tcpChanged {
-				dialer.SetTcpConcurrent(baseline.effectiveTCPConcurrent(s))
-			}
-			if loaderChanged {
-				geodata.SetLoader(baseline.effectiveGeodataLoader(s))
-			}
-			if ipv6Changed {
-				resolver.DisableIPv6 = !baseline.effectiveIPv6(s)
+		} else {
+			if s.Ports != nil {
+				p := s.Ports
+				b := &targetInbound.inbound
+				b.MixedPort, b.Port, b.SocksPort, b.RedirPort, b.TProxyPort = p.Mixed, p.HTTP, p.SOCKS, p.Redir, p.TProxy
 			}
 			if hostsChanged {
-				resolver.DefaultHosts = resolver.NewHosts(nextHosts)
-			}
-			if nextDNS != nil {
-				applyLiveDNSLocked(nextDNS, baseline.effectiveIPv6(s), targetInbound)
-			}
-		}
-	}
-	if err == nil {
-		if os.Rename(staged, path) == nil {
-			if nextDNS != nil {
-				if oldDNS.defaultResolver != nil {
-					oldDNS.defaultResolver.ResetConnection()
+				var err error
+				nextHosts, err = buildMergedHosts(baseline.rawHosts, s.Hosts)
+				if err != nil {
+					return errGeneralApply
 				}
-				resolver.ResetConnection()
 			}
-			current = next
-			log.SetLevel(s.level())
-			if s.CaptureLogs {
-				ensureDiagnosticLogsLocked()
-			} else {
-				wait = together(wait, stopDiagnosticLogsLocked())
+			dnsChanged := (appendDNSChanged && next.Profile != "" && !baseline.dnsAlreadyHasSystem) || ipv6Changed
+			if dnsChanged && baseline.dnsConfig != nil {
+				var err error
+				nextDNS, err = buildLiveDNSConfig(baseline, next.Profile, s.AppendSystemDNS, baseline.effectiveIPv6(s))
+				if err != nil {
+					return errGeneralApply
+				}
 			}
-			publishRuntime()
-			return nil
 		}
-		err = errGeneralIO
-	} else {
-		err = errGeneralPort
-	}
+		if err := preflightGeneralPorts(targetInbound, s.ControllerSecret != ""); err != nil {
+			return err
+		}
+		path := generalSettingsPath(old.HomeDir)
+		staged, err := stageProfileSettings(path, s)
+		if err != nil {
+			return errGeneralIO
+		}
+		defer os.Remove(staged)
+		if err := setPanelControllerLocked(s.ControllerSecret); err != nil {
+			eng.publishRuntimeLocked()
+			return errGeneralPanel
+		}
 
-	if rebuild && wait != nil {
-		previousConfig, parseErr := parseProfileSettingsConfig(&old, &previousInbound)
-		if parseErr == nil {
-			var rollback func()
-			rollback, parseErr = reloadPreparedLocked(old, previousConfig, previousInbound, false)
-			wait = together(wait, rollback)
-		}
-		if parseErr != nil {
-			cleanupFailure = errors.Join(cleanupFailure, closeBusinessInbounds(), stopTun(), parseErr)
-		}
-	} else if !rebuild {
-		if appliedLive {
-			mihomoHttp.SetUA(oldUA)
-			adapter.UnifiedDelay.Store(oldUnified)
-			dialer.SetTcpConcurrent(oldTCP)
-			geodata.SetLoader(oldLoader)
-			resolver.DisableIPv6 = oldDisableIPv6
-			resolver.DefaultHosts = oldHosts
-			if nextDNS != nil {
-				restoreDNSRuntimeLocked(oldDNS, previousInbound)
+		oldAuth := authStore.Default.Authenticator()
+		oldUA := mihomoHttp.UA()
+		oldUnified := adapter.UnifiedDelay.Load()
+		oldTCP := dialer.GetTcpConcurrent()
+		oldDisableIPv6 := resolver.DisableIPv6
+		oldLoader := geodata.LoaderName()
+		oldHosts := resolver.DefaultHosts
+		oldDNS := captureDNSRuntime()
+		appliedLive := false
+
+		var wait func()
+		if rebuild {
+			wait, err = reloadPreparedLocked(next, cfg, targetInbound, true)
+			tx.deferUnlock(wait)
+		} else {
+			err = applyGeneralListenersLocked(targetInbound, s.Authentication)
+			if err == nil && liveGeneralChanged {
+				appliedLive = true
+				if uaChanged {
+					mihomoHttp.SetUA(baseline.effectiveUA(s))
+				}
+				if unifiedChanged {
+					adapter.UnifiedDelay.Store(baseline.effectiveUnifiedDelay(s))
+				}
+				if tcpChanged {
+					dialer.SetTcpConcurrent(baseline.effectiveTCPConcurrent(s))
+				}
+				if loaderChanged {
+					geodata.SetLoader(baseline.effectiveGeodataLoader(s))
+				}
+				if ipv6Changed {
+					resolver.DisableIPv6 = !baseline.effectiveIPv6(s)
+				}
+				if hostsChanged {
+					resolver.DefaultHosts = resolver.NewHosts(nextHosts)
+				}
+				if nextDNS != nil {
+					applyLiveDNSLocked(nextDNS, baseline.effectiveIPv6(s), targetInbound)
+				}
 			}
 		}
-		authStore.Default.SetAuthenticator(oldAuth)
-		inbound.SetSkipAuthPrefixes(previousInbound.inbound.SkipAuthPrefixes)
-		if rollbackErr := applyGeneralListenersLocked(previousInbound, nil); rollbackErr != nil {
-			cleanupFailure = errors.Join(cleanupFailure, closeBusinessInbounds(), stopTun(), rollbackErr)
+		if err == nil {
+			if os.Rename(staged, path) == nil {
+				if nextDNS != nil {
+					if oldDNS.defaultResolver != nil {
+						oldDNS.defaultResolver.ResetConnection()
+					}
+					resolver.ResetConnection()
+				}
+				eng.current = next
+				log.SetLevel(s.level())
+				if s.CaptureLogs {
+					ensureDiagnosticLogsLocked()
+				} else {
+					tx.deferUnlock(stopDiagnosticLogsLocked())
+				}
+				eng.publishRuntimeLocked()
+				return nil
+			}
+			err = errGeneralIO
+		} else {
+			err = errGeneralPort
 		}
-	}
-	if setPanelControllerLocked(old.General.ControllerSecret) != nil {
-		err = errGeneralApply
-	}
-	current = old
-	log.SetLevel(old.General.level())
-	publishRuntime()
-	return err
+
+		if rebuild && wait != nil {
+			previousConfig, parseErr := parseProfileSettingsConfig(&old, &previousInbound)
+			if parseErr == nil {
+				var rollback func()
+				rollback, parseErr = reloadPreparedLocked(old, previousConfig, previousInbound, false)
+				tx.deferUnlock(rollback)
+			}
+			if parseErr != nil {
+				eng.cleanupFailure = errors.Join(eng.cleanupFailure, closeBusinessInbounds(), stopTun(), parseErr)
+			}
+		} else if !rebuild {
+			if appliedLive {
+				mihomoHttp.SetUA(oldUA)
+				adapter.UnifiedDelay.Store(oldUnified)
+				dialer.SetTcpConcurrent(oldTCP)
+				geodata.SetLoader(oldLoader)
+				resolver.DisableIPv6 = oldDisableIPv6
+				resolver.DefaultHosts = oldHosts
+				if nextDNS != nil {
+					restoreDNSRuntimeLocked(oldDNS, previousInbound)
+				}
+			}
+			authStore.Default.SetAuthenticator(oldAuth)
+			inbound.SetSkipAuthPrefixes(previousInbound.inbound.SkipAuthPrefixes)
+			if rollbackErr := applyGeneralListenersLocked(previousInbound, nil); rollbackErr != nil {
+				eng.cleanupFailure = errors.Join(eng.cleanupFailure, closeBusinessInbounds(), stopTun(), rollbackErr)
+			}
+		}
+		if setPanelControllerLocked(old.General.ControllerSecret) != nil {
+			err = errGeneralApply
+		}
+		eng.setCurrentLocked(old)
+		log.SetLevel(old.General.level())
+		return err
+	})
 }
 
 func together(first, second func()) func() {
@@ -871,7 +866,7 @@ func preflightGeneralPorts(target inboundSettings, panel bool) error {
 		if port == 19090 || panel && port == panelPort {
 			return errGeneralPort
 		}
-		if tunListener == nil || port == active.Port || port == active.SocksPort || port == active.RedirPort ||
+		if eng.tun == nil || port == active.Port || port == active.SocksPort || port == active.RedirPort ||
 			port == active.TProxyPort || port == active.MixedPort {
 			continue
 		}
@@ -903,8 +898,8 @@ func applyGeneralListenersLocked(target inboundSettings, a *generalAuthenticatio
 		target.inbound.SkipAuthPrefixes = nil
 		inbound.SetSkipAuthPrefixes(nil)
 	}
-	desiredInbound = target
-	if tunListener == nil {
+	eng.desiredInbound = target
+	if eng.tun == nil {
 		return nil
 	}
 	old := listener.GetPorts()

@@ -19,12 +19,12 @@ import (
 
 func TestRuntimeBeginsWarmWithoutConnectionTimer(t *testing.T) {
 	fixture(t)
-	mu.Lock()
+	eng.mu.Lock()
 	setHostTun(false)
 	waitDiagnostics := beginRuntime()
 	publishRuntime()
-	status := *runtimeSnapshot.Load()
-	mu.Unlock()
+	status := *eng.Status()
+	eng.mu.Unlock()
 	waitDiagnostics()
 	if !status.Running || status.Intent != "stopped" || status.Forward != "stopped" || status.TunAttached || status.VpnCreated || status.ListenersOpen || status.StartedAt != 0 {
 		t.Fatalf("warm status=%+v", status)
@@ -63,12 +63,12 @@ func TestRuntimeVpnStatesRequireObservedResources(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			fixture(t)
-			mu.Lock()
-			defer mu.Unlock()
-			running = test.core
+			eng.mu.Lock()
+			defer eng.mu.Unlock()
+			eng.running = test.core
 			setHostTun(test.tun)
 			err := updateVpnState(test.intent, test.forward, test.vpn)
-			status := runtimeSnapshot.Load()
+			status := eng.Status()
 			if (err != nil) != test.wantFailed || status.Running != test.core || status.TunAttached != test.tun || status.VpnCreated != test.vpn || status.Intent != test.intent {
 				t.Fatalf("status=%+v err=%v", status, err)
 			}
@@ -85,29 +85,29 @@ func TestRuntimeVpnStatesRequireObservedResources(t *testing.T) {
 
 func TestRuntimeTimerAndIdentityFollowConnectionNotHost(t *testing.T) {
 	fixture(t)
-	mu.Lock()
-	defer mu.Unlock()
-	boot, configRevision := runtimeBootID, runtimeConfigRevision
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
+	boot, configRevision := eng.bootID, eng.configRevision
 	node := currentProxyGraph().Actual["Manual"]
-	runtimeStartedAt = 1
+	eng.startedAt = 1
 	if err := updateVpnState("started", "running", true); err != nil {
 		t.Fatal(err)
 	}
-	if runtimeSnapshot.Load().StartedAt != 1 {
+	if eng.Status().StartedAt != 1 {
 		t.Fatal("idempotent connection report restarted timer")
 	}
 	setHostTun(false)
 	if err := updateVpnState("stopped", "stopped", false); err != nil {
 		t.Fatal(err)
 	}
-	stopped := *runtimeSnapshot.Load()
+	stopped := *eng.Status()
 	if stopped.StartedAt != 0 {
 		t.Fatalf("disconnect retained timer: %+v", stopped)
 	}
 	if err := updateVpnState("started", "preparing", true); err != nil {
 		t.Fatal(err)
 	}
-	if runtimeSnapshot.Load().StartedAt != 0 {
+	if eng.Status().StartedAt != 0 {
 		t.Fatal("preparing started connection timer")
 	}
 	setHostTun(true)
@@ -115,7 +115,7 @@ func TestRuntimeTimerAndIdentityFollowConnectionNotHost(t *testing.T) {
 	if err := updateVpnState("started", "running", true); err != nil {
 		t.Fatal(err)
 	}
-	connected := runtimeSnapshot.Load()
+	connected := eng.Status()
 	if connected.StartedAt < before || connected.StartedAt > time.Now().UnixMilli() || connected.Revision <= stopped.Revision {
 		t.Fatalf("reconnect status=%+v", connected)
 	}
@@ -124,21 +124,21 @@ func TestRuntimeTimerAndIdentityFollowConnectionNotHost(t *testing.T) {
 	}
 	setHostTun(false)
 	publishRuntime()
-	if status := runtimeSnapshot.Load(); status.Forward != "failed" || status.StartedAt != 0 || !status.VpnCreated {
+	if status := eng.Status(); status.Forward != "failed" || status.StartedAt != 0 || !status.VpnCreated {
 		t.Fatalf("lost TUN concealed resources: %+v", status)
 	}
 }
 
 func TestRuntimeRejectsInvalidVpnEnumsWithoutChangingFacts(t *testing.T) {
 	fixture(t)
-	mu.Lock()
-	defer mu.Unlock()
-	before := *runtimeSnapshot.Load()
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
+	before := *eng.Status()
 	for _, state := range [][2]string{{"invalid", "running"}, {"stopped", "invalid"}} {
 		if err := updateVpnState(state[0], state[1], false); err == nil {
 			t.Fatal("invalid VPN state accepted")
 		}
-		if after := *runtimeSnapshot.Load(); after != before {
+		if after := *eng.Status(); after != before {
 			t.Fatalf("invalid input changed resource facts: %+v", after)
 		}
 	}
@@ -154,8 +154,8 @@ func TestRuntimeStoppedCannotHideLiveBusinessListener(t *testing.T) {
 	if err := reserved.Close(); err != nil {
 		t.Fatal(err)
 	}
-	mu.Lock()
-	defer mu.Unlock()
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
 	listener.ReCreateHTTP(port, tunnel.Tunnel)
 	defer listener.ReCreateHTTP(0, tunnel.Tunnel)
 	if listener.GetPorts().Port != port {
@@ -165,7 +165,7 @@ func TestRuntimeStoppedCannotHideLiveBusinessListener(t *testing.T) {
 	if err := updateVpnState("stopped", "stopped", false); err == nil {
 		t.Fatal("live business listener concealed by stopped state")
 	}
-	if status := runtimeSnapshot.Load(); !status.ListenersOpen || status.Forward != "failed" {
+	if status := eng.Status(); !status.ListenersOpen || status.Forward != "failed" {
 		t.Fatalf("listener facts=%+v", status)
 	}
 	listener.ReCreateHTTP(0, tunnel.Tunnel)
@@ -176,10 +176,10 @@ func TestRuntimeStoppedCannotHideLiveBusinessListener(t *testing.T) {
 
 func TestWarmCoreAllowsSelectionAndRealUrlTest(t *testing.T) {
 	fixture(t)
-	mu.Lock()
+	eng.mu.Lock()
 	setHostTun(false)
 	err := updateVpnState("stopped", "stopped", false)
-	mu.Unlock()
+	eng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestWarmCoreAllowsSelectionAndRealUrlTest(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := selectionRequest{Profile: "fixture", Group: "Manual", Name: "REJECT", NodeID: snapshotNodeID(t, "Manual", "REJECT"), OperationID: "warm-select",
-		ExpectedBootID: runtimeBootID, ExpectedRevision: runtimeConfigRevision}
+		ExpectedBootID: eng.bootID, ExpectedRevision: eng.configRevision}
 	if result, err := commitSelection(request); err != nil || result.Selected != "REJECT" {
 		t.Fatalf("warm selection=%+v err=%v", result, err)
 	}
@@ -202,12 +202,12 @@ func TestWarmCoreAllowsSelectionAndRealUrlTest(t *testing.T) {
 	if response := requestDelay(t, "DIRECT", "Manual", server.URL, 0); response.Code != http.StatusOK {
 		t.Fatalf("warm URLTest=%d %s", response.Code, response.Body.String())
 	}
-	mu.Lock()
-	defer mu.Unlock()
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
 	if group := tunnel.Proxies()["Manual"].Adapter().(outboundgroup.ProxyGroup); group.Now() != "REJECT" {
 		t.Fatal("URLTest changed selected exit")
 	}
-	if status := runtimeSnapshot.Load(); status.TunAttached || status.VpnCreated || status.Forward != "stopped" {
+	if status := eng.Status(); status.TunAttached || status.VpnCreated || status.Forward != "stopped" {
 		t.Fatalf("warm URLTest connected VPN: %+v", status)
 	}
 }
@@ -243,9 +243,9 @@ func TestRuntimeDisconnectDoesNotCancelIndependentUrlTest(t *testing.T) {
 	if err := detachTun(); err != nil {
 		t.Fatal(err)
 	}
-	mu.Lock()
+	eng.mu.Lock()
 	err := updateVpnState("stopped", "stopped", false)
-	mu.Unlock()
+	eng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,21 +259,21 @@ func TestRuntimeDisconnectDoesNotCancelIndependentUrlTest(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("disconnect cancelled URLTest=%d %s", response.Code, response.Body.String())
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	if len(activeDelayTests) != 0 || len(delaySlots) != 0 {
+	eng.mu.Lock()
+	defer eng.mu.Unlock()
+	if len(eng.delays.active) != 0 || len(delaySlots) != 0 {
 		t.Fatal("URLTest retained execution capacity")
 	}
 }
 
 func TestEmptyProfileRejectsNodeOperationsAndSkipsSelectionFile(t *testing.T) {
 	cfg := fixture(t)
-	mu.Lock()
-	current.Profile = ""
+	eng.mu.Lock()
+	eng.current.Profile = ""
 	setHostTun(false)
 	err := updateVpnState("stopped", "stopped", false)
-	opts := current
-	mu.Unlock()
+	opts := eng.current
+	eng.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}

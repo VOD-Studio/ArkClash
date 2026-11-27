@@ -59,15 +59,15 @@ func stageProfileSettings(path string, value any) (string, error) {
 }
 
 func profileSettingsCurrent(bootID, expected, previous, next string) bool {
-	return running && bootID != "" && bootID == runtimeBootID && expected == previous && next != expected
+	return eng.running && bootID != "" && bootID == eng.bootID && expected == previous && next != expected
 }
 
-// 调用方持有 mu。退役诊断任务的等待回调须在解锁后调用。
+// 调用方持有 eng.mu。退役诊断任务的等待回调须在解锁后调用。
 func applyProfileSettingsLocked(next startOptions, path string, value any) (func(), error) {
-	if cleanupFailure != nil {
+	if eng.cleanupFailure != nil {
 		return nil, errProfileSettingsApply
 	}
-	previous := current
+	previous := eng.current
 	var nextInbound inboundSettings
 	var cfg *config.Config
 	if next.Profile != "" {
@@ -79,7 +79,7 @@ func applyProfileSettingsLocked(next startOptions, path string, value any) (func
 		if err != nil {
 			return nil, errProfileSettingsInvalid
 		}
-		if tunListener != nil && !dnsListenerAvailable(nextInbound.dnsListen, nextInbound.dnsMark) {
+		if eng.tun != nil && !dnsListenerAvailable(nextInbound.dnsListen, nextInbound.dnsMark) {
 			return nil, errProfileSettingsListen
 		}
 	}
@@ -94,7 +94,7 @@ func applyProfileSettingsLocked(next startOptions, path string, value any) (func
 	}
 	if err == nil {
 		if err = os.Rename(staged, path); err == nil {
-			current = next
+			eng.setCurrentLocked(next)
 			return wait, nil
 		}
 		err = errProfileSettingsIO
