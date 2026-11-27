@@ -24,21 +24,42 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/VOD-Studio/ArkClash/core/internal/api"
 	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
+	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
 	"github.com/VOD-Studio/ArkClash/core/internal/diagnostics"
+	"github.com/VOD-Studio/ArkClash/core/internal/engine"
 	"github.com/VOD-Studio/ArkClash/core/internal/platform"
+	"github.com/VOD-Studio/ArkClash/core/internal/subfetch"
 	"github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/log"
 )
 
+var (
+	runtimeEngine = engine.New()
+	reclaimMu     sync.Mutex
+	lastReclaim   time.Time
+)
+
 func init() {
-	if platform.TunDNS != tunDNS || platform.TunDNS6 != tunDNS6 {
-		panic("platform TUN DNS constants out of sync with tun.go")
+	if platform.TunDNS != engine.TunDNS || platform.TunDNS6 != engine.TunDNS6 {
+		panic("platform TUN DNS constants out of sync with engine")
 	}
 	// 入口装配平台日志格式化回调，避免 platform 反向依赖 diagnostics。
 	platform.StartHilog(func(event log.Event) string {
 		return diagnostics.DescribeLog(event).Message
 	})
+	api.InstallOnce(runtimeEngine)
+}
+
+func subfetchView() subfetch.RuntimeView {
+	running, homeDir, forward, stillCurrent := runtimeEngine.ObserveSubfetch()
+	return subfetch.RuntimeView{
+		Running:      running,
+		HomeDir:      homeDir,
+		Forward:      forward,
+		StillCurrent: stillCurrent,
+	}
 }
 
 func errorString(err error) *C.char {
@@ -57,16 +78,13 @@ func ArkClashStart(optionsJSON *C.char) *C.char {
 	if err := json.Unmarshal([]byte(C.GoString(optionsJSON)), &opts); err != nil {
 		return errorString(err)
 	}
-	return errorString(start(opts))
+	return errorString(runtimeEngine.Start(opts))
 }
 
 //export ArkClashStop
 func ArkClashStop() *C.char {
-	return errorString(stop())
+	return errorString(runtimeEngine.Stop())
 }
-
-var reclaimMu sync.Mutex
-var lastReclaim time.Time
 
 //export ArkClashReclaimMemory
 func ArkClashReclaimMemory() C.int {
@@ -85,28 +103,28 @@ func ArkClashReclaimMemory() C.int {
 
 //export ArkClashAttachTun
 func ArkClashAttachTun(fd C.int, optionsJSON, bootID, profile *C.char, configRevision C.ulonglong) *C.char {
-	var network tunNetworkOptions
+	var network engine.TunNetworkOptions
 	if err := json.Unmarshal([]byte(C.GoString(optionsJSON)), &network); err != nil {
 		return errorString(err)
 	}
-	return errorString(attachTun(int(fd), network, attachIdentity{
+	return errorString(runtimeEngine.AttachTun(int(fd), network, engine.AttachIdentity{
 		BootID: C.GoString(bootID), Profile: C.GoString(profile), ConfigRevision: uint64(configRevision),
 	}))
 }
 
 //export ArkClashDetachTun
 func ArkClashDetachTun() *C.char {
-	return errorString(detachTun())
+	return errorString(runtimeEngine.DetachTun())
 }
 
 //export ArkClashUpdateVpnState
 func ArkClashUpdateVpnState(intent, forward *C.char, vpnCreated C.int) *C.char {
-	return errorString(setVpnStateFromHost(C.GoString(intent), C.GoString(forward), vpnCreated != 0))
+	return errorString(runtimeEngine.SetVpnStateFromHost(C.GoString(intent), C.GoString(forward), vpnCreated != 0))
 }
 
 //export ArkClashRuntimeStatus
 func ArkClashRuntimeStatus() *C.char {
-	return C.CString(runtimeStatusJSON())
+	return C.CString(runtimeEngine.RuntimeStatusJSON())
 }
 
 // ArkClashReload 热切换到 path 指向的配置，profile 是它的编号。成功返回 NULL，
@@ -118,7 +136,7 @@ func ArkClashReload(path, profile, expectedProfile *C.char) *C.char {
 	if expectedProfile != nil {
 		expected = new(C.GoString(expectedProfile))
 	}
-	return errorString(reload(C.GoString(path), C.GoString(profile), expected))
+	return errorString(runtimeEngine.Reload(C.GoString(path), C.GoString(profile), expected))
 }
 
 // ArkClashPrefetch 预先下载 path 里还没下载过的 rule-provider（见 prefetch）。返回 JSON
@@ -126,8 +144,8 @@ func ArkClashReload(path, profile, expectedProfile *C.char) *C.char {
 //
 //export ArkClashPrefetch
 func ArkClashPrefetch(path *C.char) *C.char {
-	n, err := prefetch(C.GoString(path))
-	result := prefetchResult{Downloaded: n}
+	n, err := subfetch.Prefetch(C.GoString(path), subfetchView)
+	result := api.PrefetchResult{Downloaded: n}
 	if err != nil {
 		result.Error = err.Error()
 	}
@@ -135,17 +153,17 @@ func ArkClashPrefetch(path *C.char) *C.char {
 	return C.CString(string(data))
 }
 
-// ArkClashFetch 经内核下载，参数和结果都是 JSON（见 fetchRequest、fetchResult）。
+// ArkClashFetch 经内核下载，参数和结果都是 JSON（见 subfetch.Request、subfetch.Result）。
 // 返回值由调用方用 ArkClashFree 释放。会阻塞到请求结束，只能在工作线程上调用。
 //
 //export ArkClashFetch
 func ArkClashFetch(requestJSON *C.char) *C.char {
-	var req fetchRequest
-	result := fetchResult{}
+	var req subfetch.Request
+	result := subfetch.Result{}
 	if err := json.Unmarshal([]byte(C.GoString(requestJSON)), &req); err != nil {
 		result.Error = err.Error()
 	} else {
-		result = fetch(req)
+		result = subfetch.Fetch(req, subfetchView)
 	}
 	data, _ := json.Marshal(result)
 	return C.CString(string(data))
@@ -157,10 +175,10 @@ func ArkClashFetch(requestJSON *C.char) *C.char {
 //export ArkClashSetCommandHandler
 func ArkClashSetCommandHandler(handler C.ArkClashCommandHandler) {
 	if handler == nil {
-		setCommandDispatcher(nil)
+		ctrl.SetCommandDispatcher(nil)
 		return
 	}
-	setCommandDispatcher(func(id int64, name, body string) {
+	ctrl.SetCommandDispatcher(func(id int64, name, body string) {
 		cName := C.CString(name)
 		cBody := C.CString(body)
 		C.arkclashCallCommandHandler(handler, C.longlong(id), cName, cBody)
@@ -173,21 +191,21 @@ func ArkClashSetCommandHandler(handler C.ArkClashCommandHandler) {
 //
 //export ArkClashReply
 func ArkClashReply(id C.longlong, status C.int, body *C.char) {
-	replyCommand(int64(id), int(status), []byte(C.GoString(body)))
+	ctrl.ReplyCommand(int64(id), int(status), []byte(C.GoString(body)))
 }
 
 // ArkClashEmit 由 VPN 进程的 ArkTS 推送一条事件（JSON 对象），body 由调用方保留所有权。
 //
 //export ArkClashEmit
 func ArkClashEmit(event *C.char) {
-	emitRaw([]byte(C.GoString(event)))
+	ctrl.EmitRaw([]byte(C.GoString(event)))
 }
 
 // ArkClashRunningProfile 返回正在运行的配置编号，没在运行时是空串。用 ArkClashFree 释放。
 //
 //export ArkClashRunningProfile
 func ArkClashRunningProfile() *C.char {
-	profile, _ := runningProfile()
+	profile, _ := runtimeEngine.RunningProfile()
 	return C.CString(profile)
 }
 

@@ -1,0 +1,158 @@
+package api
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
+	"slices"
+	"testing"
+	"testing/iotest"
+
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
+	"github.com/VOD-Studio/ArkClash/core/internal/engine"
+	"github.com/metacubex/http"
+	"github.com/metacubex/http/httptest"
+	"github.com/metacubex/mihomo/constant"
+)
+
+type configContractFixture struct {
+	YAML       string
+	BaseGroup  string
+	Script     string
+	AddedRules corecfg.AddedRulesSettings
+	Standard   []string
+	Scripted   []string
+	Custom     []string
+}
+
+type contractFixtures struct {
+	DefaultSettings        json.RawMessage
+	SettingsRequest        json.RawMessage
+	InvalidSettingsRequest json.RawMessage
+	SettingsError          json.RawMessage
+	Configuration          configContractFixture
+}
+
+func readContractFixtures(t *testing.T) contractFixtures {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "testdata", "contracts.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures contractFixtures
+	if err := json.Unmarshal(data, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	return fixtures
+}
+
+func requireContractJSON(t *testing.T, actual, expected []byte) {
+	t.Helper()
+	var got, want any
+	if err := json.Unmarshal(actual, &got); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(expected, &want); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("契约 JSON 不一致\n实际：%s\n预期：%s", actual, expected)
+	}
+}
+
+func TestProfileSettingsContract(t *testing.T) {
+	cases := readContractFixtures(t)
+	opts := apiLifecycleOptions(t)
+	defaults, err := corecfg.ReadGeneralSettings(opts.HomeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(defaults)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireContractJSON(t, encoded, cases.DefaultSettings)
+
+	var request corecfg.SettingsRequest[corecfg.GeneralSettings]
+	reader := iotest.OneByteReader(bytes.NewReader(cases.SettingsRequest))
+	if err := corecfg.DecodeSettings(reader, &request); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err = json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireContractJSON(t, encoded, cases.SettingsRequest)
+
+	if err := testEng.Start(opts); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = testEng.Stop() })
+	bad := httptest.NewRecorder()
+	testSrv.postGeneralSettings(bad, httptest.NewRequest(http.MethodPost, "/arkclash/general/settings",
+		bytes.NewReader(cases.InvalidSettingsRequest)))
+	if bad.Code != http.StatusBadRequest {
+		t.Fatalf("错误字段应返回 400，得到 %d", bad.Code)
+	}
+	requireContractJSON(t, bad.Body.Bytes(), cases.SettingsError)
+
+	request.BootID = testEng.Status().BootID
+	encoded, err = json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok := httptest.NewRecorder()
+	testSrv.postGeneralSettings(ok, httptest.NewRequest(http.MethodPost, "/arkclash/general/settings", bytes.NewReader(encoded)))
+	if ok.Code != http.StatusNoContent || ok.Body.Len() != 0 {
+		t.Fatalf("保存应返回空的 204，得到 %d %s", ok.Code, ok.Body.String())
+	}
+	saved, err := corecfg.ReadGeneralSettings(opts.HomeDir)
+	if err != nil || !reflect.DeepEqual(saved, request.Settings) {
+		t.Fatalf("保存没有完整保留字段：%+v，%v", saved, err)
+	}
+}
+
+func TestConfigTransformationContract(t *testing.T) {
+	fixture := readContractFixtures(t).Configuration
+	opts := apiLifecycleOptions(t)
+	opts.Profile = "fixture"
+	opts.AddedRules = fixture.AddedRules
+	opts.ProfileRules = opts.AddedRules.ForProfile(opts.Profile)
+	path := apiWriteProfile(t, opts, opts.Profile, fixture.YAML)
+	for _, tc := range []struct {
+		name     string
+		script   corecfg.ProfileScript
+		isCustom bool
+		rules    []string
+	}{
+		{name: "standard", rules: fixture.Standard},
+		{name: "script", script: corecfg.ProfileScript{Identity: "fixture", Source: fixture.Script}, rules: fixture.Scripted},
+		{name: "custom", isCustom: true, rules: fixture.Custom},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			options := opts
+			options.Script = tc.script
+			options.CustomRules = tc.isCustom
+			cfg, err := engine.ParseConfig(path, options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Proxies[fixture.BaseGroup] == nil {
+				t.Fatal("配置变换丢失了原配置的代理组")
+			}
+			got := make([]string, 0, len(cfg.Rules))
+			for _, rule := range cfg.Rules {
+				payload := rule.Payload()
+				if rule.RuleType() == constant.MATCH {
+					payload = ""
+				}
+				got = append(got, payload+","+rule.Adapter())
+			}
+			if !slices.Equal(got, tc.rules) {
+				t.Fatalf("规则顺序或目标不一致\n实际：%v\n预期：%v", got, tc.rules)
+			}
+		})
+	}
+}

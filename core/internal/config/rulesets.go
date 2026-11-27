@@ -51,6 +51,10 @@ type RuleSetRequest struct {
 	Order            []string    `json:"order"`
 }
 
+func ValidRuleSetRevision(revision string) bool {
+	return ruleset.ValidID(revision)
+}
+
 func (s RuleSetItem) ValidOptions() bool {
 	if !ruleset.ValidID(s.ID) || s.Name == "" || len(s.Name) > 256 ||
 		strings.TrimSpace(s.Name) != s.Name || strings.ContainsAny(s.Name, "\x00\r\n") ||

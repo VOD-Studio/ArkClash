@@ -51,6 +51,14 @@ type ProfileScript struct {
 
 func (s ProfileScript) Enabled() bool { return s.Identity != "" }
 
+func SanitizeScriptBuildError(err error) error {
+	var scriptError *script.Error
+	if errors.As(err, &scriptError) {
+		return scriptError
+	}
+	return ErrScriptConfig
+}
+
 type ScriptOutbound struct {
 	Name string `json:"name"`
 	Type string `json:"type"`

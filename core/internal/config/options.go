@@ -67,6 +67,18 @@ func ValidProfileID(id string) bool {
 	return profileIDPattern.MatchString(id) && id != "." && id != ".."
 }
 
+// CheckProfilePath 校验配置路径仅允许位于 profiles 或 profile-work 目录下。
+func CheckProfilePath(home, path string) error {
+	if home == "" {
+		return errors.New("invalid_profile_path")
+	}
+	dir := filepath.Dir(filepath.Clean(path))
+	if dir != filepath.Join(home, "profiles") && dir != filepath.Join(home, "profile-work") {
+		return errors.New("invalid_profile_path")
+	}
+	return nil
+}
+
 func DecodeSettings(r io.Reader, dst any) error {
 	body, err := io.ReadAll(io.LimitReader(r, ProfileSettingsLimit+1))
 	if err != nil || len(body) > ProfileSettingsLimit || !json.Valid(body) {

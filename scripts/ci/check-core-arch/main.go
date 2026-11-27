@@ -1,4 +1,4 @@
-// 检查 core/ 的 Go 架构边界：构建标签隔离、Cgo 范围、internal/* DAG 白名单（未登记即失败）、零 mihomo 边界、init() 白名单、C ABI 导出收口、核心锁访问边界与根包顶层变量白名单。
+// 检查 core/ 的 Go 架构边界：构建标签隔离、Cgo 范围、internal/* DAG 白名单（未登记即失败）、零 mihomo 边界、init() 白名单、C ABI 导出收口、核心锁访问边界与顶层变量白名单。
 package main
 
 import (
@@ -35,6 +35,8 @@ const (
 	geoPkg         = internalPrefix + "geo"
 	configPkg      = internalPrefix + "config"
 	platformPkg    = internalPrefix + "platform"
+	enginePkg      = internalPrefix + "engine"
+	apiPkg         = internalPrefix + "api"
 	mihomoPrefix   = "github.com/metacubex/mihomo"
 )
 
@@ -68,25 +70,22 @@ var (
 		diagnosticsPkg: {ctrlPkg},
 		geoPkg:         {backupPkg, ctrlPkg, ruletunnelPkg},
 		configPkg:      {backupPkg, geoPkg, proxylinkPkg, rulesetPkg, ruletunnelPkg, scriptPkg},
+		enginePkg:      {backupPkg, configPkg, ctrlPkg, diagnosticsPkg, geoPkg, providersPkg, ruletunnelPkg},
+		apiPkg:         {backupPkg, configPkg, ctrlPkg, diagnosticsPkg, enginePkg, geoPkg, probePkg, providersPkg, subfetchPkg},
 	}
 	// 顶层 init() 文件白名单（相对 core/ 路径，使用正斜杠）。
 	allowedInitFiles = map[string]bool{
-		"api.go":                                 true,
 		"lib.go":                                 true,
 		"internal/platform/loopback.go":          true,
 		"internal/platform/socket.go":            true,
 		"internal/platform/system_dns.go":        true,
 		"internal/platform/tailscale_network.go": true,
 	}
-	// 根包非哨兵错误/非不可变正则的包级 var 白名单（未登记即失败），阻止后续新增散落全局状态。
-	// 格式："文件名:变量名"。删除对应变量时必须同步收缩此表。
+	// 根包非哨兵错误/非不可变正则的包级 var 白名单（未登记即失败）。
 	allowedRootVars = map[string]bool{
-		"backup.go:backupDAVBusy":     true,
-		"delay.go:delaySlots":         true,
-		"engine.go:eng":               true,
-		"engine.go:engineUnlockCheck": true,
-		"lib.go:reclaimMu":            true,
-		"lib.go:lastReclaim":          true,
+		"lib.go:runtimeEngine": true,
+		"lib.go:reclaimMu":     true,
+		"lib.go:lastReclaim":   true,
 	}
 )
 
@@ -159,7 +158,7 @@ func checkPackageDAG(label string, pkgs map[string]listedPackage) []string {
 		pkg := pkgs[path]
 		switch {
 		case path == rootPkg:
-			// 根包可以装配全部已登记的 internal/* 包。
+			// 根入口可以装配全部已登记的 internal/* 包。
 		case path == backupStorePkg:
 			for _, imp := range pkg.Imports {
 				if strings.HasPrefix(imp, internalPrefix) && imp != backupPkg {
@@ -297,7 +296,7 @@ func isImmutableRootVar(name string, init ast.Expr) bool {
 	if init == nil {
 		return false
 	}
-	if strings.HasPrefix(name, "err") {
+	if strings.HasPrefix(name, "err") || strings.HasPrefix(name, "Err") {
 		if call, ok := init.(*ast.CallExpr); ok {
 			if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 				if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "errors" && sel.Sel.Name == "New" {
@@ -325,7 +324,7 @@ func isImmutableRootVar(name string, init ast.Expr) bool {
 	return false
 }
 
-func coreEngineRecvName(fn *ast.FuncDecl) string {
+func engineRecvName(fn *ast.FuncDecl) string {
 	if fn.Recv == nil || len(fn.Recv.List) == 0 {
 		return ""
 	}
@@ -335,7 +334,7 @@ func coreEngineRecvName(fn *ast.FuncDecl) string {
 		typ = star.X
 	}
 	ident, ok := typ.(*ast.Ident)
-	if !ok || ident.Name != "coreEngine" || len(field.Names) == 0 {
+	if !ok || ident.Name != "Engine" || len(field.Names) == 0 {
 		return ""
 	}
 	return field.Names[0].Name
@@ -350,7 +349,8 @@ func checkSources(coreDir string) []string {
 	// - 禁止 *_ohos.go 命名；
 	// - 除 internal/platform 与入口 lib.go 外禁止出现 //go:build ohos；
 	// - 全包校验 init() 白名单与 //export 导出位置；
-	// - 根包额外校验核心锁访问边界、lib.go 纯转发与顶层 var 白名单。
+	// - internal/engine 校验核心锁仅限 engine.go 访问；
+	// - 根包校验顶层 var 白名单。
 	err := filepath.WalkDir(coreDir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -384,7 +384,7 @@ func checkSources(coreDir string) []string {
 			}
 			for _, c := range cg.List {
 				if strings.HasPrefix(c.Text, "//go:build ") && strings.Contains(c.Text, "ohos") {
-					if rel != "lib.go" && !strings.HasPrefix(rel, "internal/platform/") {
+					if rel != "lib.go" && rel != "doc.go" && !strings.HasPrefix(rel, "internal/platform/") {
 						problems = append(problems, fmt.Sprintf("core/%s 不允许使用 ohos 构建标签（仅允许入口 lib.go 与 internal/platform）", rel))
 					}
 				}
@@ -392,6 +392,7 @@ func checkSources(coreDir string) []string {
 		}
 
 		isRoot := !strings.Contains(rel, "/")
+		isEngine := strings.HasPrefix(rel, "internal/engine/")
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.GenDecl:
@@ -417,14 +418,14 @@ func checkSources(coreDir string) []string {
 						key := name + ":" + ident.Name
 						seenRootVars[key] = true
 						if !allowedRootVars[key] {
-							problems = append(problems, fmt.Sprintf("core/%s 声明了未登记的包级变量 %s（请归入 coreEngine 或子系统 Hub，确需保留须在 check-core-arch 白名单登记）", name, ident.Name))
+							problems = append(problems, fmt.Sprintf("core/%s 声明了未登记的包级变量 %s（请归入 Engine 或子系统 Hub，确需保留须在 check-core-arch 白名单登记）", name, ident.Name))
 						}
 					}
 				}
 			case *ast.FuncDecl:
 				if d.Recv == nil {
 					if d.Name.Name == "init" && !allowedInitFiles[rel] {
-						problems = append(problems, fmt.Sprintf("core/%s 不允许新增顶层 init()，白名单仅包含入口/路由注册与 ohos 平台钩子", rel))
+						problems = append(problems, fmt.Sprintf("core/%s 不允许新增顶层 init()，白名单仅包含入口装配与 ohos 平台钩子", rel))
 					}
 					if d.Doc != nil {
 						for _, comment := range d.Doc.List {
@@ -441,15 +442,9 @@ func checkSources(coreDir string) []string {
 						}
 					}
 				}
-				if isRoot && name != "engine.go" && d.Body != nil {
-					recvName := coreEngineRecvName(d)
+				if isEngine && rel != "internal/engine/engine.go" && d.Body != nil {
+					recvName := engineRecvName(d)
 					ast.Inspect(d.Body, func(n ast.Node) bool {
-						if name == "lib.go" {
-							if id, ok := n.(*ast.Ident); ok && id.Name == "eng" {
-								pos := fset.Position(id.Pos())
-								problems = append(problems, fmt.Sprintf("core/lib.go:%d 必须保持纯转发入口，禁止直接访问 eng", pos.Line))
-							}
-						}
 						sel, ok := n.(*ast.SelectorExpr)
 						if !ok || (sel.Sel.Name != "mu" && sel.Sel.Name != "lifecycle") {
 							return true
@@ -458,9 +453,9 @@ func checkSources(coreDir string) []string {
 						if !ok {
 							return true
 						}
-						if x.Name == "eng" || (recvName != "" && x.Name == recvName) {
+						if recvName != "" && x.Name == recvName {
 							pos := fset.Position(sel.Pos())
-							problems = append(problems, fmt.Sprintf("core/%s:%d 禁止在 engine.go 之外直接访问核心锁 %s.%s（请经 engine.go 事务入口进入）", name, pos.Line, x.Name, sel.Sel.Name))
+							problems = append(problems, fmt.Sprintf("core/%s:%d 禁止在 internal/engine/engine.go 之外直接访问核心锁 %s.%s（请经 engine.go 事务入口进入）", rel, pos.Line, x.Name, sel.Sel.Name))
 						}
 						return true
 					})

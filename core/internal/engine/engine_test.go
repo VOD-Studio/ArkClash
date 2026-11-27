@@ -1,0 +1,210 @@
+package engine
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
+)
+
+func TestEngineWithStateUnlocksAndRunsPostUnlockOnPanic(t *testing.T) {
+	fixture(t)
+	postRan := false
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("expected panic to propagate")
+			}
+		}()
+		_ = eng.withState(func(tx *stateTx) error {
+			tx.deferUnlock(func() {
+				// 验证 postUnlock 运行时 eng.mu 已经释放，可安全重新加锁。
+				eng.mu.Lock()
+				postRan = true
+				eng.mu.Unlock()
+			})
+			panic("boom")
+		})
+	}()
+	if !postRan {
+		t.Fatal("postUnlock did not run after panic")
+	}
+	if !eng.mu.TryLock() {
+		t.Fatal("eng.mu remained locked after panic")
+	}
+	eng.mu.Unlock()
+}
+
+func TestEngineRunningProfileMatchesStatusOnFailurePaths(t *testing.T) {
+	assertSynced := func(stage string) {
+		t.Helper()
+		profile, ok := runningProfile()
+		status := eng.Status()
+		if status == nil {
+			if ok || profile != "" {
+				t.Fatalf("%s: runningProfile=(%q,%v), status=nil", stage, profile, ok)
+			}
+			return
+		}
+		if ok != status.Running || (ok && profile != status.Profile) || (!ok && profile != "") {
+			t.Fatalf("%s: runningProfile=(%q,%v), status=(%q,%v)", stage, profile, ok, status.Profile, status.Running)
+		}
+	}
+
+	options := lifecycleOptions(t)
+	// 1. start 阶段读取无效配置失败。
+	badPath := lifecycleWriteProfile(t, options, "bad", "rules: [\n")
+	badOpts := options
+	badOpts.Profile = "bad"
+	badOpts.ConfigPath = badPath
+	if err := start(badOpts); err == nil {
+		t.Fatal("expected invalid profile start to fail")
+	}
+	assertSynced("start invalid config")
+
+	// 2. start 阶段 Geo 设置校验失败（newGeoManager 失败回滚）。
+	validPath := lifecycleWriteProfile(t, options, "good", lifecycleProfile)
+	if err := os.WriteFile(filepath.Join(options.HomeDir, "geo-settings.json"), []byte(`{"version":1,"revision":"bad","autoUpdate":true,"intervalHours":0}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	geoFailOpts := options
+	geoFailOpts.Profile = "good"
+	geoFailOpts.ConfigPath = validPath
+	if err := start(geoFailOpts); err == nil {
+		t.Fatal("expected invalid geo-settings start to fail")
+	}
+	assertSynced("start invalid geo settings")
+	_ = os.Remove(filepath.Join(options.HomeDir, "geo-settings.json"))
+
+	// 3. 正常启动后注入 reload 失败与 attachTun 失败，runningProfile 均与 status 一致。
+	goodOpts := options
+	goodOpts.Profile = "good"
+	goodOpts.ConfigPath = validPath
+	if err := start(goodOpts); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := stop(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	assertSynced("after start")
+
+	if err := reload(badPath, "bad", new("good")); err == nil {
+		t.Fatal("expected invalid reload to fail")
+	}
+	assertSynced("after failed reload")
+
+	hostTunStartError = os.ErrPermission
+	status := eng.Status()
+	if err := attachTun(7, tunNetworkOptions{Stack: "gvisor", MTU: 1500}, attachIdentity{
+		BootID: status.BootID, Profile: status.Profile, ConfigRevision: status.ConfigRevision,
+	}); err == nil {
+		t.Fatal("expected attachTun failure")
+	}
+	hostTunStartError = nil
+	assertSynced("after failed attachTun")
+}
+
+func TestEngineViewReflectsSettingsUpdates(t *testing.T) {
+	options := lifecycleOptions(t)
+	validPath := lifecycleWriteProfile(t, options, "view", lifecycleProfile)
+	options.Profile = "view"
+	options.ConfigPath = validPath
+	if err := start(options); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := stop(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	view := eng.View()
+	if view == nil || view.HomeDir != options.HomeDir || view.CaptureLogs || view.DelayTimeout != 8000 {
+		t.Fatalf("unexpected initial view: %+v", view)
+	}
+	if err := updateGeneralSettings(corecfg.SettingsRequest[corecfg.GeneralSettings]{
+		BootID:           view.Status.BootID,
+		ExpectedRevision: "default",
+		Settings: corecfg.GeneralSettings{
+			Revision:     "rev-1",
+			DelayTimeout: 5000,
+			LogLevel:     "info",
+			CaptureLogs:  true,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	updated := eng.View()
+	if !updated.CaptureLogs || updated.DelayTimeout != 5000 {
+		t.Fatalf("view did not update after general settings: %+v", updated)
+	}
+}
+
+func TestCommitSettingsFileRenameAndRollbackParseFailureEntersFailedState(t *testing.T) {
+	options := lifecycleOptions(t)
+	profilePath := lifecycleWriteProfile(t, options, "rb", lifecycleProfile)
+	options.Profile = "rb"
+	options.ConfigPath = profilePath
+	if err := start(options); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		eng.mu.Lock()
+		eng.cleanupFailure = nil
+		eng.vpnCreated = false
+		eng.publishRuntimeLocked()
+		eng.mu.Unlock()
+		_ = stop()
+	})
+	status := eng.Status()
+	if err := attachTun(9, tunNetworkOptions{Stack: "gvisor", MTU: 1500}, attachIdentity{
+		BootID: status.BootID, Profile: status.Profile, ConfigRevision: status.ConfigRevision,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := setVpnStateFromHost("started", "running", true); err != nil {
+		t.Fatal(err)
+	}
+
+	// 将目标设置文件路径占成非空目录，迫使 os.Rename 失败；同时让 previous.ConfigPath 指向损坏的旧配置，
+	// 而 next.ConfigPath 指向有效的候选文件，验证回滚重解析也失败时统一进入失败状态（记 cleanupFailure、
+	// 关闭入口并停掉 TUN、避免内存与磁盘分叉）。
+	blockedPath := filepath.Join(options.HomeDir, "dns-overrides.json")
+	if err := os.MkdirAll(filepath.Join(blockedPath, "keep"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workDir := filepath.Join(options.HomeDir, "profile-work")
+	if err := os.MkdirAll(workDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	candPath := filepath.Join(workDir, "cand.yaml")
+	if err := os.WriteFile(candPath, []byte(lifecycleProfile), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(profilePath, []byte("rules: [\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := eng.withState(func(tx *stateTx) error {
+		previous := eng.current
+		next := previous
+		next.ConfigPath = candPath
+		next.DNS = corecfg.DNSOverrideSettings{Revision: "rev-fail"}
+		return tx.CommitSettingsFile(next, blockedPath, next.DNS)
+	})
+	if !errors.Is(err, corecfg.ErrSettingsApply) {
+		t.Fatalf("expected errProfileSettingsApply, got %v", err)
+	}
+	after := eng.Status()
+	if eng.cleanupFailure == nil || eng.tun != nil || businessListenersOpen() || after.Forward != "failed" {
+		t.Fatalf("rollback failure did not enter failed state: cleanup=%v tun=%v listeners=%v forward=%s",
+			eng.cleanupFailure, eng.tun, businessListenersOpen(), after.Forward)
+	}
+	if eng.current.DNS.Revision != "default" {
+		t.Fatalf("current DNS diverged from disk after failed rollback: %q", eng.current.DNS.Revision)
+	}
+}
