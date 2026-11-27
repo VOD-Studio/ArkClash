@@ -12,7 +12,7 @@
 | `release-please.yml` | 合并到 `main` | 维护发版 PR（版本号、CHANGELOG）并触发它的 CI；合并发版 PR 后打 tag、建 Release，调用 `release.yml` |
 | `release.yml` | 被 `release-please.yml` 调用，或手动补传 | 干净构建一次，生成校验和与来源证明，上传到 Release |
 | `scheduled.yml` | 每周一 10:00（北京时间），可手动 | 更新 Geo 数据、扫描依赖漏洞、不用缓存完整构建；失败时开 issue |
-| `codeql.yml` | 内核非测试代码相关的 PR、`main`、每周 | CodeQL 扫描 Go 代码（排除 `core/**/*_test.go` 与 `core/testdata/**`），结果在 Security → Code scanning |
+| `codeql.yml` | 内核非测试代码相关的 PR、`main`、每周 | CodeQL 扫描 Go 代码（排除 `core/**/*_test.go` 与 `core/**/testdata/**`），结果在 Security → Code scanning |
 | `pr-title.yml` | PR 打开、改标题、推送 | PR 标题是否符合提交信息格式（squash 合并时它就是 main 上的提交信息）。不计入「CI 通过」 |
 | `website.yml` | 官网/文档相关 PR、合并到 `main`、手动触发 | 用 Bun 同步文档、执行 `astro check` 并构建静态站点。推送到 `main` 或手动触发时部署到 GitHub Pages |
 
@@ -29,8 +29,8 @@
 |---|---|---|
 | 变更范围 | `scripts/ci/changes.py` 判断要不要构建、依赖有没有变 | — |
 | 快速检查 | shellcheck、actionlint、zizmor、ArkTS 分层规则。PR 另检查每个提交的信息格式 | — |
-| 内核 | `make core`、`make lint CHECKS=go`（含 Go 架构门禁与 `go vet`） | 文档 PR 或发版 PR 的合并提交 |
-| 内核宿主测试 | `make test TESTS=core`（全量宿主回归、mihomo 白盒回归与 Linux TUN fd 回归）与 `CORE_RACE=1` 竞态回归（覆盖全部 `internal/*`、6 个 mihomo 白盒包及除 2 项上游 mihomo 全局竞态外的根包用例），不依赖 NDK 或 ohpm | 文档 PR 或发版 PR 的合并提交 |
+| 内核 | `make core`、`make lint CHECKS=go`（含 Go 全包架构门禁、门禁负向单测与 `go vet`） | 文档 PR 或发版 PR 的合并提交 |
+| 内核宿主测试 | `make test TESTS=core`（全量宿主回归、mihomo 白盒回归与 Linux TUN fd 回归）与 `CORE_RACE=1` 竞态回归（覆盖全部 `internal/*`、6 个 mihomo 白盒包及除 2 项上游 mihomo 全局竞态外的 `internal/engine` 与 `internal/api` 用例），不依赖 NDK 或 ohpm | 文档 PR 或发版 PR 的合并提交 |
 | HAP | codelinter、`make hap`、HAP 内容与体积检查，签名包随 artifact 上传 | 内核任务跳过、未配置工具链仓库，或 PR 来自外部 fork |
 | 依赖漏洞 | govulncheck，只报告代码真正调用到的漏洞 | 不是改了 Go 依赖的 PR |
 | CI 通过 | 汇总以上（依赖漏洞除外）：有失败或取消就失败，跳过不算失败 | — |

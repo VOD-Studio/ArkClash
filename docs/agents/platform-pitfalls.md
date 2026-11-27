@@ -30,7 +30,7 @@ ARM64 的运行问题已在真机（Pura 70 Ultra，API 26）上验证；x86_64 
 
 - **现象**：DNS 查询超时、连接不断增加，VPN 进程内存迅速超过 1 GiB。一次真机快照里有 20,284 条指向默认 DoT 上游 853 端口的 TUN 连接、40,695 个 goroutine；GC 仍在运行。
 - **原因**：`VpnConnection.protectProcessNet()` 和 `blockedApplications` 不足以保护 Go 直接通过系统调用创建的 socket。内核的 DIRECT 出站再次进入 TUN，gVisor 接受握手后又建立一条 DIRECT 出站，形成递归。
-- **做法**：`core/socket.go`（`//go:build ohos`）在初始化时设置 mihomo 的 `dialer.DefaultSocketHook`，在 TCP connect / UDP send 前，通过 `OH_NetConn_GetDefaultNet` 和 `OH_NetConn_BindSocket` 把 socket 绑定当前默认物理网络。查询或绑定失败就返回错误，不放行未保护的 socket。每次获取当前网络，不缓存会在 Wi-Fi/蜂窝切换后失效的 netId。构建 `libclash.so` 时必须传 `-tags with_gvisor,ohos`；缺 `ohos` 标签会因 `core/lib.go` 被排除而触发 fail-closed 编译失败（[ADR-0040](../adr/0040-core-build-tags-and-host-tests.md)）。
+- **做法**：`core/internal/platform/socket.go`（`//go:build ohos`）在初始化时设置 mihomo 的 `dialer.DefaultSocketHook`，在 TCP connect / UDP send 前，通过 `OH_NetConn_GetDefaultNet` 和 `OH_NetConn_BindSocket` 把 socket 绑定当前默认物理网络。查询或绑定失败就返回错误，不放行未保护的 socket。每次获取当前网络，不缓存会在 Wi-Fi/蜂窝切换后失效的 netId。构建 `libclash.so` 时必须传 `-tags with_gvisor,ohos`；缺 `ohos` 标签会因 `core/cmd/clash/lib.go` 被排除而触发 fail-closed 编译失败（[ADR-0040](../adr/0040-core-build-tags-and-host-tests.md)、[ADR-0044](../adr/0044-core-cmd-and-five-layer-internal-dag.md)）。
 - **界面进程**：继续保留 `protectProcessNet()` 和本应用的 `blockedApplications`，供 ArkTS/libc 流量直连；它们不能替代 Go 的逐 socket 保护。决定见 [ADR-0008](../adr/0008-bind-core-sockets-to-physical-network.md)。
 - **复查**：同一进程持续连接并通过浏览器访问代理站点；观察 RSS、活动连接和 TUN/853 连接是否持续增长，不能只以一次网页能打开为准。受控实验中仅开启 socket 绑定，goroutine 在约 15 秒内从 40,695 降到 73，未使用定时 GC 或内存上限。
 
@@ -45,15 +45,15 @@ ARM64 的运行问题已在真机（Pura 70 Ultra，API 26）上验证；x86_64 
 
 - **现象**：UDP 直连报 `route ip+net: netlinkrib: permission denied`。
 - **原因**：任何需要列网卡的功能都要用 netlink。这里是 mihomo 的回环检测在检查 UDP 目标是不是本机 IP。
-- **做法**：`core/loopback.go` 通过 `go:linkname` 关闭回环检测（Clash Meta for Android 也是关掉的）。出站绕过 VPN 依赖第 2 条的逐 socket 物理网络绑定，不能只依赖应用排除名单。
-- **影响**：`auto-route`、`auto-detect-interface`、按网卡绑定出站这类依赖网卡列表的功能都用不了，`core/tun.go` 里保持关闭。
+- **做法**：`core/internal/platform/loopback.go` 通过 `go:linkname` 关闭回环检测（Clash Meta for Android 也是关掉的）。出站绕过 VPN 依赖第 2 条的逐 socket 物理网络绑定，不能只依赖应用排除名单。
+- **影响**：`auto-route`、`auto-detect-interface`、按网卡绑定出站这类依赖网卡列表的功能都用不了，`core/internal/engine/tun.go` 里保持关闭。
 - **预期内的警告**：`[TUN] get tun name failed for fd`（ioctl 被拒），无害。
 
 升级 Tailscale 后复查 `scripts/tailscale-netmon.patch`。首次使用出站时应读取 Network Kit 的物理网络快照，并从系统回调接收切网事件。真机验收需要实际拨号和 DNS 查询，单独保存节点不会启动 tsnet。[ADR-0035](../adr/0035-tailscale-network-monitor.md)
 
 ## 5. 其他约束
 
-- MTU 范围为 576–1500，启用 IPv6 时为 1280–1500。TUN 地址在 `shared/VpnNetwork.ets` 和 `core/tun.go` 中定义，两处需同步。[ADR-0020](../adr/0020-vpn-network-settings.md)
+- MTU 范围为 576–1500，启用 IPv6 时为 1280–1500。TUN 地址在 `shared/VpnNetwork.ets` 和 `core/internal/engine/tun.go` 中定义，两处需同步。[ADR-0020](../adr/0020-vpn-network-settings.md)
 - 内核重启后，其他 App 还缓存着上一轮的 fake-ip，会出现 `fake DNS record ... missing`，等它们的 DNS 缓存过期就好了。要根治，得打开 fake-ip 持久化（还没做）。
 
 ## 6. 内嵌请求的取消、DNS 池与自动选路

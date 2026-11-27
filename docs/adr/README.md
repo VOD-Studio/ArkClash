@@ -44,7 +44,8 @@
 | [0037](0037-resume-after-vpn-reclaim.md) | VPN 进程被回收后在前台恢复连接 | 已采纳，恢复时机由 0038 提前 |
 | [0038](0038-bind-vpn-host-and-background-keep.md) | 绑定 VPN 扩展与后台保持连接 | 已采纳 |
 | [0039](0039-boot-scoped-structured-logs.md) | 按内核代次持续采集日志与结构化脱敏展示 | 已采纳 |
-| [0040](0040-core-build-tags-and-host-tests.md) | 用 ohos 构建标签隔离内核平台代码并原地运行宿主回归 | 已采纳，由 0041、0042 扩展，真机门禁待验收 |
+| [0040](0040-core-build-tags-and-host-tests.md) | 用 ohos 构建标签隔离内核平台代码并原地运行宿主回归 | 已采纳，由 0041、0042、0044 扩展，真机门禁待验收 |
 | [0041](0041-core-internal-deep-modules.md) | 按窄接口与独立可测性向 core/internal 抽取深度模块 | 已采纳 |
 | [0042](0042-core-engine-and-reload-tx.md) | 核心状态机（Engine）、ReloadTx 与子系统单向锁序 | 已采纳，真机门禁待验收 |
 | [0043](0043-reuse-unchanged-rule-providers.md) | 热切换复用定义未变的 rule provider | 已采纳，待真机验收 |
+| [0044](0044-core-cmd-and-five-layer-internal-dag.md) | 内核目录收口（cmd/ 入口与 5 层单向 internal DAG） | 已采纳，双 ABI 与宿主/竞态门禁通过，真机门禁待验收 |
