@@ -2,8 +2,9 @@ import { LengthMetrics } from '@kit.ArkUI';
 import { AddedRule, addedRuleText, newAddedRule } from '../../client/AddedRules';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { PAGE_GUTTER } from '../../components/Theme';
-import { RULE_CARD_RADIUS, RULE_ENTER_OFFSET, RULE_SETTLE_SPRING, RulePrimaryButton, RuleSheetHeader, ruleEnter,
-  rulePressEffect, ruleTargetTone } from './AddedRuleSheetParts';
+import { ENTER_OFFSET, enterMotion, pressEffect, PrimaryButton, SETTLE_SPRING, SHEET_CARD_RADIUS,
+  SheetHeader } from '../../components/SheetParts';
+import { ruleTargetTone } from './AddedRuleTone';
 
 interface PresetRule {
   kind: string;
@@ -134,15 +135,15 @@ export struct AddedRulePresets {
     // 预设内容超过一屏：标题和添加按钮固定，中间的卡片列表单独滚动，两端渐隐。
     Column() {
       Column() {
-        RuleSheetHeader({ icon: $r('sys.symbol.bolt_fill'), heading: $r('app.string.added_rules_presets'),
+        SheetHeader({ icon: $r('sys.symbol.bolt_fill'), heading: $r('app.string.added_rules_presets'),
           subheading: $r('app.string.added_rules_presets_hint'), closable: !this.saving,
           onClose: (): void => this.onClose() })
       }
       .width('100%')
       .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 20, bottom: 14 })
       .opacity(this.entered ? 1 : 0)
-      .translate({ y: this.entered ? 0 : RULE_ENTER_OFFSET })
-      .animation(ruleEnter(this.motion, 0))
+      .translate({ y: this.entered ? 0 : ENTER_OFFSET })
+      .animation(enterMotion(this.motion, 0))
       Scroll() {
         Column({ space: 10 }) {
           ForEach(PRESETS, (preset: AddedRulePreset, index: number) => {
@@ -152,8 +153,8 @@ export struct AddedRulePresets {
             }
             .width('100%')
             .opacity(this.entered ? 1 : 0)
-            .translate({ y: this.entered ? 0 : RULE_ENTER_OFFSET })
-            .animation(ruleEnter(this.motion, index + 1))
+            .translate({ y: this.entered ? 0 : ENTER_OFFSET })
+            .animation(enterMotion(this.motion, index + 1))
           }, (preset: AddedRulePreset): string => preset.id)
         }
         .width('100%')
@@ -168,7 +169,7 @@ export struct AddedRulePresets {
       .fadingEdge(true, { fadingEdgeLength: LengthMetrics.vp(16) })
       .nestedScroll({ scrollForward: NestedScrollMode.PARENT_FIRST, scrollBackward: NestedScrollMode.SELF_FIRST })
       Column() {
-        RulePrimaryButton({
+        PrimaryButton({
           label: this.pendingCount > 0 ? $r('app.string.added_rules_presets_add', this.pendingCount) :
             $r('app.string.added_rules_presets_pick'),
           busy: this.saving, available: this.pendingCount > 0, onPress: (): void => this.confirm()
@@ -177,8 +178,8 @@ export struct AddedRulePresets {
       .width('100%')
       .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 8, bottom: 24 })
       .opacity(this.entered ? 1 : 0)
-      .translate({ y: this.entered ? 0 : RULE_ENTER_OFFSET })
-      .animation(ruleEnter(this.motion, 3))
+      .translate({ y: this.entered ? 0 : ENTER_OFFSET })
+      .animation(enterMotion(this.motion, 3))
     }
     .width('100%')
     .height('100%')
@@ -197,7 +198,7 @@ struct AddedRulePresetCard {
   private readonly checkSwap: ReplaceSymbolEffect = new ReplaceSymbolEffect(EffectScope.WHOLE);
 
   private settle(): AnimateParam {
-    return this.motion ? { curve: RULE_SETTLE_SPRING } : { duration: 0 };
+    return this.motion ? { curve: SETTLE_SPRING } : { duration: 0 };
   }
 
   @Builder
@@ -277,11 +278,11 @@ struct AddedRulePresetCard {
     }
     .width('100%')
     .padding({ left: 14, right: 16, top: 14, bottom: 14 })
-    .borderRadius(RULE_CARD_RADIUS)
+    .borderRadius(SHEET_CARD_RADIUS)
     .backgroundColor(this.selected ? this.appStyle.palette.selectionTonal : this.appStyle.palette.cardBackground)
     .animation(this.settle())
     .opacity(this.added ? 0.6 : 1)
-    .clickEffect(this.added ? null : rulePressEffect(this.motion))
+    .clickEffect(this.added ? null : pressEffect(this.motion))
     .accessibilityGroup(true)
     .accessibilitySelected(this.selected)
     .onClick((): void => {

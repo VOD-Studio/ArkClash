@@ -2,12 +2,18 @@
 
 以「附加规则」页为样板，整理重构其他页面时可直接沿用的版式、尺寸和动效。数值都取自现有实现，改动时先对照样板代码，再按本页复用。通用约束仍以 [ui.md](ui.md) 为准，本页只补充具体做法。
 
+共用部件（`entry/src/main/ets/components/`）：
+
+| 文件 | 内容 |
+|---|---|
+| `SheetParts.ets` | 共用部件与动效参数：抽屉标题区 `SheetHeader`、主/次按钮 `PrimaryButton` / `SecondaryButton`、提示卡 `NoteCard`、可选胶囊 `ChoiceChip`，入场与过渡函数 `enterMotion` / `sectionTransition` / `pressEffect` |
+| `IllustratedEmpty.ets` | 带插画的空状态 `IllustratedEmpty` 及「无匹配」「读取失败」变体，占位按钮 `EmptyAction`（可在按钮上弹菜单） |
+
 样板代码（`entry/src/main/ets/features/tools/`）：
 
 | 文件 | 内容 |
 |---|---|
-| `AddedRuleSheetParts.ets` | 共用部件与动效参数：抽屉标题区、主/次按钮、提示卡、可选胶囊、入场与过渡函数 |
-| `AddedRulesEmpty.ets` | 带插画的空状态，及「无匹配」「读取失败」变体 |
+| `AddedRulesEmpty.ets` | 空状态：提供最前那张卡的内容和操作按钮 |
 | `AddedRuleEditor.ets` | 表单抽屉：分组菜单、横滑胶囊、按需出现的区块、内联放弃确认 |
 | `AddedRulePresets.ets` | 多选卡片列表抽屉，固定标题与底部按钮 |
 | `AddedRuleDeleteSheet.ets` | 删除确认抽屉，带待删内容预览 |
@@ -15,8 +21,8 @@
 
 ## 复用方式
 
-- feature 之间不能互相 import（`scripts/check-arch.py`）。`AddedRuleSheetParts.ets` 只依赖 `components/`，别的 feature 要用时，把通用部件（标题区、按钮、提示卡、胶囊、入场函数和动效常量）移到 `components/` 并去掉 `Rule` 前缀；`ruleTargetTone` 这类业务判断留在原 feature。
-- 移动后同一处只保留一份定义，不在新页面里复制一套常量。
+- 共用部件只依赖 `components/`，各 feature 直接 import。`ruleTargetTone`（`features/tools/AddedRuleTone.ets`）这类业务判断留在各自 feature。
+- 同一处只保留一份定义，不在新页面里复制一套常量；缺少的通用部件补进 `components/`。
 
 ## 抽屉
 
@@ -33,13 +39,13 @@
 ### 版式
 
 - 内容左右 `PAGE_GUTTER`（16），顶部 20（确认类 24），底部 24；区块间距 12（确认类 14）。
-- 标题区（`RuleSheetHeader`）：48 圆角 16 的图标块，底色 `palette.profileExpiryTonal`，图标 24、品牌色；标题 20fp / 行高 26 / 600；可选副标题 13 / 18、次要色、最多两行；右侧关闭按钮复用 `HEADER_ACTION` 与 `headerMaterial()`，图标 `sys.symbol.xmark` 20。标题区与第一个区块相距约 18（确认类 14）。
+- 标题区（`SheetHeader`）：48 圆角 16 的图标块，底色 `palette.profileExpiryTonal`，图标 24、品牌色；标题 20fp / 行高 26 / 600；可选副标题 13 / 18、次要色、最多两行；右侧关闭按钮复用 `HEADER_ACTION` 与 `headerMaterial()`，图标 `sys.symbol.xmark` 20。标题区与第一个区块相距约 18（确认类 14）。
 - 删除类标题区图标块换成 `profile_expiry_error_tonal` 底、`status_error` 图标。
 
 ### 卡片与行
 
-- 卡片圆角 `RULE_CARD_RADIUS`（20），底色 `palette.cardBackground`，`clip(true)`。
-- 带图标的行高 72：左侧 40 的圆形图标块（`palette.brandSoft` 底、品牌色图标 20），间距 12；文字区上为 13 / 18 次要色的说明，下为 17 / 24 / 600 的值。分隔线从文字左缘起（`RULE_TEXT_INSET` = 68），右侧留 16。
+- 卡片圆角 `SHEET_CARD_RADIUS`（20），底色 `palette.cardBackground`，`clip(true)`。
+- 带图标的行高 72：左侧 40 的圆形图标块（`palette.brandSoft` 底、品牌色图标 20），间距 12；文字区上为 13 / 18 次要色的说明，下为 17 / 24 / 600 的值。分隔线从文字左缘起（`SHEET_TEXT_INSET` = 68），右侧留 16。
 - 开关行高 64，同样带图标块；纯说明行可去掉图标块。
 - 整行可点的选择行用 `Button({ type: ButtonType.Normal, buttonStyle: ButtonStyleMode.TEXTUAL })` 包住，`borderRadius(0)`、`padding(0)`，借系统按压态；右侧放分组名（13 次要色）和 `sys.symbol.chevron_down`（14）。
 - 输入行把 `TextInput` 放在说明下方：透明底、`padding(0)`、高 26、光标品牌色；整行 `onClick` 用 `getFocusController().requestFocus(id)` 聚焦，不必瞄准那一行字。占位文字给该字段的真实写法（如 `192.168.0.0/16`），比「请输入…」更能说明格式。
@@ -47,7 +53,7 @@
 ### 选择控件
 
 - 选项多且能分组：在整行上 `bindMenu`，菜单里用 `MenuItemGroup({ header })` 分组，`MenuItem(...).selected(...).selectIcon(true)` 标出当前项。不用样式难调的 `Select`。
-- 选项少、需要一眼可见：用横滑胶囊（`RuleChip` + 横向 `List`）：
+- 选项少、需要一眼可见：用横滑胶囊（`ChoiceChip` + 横向 `List`）：
   - 胶囊高 36、圆角 18，左右内边距 12 / 14，前导 7 的语义色圆点或 14 的图标，文字 14；业务标识用等宽 600，普通文字用应用字体 500。
   - 选中只换底色和字色（品牌底、`onBrand` 字），宽度不变，换行或滚动布局不会跳。
   - `List` 横向、高 36、间距 8，`contentStartOffset` / `contentEndOffset` 16 与卡片内边距对齐，`fadingEdge` 20 提示可滑动；`initialIndex` 取当前项前一项，打开时让选中项和半个邻居都在视野里。
@@ -57,15 +63,15 @@
 
 ### 操作区
 
-- 主按钮（`RulePrimaryButton`）：通栏胶囊，高 48，品牌底、`onBrand` 字 16 / 600。没准备好时禁用；进行中按钮里转圈、文字换成「保存中」，保持实色不变灰，只是不响应点击。
+- 主按钮（`PrimaryButton`）：通栏胶囊，高 48，品牌底、`onBrand` 字 16 / 600。没准备好时禁用；进行中按钮里转圈、文字换成「保存中」，保持实色不变灰，只是不响应点击。
 - 危险操作用 `danger` 样式：`profile_expiry_error_tonal` 底、`status_error` 字，进行中文字不变。不用整块红底。
-- 次按钮（`RuleSecondaryButton`）：`ButtonStyleMode.NORMAL` 胶囊，高 48，文字着色（普通用主色，放弃类用 `status_error`）。
+- 次按钮（`SecondaryButton`）：`ButtonStyleMode.NORMAL` 胶囊，高 48，文字着色（普通用主色，放弃类用 `status_error`）。
 - 「取消 / 确认」并排时 `Row({ space: 10 })` 各占 `layoutWeight(1)`，取消在左。标题区已有关闭按钮的表单不再放「取消」。
 - 进行中只锁表单区（各卡片 `enabled(!saving)`），不锁操作区，否则按钮会被一起置灰。
 
 ### 提示与确认
 
-- 提示卡（`RuleNote`）：内边距 14、圆角 20，18 的图标 + 14 / 20 文字。错误用 `profile_expiry_error_tonal` 底和 `status_error`；普通提示用卡片底和次要色。
+- 提示卡（`NoteCard`）：内边距 14、圆角 20，18 的图标 + 14 / 20 文字。错误用 `profile_expiry_error_tonal` 底和 `status_error`；普通提示用卡片底和次要色。
 - 不用 Alert。放弃确认放在抽屉内：操作区换成提示卡 +「继续编辑 / 放弃修改」。两套操作叠在同一个 `Stack({ alignContent: Alignment.Bottom })` 里交替出现，切换时不会先把高度撑成两份。
 - 删除确认列出将被删除的内容：最多 3 行（类型等宽 14 / 600、内容等宽 12 次要色、右侧策略 13 / 600 语义色），更多的用一行「以及另外 N 条」收尾，抽屉高度不随选择数量增长。
 
@@ -99,10 +105,10 @@
 | 按压 | `clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.95 })` |
 | 图标切换 | `SymbolGlyph.symbolEffect(new ReplaceSymbolEffect(EffectScope.WHOLE), trigger)` |
 
-- 入场：组件持有 `entered`，`aboutToAppear` 里设为 `!motion`，根节点 `onAppear` 里设为 `true`；每个区块包一层 `Column`，依次写 `opacity`、`translate`，再 `.animation(ruleEnter(motion, index))`。区块随抽屉上滑同时浮现，整体在抽屉停稳前后结束。
-- 会因选择而出现或消失的区块，在 `animateTo({ curve: RULE_SETTLE_SPRING }, ...)` 里改状态，并给区块加 `.transition(ruleSectionTransition(motion))`；同一位置的两套内容用 `Stack` 叠放交替。
+- 入场：组件持有 `entered`，`aboutToAppear` 里设为 `!motion`，根节点 `onAppear` 里设为 `true`；每个区块包一层 `Column`，依次写 `opacity`、`translate`，再 `.animation(enterMotion(motion, index))`。区块随抽屉上滑同时浮现，整体在抽屉停稳前后结束。
+- 会因选择而出现或消失的区块，在 `animateTo({ curve: SETTLE_SPRING }, ...)` 里改状态，并给区块加 `.transition(sectionTransition(motion))`；同一位置的两套内容用 `Stack` 叠放交替。
 - 颜色过渡只对支持属性动画的属性生效：圆点用带 `backgroundColor` 的 `Row` 画，`Circle.fill` 不参与动画、会跳色。
-- 减弱动态：页面把系统设置作为 `motion` 参数传入；关闭时入场首帧即终态（`entered` 初值为 `true`），`ruleEnter` 返回零时长，过渡用 `TransitionEffect.IDENTITY`，`clickEffect` 传 `null`，`symbolEffect` 的触发值固定不变。空状态在页面不在前台时也按关闭处理。
+- 减弱动态：页面把系统设置作为 `motion` 参数传入；关闭时入场首帧即终态（`entered` 初值为 `true`），`enterMotion` 返回零时长，过渡用 `TransitionEffect.IDENTITY`，`clickEffect` 传 `null`，`symbolEffect` 的触发值固定不变。空状态在页面不在前台时也按关闭处理。
 
 ## 易错点
 

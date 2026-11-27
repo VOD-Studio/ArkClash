@@ -3,9 +3,10 @@ import { AddedRule, ADDED_RULE_KINDS, ADDED_RULE_TARGETS, addedRuleHasParams } f
 import { RuleSetItem } from '../../client/RuleSets';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { PAGE_GUTTER } from '../../components/Theme';
-import { RULE_CARD_RADIUS, RULE_ENTER_OFFSET, RULE_ROW_HEIGHT, RULE_SETTLE_SPRING, RULE_TEXT_INSET,
-  RULE_TILE_SIZE, RuleChip, RuleNote, RulePrimaryButton, RuleSecondaryButton, RuleSheetHeader, ruleEnter,
-  ruleSectionTransition, ruleTargetTone } from './AddedRuleSheetParts';
+import { ChoiceChip, ENTER_OFFSET, enterMotion, NoteCard, PrimaryButton, SecondaryButton, sectionTransition,
+  SETTLE_SPRING, SHEET_CARD_RADIUS, SHEET_ROW_HEIGHT, SHEET_TEXT_INSET, SHEET_TILE_SIZE,
+  SheetHeader } from '../../components/SheetParts';
+import { ruleTargetTone } from './AddedRuleTone';
 
 @ObservedV2
 export class AddedRuleDraft {
@@ -194,7 +195,7 @@ export struct AddedRuleEditor {
   /** 改草稿并让随之出现、消失的区块用弹簧过渡；减弱动态时直接改。 */
   private change(apply: () => void): void {
     if (this.motion) {
-      this.getUIContext().animateTo({ curve: RULE_SETTLE_SPRING }, apply);
+      this.getUIContext().animateTo({ curve: SETTLE_SPRING }, apply);
     } else {
       apply();
     }
@@ -255,9 +256,9 @@ export struct AddedRuleEditor {
     Stack() {
       SymbolGlyph(icon).fontSize(20).fontColor([this.appStyle.palette.brand])
     }
-    .width(RULE_TILE_SIZE)
-    .height(RULE_TILE_SIZE)
-    .borderRadius(RULE_TILE_SIZE / 2)
+    .width(SHEET_TILE_SIZE)
+    .height(SHEET_TILE_SIZE)
+    .borderRadius(SHEET_TILE_SIZE / 2)
     .backgroundColor(this.appStyle.palette.brandSoft)
   }
 
@@ -305,9 +306,9 @@ export struct AddedRuleEditor {
             .fontColor([this.appStyle.palette.brand])
             .symbolEffect(this.iconSwap, this.motion ? this.groupIndex : 0)
         }
-        .width(RULE_TILE_SIZE)
-        .height(RULE_TILE_SIZE)
-        .borderRadius(RULE_TILE_SIZE / 2)
+        .width(SHEET_TILE_SIZE)
+        .height(SHEET_TILE_SIZE)
+        .borderRadius(SHEET_TILE_SIZE / 2)
         .backgroundColor(this.appStyle.palette.brandSoft)
         Column({ space: 2 }) {
           this.Caption($r('app.string.added_rules_type'))
@@ -335,7 +336,7 @@ export struct AddedRuleEditor {
       .padding({ left: 16, right: 16 })
     }
     .width('100%')
-    .height(RULE_ROW_HEIGHT)
+    .height(SHEET_ROW_HEIGHT)
     .borderRadius(0)
     .padding(0)
     .bindMenu(this.KindMenu)
@@ -369,7 +370,7 @@ export struct AddedRuleEditor {
         .padding({ left: 16, right: 16 })
       }
       .width('100%')
-      .height(RULE_ROW_HEIGHT)
+      .height(SHEET_ROW_HEIGHT)
       .borderRadius(0)
       .padding(0)
       .enabled(this.ruleSets.length > 0)
@@ -399,7 +400,7 @@ export struct AddedRuleEditor {
         .alignItems(HorizontalAlign.Start)
       }
       .width('100%')
-      .height(RULE_ROW_HEIGHT)
+      .height(SHEET_ROW_HEIGHT)
       .padding({ left: 16, right: 16 })
       // 整行都能点进输入框，不必瞄准那一行字。
       .onClick((): void => { this.getUIContext().getFocusController().requestFocus(PAYLOAD_INPUT_ID); })
@@ -410,11 +411,11 @@ export struct AddedRuleEditor {
   MatchCard() {
     Column() {
       this.KindRow()
-      Divider().color(this.appStyle.palette.divider).margin({ left: RULE_TEXT_INSET, right: 16 })
+      Divider().color(this.appStyle.palette.divider).margin({ left: SHEET_TEXT_INSET, right: 16 })
       this.PayloadRow()
     }
     .width('100%')
-    .borderRadius(RULE_CARD_RADIUS)
+    .borderRadius(SHEET_CARD_RADIUS)
     .backgroundColor(this.appStyle.palette.cardBackground)
     .clip(true)
   }
@@ -431,7 +432,7 @@ export struct AddedRuleEditor {
       List({ space: 8, initialIndex: this.targetStart }) {
         ForEach(this.targetChoices, (choice: TargetChoice) => {
           ListItem() {
-            RuleChip({
+            ChoiceChip({
               label: choice.label, selected: this.chosen(choice), mono: choice.kind === 'builtin',
               tone: choice.kind === 'builtin' ? ruleTargetTone(choice.value) : 'brand',
               icon: choice.kind === 'exit' ? $r('sys.symbol.arrowshape_turn_up_right') :
@@ -466,13 +467,13 @@ export struct AddedRuleEditor {
         .width('100%')
         .alignItems(HorizontalAlign.Start)
         .padding({ left: 16, right: 16 })
-        .transition(ruleSectionTransition(this.motion))
+        .transition(sectionTransition(this.motion))
       }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .padding({ top: 16, bottom: 16 })
-    .borderRadius(RULE_CARD_RADIUS)
+    .borderRadius(SHEET_CARD_RADIUS)
     .backgroundColor(this.appStyle.palette.cardBackground)
     .clip(true)
   }
@@ -501,12 +502,12 @@ export struct AddedRuleEditor {
     Column() {
       this.ToggleRow($r('sys.symbol.link_slash'), $r('app.string.added_rules_no_resolve'), this.draft.noResolve,
         (on: boolean): void => { this.draft.noResolve = on; })
-      Divider().color(this.appStyle.palette.divider).margin({ left: RULE_TEXT_INSET, right: 16 })
+      Divider().color(this.appStyle.palette.divider).margin({ left: SHEET_TEXT_INSET, right: 16 })
       this.ToggleRow($r('sys.symbol.smallcircle_filled_circle'), $r('app.string.added_rules_source_ip'),
         this.draft.source, (on: boolean): void => { this.draft.source = on; })
     }
     .width('100%')
-    .borderRadius(RULE_CARD_RADIUS)
+    .borderRadius(SHEET_CARD_RADIUS)
     .backgroundColor(this.appStyle.palette.cardBackground)
     .clip(true)
   }
@@ -517,25 +518,25 @@ export struct AddedRuleEditor {
     Stack({ alignContent: Alignment.Bottom }) {
       if (this.discardRequested) {
         Column({ space: 12 }) {
-          RuleNote({ icon: $r('sys.symbol.exclamationmark_circle'), text: $r('app.string.added_rules_unsaved') })
+          NoteCard({ icon: $r('sys.symbol.exclamationmark_circle'), text: $r('app.string.added_rules_unsaved') })
           Row({ space: 10 }) {
-            RuleSecondaryButton({ label: $r('app.string.added_rules_resume'), onPress: (): void => this.onResume() })
+            SecondaryButton({ label: $r('app.string.added_rules_resume'), onPress: (): void => this.onResume() })
               .layoutWeight(1)
-            RuleSecondaryButton({ label: $r('app.string.added_rules_discard'), danger: true,
+            SecondaryButton({ label: $r('app.string.added_rules_discard'), danger: true,
               onPress: (): void => this.onDiscard() })
               .layoutWeight(1)
           }
           .width('100%')
         }
         .width('100%')
-        .transition(ruleSectionTransition(this.motion))
+        .transition(sectionTransition(this.motion))
       } else {
         Column() {
-          RulePrimaryButton({ label: $r('app.string.action_save'), busy: this.saving, available: this.ready,
+          PrimaryButton({ label: $r('app.string.action_save'), busy: this.saving, available: this.ready,
             onPress: (): void => this.onSave() })
         }
         .width('100%')
-        .transition(ruleSectionTransition(this.motion))
+        .transition(sectionTransition(this.motion))
       }
     }
     .width('100%')
@@ -545,49 +546,49 @@ export struct AddedRuleEditor {
     Scroll() {
       Column({ space: 12 }) {
         Column() {
-          RuleSheetHeader({ icon: this.editing ? $r('sys.symbol.square_and_pencil') : $r('sys.symbol.plus'),
+          SheetHeader({ icon: this.editing ? $r('sys.symbol.square_and_pencil') : $r('sys.symbol.plus'),
             heading: this.editing ? $r('app.string.added_rules_edit') : $r('app.string.added_rules_add'),
             closable: !this.saving, onClose: (): void => this.onCancel() })
         }
         .width('100%')
         .margin({ bottom: 6 })
         .opacity(this.entered ? 1 : 0)
-        .translate({ y: this.entered ? 0 : RULE_ENTER_OFFSET })
-        .animation(ruleEnter(this.motion, 0))
+        .translate({ y: this.entered ? 0 : ENTER_OFFSET })
+        .animation(enterMotion(this.motion, 0))
         Column() { this.MatchCard() }
           .width('100%')
           .enabled(!this.saving)
           .opacity(this.entered ? 1 : 0)
-          .translate({ y: this.entered ? 0 : RULE_ENTER_OFFSET })
-          .animation(ruleEnter(this.motion, 1))
+          .translate({ y: this.entered ? 0 : ENTER_OFFSET })
+          .animation(enterMotion(this.motion, 1))
         Column() { this.TargetCard() }
           .width('100%')
           .enabled(!this.saving)
           .opacity(this.entered ? 1 : 0)
-          .translate({ y: this.entered ? 0 : RULE_ENTER_OFFSET })
-          .animation(ruleEnter(this.motion, 2))
+          .translate({ y: this.entered ? 0 : ENTER_OFFSET })
+          .animation(enterMotion(this.motion, 2))
         if (addedRuleHasParams(this.draft.kind)) {
           Column() { this.ParamsCard() }
             .width('100%')
             .enabled(!this.saving)
             .opacity(this.entered ? 1 : 0)
-            .translate({ y: this.entered ? 0 : RULE_ENTER_OFFSET })
-            .animation(ruleEnter(this.motion, 3))
-            .transition(ruleSectionTransition(this.motion))
+            .translate({ y: this.entered ? 0 : ENTER_OFFSET })
+            .animation(enterMotion(this.motion, 3))
+            .transition(sectionTransition(this.motion))
         }
         if (this.issue !== '') {
           Column() {
-            RuleNote({ icon: $r('sys.symbol.exclamationmark_triangle'), text: this.issue, error: true })
+            NoteCard({ icon: $r('sys.symbol.exclamationmark_triangle'), text: this.issue, error: true })
           }
           .width('100%')
-          .transition(ruleSectionTransition(this.motion))
+          .transition(sectionTransition(this.motion))
         }
         Column() { this.Actions() }
           .width('100%')
           .margin({ top: 4 })
           .opacity(this.entered ? 1 : 0)
-          .translate({ y: this.entered ? 0 : RULE_ENTER_OFFSET })
-          .animation(ruleEnter(this.motion, 4))
+          .translate({ y: this.entered ? 0 : ENTER_OFFSET })
+          .animation(enterMotion(this.motion, 4))
       }
       .width('100%')
       .alignItems(HorizontalAlign.Start)

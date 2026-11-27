@@ -1,7 +1,8 @@
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { PAGE_GUTTER } from '../../components/Theme';
-import { RULE_CARD_RADIUS, RULE_ENTER_OFFSET, RulePrimaryButton, RuleSecondaryButton, RuleTone, ruleEnter,
-  ruleTargetTone } from './AddedRuleSheetParts';
+import { ENTER_OFFSET, enterMotion, PrimaryButton, SecondaryButton, SHEET_CARD_RADIUS,
+  Tone } from '../../components/SheetParts';
+import { ruleTargetTone } from './AddedRuleTone';
 
 /** 删除确认里预览的一条规则：类型、内容（规则集显示名称）和策略。 */
 export interface RuleDeletePreview {
@@ -34,7 +35,7 @@ export struct AddedRuleDeleteSheet {
     this.entered = !this.motion;
   }
 
-  private tone(item: RuleDeletePreview): RuleTone {
+  private tone(item: RuleDeletePreview): Tone {
     return item.customExit ? 'brand' : ruleTargetTone(item.target);
   }
 
@@ -138,7 +139,7 @@ export struct AddedRuleDeleteSheet {
       }
     }
     .width('100%')
-    .borderRadius(RULE_CARD_RADIUS)
+    .borderRadius(SHEET_CARD_RADIUS)
     .backgroundColor(this.appStyle.palette.cardBackground)
     .clip(true)
   }
@@ -148,28 +149,28 @@ export struct AddedRuleDeleteSheet {
       Column() { this.Hero() }
         .width('100%')
         .opacity(this.entered ? 1 : 0)
-        .translate({ y: this.entered ? 0 : RULE_ENTER_OFFSET })
-        .animation(ruleEnter(this.motion, 0))
+        .translate({ y: this.entered ? 0 : ENTER_OFFSET })
+        .animation(enterMotion(this.motion, 0))
       if (this.previews.length > 0) {
         Column() { this.Previews() }
           .width('100%')
           .opacity(this.entered ? 1 : 0)
-          .translate({ y: this.entered ? 0 : RULE_ENTER_OFFSET })
-          .animation(ruleEnter(this.motion, 1))
+          .translate({ y: this.entered ? 0 : ENTER_OFFSET })
+          .animation(enterMotion(this.motion, 1))
       }
       Row({ space: 10 }) {
-        RuleSecondaryButton({ label: $r('app.string.action_cancel'), available: !this.saving,
+        SecondaryButton({ label: $r('app.string.action_cancel'), available: !this.saving,
           onPress: (): void => this.onCancel() })
           .layoutWeight(1)
-        RulePrimaryButton({ label: $r('app.string.action_delete'), busyLabel: $r('app.string.action_delete'),
+        PrimaryButton({ label: $r('app.string.action_delete'), busyLabel: $r('app.string.action_delete'),
           danger: true, busy: this.saving, onPress: (): void => this.onConfirm() })
           .layoutWeight(1)
       }
       .width('100%')
       .margin({ top: 4 })
       .opacity(this.entered ? 1 : 0)
-      .translate({ y: this.entered ? 0 : RULE_ENTER_OFFSET })
-      .animation(ruleEnter(this.motion, 2))
+      .translate({ y: this.entered ? 0 : ENTER_OFFSET })
+      .animation(enterMotion(this.motion, 2))
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
