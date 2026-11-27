@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, copyFile, cp, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, copyFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,47 +7,39 @@ import { spawnSync } from 'node:child_process';
 import test, { before, after } from 'node:test';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+const coreDir = join(root, 'core');
 const goVersion = (await readFile(join(root, '.go-version'), 'utf8')).trim();
 const race = process.env.CORE_RACE === '1';
-const goEnv = { ...process.env, CGO_ENABLED: '1', GOTOOLCHAIN: `go${goVersion}` };
-const sandbox = await mkdtemp(join(tmpdir(), 'arkclash-core-host-'));
-const executable = join(sandbox, 'core.test');
+const raceFlag = race ? ['-race'] : [];
+const goEnv = { ...process.env, CGO_ENABLED: '1', GOTOOLCHAIN: process.env.GOTOOLCHAIN ?? `go${goVersion}` };
+const depsDir = await mkdtemp(join(tmpdir(), 'arkclash-core-host-'));
+const modfile = join(depsDir, 'go.mod');
 const linuxFdEnabled = process.platform === 'linux' || process.env.CORE_LINUX_FD === '1';
-const linuxFdExecutable = join(sandbox, 'tun-fd.test');
-const mihomoExecutables = ['dns', 'tunnel/statistic', 'adapter/inbound', 'listener/auth', 'log', 'adapter/outbound'].map((pkg, index) => ({
-  pkg, executable: join(sandbox, `mihomo-${index}.test`)
-}));
-after(() => rm(sandbox, { recursive: true, force: true }));
+const linuxFdExecutable = join(depsDir, 'tun-fd.test');
+const mihomoPackages = ['dns', 'tunnel/statistic', 'adapter/inbound', 'listener/auth', 'log', 'adapter/outbound'];
+const maxBuffer = 16 * 1024 * 1024;
+after(() => rm(depsDir, { recursive: true, force: true }));
 
-// 冷缓存的工具链、依赖下载和编译不占用用例执行时限。
+function runGo(args, options = {}) {
+  return spawnSync('go', args, {
+    cwd: coreDir,
+    encoding: 'utf8',
+    maxBuffer,
+    env: goEnv,
+    ...options
+  });
+}
+
+// 冷缓存的工具链、依赖下载和编译不占用用例执行时限；测试在 core/ 原地执行，不再拷贝业务源码。
 before(async () => {
-  const prepare = spawnSync('bash', [join(root, 'scripts/prepare-core-modfile.sh'), sandbox], {
-    encoding: 'utf8', timeout: 300000, env: goEnv
+  const prepare = spawnSync('bash', [join(root, 'scripts/prepare-core-modfile.sh'), depsDir], {
+    encoding: 'utf8', timeout: 300000, maxBuffer, env: goEnv
   });
   assert.equal(prepare.status, 0, `${prepare.error ?? ''}\n${prepare.stdout}\n${prepare.stderr}`);
-  for (const file of ['lifecycle.go', 'inbound.go', 'runtime.go', 'selection.go', 'delay.go', 'probe.go', 'probe_body.go', 'proxies.go',
-    'providers.go', 'geo_settings.go', 'geo.go', 'geo_download.go', 'geo_events.go', 'diagnostics.go', 'dns_overrides.go',
-    'added_rules.go', 'rule_set_data.go', 'rule_sets.go', 'profile_settings.go', 'profile_scripts.go', 'profile_preview.go', 'local_proxies.go', 'local_proxy_links.go',
-    'proxy_filters.go', 'diagnostics_connections.go', 'diagnostics_dns.go', 'diagnostics_stream.go',
-    'diagnostics_stats.go', 'diagnostics_logs.go', 'general_settings.go', 'panel_controller.go', 'backup.go', 'profile_subscription_age.go',
-    'tailscale_watch.go', 'tailscale_login.go', 'fetch.go', 'commands.go']) {
-    await copyFile(join(root, 'core', file), join(sandbox, file));
-  }
-  for (const file of ['contracts-host_test.go', 'backup-live-host_test.go', 'core-host_test.go', 'delay-host_test.go', 'probe-host_test.go', 'proxies-host_test.go',
-    'providers-host_test.go', 'geo-reader-host_test.go', 'geo-host_test.go', 'geo-scheduler-host_test.go', 'diagnostics-host_test.go',
-    'diagnostics-stream-host_test.go', 'diagnostics-lifecycle-host_test.go', 'diagnostics-control-host_test.go',
-    'lifecycle-host_test.go', 'runtime-lifecycle-host_test.go', 'disconnected-delay-host_test.go', 'inbound-host_test.go',
-    'controller-lifecycle-host_test.go', 'forwarding-lifecycle-host_test.go', 'dns-overrides-host_test.go',
-    'added-rules-host_test.go', 'proxy-filters-host_test.go', 'rule-sets-host_test.go', 'profile-scripts-host_test.go',
-    'profile-preview-host_test.go', 'local-proxies-host_test.go', 'general-settings-host_test.go', 'subscription-age-host_test.go',
-    'tailscale-network-host_test.go']) {
-    await copyFile(new URL(`./${file}`, import.meta.url), join(sandbox, file));
-  }
-  await cp(join(root, 'core/internal'), join(sandbox, 'internal'), { recursive: true });
   const quickjs = spawnSync('bash', [join(root, 'scripts/prepare-quickjs.sh')], { encoding: 'utf8', timeout: 120000 });
   assert.equal(quickjs.status, 0, quickjs.stderr);
   goEnv.CGO_CPPFLAGS = `${process.env.CGO_CPPFLAGS ?? ''} -I ${JSON.stringify(quickjs.stdout.trim())}`;
-  await cp(join(root, 'scripts/testdata/geo'), join(sandbox, 'testdata/geo'), { recursive: true });
+
   for (const [source, destination] of [
     ['observation-dns-host_test.go', 'dns/arkclash_observation_test.go'],
     ['observation-clear-host_test.go', 'dns/arkclash_observation_clear_test.go'],
@@ -55,71 +47,68 @@ before(async () => {
     ['tun-fd-linux-host_test.go', 'listener/sing_tun/arkclash_fd_linux_test.go'],
     ['tailscale-address-host_test.go', 'adapter/outbound/arkclash_tailscale_address_test.go']
   ]) {
-    await copyFile(join(root, 'scripts', source), join(sandbox, 'mihomo', destination));
+    await copyFile(join(root, 'scripts', source), join(depsDir, 'mihomo', destination));
   }
-  const apiSource = await readFile(join(root, 'core/api.go'), 'utf8');
-  const frameFunctions = ['upgradeWebSocket', 'writeTextFrame', 'getStatus', 'writeError'].map(name => {
-    const declaration = apiSource.match(new RegExp(`^func ${name}\\([^\\n]+\\) [^\\n]*\\{[\\s\\S]*?^\\}`, 'm'))?.[0];
-    assert.ok(declaration, `未找到产品 WebSocket/状态函数 ${name}`);
-    return declaration;
+
+  // 预热编译缓存，不执行测试。
+  const prewarm = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-run=^$', '.', './internal/backup', './internal/script'], {
+    timeout: 600000
   });
-  await writeFile(join(sandbox, 'frames.go'), 'package main\nimport (\n' +
-    '"bufio"\n"crypto/sha1"\n"encoding/base64"\n"encoding/binary"\n"errors"\n"io"\n"net"\n' +
-    '"github.com/metacubex/http"\n"github.com/metacubex/chi/render"\n)\n' +
-    apiSource.match(/^type apiError struct \{[\s\S]*?^\}/m)[0] + '\n\n' + frameFunctions.join('\n\n') + '\n');
-  const build = spawnSync('go', ['test', '-mod=readonly', ...(race ? ['-race'] : []), '-c', '-o', executable, '.'], {
-    cwd: sandbox, encoding: 'utf8', timeout: 600000, env: goEnv
-  });
-  assert.equal(build.status, 0, `${build.error ?? ''}\n${build.stdout}\n${build.stderr}`);
-  for (const target of mihomoExecutables) {
-    const compiled = spawnSync('go', ['test', '-mod=readonly', ...(race ? ['-race'] : []),
-      ...(target.pkg === 'adapter/outbound' ? ['-tags', 'with_gvisor'] : []),
-      '-c', '-o', target.executable, `github.com/metacubex/mihomo/${target.pkg}`], {
-      cwd: sandbox, encoding: 'utf8', timeout: 600000, env: goEnv
-    });
-    assert.equal(compiled.status, 0, `${compiled.error ?? ''}\n${compiled.stdout}\n${compiled.stderr}`);
+  assert.equal(prewarm.status, 0, `${prewarm.error ?? ''}\n${prewarm.stdout}\n${prewarm.stderr}`);
+
+  for (const pkg of mihomoPackages) {
+    const prewarmPkg = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag,
+      ...(pkg === 'adapter/outbound' ? ['-tags', 'with_gvisor'] : []),
+      '-run=^$', `github.com/metacubex/mihomo/${pkg}`], { timeout: 600000 });
+    assert.equal(prewarmPkg.status, 0, `${prewarmPkg.error ?? ''}\n${prewarmPkg.stdout}\n${prewarmPkg.stderr}`);
   }
+
   if (linuxFdEnabled) {
-    const compiled = spawnSync('go', ['test', '-mod=readonly', '-c', '-o', linuxFdExecutable,
-      'github.com/metacubex/mihomo/listener/sing_tun'], {
-      cwd: sandbox, encoding: 'utf8', timeout: 600000,
-      env: { ...goEnv, CGO_ENABLED: '0', GOOS: 'linux', GOARCH: process.arch === 'arm64' ? 'arm64' : 'amd64' }
-    });
+    const compiled = process.platform === 'linux'
+      ? runGo(['test', '-mod=readonly', '-modfile', modfile, '-run=^$', 'github.com/metacubex/mihomo/listener/sing_tun'], {
+        timeout: 600000, env: { ...goEnv, CGO_ENABLED: '0' }
+      })
+      : runGo(['test', '-mod=readonly', '-modfile', modfile, '-c', '-o', linuxFdExecutable,
+        'github.com/metacubex/mihomo/listener/sing_tun'], {
+        timeout: 600000,
+        env: { ...goEnv, CGO_ENABLED: '0', GOOS: 'linux', GOARCH: process.arch === 'arm64' ? 'arm64' : 'amd64' }
+      });
     assert.equal(compiled.status, 0, `${compiled.error ?? ''}\n${compiled.stdout}\n${compiled.stderr}`);
   }
 }, { timeout: 900000 });
 
 test('ZIP 备份、原子恢复和 WebDAV', { timeout: 90000 }, () => {
-  const result = spawnSync('go', ['test', '-mod=readonly', '-count=1', '-v', './internal/backup'], {
-    cwd: sandbox, encoding: 'utf8', timeout: 85000, env: goEnv
+  const result = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-count=1', '-v', './internal/backup'], {
+    timeout: 85000
   });
   assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
   console.log(result.stdout.trim());
 });
 
 test('QuickJS 配置脚本与执行限额', { timeout: 90000 }, () => {
-  const result = spawnSync('go', ['test', '-mod=readonly', '-count=1', '-v', './internal/script'], {
-    cwd: sandbox, encoding: 'utf8', timeout: 85000, env: goEnv
+  const result = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-count=1', '-v', './internal/script'], {
+    timeout: 85000
   });
   assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
   console.log(result.stdout.trim());
 });
 
-// 原生 TUN 生命周期由宿主夹具提供；脚本执行使用与手机相同的 QuickJS 源码。
+// 宿主只替换 TUN 构造器；其余内核逻辑与 QuickJS 脚本在 core/ 原地编译执行。
 test('核心选择持久化、回滚、规则探测与实际请求取消', { timeout: 240000 }, () => {
-  const result = spawnSync(executable, ['-test.count=1', '-test.timeout=90s', '-test.v',
-    ...(process.env.CORE_TEST_RUN ? [`-test.run=${process.env.CORE_TEST_RUN}`] : [])], {
-    cwd: sandbox, encoding: 'utf8', timeout: 230000, env: goEnv
+  const result = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-count=1', '-timeout=90s', '-v',
+    ...(process.env.CORE_TEST_RUN ? [`-run=${process.env.CORE_TEST_RUN}`] : []), '.'], {
+    timeout: 230000
   });
   assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
   console.log(result.stdout.trim());
 });
 
 test('mihomo 诊断、DNS 缓存、监听所有权与 Tailscale 拨号回归', { timeout: 300000 }, () => {
-  for (const target of mihomoExecutables) {
-    const result = spawnSync(target.executable, ['-test.run=^TestArkClash', '-test.count=1',
-      '-test.timeout=45s', '-test.v'], {
-      cwd: sandbox, encoding: 'utf8', timeout: 55000, env: goEnv
+  for (const pkg of mihomoPackages) {
+    const result = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag,
+      ...(pkg === 'adapter/outbound' ? ['-tags', 'with_gvisor'] : []),
+      '-run=^TestArkClash', '-count=1', '-timeout=45s', '-v', `github.com/metacubex/mihomo/${pkg}`], {
+      timeout: 55000
     });
     assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
     console.log(result.stdout.trim());
@@ -127,12 +116,16 @@ test('mihomo 诊断、DNS 缓存、监听所有权与 Tailscale 拨号回归', {
 });
 
 test('Linux TUN 原始 fd 与副本所有权', { skip: !linuxFdEnabled, timeout: 120000 }, () => {
-  const args = ['-test.run=^TestArkClash', '-test.count=1', '-test.timeout=45s', '-test.v'];
-  const result = process.platform === 'linux' ?
-    spawnSync(linuxFdExecutable, args, { encoding: 'utf8', timeout: 55000 }) :
-    spawnSync('docker', ['run', '--rm', '--network', 'none', '--mount',
-      `type=bind,source=${sandbox},target=/test,readonly`, process.env.CORE_LINUX_IMAGE ?? 'alpine:latest',
-      '/test/tun-fd.test', ...args], { encoding: 'utf8', timeout: 110000 });
+  const result = process.platform === 'linux'
+    ? runGo(['test', '-mod=readonly', '-modfile', modfile, '-run=^TestArkClash', '-count=1', '-timeout=45s', '-v',
+      'github.com/metacubex/mihomo/listener/sing_tun'], {
+      timeout: 55000, env: { ...goEnv, CGO_ENABLED: '0' }
+    })
+    : spawnSync('docker', ['run', '--rm', '--network', 'none', '--mount',
+      `type=bind,source=${depsDir},target=/test,readonly`, process.env.CORE_LINUX_IMAGE ?? 'alpine:latest',
+      '/test/tun-fd.test', '-test.run=^TestArkClash', '-test.count=1', '-test.timeout=45s', '-test.v'], {
+      encoding: 'utf8', maxBuffer, timeout: 110000
+    });
   assert.equal(result.status, 0, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
   console.log(result.stdout.trim());
 });

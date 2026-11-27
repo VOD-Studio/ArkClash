@@ -26,6 +26,13 @@ rules: ['MATCH,DIRECT']
 
 func lifecycleOptions(t *testing.T) startOptions {
 	t.Helper()
+	// 先注册的后执行，确保用例清理（stop）结束后一次性 TUN 关闭标记也已复位。
+	t.Cleanup(func() {
+		hostTunStartError = nil
+		hostTunStopError = nil
+		setHostTun(false)
+		cleanupFailure = nil
+	})
 	home := t.TempDir()
 	if err := os.Mkdir(filepath.Join(home, "profiles"), 0700); err != nil {
 		t.Fatal(err)

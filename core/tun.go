@@ -19,9 +19,23 @@ const (
 	tunDNS6     = "[fdfe:dcba:9876::2]:53"
 )
 
-var tunListener *sing_tun.Listener
+type tunHandle interface {
+	Close() error
+}
+
+var tunListener tunHandle
 var tunCloseErr error
 var tunCloseAttempted bool
+
+// 宿主测试可替换该构造器以注入启动/关闭故障，同时保留真实参数校验与一次性关闭逻辑。
+var newTunListener = func(options LC.Tun) (tunHandle, error) {
+	l, err := sing_tun.New(options, tunnel.Tunnel)
+	if err != nil {
+		// 显式返回无类型 nil，避免 (*sing_tun.Listener)(nil) 落入 tunListener != nil 判断。
+		return nil, err
+	}
+	return l, nil
+}
 
 // startTun runs our own TUN listener instead of the profile's, so reloading or
 // switching profiles never tears down the TUN.
@@ -61,7 +75,7 @@ func startTun(fd int, network tunNetworkOptions) error {
 		options.CongestionController = network.CongestionController
 	}
 
-	l, err := sing_tun.New(options, tunnel.Tunnel)
+	l, err := newTunListener(options)
 	if err != nil {
 		return err
 	}

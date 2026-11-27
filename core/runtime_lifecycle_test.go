@@ -20,7 +20,7 @@ import (
 func TestRuntimeBeginsWarmWithoutConnectionTimer(t *testing.T) {
 	fixture(t)
 	mu.Lock()
-	tunListener = nil
+	setHostTun(false)
 	waitDiagnostics := beginRuntime()
 	publishRuntime()
 	status := *runtimeSnapshot.Load()
@@ -66,11 +66,7 @@ func TestRuntimeVpnStatesRequireObservedResources(t *testing.T) {
 			mu.Lock()
 			defer mu.Unlock()
 			running = test.core
-			tunListener = nil
-			if test.tun {
-				fd := 1
-				tunListener = &fd
-			}
+			setHostTun(test.tun)
 			err := updateVpnState(test.intent, test.forward, test.vpn)
 			status := runtimeSnapshot.Load()
 			if (err != nil) != test.wantFailed || status.Running != test.core || status.TunAttached != test.tun || status.VpnCreated != test.vpn || status.Intent != test.intent {
@@ -100,7 +96,7 @@ func TestRuntimeTimerAndIdentityFollowConnectionNotHost(t *testing.T) {
 	if runtimeSnapshot.Load().StartedAt != 1 {
 		t.Fatal("idempotent connection report restarted timer")
 	}
-	tunListener = nil
+	setHostTun(false)
 	if err := updateVpnState("stopped", "stopped", false); err != nil {
 		t.Fatal(err)
 	}
@@ -114,8 +110,7 @@ func TestRuntimeTimerAndIdentityFollowConnectionNotHost(t *testing.T) {
 	if runtimeSnapshot.Load().StartedAt != 0 {
 		t.Fatal("preparing started connection timer")
 	}
-	fd := 1
-	tunListener = &fd
+	setHostTun(true)
 	before := time.Now().UnixMilli()
 	if err := updateVpnState("started", "running", true); err != nil {
 		t.Fatal(err)
@@ -127,7 +122,7 @@ func TestRuntimeTimerAndIdentityFollowConnectionNotHost(t *testing.T) {
 	if connected.BootID != boot || connected.ConfigRevision != configRevision || currentProxyGraph().Actual["Manual"] != node {
 		t.Fatal("VPN state changed core or node identity")
 	}
-	tunListener = nil
+	setHostTun(false)
 	publishRuntime()
 	if status := runtimeSnapshot.Load(); status.Forward != "failed" || status.StartedAt != 0 || !status.VpnCreated {
 		t.Fatalf("lost TUN concealed resources: %+v", status)
@@ -166,7 +161,7 @@ func TestRuntimeStoppedCannotHideLiveBusinessListener(t *testing.T) {
 	if listener.GetPorts().Port != port {
 		t.Fatal("HTTP listener did not open")
 	}
-	tunListener = nil
+	setHostTun(false)
 	if err := updateVpnState("stopped", "stopped", false); err == nil {
 		t.Fatal("live business listener concealed by stopped state")
 	}
@@ -182,7 +177,7 @@ func TestRuntimeStoppedCannotHideLiveBusinessListener(t *testing.T) {
 func TestWarmCoreAllowsSelectionAndRealUrlTest(t *testing.T) {
 	fixture(t)
 	mu.Lock()
-	tunListener = nil
+	setHostTun(false)
 	err := updateVpnState("stopped", "stopped", false)
 	mu.Unlock()
 	if err != nil {
@@ -275,7 +270,7 @@ func TestEmptyProfileRejectsNodeOperationsAndSkipsSelectionFile(t *testing.T) {
 	cfg := fixture(t)
 	mu.Lock()
 	current.Profile = ""
-	tunListener = nil
+	setHostTun(false)
 	err := updateVpnState("stopped", "stopped", false)
 	opts := current
 	mu.Unlock()

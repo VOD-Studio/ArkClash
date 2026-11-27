@@ -1,10 +1,11 @@
-// 宿主只替换平台生命周期；选择事务、规则拨号和取消路径均编译产品源码执行。
+// 宿主只替换平台 TUN 构造器；生命周期、事件推送、选择事务、规则拨号和取消路径均执行真实产品源码。
 package main
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -22,38 +23,43 @@ import (
 	"github.com/metacubex/mihomo/config"
 	C "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/hub/executor"
+	LC "github.com/metacubex/mihomo/listener/config"
 	"github.com/metacubex/mihomo/listener/inner"
 	"github.com/metacubex/mihomo/tunnel"
 )
 
-var tunListener *int
-var hostTunStartError error
-var hostTunStopError error
-
-func startTun(fd int, network tunNetworkOptions) error {
-	if hostTunStartError != nil {
-		return hostTunStartError
-	}
-	tunListener = &fd
-	return nil
+type stubTunHandle struct {
+	fd int
 }
 
-func stopTun() error {
-	tunListener = nil
+func (h *stubTunHandle) Close() error {
 	return hostTunStopError
 }
 
-var runtimeEvents = make(chan string, 256)
+var hostTunStartError error
+var hostTunStopError error
 
-func emit(event any) {
-	data, err := json.Marshal(event)
-	if err != nil {
+func hostNewTunListener(options LC.Tun) (tunHandle, error) {
+	if hostTunStartError != nil {
+		return nil, hostTunStartError
+	}
+	return &stubTunHandle{fd: options.FileDescriptor}, nil
+}
+
+// 绕过 startTun/stopTun 直接设置宿主 TUN 状态时，必须同步复位一次性关闭标记。
+func setHostTun(attached bool) {
+	tunCloseAttempted = false
+	tunCloseErr = nil
+	if attached {
+		tunListener = &stubTunHandle{fd: 1}
 		return
 	}
-	select {
-	case runtimeEvents <- string(data):
-	default:
-	}
+	tunListener = nil
+}
+
+func TestMain(m *testing.M) {
+	newTunListener = hostNewTunListener
+	os.Exit(m.Run())
 }
 func fixture(t *testing.T) *config.Config {
 	t.Helper()
@@ -94,8 +100,7 @@ rules: ['MATCH,DIRECT']
 	current = startOptions{HomeDir: home, Profile: "fixture", Geo: defaultGeoSettings()}
 	running = true
 	runningID.Store(&current.Profile)
-	fd := 1
-	tunListener = &fd
+	setHostTun(true)
 	waitDiagnostics := beginRuntime()
 	if err := updateVpnState("started", "running", true); err != nil {
 		mu.Unlock()
@@ -121,7 +126,7 @@ rules: ['MATCH,DIRECT']
 		cancelDelayTests()
 		running = false
 		runningID.Store(nil)
-		tunListener = nil
+		setHostTun(false)
 		runtimeVpnCreated = false
 		runtimeIntent = "stopped"
 		runtimeForward = "stopped"
@@ -458,5 +463,34 @@ rules: ['MATCH,DIRECT']
 	executor.ApplyConfig(cfg, true)
 	if got := cfg.Proxies["Manual"].Adapter().(outboundgroup.ProxyGroup).Now(); got != "REJECT" {
 		t.Fatalf("global cache replaced the profile selection with %s", got)
+	}
+}
+
+func TestStartTunValidatesOptionsAndClearsStateOnFailure(t *testing.T) {
+	t.Cleanup(func() {
+		hostTunStartError = nil
+		hostTunStopError = nil
+		setHostTun(false)
+	})
+	if err := startTun(11, tunNetworkOptions{Stack: "invalid", MTU: 1500}); err == nil || tunListener != nil {
+		t.Fatalf("invalid stack accepted: err=%v tun=%v", err, tunListener)
+	}
+	if err := startTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 575}); err == nil || tunListener != nil {
+		t.Fatalf("too small IPv4 MTU accepted: err=%v tun=%v", err, tunListener)
+	}
+	if err := startTun(11, tunNetworkOptions{Stack: "gvisor", IPv6: true, MTU: 1279}); err == nil || tunListener != nil {
+		t.Fatalf("too small IPv6 MTU accepted: err=%v tun=%v", err, tunListener)
+	}
+	wantErr := errors.New("constructor failure")
+	hostTunStartError = wantErr
+	if err := startTun(11, tunNetworkOptions{Stack: "gvisor", MTU: 1500}); !errors.Is(err, wantErr) || tunListener != nil {
+		t.Fatalf("constructor failure left non-nil tunListener: err=%v tun=%v", err, tunListener)
+	}
+	hostTunStartError = nil
+	if err := startTun(11, tunNetworkOptions{Stack: "gvisor", IPv6: true, MTU: 1500}); err != nil || tunListener == nil {
+		t.Fatalf("valid startTun failed: err=%v tun=%v", err, tunListener)
+	}
+	if err := stopTun(); err != nil || tunListener != nil {
+		t.Fatalf("stopTun failed: err=%v tun=%v", err, tunListener)
 	}
 }

@@ -184,12 +184,11 @@ func TestSubscriptionFetchUsesForwardingState(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		intent := "started"
-		tunListener = nil
+		setHostTun(false)
 		if forward == "stopped" {
 			intent = "stopped"
 		} else if forward == "running" {
-			fd := 1
-			tunListener = &fd
+			setHostTun(true)
 		}
 		if err := updateVpnState(intent, forward, tunListener != nil); err != nil {
 			t.Fatal(err)
@@ -391,20 +390,20 @@ func automaticProbeProxy(t *testing.T, name string, peer *automaticProbePeer) st
 	return probeProxyConfig(t, name, address.Host)
 }
 
-func awaitAutomaticProbeRoute(t *testing.T, group outboundgroup.ProxyGroup, name string, previous uint64) {
+func awaitAutomaticProbeRoute(t *testing.T, events <-chan []byte, group outboundgroup.ProxyGroup, name string, previous uint64) {
 	t.Helper()
 	timeout := time.NewTimer(12 * time.Second)
 	defer timeout.Stop()
 	for {
 		select {
-		case text := <-runtimeEvents:
+		case raw := <-events:
 			var event struct {
 				Type   string         `json:"type"`
 				Status statusResponse `json:"status"`
 			}
 			watch := runtimeRoutes.Load()
 			changes := watch.changes.Load()
-			if json.Unmarshal([]byte(text), &event) == nil && event.Type == "runtime" && event.Status.Revision > previous && group.Now() == name && watch.changes.Load() == changes {
+			if json.Unmarshal(raw, &event) == nil && event.Type == "runtime" && event.Status.Revision > previous && group.Now() == name && watch.changes.Load() == changes {
 				return
 			}
 		case <-timeout.C:
@@ -443,6 +442,8 @@ func TestAutomaticHealthChangePushesRuntimeAndDiscardsOldProbe(t *testing.T) {
 				close(done)
 			}()
 			receiveProbeSignal(t, a.entered, "old probe did not use the initially selected actual route")
+			events, unsubscribe := subscribeEvents(256)
+			defer unsubscribe()
 			a.unhealthy.Store(true)
 			expected, err := utils.NewUnsignedRanges[uint16]("204")
 			if err != nil {
@@ -459,7 +460,7 @@ func TestAutomaticHealthChangePushesRuntimeAndDiscardsOldProbe(t *testing.T) {
 					t.Fatalf("health completion bypassed the real ten-second route cache: now=%s response=%d %s", group.Now(), cached.Code, cached.Body.String())
 				}
 			}
-			awaitAutomaticProbeRoute(t, group, "B", before)
+			awaitAutomaticProbeRoute(t, events, group, "B", before)
 			if kind == "url-test" && time.Since(cacheStartedAt) < 10*time.Second {
 				t.Fatal("automatic update committed before the real ten-second cache expired")
 			}

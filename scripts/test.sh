@@ -9,6 +9,10 @@ if [[ $# -eq 1 && $1 == go ]]; then
   exit
 fi
 
+if [[ $# -eq 1 && $1 == core ]]; then
+  exec node --test "$ROOT/scripts/verify-core.mjs"
+fi
+
 if [[ $# -eq 1 && $1 == local ]]; then
   case "$(uname -s)" in
     Darwin|MINGW*|MSYS*|CYGWIN*) ;;
