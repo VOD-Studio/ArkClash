@@ -16,6 +16,7 @@ import {
 } from '../../shared/VpnNetwork';
 import { ACCESS_APP_CATEGORIES, AccessAppCategory } from './AccessControlCatalog';
 import { AccessControlDraft, AccessControlRowItem } from './AccessControlLogic';
+import { SettingsSection } from './SettingsSection';
 
 interface AccessHeaderActionOption {
   icon: Resource;
@@ -486,7 +487,7 @@ export struct AccessControlPage {
             .fontSize(14)
             .fontColor(this.appStyle.palette.onBrand)
             .iconColor(this.appStyle.palette.onBrand)
-            .bgColor(this.appStyle.palette.brand)
+            .backgroundColor(this.appStyle.palette.brand)
             .onClick((_event: ClickEvent, result: PasteButtonOnClickResult): void => {
               if (result === PasteButtonOnClickResult.SUCCESS) {
                 this.pasteFromClipboard();
