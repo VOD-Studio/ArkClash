@@ -24,6 +24,7 @@ const (
 	internalPrefix = rootPkg + "/internal/"
 	backupPkg      = internalPrefix + "backup"
 	scriptPkg      = internalPrefix + "script"
+	ctrlPkg        = internalPrefix + "ctrl"
 	proxylinkPkg   = internalPrefix + "proxylink"
 	rulesetPkg     = internalPrefix + "ruleset"
 	mihomoPrefix   = "github.com/metacubex/mihomo"
@@ -36,11 +37,12 @@ var (
 		backupStorePkg: true,
 		scriptPkg:      true,
 	}
-	zeroMihomoPkgs = []string{backupStorePkg, backupPkg, scriptPkg}
+	zeroMihomoPkgs = []string{backupStorePkg, backupPkg, scriptPkg, ctrlPkg}
 	// internal/* 包依赖白名单（未登记即失败）：只列出每个子包允许依赖的其他 core/internal/* 包。
 	allowedInternalDeps = map[string][]string{
 		backupPkg:    nil,
 		scriptPkg:    nil,
+		ctrlPkg:      nil,
 		proxylinkPkg: nil,
 		rulesetPkg:   nil,
 	}
