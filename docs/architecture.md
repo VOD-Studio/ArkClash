@@ -169,6 +169,7 @@ ZIP 快照与恢复机制、旧版目录兼容及 WebDAV 路由见 [ADR-0031](ad
 | `core/diagnostics_connections.go`、`diagnostics_dns.go` | 连接与 DNS 观察、不可变 DTO、有界历史和可见时的流量采样 |
 | `core/diagnostics_stream.go`、`diagnostics_stats.go` | 诊断 WebSocket、控制帧、整帧写锁、deadline、仪表盘轻量统计推送与会话清理 |
 | `core/prefetch.go` | 在后台预先下载配置里的 rule-provider，第一次热切换不用等 |
+| `core/rule_provider_reuse.go` | 热切换时判断并复用定义未变的 rule-provider 实例 |
 | `core/tun.go` | 独立持有平台 TUN 的 Go listener（经 `tunHandle`/`newTunListener` 解耦宿主测试）；副本 fd 获取与回滚见 mihomo 补丁 |
 | `core/socket.go` | `//go:build ohos`：通过 Network Kit 原生 API 保护 Go 出站 socket，绑定失败则拒绝拨号 |
 | `core/hilog.go` | `//go:build ohos`：内核日志转发到 hilog |
@@ -198,6 +199,7 @@ entry/ ── hvigor（CMake 编 NAPI 桥 + ArkTS）──► HAP
 
 ## 后续演进的约束
 
+- **rule-provider 复用**：热切换时定义没变、已加载出内容的 Domain/IPCIDR rule-provider 沿用运行中的实例，不重新解析，应用阶段不再随规则集大小变长（[ADR-0043](adr/0043-reuse-unchanged-rule-providers.md)）。
 - **provider 预下载**：热切换要等新配置的 provider 全部加载完。`core/prefetch.go` 在后台预先下载 rule-provider，触发方是 VPN 进程（订阅更新后、连接 10 秒后）和界面（连接中导入本地配置后，经 `POST /arkclash/prefetch`）。proxy-provider 不预下载（原因见 ADR-0010）。
 - **新的 ArkClash 命令**：挂在 `core/api.go` 的 `/arkclash/` 下。内核自己能完成的由 Go 处理；要用到 ArkTS 侧逻辑的，走 `/arkclash/profiles/{name}` 这类转发路由（ADR-0009）。
 - **VpnConfig 级设置**（协议栈、IPv6、分应用代理、VpnConfig 里的 DNS 地址和 MTU）不能热切换，改了只能断开重连（ADR-0010）。

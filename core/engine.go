@@ -117,6 +117,8 @@ type coreEngine struct {
 
 	// 4. 无锁只读快照
 	view atomic.Pointer[runtimeView]
+	// 最近一次生效配置里的 rule provider，在 e.mu 下整份发布，mihomo 解析钩子在锁外只读（ADR-0043）。
+	ruleProviders atomic.Pointer[ruleProviderGeneration]
 
 	// 5. 下游独立子系统与路线监听
 	providers *providers.Hub
@@ -234,6 +236,7 @@ func (tx *stateTx) CommitReload(plan reloadPlan) (bool, error) {
 	tx.deferUnlock(e.diag.BeginReload())
 	C.SetConfig(plan.Next.ConfigPath)
 	executor.ApplyConfig(withoutBusinessInbounds(plan.Cfg), true)
+	publishRuleProvidersLocked(plan.Cfg, plan.Inbound.ruleProviderKeys)
 	e.desiredInbound = plan.Inbound
 	e.current = plan.Next
 	e.configRevision++

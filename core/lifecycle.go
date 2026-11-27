@@ -90,6 +90,8 @@ func start(opts startOptions) error {
 			return err
 		}
 
+		installRuleProviderReuse()
+		publishRuleProvidersLocked(nil, nil)
 		constant.SetHomeDir(opts.HomeDir)
 		constant.SetConfig(opts.ConfigPath)
 
@@ -110,6 +112,7 @@ func start(opts startOptions) error {
 			return err
 		}
 		executor.ApplyConfig(withoutBusinessInbounds(cfg), true)
+		publishRuleProvidersLocked(cfg, nextInbound.ruleProviderKeys)
 
 		eng.running = true
 		eng.current = opts
@@ -123,6 +126,7 @@ func start(opts startOptions) error {
 			tunnel.OnSuspend()
 			tunnel.UpdateProxies(nil, nil)
 			tunnel.UpdateRules(nil, nil, nil)
+			publishRuleProvidersLocked(nil, nil)
 			eng.running = false
 			eng.current = startOptions{}
 			eng.desiredInbound = inboundSettings{}
@@ -238,6 +242,10 @@ func prepareRawConfig(rawCfg *config.RawConfig, opts startOptions, settings *inb
 	// 配置解析可能初始化缺失的 Geo，来源必须先固定为页面设置。
 	setGeoURLs(opts.Geo)
 	mappings := rawCfg.Listeners
+	var providerKeys map[string]string
+	if settings != nil {
+		providerKeys = ruleProviderKeys(rawCfg.RuleProvider)
+	}
 	cfg, err := config.ParseRawConfig(rawCfg)
 	if err != nil {
 		return nil, err
@@ -251,6 +259,7 @@ func prepareRawConfig(rawCfg *config.RawConfig, opts startOptions, settings *inb
 		baseline.finalizeDNS(cfg.DNS, opts.Profile != "" && opts.General.AppendSystemDNS)
 		*settings = captureInbound(cfg, mappings)
 		settings.baseline = baseline
+		settings.ruleProviderKeys = providerKeys
 	}
 	return cfg, nil
 }
@@ -496,6 +505,7 @@ func stop() error {
 		tunnel.UpdateProxies(nil, nil)
 		tunnel.UpdateRules(nil, nil, nil)
 		tunnel.UpdateListeners(nil)
+		publishRuleProvidersLocked(nil, nil)
 		eng.running = false
 		eng.current = startOptions{}
 		eng.desiredInbound = inboundSettings{}

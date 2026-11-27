@@ -66,6 +66,7 @@ ARM64 的运行问题已在真机（Pura 70 Ultra，API 26）上验证；x86_64 
 - 升级 mihomo 后先确认两个补丁能应用并通过 `make core`，再复查真实拨号取消、普通 DNS 与探测并发、provider 退休、缓存到期选路及同名成员身份。真机转发与长时间待机仍按独立门禁验证。
 - `CORE_RACE=1 make test TESTS=core` 揭示 File provider 文件监听与手动更新并发读取/写入 Fetcher hash 的竞态。`scripts/mihomo-provider-hash.patch` 在已有 loadBufMutex 下取得 hash 快照，网络读取仍在锁外；不改变更新与通知语义。
 - `scripts/mihomo-provider-manage.patch` 为运行中 Provider 管理与节点入库补充三组最小钩子：在 `adapter.ParseProxy` 保存节点原始配置深拷贝（`ArkClashRawDefinition`，直接节点与 provider 成员统一经过该入口），为 `ProxySetProvider` / `RuleSetProvider` 暴露返回变化标记的 `ArkClashUpdate`、`ArkClashReplace`、`ArkClashFormat` 与无锁原子时间戳 `ArkClashUpdatedAt`，并将 `rules/provider.baseProvider.strategy` 改为原子指针以避免替换与并发规则匹配产生数据竞态。升级 mihomo 后需确认该补丁可干净应用并通过 `CORE_RACE=1` 宿主测试。
+- `scripts/mihomo-provider-reuse.patch` 让热切换复用定义未变、已加载的 Domain/IPCIDR rule-provider：`config.parseRuleProviders` 新建前经 `ArkClashSetRuleProviderReuse` 登记的判断询问内核，`executor.loadProvider` 经 `ArkClashSetProviderLoaded` 登记的判断跳过复用实例的 `Initial`。替换必须发生在解析阶段，DNS 策略、fake-ip 过滤和嗅探此时就拿走了 provider 引用。升级 mihomo 后确认这两处仍是 rule-provider 的唯一构造和初始化入口、`RULE-SET` 仍按名字从 tunnel 取 provider，并跑 `TestRuleProviderReuseAcrossReload`（[ADR-0043](../adr/0043-reuse-unchanged-rule-providers.md)）。
 
 ## 7. 系统与 Go 不能共同关闭同一个 TUN fd
 

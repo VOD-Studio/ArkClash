@@ -23,6 +23,8 @@ type inboundSettings struct {
 	dnsListen string
 	dnsMark   int
 	baseline  generalBaseline
+	// 这份配置的 rule-provider 定义指纹，应用后随实例一起发布，供下一次热切换判断能否复用（ADR-0043）。
+	ruleProviderKeys map[string]string
 }
 
 func captureInbound(cfg *config.Config, mappings []map[string]any) inboundSettings {
