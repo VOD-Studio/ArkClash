@@ -30,13 +30,13 @@ lint_go() {
 
   echo "== gofmt"
   local unformatted
-  unformatted="$(gofmt -l core)"
+  unformatted="$(gofmt -l core scripts/ci/check-core-arch)"
   if [[ -n "$unformatted" ]]; then
     echo "需要 gofmt：$unformatted" >&2
     failed=1
   fi
 
-  echo "== go vet"
+  echo "== go arch & vet"
   prepare_quickjs || { failed=1; return; }
   local clang="$OHOS_SDK/native/llvm/bin/aarch64-unknown-linux-ohos-clang"
   (
@@ -45,15 +45,8 @@ lint_go() {
     bash "$ROOT/scripts/prepare-core-modfile.sh" "$lint_deps" || exit 1
     cd core
 
-    # 正向校验 ohos 标签：确保目标构建包含全部 6 个平台/ABI 文件，避免标签拼错被静默跳过。
-    ohos_files="$(CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go list -modfile "$lint_deps/go.mod" \
-      -tags with_gvisor,ohos -f '{{range .GoFiles}}{{.}} {{end}}{{range .CgoFiles}}{{.}} {{end}}' .)"
-    for required in hilog.go lib.go loopback.go socket.go system_dns.go tailscale_network.go; do
-      if [[ " $ohos_files " != *" $required "* ]]; then
-        echo "ohos 构建未包含必需文件：$required" >&2
-        exit 1
-      fi
-    done
+    # 校验构建标签隔离、Cgo 边界、backupstore 依赖、init() 白名单与 C ABI 导出位置。
+    go run "$ROOT/scripts/ci/check-core-arch/main.go" -core "$ROOT/core" -modfile "$lint_deps/go.mod"
 
     # 无 NDK 时也能检查全部纯 Go 与宿主 cgo（QuickJS/backupstore）代码。
     CGO_ENABLED=1 go vet -modfile "$lint_deps/go.mod" -tags with_gvisor ./...

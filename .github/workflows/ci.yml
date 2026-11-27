@@ -71,6 +71,24 @@ jobs:
     if: needs.changes.outputs.build == 'true'
     uses: ./.github/workflows/core.yml
 
+  core-test:
+    name: 内核宿主测试
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .go-version
+          cache: true
+          cache-dependency-path: core/go.sum
+      - name: 内核宿主回归
+        run: make test TESTS=core
+
   hap:
     needs: [changes, core]
     # 外部 fork 的 PR 拿不到私有 Command Line Tools 的 token，跳过；合并后 main 上会补跑。
@@ -107,7 +125,7 @@ jobs:
   ci-ok:
     name: CI 通过
     if: always()
-    needs: [changes, checks, core, hap]
+    needs: [changes, checks, core, core-test, hap]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

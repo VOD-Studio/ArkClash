@@ -8,6 +8,8 @@ on:
   pull_request:
     paths:
       - core/**
+      - '!core/**/*_test.go'
+      - '!core/testdata/**'
       - scripts/build-core.sh
       - scripts/ci/build-codeql.sh
       - scripts/prepare-core-modfile.sh
