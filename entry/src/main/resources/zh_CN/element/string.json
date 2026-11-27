@@ -1405,8 +1405,68 @@
       "value": "配置详情"
     },
     {
-      "name": "profile_details_counts",
-      "value": "%d 个节点 · %d 个代理组"
+      "name": "profile_detail_used",
+      "value": "已用流量"
+    },
+    {
+      "name": "profile_detail_total",
+      "value": "/ %s"
+    },
+    {
+      "name": "profile_detail_remaining",
+      "value": "剩余 %s"
+    },
+    {
+      "name": "profile_detail_upload",
+      "value": "上传 %s"
+    },
+    {
+      "name": "profile_detail_download",
+      "value": "下载 %s"
+    },
+    {
+      "name": "profile_detail_nodes",
+      "value": "节点"
+    },
+    {
+      "name": "profile_detail_days_unit",
+      "value": "天"
+    },
+    {
+      "name": "profile_detail_days_left",
+      "value": "剩余天数"
+    },
+    {
+      "name": "profile_detail_expired",
+      "value": "已到期"
+    },
+    {
+      "name": "profile_detail_link",
+      "value": "订阅链接"
+    },
+    {
+      "name": "profile_detail_expire_at",
+      "value": "到期时间"
+    },
+    {
+      "name": "profile_detail_updated_at",
+      "value": "上次更新"
+    },
+    {
+      "name": "profile_detail_every_hours",
+      "value": "每 %d 小时"
+    },
+    {
+      "name": "profile_detail_every_minutes",
+      "value": "每 %d 分钟"
+    },
+    {
+      "name": "profile_detail_off",
+      "value": "已关闭"
+    },
+    {
+      "name": "profile_detail_updating",
+      "value": "更新中"
     },
     {
       "name": "proxy_actual",

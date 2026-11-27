@@ -1425,8 +1425,68 @@
       "value": "Profile details"
     },
     {
-      "name": "profile_details_counts",
-      "value": "%d proxies · %d proxy groups"
+      "name": "profile_detail_used",
+      "value": "Data used"
+    },
+    {
+      "name": "profile_detail_total",
+      "value": "/ %s"
+    },
+    {
+      "name": "profile_detail_remaining",
+      "value": "%s left"
+    },
+    {
+      "name": "profile_detail_upload",
+      "value": "Upload %s"
+    },
+    {
+      "name": "profile_detail_download",
+      "value": "Download %s"
+    },
+    {
+      "name": "profile_detail_nodes",
+      "value": "Proxies"
+    },
+    {
+      "name": "profile_detail_days_unit",
+      "value": "days"
+    },
+    {
+      "name": "profile_detail_days_left",
+      "value": "Days left"
+    },
+    {
+      "name": "profile_detail_expired",
+      "value": "Expired"
+    },
+    {
+      "name": "profile_detail_link",
+      "value": "Subscription link"
+    },
+    {
+      "name": "profile_detail_expire_at",
+      "value": "Expires on"
+    },
+    {
+      "name": "profile_detail_updated_at",
+      "value": "Last updated"
+    },
+    {
+      "name": "profile_detail_every_hours",
+      "value": "Every %d h"
+    },
+    {
+      "name": "profile_detail_every_minutes",
+      "value": "Every %d min"
+    },
+    {
+      "name": "profile_detail_off",
+      "value": "Off"
+    },
+    {
+      "name": "profile_detail_updating",
+      "value": "Updating"
     },
     {
       "name": "proxy_actual",
