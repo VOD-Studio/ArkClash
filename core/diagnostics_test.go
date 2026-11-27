@@ -260,7 +260,7 @@ func TestDiagnosticsSharedSamplerHeartbeatAndLastUnsubscribe(t *testing.T) {
 	cfg := fixture(t)
 	first, releaseFirst := diagnosticTestSubscribe(t, "connections")
 	second, releaseSecond := diagnosticTestSubscribe(t, "connections")
-	if first.collector != second.collector || diagnosticDNS != nil {
+	if first.collector != second.collector || eng.diag.dns != nil {
 		t.Fatal("collectors are not feed scoped and shared")
 	}
 	now := time.Now()
@@ -285,9 +285,9 @@ func TestDiagnosticsSharedSamplerHeartbeatAndLastUnsubscribe(t *testing.T) {
 		t.Fatalf("heartbeat fabricated changes: %+v", frame)
 	}
 	releaseFirst()
-	eng.mu.Lock()
-	stillActive := diagnosticConnections == c
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	stillActive := eng.diag.connections == c
+	eng.diag.mu.Unlock()
 	if !stillActive {
 		t.Fatal("first unsubscribe detached shared observer")
 	}
@@ -297,12 +297,12 @@ func TestDiagnosticsSharedSamplerHeartbeatAndLastUnsubscribe(t *testing.T) {
 		t.Fatal("remaining subscriber lost Close")
 	}
 	releaseSecond()
-	eng.mu.Lock()
-	if diagnosticConnections != nil {
-		eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	if eng.diag.connections != nil {
+		eng.diag.mu.Unlock()
 		t.Fatal("last unsubscribe retained registry")
 	}
-	eng.mu.Unlock()
+	eng.diag.mu.Unlock()
 	c.mu.Lock()
 	if !c.closed || len(c.connections) != 0 || !c.sampleDue.IsZero() {
 		c.mu.Unlock()
@@ -329,7 +329,7 @@ func TestDiagnosticsDNSOverflowBoundaryConversionAndRetirement(t *testing.T) {
 	s, release := diagnosticTestSubscribe(t, "dns")
 	now := time.Now()
 	first := diagnosticTestDNSFrame(t, s, now)
-	if first.Kind != "snapshot" || len(first.Records) != 0 || first.Seq != 1 || diagnosticConnections != nil {
+	if first.Kind != "snapshot" || len(first.Records) != 0 || first.Seq != 1 || eng.diag.connections != nil {
 		t.Fatal("DNS baseline or feed isolation incorrect")
 	}
 	c := s.collector
@@ -379,11 +379,12 @@ func TestDiagnosticsDNSOverflowBoundaryConversionAndRetirement(t *testing.T) {
 		}
 	}
 	release()
-	eng.mu.Lock()
-	if diagnosticDNS != c {
+	eng.diag.mu.Lock()
+	if eng.diag.dns != c {
+		eng.diag.mu.Unlock()
 		t.Fatal("early DNS unsubscribe detached shared hook")
 	}
-	eng.mu.Unlock()
+	eng.diag.mu.Unlock()
 	releaseLate()
 	c.observeDNS(diagnosticTestRecord(9999))
 	c.mu.Lock()
@@ -453,15 +454,15 @@ func TestDiagnosticsActionsRejectStaleMalformedAndCloseIdempotently(t *testing.T
 	if status := diagnosticTestAction(t, false, `{`+identity+`,"scope":""}`); status != 400 {
 		t.Fatal("DNS action accepted scope")
 	}
-	eng.mu.Lock()
-	eng.running = false
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	eng.diag.identity.Running = false
+	eng.diag.mu.Unlock()
 	if status := diagnosticTestAction(t, true, `{`+identity+`,"scope":"all"}`); status != 503 {
 		t.Fatal("stopped action not rejected")
 	}
-	eng.mu.Lock()
-	eng.running = true
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	eng.diag.identity.Running = true
+	eng.diag.mu.Unlock()
 }
 
 func newDiagnosticTestResolver(t *testing.T) dns.Resolvers {
@@ -546,10 +547,14 @@ func TestDiagnosticsStopCancelsSocketsAndWaitsOutsideCoreLock(t *testing.T) {
 		t.Fatal("attach failed")
 	}
 	eng.mu.Lock()
-	wait := stopDiagnosticsLocked()
-	if diagnosticConnections != nil || diagnosticDNS != nil {
+	wait := eng.diag.Stop()
+	eng.diag.mu.Lock()
+	if eng.diag.connections != nil || eng.diag.dns != nil {
+		eng.diag.mu.Unlock()
+		eng.mu.Unlock()
 		t.Fatal("stop left observers registered")
 	}
+	eng.diag.mu.Unlock()
 	select {
 	case <-connections.done:
 	default:

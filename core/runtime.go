@@ -49,7 +49,6 @@ func (start *statusResponse) subscriptionRouteCurrent() bool {
 }
 
 func beginRuntime() func() {
-	waitDiagnostics := stopDiagnosticsLocked()
 	stopRuntimeRoutes()
 	now := time.Now()
 	eng.bootID = fmt.Sprintf("%x-%x", os.Getpid(), now.UnixNano())
@@ -61,7 +60,7 @@ func beginRuntime() func() {
 	eng.vpnCreated = false
 	eng.selections.ops = make(map[string]selectionOperation)
 	eng.selections.order = nil
-	return waitDiagnostics
+	return eng.diag.Start(eng.diagIdentityLocked())
 }
 
 // 供宿主（lib.go）更新平台 VPN 资源与转发状态；内部持核锁提交并发布快照。

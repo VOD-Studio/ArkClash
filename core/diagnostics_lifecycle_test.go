@@ -3,14 +3,19 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/metacubex/http"
+	"github.com/metacubex/http/httptest"
 	C "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/tunnel"
 	"github.com/metacubex/mihomo/tunnel/statistic"
@@ -22,9 +27,9 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 	rs := newDiagnosticTestResolver(t)
 	capture, captureReader, captureExecution := dialDiagnosticStream(t, server, "capture", false)
 	readDiagnosticCaptureReady(t, capture, captureReader)
-	eng.mu.Lock()
-	lease, previousConnections, previousDNS := diagnosticCapture, diagnosticConnections, diagnosticDNS
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	lease, previousConnections, previousDNS := eng.diag.capture, eng.diag.connections, eng.diag.dns
+	eng.diag.mu.Unlock()
 	old := newDiagnosticStreamTracker(t, "old.diag.test")
 	if err := old.Close(); err != nil {
 		t.Fatal(err)
@@ -55,9 +60,9 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 		default:
 		}
 	}
-	eng.mu.Lock()
-	untouched := diagnosticCapture == lease && diagnosticConnections == previousConnections && diagnosticDNS == previousDNS
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	untouched := eng.diag.capture == lease && eng.diag.connections == previousConnections && eng.diag.dns == previousDNS
+	eng.diag.mu.Unlock()
 	if !untouched {
 		t.Fatal("failed parse cleared diagnostic state")
 	}
@@ -76,10 +81,10 @@ func TestDiagnosticsReloadKeepsBootLeaseAndReplacesConfigurationRings(t *testing
 	waitDiagnosticStream(t, previousConnections.workerDone)
 	waitDiagnosticStream(t, previousDNS.workerDone)
 	pingDiagnosticCapture(t, capture, captureReader)
-	eng.mu.Lock()
-	fresh := diagnosticCapture == lease && diagnosticConnections != nil && diagnosticConnections != previousConnections &&
-		diagnosticDNS != nil && diagnosticDNS != previousDNS
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	fresh := eng.diag.capture == lease && eng.diag.connections != nil && eng.diag.connections != previousConnections &&
+		eng.diag.dns != nil && eng.diag.dns != previousDNS
+	eng.diag.mu.Unlock()
 	if !fresh || eng.bootID != oldBoot || eng.configRevision != oldRevision+1 || eng.current.Profile != "next" {
 		t.Fatal("successful reload did not advance configuration identity")
 	}
@@ -122,9 +127,11 @@ func TestDiagnosticsReloadKeepsCollectorsOnForwardingSuspensionFailure(t *testin
 		t.Fatal(err)
 	}
 	eng.mu.Lock()
-	dns := diagnosticDNS
 	oldRevision := eng.configRevision
 	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	dns := eng.diag.dns
+	eng.diag.mu.Unlock()
 	dns.observeDNS(diagnosticTestRecord(1))
 
 	sentinel := errors.New("fixture forwarding close uncertainty")
@@ -155,8 +162,11 @@ func TestDiagnosticsReloadKeepsCollectorsOnForwardingSuspensionFailure(t *testin
 	}
 	pingDiagnosticCapture(t, capture, reader)
 	eng.mu.Lock()
-	intact := diagnosticConnections == session.collector && diagnosticDNS == dns && eng.configRevision == oldRevision
+	rev := eng.configRevision
 	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	intact := eng.diag.connections == session.collector && eng.diag.dns == dns && rev == oldRevision
+	eng.diag.mu.Unlock()
 	if !intact {
 		t.Fatal("failed suspension replaced canonical diagnostic state")
 	}
@@ -257,4 +267,133 @@ func TestDiagnosticsMetadataSnapshotExcludesPrivateTrackerFields(t *testing.T) {
 	if record.Upload != 12 || record.Download != 34 {
 		t.Fatal("lost initial cumulative traffic")
 	}
+}
+
+func TestBackupRestoreSynchronizesDiagnosticLogsCollector(t *testing.T) {
+	options := lifecycleOptions(t)
+	profilePath := lifecycleWriteProfile(t, options, "p1", lifecycleProfile)
+	options.Profile = "p1"
+	options.ConfigPath = profilePath
+	writeGeneral := func(rev string, capture bool) {
+		t.Helper()
+		raw, err := json.Marshal(generalSettings{
+			Revision: rev, DelayTimeout: 8000, LogLevel: "error", CaptureLogs: capture,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(generalSettingsPath(options.HomeDir), raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeList := func(rev string) {
+		t.Helper()
+		body := fmt.Sprintf(`{"current":"p1","revision":%q}`, rev)
+		if err := os.WriteFile(filepath.Join(options.HomeDir, "profiles", "list.json"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeGeneral("init-on", true)
+	if err := start(options); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stop() })
+
+	eng.diag.mu.Lock()
+	initialLogs := eng.diag.logs
+	eng.diag.mu.Unlock()
+	if initialLogs == nil {
+		t.Fatal("start with CaptureLogs=true did not start log collector")
+	}
+
+	// 备份恢复将 CaptureLogs 从开改为关：无页面订阅时也必须立即退休日志观察器并同步身份。
+	writeGeneral("restored-off", false)
+	writeList("rev-off")
+	if err := applyBackup(backupApplyRequest{
+		BootID: eng.Status().BootID, Profile: "p1", Revision: "rev-off", Mode: "direct",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	eng.diag.mu.Lock()
+	afterOff, identityOff := eng.diag.logs, eng.diag.identity
+	eng.diag.mu.Unlock()
+	if afterOff != nil || identityOff.CaptureLogs {
+		t.Fatalf("backup restore off leaked log collector: logs=%v identity=%+v", afterOff, identityOff)
+	}
+	if _, status, _ := subscribeDiagnostics("logs", eng.Status().BootID, 0); status != http.StatusForbidden {
+		t.Fatalf("expected 403 after backup disabled logs, got %d", status)
+	}
+
+	// 再由备份恢复将 CaptureLogs 从关改为开：立即拉起日志采集器并允许订阅。
+	writeGeneral("restored-on", true)
+	writeList("rev-on")
+	if err := applyBackup(backupApplyRequest{
+		BootID: eng.Status().BootID, Profile: "p1", Revision: "rev-on", Mode: "direct",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	eng.diag.mu.Lock()
+	afterOn, identityOn := eng.diag.logs, eng.diag.identity
+	eng.diag.mu.Unlock()
+	if afterOn == nil || !identityOn.CaptureLogs {
+		t.Fatalf("backup restore on did not start log collector: logs=%v identity=%+v", afterOn, identityOn)
+	}
+}
+
+func TestDiagnosticsConcurrentSubscribeAndActionsWithReload(t *testing.T) {
+	options := lifecycleOptions(t)
+	firstPath := lifecycleWriteProfile(t, options, "a", lifecycleProfile)
+	secondPath := lifecycleWriteProfile(t, options, "b", lifecycleProfile)
+	options.Profile = "a"
+	options.ConfigPath = firstPath
+	if err := start(options); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = stop() })
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		for i := range 8 {
+			p, name := secondPath, "b"
+			if i%2 == 1 {
+				p, name = firstPath, "a"
+			}
+			if err := reload(p, name, nil); err != nil {
+				t.Errorf("reload %d: %v", i, err)
+				return
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 20 {
+			st := eng.Status()
+			if st == nil {
+				continue
+			}
+			if s, _, err := subscribeDiagnostics("connections", st.BootID, st.ConfigRevision); err == nil {
+				s.close()
+				close(s.workerDone)
+			}
+			if stSession, _, err := subscribeDiagnosticStats(st.BootID, st.ConfigRevision); err == nil {
+				stSession.close()
+				close(stSession.workerDone)
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 20 {
+			st := eng.Status()
+			if st == nil {
+				continue
+			}
+			body := fmt.Sprintf(`{"expectedBootId":%q,"expectedConfigRevision":%d}`, st.BootID, st.ConfigRevision)
+			req := httptest.NewRequest(http.MethodPost, "/arkclash/diagnostics/dns/clear-cache", strings.NewReader(body))
+			postDiagnosticDnsClearCache(httptest.NewRecorder(), req)
+		}
+	}()
+	wg.Wait()
 }

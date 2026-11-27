@@ -18,7 +18,6 @@ import (
 const diagnosticLogLimit = 5000
 
 var errDiagnosticLogsDisabled = errors.New("diagnostic_logs_disabled")
-var diagnosticLogs *diagnosticCollector
 
 var (
 	logTagPrefixPattern = regexp.MustCompile(`(?s)^\[([^\]]+)\] (.+)$`)
@@ -585,14 +584,8 @@ func (c *diagnosticCollector) logsFrameLocked(s *diagnosticSession, kind string,
 	return frame
 }
 
-func ensureDiagnosticLogsLocked() {
-	if eng.running && eng.current.General.CaptureLogs {
-		ensureDiagnosticCollectorLocked(&diagnosticLogs, "logs")
-	}
-}
-
-func clearDiagnosticLogsLocked() {
-	c := diagnosticLogs
+func (h *diagnosticsHub) clearLogsLocked() {
+	c := h.logs
 	if c == nil {
 		return
 	}
@@ -650,20 +643,16 @@ func postDiagnosticLogsClear(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, err)
 		return
 	}
-	eng.mu.Lock()
-	status, err := diagnosticBootError(request.ExpectedBootID)
+	h := eng.diag
+	h.mu.Lock()
+	status, err := h.bootErrorLocked(request.ExpectedBootID)
 	if err == nil {
-		clearDiagnosticLogsLocked()
+		h.clearLogsLocked()
 	}
-	eng.mu.Unlock()
+	h.mu.Unlock()
 	if err != nil {
 		writeError(w, r, status, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func stopDiagnosticLogsLocked() func() {
-	workers := retireDiagnosticCollectorLocked(diagnosticLogs, false)
-	return func() { waitDiagnosticWorkers(workers) }
 }

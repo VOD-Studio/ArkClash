@@ -226,9 +226,9 @@ func TestLogPageCaptureThresholdRedactionAndRetirement(t *testing.T) {
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	eng.mu.Lock()
-	collector := diagnosticLogs
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	collector := eng.diag.logs
+	eng.diag.mu.Unlock()
 	if collector == nil {
 		t.Fatal("enabling capture did not start boot-scoped log collector")
 	}
@@ -294,9 +294,9 @@ func TestLogPageCaptureThresholdRedactionAndRetirement(t *testing.T) {
 	// 最后一个日志页面离开后，采集器在捕获开启期间继续存活。
 	closeDiagnosticClient(t, conn, reader)
 	waitDiagnosticStream(t, worker.done)
-	eng.mu.Lock()
-	stillRunning := diagnosticLogs == collector
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	stillRunning := eng.diag.logs == collector
+	eng.diag.mu.Unlock()
 	if !stillRunning {
 		t.Fatal("closing log page retired continuous capture")
 	}
@@ -307,9 +307,9 @@ func TestLogPageCaptureThresholdRedactionAndRetirement(t *testing.T) {
 	if err := saveGeneralTestSettings(next); err != nil {
 		t.Fatal(err)
 	}
-	eng.mu.Lock()
-	afterOff := diagnosticLogs
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	afterOff := eng.diag.logs
+	eng.diag.mu.Unlock()
 	if afterOff != nil {
 		t.Fatal("disabling capture did not retire log collector")
 	}

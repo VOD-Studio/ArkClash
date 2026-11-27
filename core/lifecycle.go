@@ -114,10 +114,9 @@ func start(opts startOptions) error {
 		eng.running = true
 		eng.current = opts
 		tx.deferUnlock(beginRuntime())
-		ensureDiagnosticLogsLocked()
 		manager, err := newGeoManager(opts.HomeDir, eng.bootID, opts.Geo)
 		if err != nil {
-			tx.deferUnlock(stopDiagnosticsLocked())
+			tx.deferUnlock(eng.diag.Stop())
 			closeCoreListeners()
 			executor.Shutdown()
 			eng.cleanupFailure = errors.Join(eng.cleanupFailure, route.ArkClashCloseServer())
@@ -478,7 +477,7 @@ func stop() error {
 			_ = updateVpnState("stopped", "stopped", eng.vpnCreated)
 			return eng.cleanupFailure
 		}
-		tx.deferUnlock(stopDiagnosticsLocked())
+		tx.deferUnlock(eng.diag.Stop())
 		manager := activeGeo.Swap(nil)
 		if manager != nil {
 			manager.closeLocked()

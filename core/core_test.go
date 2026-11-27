@@ -163,7 +163,7 @@ rules: ['MATCH,DIRECT']
 			t.Error(err)
 		}
 		eng.mu.Lock()
-		waitDiagnostics := stopDiagnosticsLocked()
+		waitDiagnostics := eng.diag.Stop()
 		defer func() {
 			eng.mu.Unlock()
 			waitDiagnostics()

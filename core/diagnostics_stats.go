@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/metacubex/http"
@@ -22,6 +21,7 @@ type diagnosticStatsFrame struct {
 }
 
 type diagnosticStatsSession struct {
+	hub         *diagnosticsHub
 	bootID      string
 	revision    uint64
 	connections *diagnosticCollector
@@ -33,40 +33,43 @@ type diagnosticStatsSession struct {
 	closed      bool
 }
 
-// diagnosticStatsMu 始终作为叶子锁，禁止在持锁期间获取 mu 或 collector 锁。
-var (
-	diagnosticStatsMu       sync.Mutex
-	diagnosticStatsSessions = map[*diagnosticStatsSession]struct{}{}
-)
-
-func hasDiagnosticStats() bool {
-	diagnosticStatsMu.Lock()
-	active := len(diagnosticStatsSessions) != 0
-	diagnosticStatsMu.Unlock()
+func (h *diagnosticsHub) hasStats() bool {
+	h.statsMu.Lock()
+	active := len(h.stats) != 0
+	h.statsMu.Unlock()
 	return active
 }
 
 func notifyDiagnosticStats() {
-	diagnosticStatsMu.Lock()
-	for s := range diagnosticStatsSessions {
+	eng.diag.notifyStats()
+}
+
+func (h *diagnosticsHub) notifyStats() {
+	h.statsMu.Lock()
+	for s := range h.stats {
 		select {
 		case s.dirty <- struct{}{}:
 		default:
 		}
 	}
-	diagnosticStatsMu.Unlock()
+	h.statsMu.Unlock()
 }
 
 func subscribeDiagnosticStats(expectedBootID string, expectedConfigRevision uint64) (*diagnosticStatsSession, int, error) {
-	eng.mu.Lock()
-	defer eng.mu.Unlock()
-	if status, err := diagnosticRuntimeError(expectedBootID, expectedConfigRevision); err != nil {
+	return eng.diag.subscribeStats(expectedBootID, expectedConfigRevision)
+}
+
+func (h *diagnosticsHub) subscribeStats(expectedBootID string, expectedConfigRevision uint64) (*diagnosticStatsSession, int, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if status, err := h.runtimeErrorLocked(expectedBootID, expectedConfigRevision); err != nil {
 		return nil, status, err
 	}
 	// 仅挂观察器而不向 collector.sessions 注册，避免仪表盘触发连接页的 1Hz 流量采样。
-	connections := ensureDiagnosticCollectorLocked(&diagnosticConnections, "connections")
-	queries := ensureDiagnosticCollectorLocked(&diagnosticDNS, "dns")
+	connections := h.ensureCollectorLocked(&h.connections, "connections")
+	queries := h.ensureCollectorLocked(&h.dns, "dns")
 	s := &diagnosticStatsSession{
+		hub:         h,
 		bootID:      expectedBootID,
 		revision:    expectedConfigRevision,
 		connections: connections,
@@ -75,9 +78,9 @@ func subscribeDiagnosticStats(expectedBootID string, expectedConfigRevision uint
 		done:        make(chan struct{}),
 		workerDone:  make(chan struct{}),
 	}
-	diagnosticStatsMu.Lock()
-	diagnosticStatsSessions[s] = struct{}{}
-	diagnosticStatsMu.Unlock()
+	h.statsMu.Lock()
+	h.stats[s] = struct{}{}
+	h.statsMu.Unlock()
 	return s, 0, nil
 }
 
@@ -93,48 +96,50 @@ func (s *diagnosticStatsSession) snapshot() diagnosticStatsFrame {
 }
 
 func (s *diagnosticStatsSession) attach(conn net.Conn) bool {
-	diagnosticStatsMu.Lock()
+	h := s.hub
+	h.statsMu.Lock()
 	if s.closed {
-		diagnosticStatsMu.Unlock()
+		h.statsMu.Unlock()
 		_ = conn.Close()
 		return false
 	}
 	s.conn = conn
-	diagnosticStatsMu.Unlock()
+	h.statsMu.Unlock()
 	return true
 }
 
 func (s *diagnosticStatsSession) close() {
-	eng.mu.Lock()
-	diagnosticStatsMu.Lock()
+	h := s.hub
+	h.mu.Lock()
+	h.statsMu.Lock()
 	if s.closed {
-		diagnosticStatsMu.Unlock()
-		eng.mu.Unlock()
+		h.statsMu.Unlock()
+		h.mu.Unlock()
 		return
 	}
 	s.closed = true
 	close(s.done)
 	conn := s.conn
 	s.conn = nil
-	delete(diagnosticStatsSessions, s)
-	last := len(diagnosticStatsSessions) == 0
-	diagnosticStatsMu.Unlock()
+	delete(h.stats, s)
+	last := len(h.stats) == 0
+	h.statsMu.Unlock()
 	var workers []<-chan struct{}
-	if last && diagnosticCapture == nil {
-		workers = retireDiagnosticCollectorsLocked(true)
+	if last && h.capture == nil {
+		workers = h.retireCollectorsLocked(true)
 	}
-	eng.mu.Unlock()
+	h.mu.Unlock()
 	if conn != nil {
 		_ = conn.Close()
 	}
 	waitDiagnosticWorkers(workers)
 }
 
-func retireDiagnosticStatsLocked() []<-chan struct{} {
-	diagnosticStatsMu.Lock()
-	workers := make([]<-chan struct{}, 0, len(diagnosticStatsSessions))
-	conns := make([]net.Conn, 0, len(diagnosticStatsSessions))
-	for s := range diagnosticStatsSessions {
+func (h *diagnosticsHub) retireStatsLocked() []<-chan struct{} {
+	h.statsMu.Lock()
+	workers := make([]<-chan struct{}, 0, len(h.stats))
+	conns := make([]net.Conn, 0, len(h.stats))
+	for s := range h.stats {
 		if !s.closed {
 			s.closed = true
 			close(s.done)
@@ -145,8 +150,8 @@ func retireDiagnosticStatsLocked() []<-chan struct{} {
 		}
 		workers = append(workers, s.workerDone)
 	}
-	clear(diagnosticStatsSessions)
-	diagnosticStatsMu.Unlock()
+	clear(h.stats)
+	h.statsMu.Unlock()
 	for _, conn := range conns {
 		_ = conn.Close()
 	}

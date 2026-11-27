@@ -120,6 +120,7 @@ type coreEngine struct {
 
 	// 5. 下游独立子系统与路线监听
 	providers *providers.Hub
+	diag      *diagnosticsHub
 	routes    atomic.Pointer[runtimeRouteWatch]
 }
 
@@ -144,6 +145,16 @@ func newCoreEngine() *coreEngine {
 		tunFactory: defaultTunFactory,
 		delays:     activeDelayRegistry{active: make(map[*http.Request]context.CancelFunc)},
 		providers:  providers.NewHub(),
+		diag:       newDiagnosticsHub(),
+	}
+}
+
+func (e *coreEngine) diagIdentityLocked() diagIdentity {
+	return diagIdentity{
+		Running:        e.running,
+		BootID:         e.bootID,
+		ConfigRevision: e.configRevision,
+		CaptureLogs:    e.current.General.CaptureLogs,
 	}
 }
 
@@ -219,13 +230,13 @@ func (tx *stateTx) CommitReload(plan reloadPlan) (bool, error) {
 		e.publishRuntimeLocked()
 		return false, e.cleanupFailure
 	}
-	tx.deferUnlock(reloadDiagnosticsLocked())
+	tx.deferUnlock(e.diag.BeginReload())
 	C.SetConfig(plan.Next.ConfigPath)
 	executor.ApplyConfig(withoutBusinessInbounds(plan.Cfg), true)
 	e.desiredInbound = plan.Inbound
 	e.current = plan.Next
 	e.configRevision++
-	ensureDiagnosticCaptureCollectorsLocked()
+	tx.deferUnlock(e.diag.EndReload(e.diagIdentityLocked()))
 	resetProxyIdentities()
 	watchRuntimeRoutes(plan.Cfg)
 	e.providers.Reset(providers.Identity{

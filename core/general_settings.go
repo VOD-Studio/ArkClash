@@ -788,10 +788,8 @@ func updateGeneralSettings(request profileSettingsRequest[generalSettings]) erro
 				}
 				eng.current = next
 				log.SetLevel(s.level())
-				if s.CaptureLogs {
-					ensureDiagnosticLogsLocked()
-				} else {
-					tx.deferUnlock(stopDiagnosticLogsLocked())
+				if !rebuild {
+					tx.deferUnlock(eng.diag.SetCaptureLogs(s.CaptureLogs))
 				}
 				eng.publishRuntimeLocked()
 				return nil

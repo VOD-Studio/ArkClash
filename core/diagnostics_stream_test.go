@@ -147,11 +147,11 @@ func waitDiagnosticStream(t *testing.T, done <-chan struct{}) {
 
 func activeDiagnosticStream(t *testing.T, feed string) (*diagnosticCollector, *diagnosticSession) {
 	t.Helper()
-	eng.mu.Lock()
-	defer eng.mu.Unlock()
-	c := diagnosticConnections
+	eng.diag.mu.Lock()
+	defer eng.diag.mu.Unlock()
+	c := eng.diag.connections
 	if feed == "dns" {
-		c = diagnosticDNS
+		c = eng.diag.dns
 	}
 	if c == nil {
 		t.Fatal("subscription missing")
@@ -171,9 +171,9 @@ func assertDiagnosticStreamRetired(t *testing.T, c *diagnosticCollector, session
 	t.Helper()
 	waitDiagnosticStream(t, session.workerDone)
 	waitDiagnosticStream(t, c.workerDone)
-	eng.mu.Lock()
-	defer eng.mu.Unlock()
-	if c.feed == "dns" && diagnosticDNS == c || c.feed == "connections" && diagnosticConnections == c {
+	eng.diag.mu.Lock()
+	defer eng.diag.mu.Unlock()
+	if c.feed == "dns" && eng.diag.dns == c || c.feed == "connections" && eng.diag.connections == c {
 		t.Fatal("last subscription retained its collector")
 	}
 	c.mu.Lock()
@@ -302,9 +302,9 @@ func TestDiagnosticsCaptureCollectsAndTransfersWithoutPageStreams(t *testing.T) 
 	server := newDiagnosticStreamServer(t, nil)
 	oldCapture, oldReader, oldExecution := dialDiagnosticStream(t, server, "capture", false)
 	readDiagnosticCaptureReady(t, oldCapture, oldReader)
-	eng.mu.Lock()
-	connections, queries := diagnosticConnections, diagnosticDNS
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	connections, queries := eng.diag.connections, eng.diag.dns
+	eng.diag.mu.Unlock()
 	if connections == nil || queries == nil {
 		t.Fatal("capture did not enable both observers")
 	}
@@ -334,9 +334,9 @@ func TestDiagnosticsCaptureCollectsAndTransfersWithoutPageStreams(t *testing.T) 
 	capture, captureReader, captureExecution := dialDiagnosticStream(t, server, "capture", false)
 	readDiagnosticCaptureReady(t, capture, captureReader)
 	waitDiagnosticStream(t, oldExecution.done)
-	eng.mu.Lock()
-	preserved := diagnosticConnections == connections && diagnosticDNS == queries
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	preserved := eng.diag.connections == connections && eng.diag.dns == queries
+	eng.diag.mu.Unlock()
 	if !preserved {
 		t.Fatal("lease transfer retired an active collector")
 	}
@@ -397,9 +397,9 @@ func TestDiagnosticsCaptureCollectsAndTransfersWithoutPageStreams(t *testing.T) 
 	waitDiagnosticStream(t, captureExecution.done)
 	waitDiagnosticStream(t, connections.workerDone)
 	waitDiagnosticStream(t, queries.workerDone)
-	eng.mu.Lock()
-	released := diagnosticCapture == nil && diagnosticConnections == nil && diagnosticDNS == nil
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	released := eng.diag.capture == nil && eng.diag.connections == nil && eng.diag.dns == nil
+	eng.diag.mu.Unlock()
 	if !released {
 		t.Fatal("last owner left an active lease or observer")
 	}
@@ -438,9 +438,9 @@ func TestDiagnosticsCaptureCancellationPreservesOnlyVisibleFeed(t *testing.T) {
 			requests, requestsReader, requestsExecution := dialDiagnosticStream(t, server, "connections", false)
 			readDiagnosticSnapshot(t, requests, requestsReader, "connections")
 			connections, session := activeDiagnosticStream(t, "connections")
-			eng.mu.Lock()
-			dns := diagnosticDNS
-			eng.mu.Unlock()
+			eng.diag.mu.Lock()
+			dns := eng.diag.dns
+			eng.diag.mu.Unlock()
 			switch cause {
 			case "tcp-eof":
 				_ = capture.Close()
@@ -448,16 +448,16 @@ func TestDiagnosticsCaptureCancellationPreservesOnlyVisibleFeed(t *testing.T) {
 				captureExecution.cancel()
 			case "boot-stop":
 				eng.mu.Lock()
-				wait := stopDiagnosticsLocked()
+				wait := eng.diag.Stop()
 				eng.mu.Unlock()
 				wait()
 			}
 			waitDiagnosticStream(t, captureExecution.done)
 			waitDiagnosticStream(t, dns.workerDone)
 			if cause != "boot-stop" {
-				eng.mu.Lock()
-				ownedOnlyByPage := diagnosticCapture == nil && diagnosticDNS == nil && diagnosticConnections == connections
-				eng.mu.Unlock()
+				eng.diag.mu.Lock()
+				ownedOnlyByPage := eng.diag.capture == nil && eng.diag.dns == nil && eng.diag.connections == connections
+				eng.diag.mu.Unlock()
 				if !ownedOnlyByPage {
 					t.Fatal("only visible feed should survive capture cancellation")
 				}
@@ -483,20 +483,20 @@ func TestDiagnosticsCaptureRejectsInvalidRuntime(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.name == "stopped" {
-				eng.mu.Lock()
-				eng.running = false
-				eng.mu.Unlock()
+				eng.diag.mu.Lock()
+				eng.diag.identity.Running = false
+				eng.diag.mu.Unlock()
 				defer func() {
-					eng.mu.Lock()
-					eng.running = true
-					eng.mu.Unlock()
+					eng.diag.mu.Lock()
+					eng.diag.identity.Running = true
+					eng.diag.mu.Unlock()
 				}()
 			}
 			response := httptest.NewRecorder()
 			getDiagnosticCapture(response, diagnosticStreamRequest(tc.target))
-			eng.mu.Lock()
-			untouched := diagnosticConnections == nil && diagnosticDNS == nil && diagnosticCapture == nil
-			eng.mu.Unlock()
+			eng.diag.mu.Lock()
+			untouched := eng.diag.connections == nil && eng.diag.dns == nil && eng.diag.capture == nil
+			eng.diag.mu.Unlock()
 			if response.Code != tc.status || !untouched {
 				t.Fatalf("status=%d body=%s registry untouched=%v", response.Code, response.Body, untouched)
 			}
@@ -550,9 +550,9 @@ func TestDiagnosticsStreamRejectsInvalidRequests(t *testing.T) {
 				if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "diagnostics_invalid_request") {
 					t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 				}
-				eng.mu.Lock()
-				defer eng.mu.Unlock()
-				if diagnosticConnections != nil || diagnosticDNS != nil {
+				eng.diag.mu.Lock()
+				defer eng.diag.mu.Unlock()
+				if eng.diag.connections != nil || eng.diag.dns != nil {
 					t.Fatal("invalid handshake installed observation hooks")
 				}
 			})
@@ -573,13 +573,13 @@ func TestDiagnosticsStreamRejectsStaleAndStoppedRuntime(t *testing.T) {
 				} else if stale == "configuration" {
 					query.Set("expectedConfigRevision", strconv.FormatUint(eng.configRevision+1, 10))
 				} else {
-					eng.mu.Lock()
-					eng.running = false
-					eng.mu.Unlock()
+					eng.diag.mu.Lock()
+					eng.diag.identity.Running = false
+					eng.diag.mu.Unlock()
 					defer func() {
-						eng.mu.Lock()
-						eng.running = true
-						eng.mu.Unlock()
+						eng.diag.mu.Lock()
+						eng.diag.identity.Running = true
+						eng.diag.mu.Unlock()
 					}()
 					status, message = http.StatusServiceUnavailable, "diagnostics_not_ready"
 				}
@@ -627,9 +627,9 @@ func TestDiagnosticsStreamFailedHandshakeCompletesWorker(t *testing.T) {
 				if session != nil {
 					assertDiagnosticStreamRetired(t, c, session)
 				} else {
-					eng.mu.Lock()
-					defer eng.mu.Unlock()
-					if diagnosticConnections != nil || diagnosticDNS != nil {
+					eng.diag.mu.Lock()
+					defer eng.diag.mu.Unlock()
+					if eng.diag.connections != nil || eng.diag.dns != nil {
 						t.Fatal("unsupported hijacker retained collector")
 					}
 				}
@@ -770,7 +770,7 @@ func TestDiagnosticsStreamCancellationJoinsReader(t *testing.T) {
 					_ = conn.Close()
 				case "runtime-stop":
 					eng.mu.Lock()
-					wait := stopDiagnosticsLocked()
+					wait := eng.diag.Stop()
 					eng.mu.Unlock()
 					stopped = make(chan struct{})
 					go func() { wait(); close(stopped) }()
@@ -990,9 +990,9 @@ func TestDiagnosticsStatsPushesCoalescedCountsWithoutTrafficSampling(t *testing.
 	if initial.Live != 1 || initial.Recent != 0 || initial.DNS != 0 {
 		t.Fatalf("initial stats=%+v want live=1 recent=0 dns=0", initial)
 	}
-	eng.mu.Lock()
-	connections, queries := diagnosticConnections, diagnosticDNS
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	connections, queries := eng.diag.connections, eng.diag.dns
+	eng.diag.mu.Unlock()
 	if connections == nil || queries == nil {
 		t.Fatal("stats stream did not install both observers")
 	}
@@ -1052,9 +1052,9 @@ func TestDiagnosticsStatsPushesCoalescedCountsWithoutTrafficSampling(t *testing.
 	waitDiagnosticStream(t, execution.done)
 	waitDiagnosticStream(t, connections.workerDone)
 	waitDiagnosticStream(t, queries.workerDone)
-	eng.mu.Lock()
-	retired := diagnosticConnections == nil && diagnosticDNS == nil && !hasDiagnosticStats()
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	retired := eng.diag.connections == nil && eng.diag.dns == nil && !eng.diag.hasStats()
+	eng.diag.mu.Unlock()
 	if !retired {
 		t.Fatal("closing last stats subscriber left collectors active")
 	}
@@ -1075,20 +1075,20 @@ func TestDiagnosticsStatsLifecycleCoexistenceAndValidation(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.stop {
-				eng.mu.Lock()
-				eng.running = false
-				eng.mu.Unlock()
+				eng.diag.mu.Lock()
+				eng.diag.identity.Running = false
+				eng.diag.mu.Unlock()
 				defer func() {
-					eng.mu.Lock()
-					eng.running = true
-					eng.mu.Unlock()
+					eng.diag.mu.Lock()
+					eng.diag.identity.Running = true
+					eng.diag.mu.Unlock()
 				}()
 			}
 			w := httptest.NewRecorder()
 			getDiagnosticStats(w, diagnosticStreamRequest(tc.target))
-			eng.mu.Lock()
-			untouched := diagnosticConnections == nil && diagnosticDNS == nil && !hasDiagnosticStats()
-			eng.mu.Unlock()
+			eng.diag.mu.Lock()
+			untouched := eng.diag.connections == nil && eng.diag.dns == nil && !eng.diag.hasStats()
+			eng.diag.mu.Unlock()
 			if w.Code != tc.status || !untouched {
 				t.Fatalf("status=%d body=%s untouched=%v", w.Code, w.Body.String(), untouched)
 			}
@@ -1101,31 +1101,28 @@ func TestDiagnosticsStatsLifecycleCoexistenceAndValidation(t *testing.T) {
 	readDiagnosticCaptureReady(t, capture, captureReader)
 	stats, statsReader, statsExecution := dialDiagnosticStream(t, server, "stats", false)
 	readDiagnosticStatsFrame(t, stats, statsReader)
-	eng.mu.Lock()
-	connections, queries := diagnosticConnections, diagnosticDNS
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	connections, queries := eng.diag.connections, eng.diag.dns
+	eng.diag.mu.Unlock()
 	closeDiagnosticClient(t, capture, captureReader)
 	waitDiagnosticStream(t, captureExecution.done)
-	eng.mu.Lock()
-	preserved := diagnosticCapture == nil && diagnosticConnections == connections && diagnosticDNS == queries && hasDiagnosticStats()
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	preserved := eng.diag.capture == nil && eng.diag.connections == connections && eng.diag.dns == queries && eng.diag.hasStats()
+	eng.diag.mu.Unlock()
 	if !preserved {
 		t.Fatal("releasing capture retired collectors still owned by stats")
 	}
-	eng.
-
-		// 配置热切换/停机时必须关闭活跃 stats 会话并回收全部采集器。
-		mu.
-		Lock()
-	wait := reloadDiagnosticsLocked()
+	// 配置热切换/停机时必须关闭活跃 stats 会话并回收全部采集器。
+	eng.mu.Lock()
+	wait := eng.diag.BeginReload()
 	eng.mu.Unlock()
 	wait()
 	waitDiagnosticStream(t, statsExecution.done)
 	waitDiagnosticStream(t, connections.workerDone)
 	waitDiagnosticStream(t, queries.workerDone)
-	eng.mu.Lock()
-	cleared := diagnosticConnections == nil && diagnosticDNS == nil && !hasDiagnosticStats()
-	eng.mu.Unlock()
+	eng.diag.mu.Lock()
+	cleared := eng.diag.connections == nil && eng.diag.dns == nil && !eng.diag.hasStats()
+	eng.diag.mu.Unlock()
 	if !cleared {
 		t.Fatal("reload did not retire stats stream and collectors")
 	}
