@@ -3054,7 +3054,39 @@
     },
     {
       "name": "access_control_unsaved_title",
-      "value": "是否保存应用访问控制修改？"
+      "value": "保存修改？"
+    },
+    {
+      "name": "access_control_unsaved_hint",
+      "value": "应用访问控制的修改还没有保存。"
+    },
+    {
+      "name": "access_control_change_mode",
+      "value": "访问模式"
+    },
+    {
+      "name": "access_control_change_blocked",
+      "value": "绕过的应用"
+    },
+    {
+      "name": "access_control_change_trusted",
+      "value": "仅代理的应用"
+    },
+    {
+      "name": "access_control_change_added",
+      "value": "新增 %d 个"
+    },
+    {
+      "name": "access_control_change_removed",
+      "value": "移除 %d 个"
+    },
+    {
+      "name": "access_control_change_reconnect",
+      "value": "VPN 重新连接后生效。"
+    },
+    {
+      "name": "access_control_saving",
+      "value": "保存中"
     },
     {
       "name": "access_control_cat_all",

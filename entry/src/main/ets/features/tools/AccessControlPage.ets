@@ -15,7 +15,8 @@ import {
   MAX_VPN_EXCLUDED_APPS, MAX_VPN_TRUSTED_APPS, VPN_APP_ACCESS_MODES, VpnAppAccessMode, VpnNetworkSettings
 } from '../../shared/VpnNetwork';
 import { ACCESS_APP_CATEGORIES, AccessAppCategory } from './AccessControlCatalog';
-import { AccessControlDraft, AccessControlRowItem } from './AccessControlLogic';
+import { AccessControlChanges, AccessControlDraft, AccessControlRowItem } from './AccessControlLogic';
+import { AccessLeaveSheet } from './AccessLeaveSheet';
 import { SettingsSection } from './SettingsSection';
 
 interface AccessHeaderActionOption {
@@ -52,6 +53,9 @@ export struct AccessControlPage {
   @Local private importReplace: boolean = false;
   @Local private importIssue: ResourceStr = '';
   @Local private leaveShown: boolean = false;
+  @Local private leaveChanges: AccessControlChanges = { fromMode: 'off', toMode: 'off', lists: [] };
+  @Local private leaveIssue: ResourceStr = '';
+  @Local private leaveReconnect: boolean = false;
   private draft: AccessControlDraft = new AccessControlDraft(peekVpnNetworkSettings() ?? new VpnNetworkSettings());
   private rows: KeyedListSource<AccessControlRowItem> = new KeyedListSource<AccessControlRowItem>();
   private visibleBundles: string[] = [];
@@ -292,6 +296,11 @@ export struct AccessControlPage {
       return true;
     }
     if (!this.approvedClose && this.dirty) {
+      // 草稿不是可观察对象，打开时取一次快照；抽屉开着时页面不可编辑，快照不会过期。
+      this.leaveChanges = this.draft.changes();
+      const issue = this.draft.validationError();
+      this.leaveIssue = issue === '' ? '' : this.errorText(issue);
+      this.leaveReconnect = this.conn.connected && this.draft.effectiveChanged();
       this.leaveShown = true;
       return true;
     }
@@ -547,30 +556,19 @@ export struct AccessControlPage {
 
   @Builder
   LeaveSheet() {
-    Column({ space: 12 }) {
-      Button($r('app.string.action_save'))
-        .width('100%')
-        .height(48)
-        .enabled(!this.saving)
-        .onClick((): void => { this.save(true); })
-      Button($r('app.string.profile_discard'), { role: ButtonRole.ERROR })
-        .width('100%')
-        .height(48)
-        .enabled(!this.saving)
-        .onClick((): void => {
-          this.leaveShown = false;
-          this.approvedClose = true;
-          this.onClose();
-        })
-      Button($r('app.string.profile_keep_editing'))
-        .buttonStyle(ButtonStyleMode.NORMAL)
-        .width('100%')
-        .height(48)
-        .enabled(!this.saving)
-        .onClick((): void => { this.leaveShown = false; })
-    }
-    .width('100%')
-    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 12, bottom: 24 })
+    AccessLeaveSheet({
+      changes: this.leaveChanges,
+      issue: this.leaveIssue,
+      reconnect: this.leaveReconnect,
+      saving: this.saving,
+      onSave: (): void => { this.save(true); },
+      onDiscard: (): void => {
+        this.leaveShown = false;
+        this.approvedClose = true;
+        this.onClose();
+      },
+      onKeep: (): void => { this.leaveShown = false; }
+    })
   }
 
   @Builder
@@ -693,11 +691,11 @@ export struct AccessControlPage {
             systemMaterial: this.appStyle.sheetMaterial()
           })
         Column()
+          // 标题区由抽屉内容自己绘制；「继续编辑」、下滑和返回都能取消，不再叠一个关闭按钮。
           .bindSheet($$this.leaveShown, this.LeaveSheet, {
-            title: { title: $r('app.string.access_control_unsaved_title') },
             height: SheetSize.FIT_CONTENT,
             preferType: SheetType.BOTTOM,
-            showClose: true,
+            showClose: false,
             systemMaterial: this.appStyle.sheetMaterial(),
             onWillDismiss: (action: DismissSheetAction): void => {
               if (!this.saving) {

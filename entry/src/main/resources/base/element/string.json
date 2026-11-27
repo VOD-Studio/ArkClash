@@ -3074,7 +3074,39 @@
     },
     {
       "name": "access_control_unsaved_title",
-      "value": "Save access control changes?"
+      "value": "Save changes?"
+    },
+    {
+      "name": "access_control_unsaved_hint",
+      "value": "Your access control changes haven't been saved."
+    },
+    {
+      "name": "access_control_change_mode",
+      "value": "Access mode"
+    },
+    {
+      "name": "access_control_change_blocked",
+      "value": "Bypassed apps"
+    },
+    {
+      "name": "access_control_change_trusted",
+      "value": "Proxy-only apps"
+    },
+    {
+      "name": "access_control_change_added",
+      "value": "%d added"
+    },
+    {
+      "name": "access_control_change_removed",
+      "value": "%d removed"
+    },
+    {
+      "name": "access_control_change_reconnect",
+      "value": "Takes effect after the VPN reconnects."
+    },
+    {
+      "name": "access_control_saving",
+      "value": "Saving"
     },
     {
       "name": "access_control_cat_all",

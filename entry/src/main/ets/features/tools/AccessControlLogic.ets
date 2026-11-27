@@ -31,6 +31,30 @@ export interface AccessControlImportOutcome {
   skippedOwn: boolean;
 }
 
+/** 单个名单相对已保存设置的增删数；mode 指名单所属模式（blocked 或 trusted）。 */
+export interface AccessListChange {
+  mode: VpnAppAccessMode;
+  added: number;
+  removed: number;
+}
+
+/** 离开确认页展示的修改摘要：模式变化和有增删的名单，当前模式的名单排在前面。 */
+export interface AccessControlChanges {
+  fromMode: VpnAppAccessMode;
+  toMode: VpnAppAccessMode;
+  lists: AccessListChange[];
+}
+
+function listChange(mode: VpnAppAccessMode, before: string[], after: string[]): AccessListChange {
+  const old = new Set<string>(before);
+  const next = new Set<string>(after);
+  return {
+    mode: mode,
+    added: Array.from(next).filter((item: string): boolean => !old.has(item)).length,
+    removed: Array.from(old).filter((item: string): boolean => !next.has(item)).length
+  };
+}
+
 function sameBundleSet(left: string[], right: string[]): boolean {
   if (left.length !== right.length) {
     return false;
@@ -207,6 +231,17 @@ export class AccessControlDraft {
     return this.mode !== this.baseline.appAccessMode ||
       !sameBundleSet(this.excluded, this.baseline.excludedApplications) ||
       !sameBundleSet(this.trusted, this.baseline.trustedApplications);
+  }
+
+  changes(): AccessControlChanges {
+    const blocked = listChange('blocked', this.baseline.excludedApplications, this.excluded);
+    const trusted = listChange('trusted', this.baseline.trustedApplications, this.trusted);
+    const ordered = this.mode === 'trusted' ? [trusted, blocked] : [blocked, trusted];
+    return {
+      fromMode: this.baseline.appAccessMode,
+      toMode: this.mode,
+      lists: ordered.filter((item: AccessListChange): boolean => item.added > 0 || item.removed > 0)
+    };
   }
 
   toSettings(): VpnNetworkSettings {
