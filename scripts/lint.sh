@@ -23,6 +23,11 @@ prepare_quickjs() {
 }
 
 lint_go() {
+  if ! command -v go >/dev/null; then
+    echo "跳过：没有安装 go"
+    return
+  fi
+
   echo "== gofmt"
   local unformatted
   unformatted="$(gofmt -l core)"
@@ -33,19 +38,34 @@ lint_go() {
 
   echo "== go vet"
   prepare_quickjs || { failed=1; return; }
-  # 内核用 cgo 引用 OHOS NDK 的头文件，vet 也要用 NDK 的编译器。
   local clang="$OHOS_SDK/native/llvm/bin/aarch64-unknown-linux-ohos-clang"
-  if [[ -x "$clang" ]]; then
-    (
-      lint_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-lint.XXXXXX")" || exit 1
-      trap 'rm -rf "$lint_deps"' EXIT
-      bash "$ROOT/scripts/prepare-core-modfile.sh" "$lint_deps" || exit 1
-      cd core
-      CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" go vet -modfile "$lint_deps/go.mod" -tags with_gvisor,ohos ./...
-    ) || failed=1
-  else
-    echo "跳过：找不到 OHOS NDK（${clang}）"
-  fi
+  (
+    lint_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-lint.XXXXXX")" || exit 1
+    trap 'rm -rf "$lint_deps"' EXIT
+    bash "$ROOT/scripts/prepare-core-modfile.sh" "$lint_deps" || exit 1
+    cd core
+
+    # 正向校验 ohos 标签：确保目标构建包含全部 6 个平台/ABI 文件，避免标签拼错被静默跳过。
+    ohos_files="$(CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go list -modfile "$lint_deps/go.mod" \
+      -tags with_gvisor,ohos -f '{{range .GoFiles}}{{.}} {{end}}{{range .CgoFiles}}{{.}} {{end}}' .)"
+    for required in hilog.go lib.go loopback.go socket.go system_dns.go tailscale_network.go; do
+      if [[ " $ohos_files " != *" $required "* ]]; then
+        echo "ohos 构建未包含必需文件：$required" >&2
+        exit 1
+      fi
+    done
+
+    # 无 NDK 时也能检查全部纯 Go 与宿主 cgo（QuickJS/backupstore）代码。
+    CGO_ENABLED=1 go vet -modfile "$lint_deps/go.mod" -tags with_gvisor ./...
+
+    # 内核平台代码用 cgo 引用 OHOS NDK 的头文件，含 ohos 标签的 vet 仍需 NDK 编译器。
+    if [[ -x "$clang" ]]; then
+      CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" \
+        go vet -modfile "$lint_deps/go.mod" -tags with_gvisor,ohos ./...
+    else
+      echo "跳过 OHOS NDK go vet：找不到 OHOS NDK（${clang}）"
+    fi
+  ) || failed=1
 }
 
 lint_shell() {

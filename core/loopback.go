@@ -1,3 +1,5 @@
+//go:build ohos
+
 package main
 
 import _ "unsafe" // go:linkname
