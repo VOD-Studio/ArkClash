@@ -7,12 +7,12 @@
 | workflow | 什么时候跑 | 做什么 |
 |---|---|---|
 | `ci.yml` | PR、合并到 `main`、机器人手动触发 | 分层检查，最后由「CI 通过」汇总，见下一节 |
-| `core.yml` | 被其他 workflow 调用 | 用公开的 OpenHarmony NDK 编译转发内核和独立备份库、跑 `go vet`，上传为 artifact |
+| `core.yml` | 被其他 workflow 调用 | 用公开的 OpenHarmony NDK 编译转发内核和独立备份库、跑 `gofmt` / Go 架构门禁 / `go vet`，上传为 artifact |
 | `hap.yml` | 被其他 workflow 调用 | 打 HAP（有签名材料时同一次构建产出签名包）、codelinter、检查内容和体积 |
 | `release-please.yml` | 合并到 `main` | 维护发版 PR（版本号、CHANGELOG）并触发它的 CI；合并发版 PR 后打 tag、建 Release，调用 `release.yml` |
 | `release.yml` | 被 `release-please.yml` 调用，或手动补传 | 干净构建一次，生成校验和与来源证明，上传到 Release |
 | `scheduled.yml` | 每周一 10:00（北京时间），可手动 | 更新 Geo 数据、扫描依赖漏洞、不用缓存完整构建；失败时开 issue |
-| `codeql.yml` | 内核相关的 PR、`main`、每周 | CodeQL 扫描 Go 代码，结果在 Security → Code scanning |
+| `codeql.yml` | 内核非测试代码相关的 PR、`main`、每周 | CodeQL 扫描 Go 代码（排除 `core/**/*_test.go` 与 `core/testdata/**`），结果在 Security → Code scanning |
 | `pr-title.yml` | PR 打开、改标题、推送 | PR 标题是否符合提交信息格式（squash 合并时它就是 main 上的提交信息）。不计入「CI 通过」 |
 | `website.yml` | 官网/文档相关 PR、合并到 `main`、手动触发 | 用 Bun 同步文档、执行 `astro check` 并构建静态站点。推送到 `main` 或手动触发时部署到 GitHub Pages |
 
@@ -21,14 +21,16 @@
 ```
 变更范围 ─┬─ 快速检查 ───────────────┐
           ├─ 内核 ──── HAP ──────────┼─ CI 通过
+          ├─ 内核宿主测试 ───────────┤
           └─ 依赖漏洞（不计入汇总）   │
 ```
 
 | 任务 | 内容 | 跳过条件 |
 |---|---|---|
 | 变更范围 | `scripts/ci/changes.py` 判断要不要构建、依赖有没有变 | — |
-| 快速检查 | shellcheck、actionlint、zizmor、分层规则。PR 另检查每个提交的信息格式 | — |
-| 内核 | `make core`、`go vet` | 文档 PR 或发版 PR 的合并提交 |
+| 快速检查 | shellcheck、actionlint、zizmor、ArkTS 分层规则。PR 另检查每个提交的信息格式 | — |
+| 内核 | `make core`、`make lint CHECKS=go`（含 Go 架构门禁与 `go vet`） | 文档 PR 或发版 PR 的合并提交 |
+| 内核宿主测试 | `make test TESTS=core`（原地运行 `core/` 宿主回归、mihomo 白盒回归与 Linux TUN fd 回归，不依赖 NDK 或 ohpm） | 文档 PR 或发版 PR 的合并提交 |
 | HAP | codelinter、`make hap`、HAP 内容与体积检查，签名包随 artifact 上传 | 内核任务跳过、未配置工具链仓库，或 PR 来自外部 fork |
 | 依赖漏洞 | govulncheck，只报告代码真正调用到的漏洞 | 不是改了 Go 依赖的 PR |
 | CI 通过 | 汇总以上（依赖漏洞除外）：有失败或取消就失败，跳过不算失败 | — |
@@ -155,7 +157,7 @@ gh run download <运行编号> -R VOD-Studio/ArkClash -n hap-debug
 
 - **常规 CI 的 HAP 任务被跳过**：没配置 `HARMONYOS_TOOLS_REPO`，或者是外部 fork 发起的 PR（拿不到 secret）。
 - **自动发版显示成功，但 Release 没有 HAP**：检查各任务结果，不能只看 workflow 总状态。自动发版会跳过仅供手动补传的 `check`；GitHub Actions 的隐式 `success()` 会把跳过沿依赖链传播，所以 `hap`、`publish` 都要用 `!cancelled()` 加直接上游 `result == 'success'` 显式放行。旧 tag 的 workflow 不随 `main` 更新；已有版本缺包时，按「发版」第 4 步手动补传。
-- **CodeQL 构建缺少 `tunnel.DialContext` 等符号**：分析同样依赖 mihomo 补丁，不能直接在 `core/` 执行裸 `go build`。统一用 `make core-codeql`，它保持 CodeQL 能跟踪的标准 Go，同时准备 mihomo/gVisor 补丁和临时 modfile，并用 `-a` 强制提取；分析产物随后删除，不用于装机或分发。
+- **CodeQL 构建缺少 `tunnel.DialContext` 等符号**：分析同样依赖 mihomo 补丁，不能直接在 `core/` 执行裸 `go build`。统一用 `make core-codeql`，它保持 CodeQL 能跟踪的标准 Go，通过 `scripts/prepare-core-modfile.sh` 准备 mihomo/tailscale/gVisor 补丁和临时 modfile，并以 `-tags with_gvisor,ohos -a` 强制提取；分析产物随后删除，不用于装机或分发。
 - **dependabot 的 PR 上 HAP 报「没有 HARMONYOS_TOOLS_TOKEN」**：在 Dependabot secrets 里补配，见「变量与密钥」。
 - **机器人 PR 上没有「CI 通过」**：见「机器人 PR」。
 - **下载 Command Line Tools 报 404 或 403**：token 过期，或者没有授予那个私有仓库的权限。

@@ -44,3 +44,4 @@
 | [0037](0037-resume-after-vpn-reclaim.md) | VPN 进程被回收后在前台恢复连接 | 已采纳，恢复时机由 0038 提前 |
 | [0038](0038-bind-vpn-host-and-background-keep.md) | 绑定 VPN 扩展与后台保持连接 | 已采纳 |
 | [0039](0039-boot-scoped-structured-logs.md) | 按内核代次持续采集日志与结构化脱敏展示 | 已采纳 |
+| [0040](0040-core-build-tags-and-host-tests.md) | 用 ohos 构建标签隔离内核平台代码并原地运行宿主回归 | 已采纳，真机门禁待验收 |
