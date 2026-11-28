@@ -63,11 +63,18 @@ function sameBundleSet(left: string[], right: string[]): boolean {
   return entries.size === right.length && right.every((item: string): boolean => entries.has(item));
 }
 
-function entryMatchesQuery(bundleName: string, entry: AccessCatalogEntry | undefined, words: string[]): boolean {
+/** 系统应用选择器返回的单个应用；label 可能为空串。 */
+export interface AccessPickedApp {
+  bundleName: string;
+  label: string;
+}
+
+function entryMatchesQuery(bundleName: string, entry: AccessCatalogEntry | undefined, words: string[],
+  label: string = ''): boolean {
   if (words.length === 0) {
     return true;
   }
-  const haystack = entry === undefined ? bundleName.toLowerCase() :
+  const haystack = entry === undefined ? `${label} ${bundleName}`.toLowerCase() :
     `${entry.nameZh} ${entry.nameEn} ${entry.bundleName} ${entry.keywords.join(' ')}`.toLowerCase();
   return words.every((word: string): boolean => haystack.includes(word));
 }
@@ -79,13 +86,41 @@ export class AccessControlDraft {
   excluded: string[];
   trusted: string[];
   private pinnedOnOpen: Set<string>;
+  // 目录外应用的显示名，来自系统应用选择器；只影响显示和搜索，不参与脏检查。
+  readonly labels: Map<string, string>;
 
-  constructor(initial: VpnNetworkSettings) {
+  constructor(initial: VpnNetworkSettings, labels: Map<string, string> = new Map<string, string>()) {
     this.baseline = initial.copy();
     this.mode = initial.appAccessMode;
     this.excluded = initial.excludedApplications.slice();
     this.trusted = initial.trustedApplications.slice();
     this.pinnedOnOpen = new Set<string>(this.activeList());
+    this.labels = new Map<string, string>(labels);
+  }
+
+  /** 当前模式还能再选几个，用作系统选择器的单次上限参考。 */
+  activeRemaining(): number {
+    return Math.max(0, this.activeLimit() - this.activeList().length);
+  }
+
+  /** 选择器结果并入当前名单：沿用导入的去重、跳过自身和上限校验，成功后才记下应用名。 */
+  applyPicked(apps: AccessPickedApp[], ownBundle: string): AccessControlImportOutcome {
+    const text = apps.map((app: AccessPickedApp): string => app.bundleName).join('\n');
+    const outcome = this.applyImport(text, ownBundle, false);
+    if (outcome.ok) {
+      for (const app of apps) {
+        const label = app.label.trim();
+        if (label !== '' && app.bundleName !== ownBundle) {
+          this.labels.set(app.bundleName, label);
+        }
+      }
+    }
+    return outcome;
+  }
+
+  /** 两份名单的并集，用于保存时裁剪应用名。 */
+  allBundles(): string[] {
+    return Array.from(new Set<string>(this.excluded.concat(this.trusted)));
   }
 
   activeList(): string[] {
@@ -296,10 +331,11 @@ export class AccessControlDraft {
 
     if (category === 'all') {
       for (const bundle of Array.from(customBundles)) {
-        if (!entryMatchesQuery(bundle, undefined, words)) {
+        const label = this.labels.get(bundle) ?? '';
+        if (!entryMatchesQuery(bundle, undefined, words, label)) {
           continue;
         }
-        const row = new AccessControlRowItem(bundle, '', 'all', true, false);
+        const row = new AccessControlRowItem(bundle, label, 'all', true, false);
         if (this.pinnedOnOpen.has(bundle)) {
           pinnedCustom.push(row);
         } else {

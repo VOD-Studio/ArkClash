@@ -1,7 +1,10 @@
 import { common } from '@kit.AbilityKit';
-import { pasteboard } from '@kit.BasicServicesKit';
+import { BusinessError, pasteboard } from '@kit.BasicServicesKit';
+import { antifraudPicker } from '@kit.DeviceSecurityKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { i18n } from '@kit.LocalizationKit';
 import { CapsuleSegmentButtonV2, ColorMetrics, SegmentButtonV2Items, TextModifier } from '@kit.ArkUI';
+import { peekAccessAppLabels, readAccessAppLabels, saveAccessAppLabels } from '../../client/AccessAppLabels';
 import { connection, Connection } from '../../client/Connection';
 import { peekVpnNetworkSettings, readVpnNetworkSettings, saveVpnNetworkSettings } from '../../client/VpnNetworkSettings';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
@@ -15,9 +18,12 @@ import {
   MAX_VPN_EXCLUDED_APPS, MAX_VPN_TRUSTED_APPS, VPN_APP_ACCESS_MODES, VpnAppAccessMode, VpnNetworkSettings
 } from '../../shared/VpnNetwork';
 import { ACCESS_APP_CATEGORIES, AccessAppCategory } from './AccessControlCatalog';
-import { AccessControlChanges, AccessControlDraft, AccessControlRowItem } from './AccessControlLogic';
+import { AccessControlChanges, AccessControlDraft, AccessControlRowItem, AccessPickedApp } from './AccessControlLogic';
 import { AccessLeaveSheet } from './AccessLeaveSheet';
 import { SettingsSection } from './SettingsSection';
+
+const PICKER_MAX_SELECT = 50; // selectFraudApp 的 maxSelectNumber 只接受 1~50
+const PICKER_UNSUPPORTED = 1017600002; // 设备类型不支持（PC/2in1 等）
 
 interface AccessHeaderActionOption {
   icon: Resource;
@@ -56,7 +62,10 @@ export struct AccessControlPage {
   @Local private leaveChanges: AccessControlChanges = { fromMode: 'off', toMode: 'off', lists: [] };
   @Local private leaveIssue: ResourceStr = '';
   @Local private leaveReconnect: boolean = false;
-  private draft: AccessControlDraft = new AccessControlDraft(peekVpnNetworkSettings() ?? new VpnNetworkSettings());
+  @Local private picking: boolean = false;
+  private readonly pickerSupported: boolean = canIUse('SystemCapability.Security.Antifraud');
+  private draft: AccessControlDraft = new AccessControlDraft(peekVpnNetworkSettings() ?? new VpnNetworkSettings(),
+    peekAccessAppLabels());
   private rows: KeyedListSource<AccessControlRowItem> = new KeyedListSource<AccessControlRowItem>();
   private visibleBundles: string[] = [];
   private shown: boolean = false;
@@ -81,8 +90,8 @@ export struct AccessControlPage {
     }
   }
 
-  private applyLoaded(settings: VpnNetworkSettings): void {
-    this.draft = new AccessControlDraft(settings);
+  private applyLoaded(settings: VpnNetworkSettings, labels?: Map<string, string>): void {
+    this.draft = new AccessControlDraft(settings, labels ?? peekAccessAppLabels());
     this.syncFromDraft();
   }
 
@@ -114,8 +123,11 @@ export struct AccessControlPage {
     }
     try {
       const loaded = await readVpnNetworkSettings(this.context());
+      // 应用名只是显示用，读失败时退回包名，不影响名单编辑。
+      const labels = await readAccessAppLabels(this.context()).catch((): Map<string, string> =>
+        new Map<string, string>());
       if (!this.dirty) {
-        this.applyLoaded(loaded);
+        this.applyLoaded(loaded, labels);
       }
       this.loadFailed = false;
     } catch (_error) {
@@ -242,6 +254,47 @@ export struct AccessControlPage {
     }
   }
 
+  // HarmonyOS 不开放已安装应用列表；反诈应用选择器是唯一能让用户从本机应用里勾选的系统界面，
+  // 依赖受限权限 USE_FRAUD_APP_PICKER（调试 Profile 需带该 ACL，见 docs/adr/0045）。
+  private async pickInstalledApps(): Promise<void> {
+    if (!this.editable() || this.activeMode === 'off' || this.picking) {
+      return;
+    }
+    const remaining = this.draft.activeRemaining();
+    if (remaining === 0) {
+      this.toast(this.errorText('too_many_apps'));
+      return;
+    }
+    this.picking = true;
+    try {
+      const result = await antifraudPicker.selectFraudApp(this.context(),
+        { maxSelectNumber: Math.min(PICKER_MAX_SELECT, remaining) });
+      const apps = result.appInfo.map((info: antifraudPicker.SingleAntifraudAppInfo): AccessPickedApp => ({
+        bundleName: info.bundleName,
+        label: info.label ?? ''
+      }));
+      // 选择器打开期间页面可能被重新加载或切到关闭模式，回来后以草稿当前状态为准。
+      if (apps.length === 0 || !this.editable() || this.draft.mode === 'off') {
+        return;
+      }
+      const outcome = this.draft.applyPicked(apps, this.context().applicationInfo.name);
+      if (!outcome.ok) {
+        this.toast(this.errorText(outcome.error));
+        return;
+      }
+      this.syncFromDraft();
+      this.toast(outcome.skippedOwn ? $r('app.string.access_control_import_own_skipped', outcome.addedCount) :
+        $r('app.string.access_control_pick_done', outcome.addedCount));
+    } catch (error) {
+      const code = (error as BusinessError).code;
+      hilog.warn(0xD000, 'ArkClashAccess', '应用选择器失败 %{public}d', code);
+      this.toast(code === PICKER_UNSUPPORTED ?
+        $r('app.string.access_control_pick_unsupported') : $r('app.string.access_control_pick_failed'));
+    } finally {
+      this.picking = false;
+    }
+  }
+
   private async exportToClipboard(): Promise<void> {
     const text = this.draft.exportText();
     if (text === '') {
@@ -271,7 +324,13 @@ export struct AccessControlPage {
     this.saving = true;
     try {
       await saveVpnNetworkSettings(this.context(), next);
-      this.applyLoaded(next);
+      const labels = this.draft.labels;
+      try {
+        await saveAccessAppLabels(this.context(), labels, this.draft.allBundles());
+      } catch (_error) {
+        hilog.warn(0xD000, 'ArkClashAccess', '应用名保存失败');
+      }
+      this.applyLoaded(next, labels);
       this.leaveShown = false;
       this.toast(this.conn.connected && effectiveChanged ?
         $r('app.string.network_reconnect') : $r('app.string.network_saved'));
@@ -357,6 +416,11 @@ export struct AccessControlPage {
   @Builder
   MoreMenu() {
     Menu() {
+      if (this.pickerSupported) {
+        MenuItem({ content: $r('app.string.access_control_pick_installed') })
+          .enabled(!this.picking)
+          .onClick((): void => { this.pickInstalledApps(); })
+      }
       MenuItem({ content: $r('app.string.access_control_import') })
         .onClick((): void => this.openImport())
       MenuItem({ content: $r('app.string.access_control_export') })
@@ -727,7 +791,7 @@ struct AccessAppRow {
       Row({ space: 12 }) {
         Column({ space: 4 }) {
           Row({ space: 8 }) {
-            Text(this.item.custom ? $r('app.string.access_control_custom_app') : this.item.title)
+            Text(this.item.custom && this.item.title === '' ? $r('app.string.access_control_custom_app') : this.item.title)
               .fontFamily(this.appStyle.fontFamily)
               .fontSize(16)
               .fontColor($r('sys.color.font_primary'))

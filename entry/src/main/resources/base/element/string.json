@@ -3046,11 +3046,11 @@
     },
     {
       "name": "access_control_platform_note",
-      "value": "HarmonyOS does not allow third-party apps to read the installed app list. Pick from the built-in common app directory or add bundle names manually. Changes apply when VPN reconnects."
+      "value": "HarmonyOS does not expose the installed app list. Choose from installed apps via More in the top-right corner, pick from the built-in common app directory, or add bundle names manually. Changes apply when VPN reconnects."
     },
     {
       "name": "access_control_blocked_notice",
-      "value": "Selected apps bypass the VPN. Built-in directory shows common HarmonyOS apps; add any unlisted bundle name via Add / Import."
+      "value": "Selected apps bypass the VPN. Built-in directory shows common HarmonyOS apps; add unlisted apps via More > Choose from installed apps, or by bundle name via Add / Import."
     },
     {
       "name": "access_control_trusted_notice",
@@ -3087,6 +3087,22 @@
     {
       "name": "access_control_custom_app",
       "value": "Custom app"
+    },
+    {
+      "name": "access_control_pick_installed",
+      "value": "Choose from installed apps"
+    },
+    {
+      "name": "access_control_pick_done",
+      "value": "Added %d apps."
+    },
+    {
+      "name": "access_control_pick_unsupported",
+      "value": "This device does not support the system app picker. Use the directory or import bundle names."
+    },
+    {
+      "name": "access_control_pick_failed",
+      "value": "Could not open the system app picker. Try again or import bundle names."
     },
     {
       "name": "access_control_container_badge",

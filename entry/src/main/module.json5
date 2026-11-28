@@ -73,6 +73,9 @@
       },
       {
         "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
+      },
+      {
+        "name": "ohos.permission.USE_FRAUD_APP_PICKER"
       }
     ]
   }

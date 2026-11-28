@@ -3026,11 +3026,11 @@
     },
     {
       "name": "access_control_platform_note",
-      "value": "HarmonyOS 不允许三方应用读取已安装应用列表。可从内置常用应用目录勾选，或手动/剪贴板导入包名；修改后重新连接 VPN 生效。"
+      "value": "HarmonyOS 不开放已安装应用列表。可在右上角「更多」中从已安装应用选择，或从内置常用应用目录勾选、手动/剪贴板导入包名；修改后重新连接 VPN 生效。"
     },
     {
       "name": "access_control_blocked_notice",
-      "value": "选中的应用绕过 VPN 直连。下方为内置常用鸿蒙应用目录，未收录应用可点右上角或“添加/导入”填写包名。"
+      "value": "选中的应用绕过 VPN 直连。下方为内置常用鸿蒙应用目录，未收录应用可在右上角「更多」中从已安装应用选择，或点“添加/导入”填写包名。"
     },
     {
       "name": "access_control_trusted_notice",
@@ -3067,6 +3067,22 @@
     {
       "name": "access_control_custom_app",
       "value": "自定义包名"
+    },
+    {
+      "name": "access_control_pick_installed",
+      "value": "从已安装应用选择"
+    },
+    {
+      "name": "access_control_pick_done",
+      "value": "已添加 %d 个应用。"
+    },
+    {
+      "name": "access_control_pick_unsupported",
+      "value": "当前设备不支持系统应用选择器，请用目录勾选或导入包名。"
+    },
+    {
+      "name": "access_control_pick_failed",
+      "value": "无法打开系统应用选择器，请稍后重试或导入包名。"
     },
     {
       "name": "access_control_container_badge",
