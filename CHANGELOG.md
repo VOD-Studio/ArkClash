@@ -90,6 +90,73 @@
 
 * **ui:** 使用系统异步接口采集界面进程内存，避免在 ArkTS 主线程同步读取 smaps。
 
+## [0.6.4](https://github.com/VOD-Studio/ArkClash/compare/v0.6.3...v0.6.4) (2026-11-28)
+
+
+### 新增
+
+* improve added rules editor ([77f9a54](https://github.com/VOD-Studio/ArkClash/commit/77f9a54d6953dffab08e736aa64d6b0cb8d42493))
+* **profiles:** 订阅支持 Base64 与纯分享链接列表 ([b7a7f5a](https://github.com/VOD-Studio/ArkClash/commit/b7a7f5aaf278e8df996b2d8e9ed771fadee7a632)), closes [#129](https://github.com/VOD-Studio/ArkClash/issues/129)
+* **ui:** 应用访问控制支持从已安装应用中选择 ([88e64cb](https://github.com/VOD-Studio/ArkClash/commit/88e64cb76a65ac6d3a82b30d82216f907a3a81d2))
+* **ui:** 按新设计重做访问控制页 ([55a54a2](https://github.com/VOD-Studio/ArkClash/commit/55a54a201f7c434b598da1cc2035c16794a085b9))
+* **ui:** 按界面范式重新设计脚本页 ([a41a47b](https://github.com/VOD-Studio/ArkClash/commit/a41a47b25e36373c477b90c48fc4298b388de1bf))
+* **ui:** 新增独立应用访问控制页、常用目录与批量导入导出 ([9ed1b35](https://github.com/VOD-Studio/ArkClash/commit/9ed1b35432498a85af676c575d70d520e30308a7))
+* **ui:** 重新设计应用访问控制的离开确认抽屉 ([d35e1fd](https://github.com/VOD-Studio/ArkClash/commit/d35e1fd3ea07c27e2e500295aa9423f926209703))
+* **ui:** 重新设计配置详情抽屉 ([9ddf9c1](https://github.com/VOD-Studio/ArkClash/commit/9ddf9c13ea2ac1b844f7d54fcfc6490035ecbd78))
+* **ui:** 重新设计附加规则的删除确认抽屉 ([76e5f31](https://github.com/VOD-Studio/ArkClash/commit/76e5f316e3e7a11c24288f70f4ca5c9a28557330))
+* **vpn:** 支持分应用访问控制双名单与白名单模式 ([1c75940](https://github.com/VOD-Studio/ArkClash/commit/1c7594016408200f8b5009345ce23b223f1a8731))
+* 应用访问控制双名单、内核分层重构与订阅格式兼容 ([cccc619](https://github.com/VOD-Studio/ArkClash/commit/cccc61992a48ec2d19923ed1a7b60ccfb22c9d96))
+
+
+### 修复
+
+* **ci:** 修复 lint.sh 子 shell 在 || failed=1 下忽略前置命令失败 ([7693750](https://github.com/VOD-Studio/ArkClash/commit/7693750b408a45c58889b897330f16218271b026))
+* **client:** 关闭 controller WebSocket 心跳，消除每分钟断线导致的速度曲线断档 ([ac852d8](https://github.com/VOD-Studio/ArkClash/commit/ac852d81c5dd5858cad9f6148141f00c6e4eb727))
+* **client:** 连接确认不再要求业务入口已打开 ([e5395fd](https://github.com/VOD-Studio/ArkClash/commit/e5395fd803256e570e3596a8ccd27d2d5feee1d0)), closes [#131](https://github.com/VOD-Studio/ArkClash/issues/131)
+* **client:** 连接途中不再闪回未连接 ([809fb42](https://github.com/VOD-Studio/ArkClash/commit/809fb42d2fb0cb5795bcbaa2e1e1282b3b252c8c))
+* **core:** 修复 fetch 与 prefetch 路径检查及预下载的数据竞态 ([d3ed2f3](https://github.com/VOD-Studio/ArkClash/commit/d3ed2f35a85c549b558d74924542b38cd29d2f3c))
+* **ui:** 仅代理所选清空后也能保存和返回 ([1e09c6e](https://github.com/VOD-Studio/ArkClash/commit/1e09c6ea15ddac9fa1261f20720c5e1080f3c6ea))
+* **ui:** 仪表盘切回后出口 IP 不再停在加载 ([ca4b43f](https://github.com/VOD-Studio/ArkClash/commit/ca4b43f816c84e61a87f31c2086448ebc2bda91c))
+* **ui:** 修复应用访问控制页编译错误 ([f0eab17](https://github.com/VOD-Studio/ArkClash/commit/f0eab17e9050679c802f8971c60a0959448f802e))
+* **ui:** 按真机反馈修正访问控制页 ([ea77f6e](https://github.com/VOD-Studio/ArkClash/commit/ea77f6eb5e2a0b3559f7593146e374a9c39a82d1))
+* **ui:** 按真机验收修正附加规则空状态和两个抽屉 ([b7f8b6c](https://github.com/VOD-Studio/ArkClash/commit/b7f8b6cd3d7b3b6b999b022774ff279d3edf3b57))
+* **ui:** 访问控制模式改叫白名单 / 黑名单 ([e24cec4](https://github.com/VOD-Studio/ArkClash/commit/e24cec486d9ed7a097c3fc92f7addb2223c5a4dc))
+
+
+### 性能
+
+* **core:** reuse unchanged rule providers on reload ([947ba0a](https://github.com/VOD-Studio/ArkClash/commit/947ba0a7f12a8dce3ea629f4aa247fb9dcf68587))
+
+
+### 重构
+
+* **core:** 为 OHOS 平台文件添加 ohos 构建标签并补全宿主 go vet ([bd7b5f3](https://github.com/VOD-Studio/ArkClash/commit/bd7b5f32bd753a99d1958e515c6aec5cbe0a4bc9))
+* **core:** 升格 cmd 入口并扩展全包架构门禁 ([7cba090](https://github.com/VOD-Studio/ArkClash/commit/7cba090bddb69e34e8b74b34e39cf5583a0affbc))
+* **core:** 将 lib.go 收口为纯转发入口 ([cdc85fe](https://github.com/VOD-Studio/ArkClash/commit/cdc85fe78a62751371362902d1171e2797b6ed3e))
+* **core:** 扩展 internal/ctrl 并抽出 ruletunnel、probe 与 subfetch ([d388f6c](https://github.com/VOD-Studio/ArkClash/commit/d388f6c7692557b34e7a5829ff36799a79a14f50))
+* **core:** 抽出纯引擎 internal/proxylink 与 internal/ruleset ([e8e71c3](https://github.com/VOD-Studio/ArkClash/commit/e8e71c380a1475a87cb6f5fa86935891e89439d8))
+* **core:** 抽出零 core.mu 子系统 internal/providers 并拆分单测与集成测试 ([1db5cce](https://github.com/VOD-Studio/ArkClash/commit/1db5cce3ce3ff6b794c56a70e79e830ef1992b2f))
+* **core:** 抽出零 mihomo 控制面辅助包 internal/ctrl ([a60eb53](https://github.com/VOD-Studio/ArkClash/commit/a60eb538eafb3a6bd03316e7dd9ddcec0d02d508))
+* **core:** 拆分 api.go 并收口 C ABI 导出到 lib.go ([50e5b32](https://github.com/VOD-Studio/ArkClash/commit/50e5b3259d0b8cebe825c2e998ed7b295389cbfc))
+* **core:** 拆分核心引擎 engine 与控制面 api 包 ([30264ab](https://github.com/VOD-Studio/ArkClash/commit/30264ab56b158a84a0e1192fd6518569bbe09421))
+* **core:** 收口 ReloadTx 事务与统一配置回滚失败策略 ([ee7e034](https://github.com/VOD-Studio/ArkClash/commit/ee7e0346beef24e86362e192346d11bed11d2437))
+* **core:** 收口核心状态机到 coreEngine 与两层只读快照 ([7dc3eea](https://github.com/VOD-Studio/ArkClash/commit/7dc3eea7ba036c7d239afff8b64e51bf2bf6a40e))
+* **core:** 改造 diagnosticsHub 倒置锁方向并修复备份恢复日志开关同步 ([30f0984](https://github.com/VOD-Studio/ArkClash/commit/30f0984c181c09ae1a6a3377342895affba2c1da))
+* **core:** 改造 geoHub 倒置锁方向并经 Engine 串行热换提交 ([2fcec78](https://github.com/VOD-Studio/ArkClash/commit/2fcec783065e3cb8e0b5eaf34b64c5324d152880))
+* **core:** 改造 TUN 与事件夹具并将宿主回归测试回迁 core ([7daa85a](https://github.com/VOD-Studio/ArkClash/commit/7daa85afd9574f581a9f85eb0eea7099535afae0))
+* **core:** 迁出零核心锁 Geo 子系统 internal/geo ([b39a23c](https://github.com/VOD-Studio/ArkClash/commit/b39a23c988421e77ec08b525553c424a90ab3a48))
+* **core:** 迁出零核心锁诊断子系统 internal/diagnostics ([d811d4e](https://github.com/VOD-Studio/ArkClash/commit/d811d4e9e02054f98bd599c18658fc4216e3e6d7))
+* **core:** 迁出零核心锁配置域 internal/config ([2cdbdcc](https://github.com/VOD-Studio/ArkClash/commit/2cdbdccd809b3f5f0e52a13afda15954a8f785fe))
+* **core:** 隔离 OHOS 平台层至 internal/platform ([e582115](https://github.com/VOD-Studio/ArkClash/commit/e58211546443316aecf671b5e79c06d1e409f302))
+* **profiles:** 安装链接解析改用 URL.parseURL 和 params ([5035379](https://github.com/VOD-Studio/ArkClash/commit/5035379db2ab325d174120b86fb478512ff85ddd))
+* **scripts:** ABI 与安装包命名收口到 env.sh ([9a98d50](https://github.com/VOD-Studio/ArkClash/commit/9a98d50e9c5d255e67a70bd134826973f2249412))
+* **scripts:** 依赖补丁按模块 series 应用并合并准备脚本 ([ea87339](https://github.com/VOD-Studio/ArkClash/commit/ea873392bbd100b4e7fa194fc342ce86d9db186c))
+* **scripts:** 基准、冒烟与编辑器构建按用途归档 ([4f35e1a](https://github.com/VOD-Studio/ArkClash/commit/4f35e1a3a95be05862a03cd6fdf48c0b614969a7))
+* **scripts:** 宿主回归迁入 scripts/tests ([eda4345](https://github.com/VOD-Studio/ArkClash/commit/eda4345ac9815d0ec81344d7d20f725744a0e69a))
+* **scripts:** 领域入口移入各自目录，顶层只留跨领域入口 ([709a397](https://github.com/VOD-Studio/ArkClash/commit/709a39762b40dceabf12bd8428deedeae1f08a63))
+* **ui:** ScrollControls 用箭头函数初始化工具栏的 @BuilderParam ([5dc63df](https://github.com/VOD-Studio/ArkClash/commit/5dc63df90b52d257da7f65092db5944d003e4cde))
+* **ui:** 把抽屉与空状态的共用部件移到 components/ ([f9a8b3c](https://github.com/VOD-Studio/ArkClash/commit/f9a8b3c1bcac845db51d7ec4324cbfe60d91cdf1))
+
 ## [0.6.3](https://github.com/VOD-Studio/ArkClash/compare/v0.6.2...v0.6.3) (2026-11-26)
 
 
