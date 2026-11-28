@@ -22,7 +22,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = re.search(r'"bundleName"\s*:\s*"([\w.]+)"',
                    (ROOT / 'AppScope/app.json5').read_text()).group(1)
 MARKERS = re.compile(
@@ -209,7 +209,7 @@ class BrowserProbe:
         with ThreadingHTTPServer(('127.0.0.1', 0), ProbeHandler) as self.server:
             self.port = self.server.server_port
             self.server.session = (None, {}, None)
-            self.server.script = (ROOT / 'scripts/bench-browser.mjs').read_bytes()
+            self.server.script = (ROOT / 'scripts/bench/browser.mjs').read_bytes()
             thread = threading.Thread(target=self.server.serve_forever, daemon=True)
             with self.device.reverse_port(self.port):
                 thread.start()
@@ -263,7 +263,7 @@ def build_clock(work):
     clang = Path(os.environ['OHOS_SDK']) / 'native/llvm/bin' / f'{architectures[abi]}-unknown-linux-ohos-clang'
     binary = work / 'clock'
     run([str(clang), '-O2', '-Wall', '-Wextra', '-Werror', '-fPIE', '-pie',
-         '-o', str(binary), 'scripts/bench-clock.c'], 'build_device_clock')
+         '-o', str(binary), 'scripts/bench/clock.c'], 'build_device_clock')
     return binary
 
 

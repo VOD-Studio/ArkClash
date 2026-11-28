@@ -113,7 +113,7 @@ trap 'exit 143' TERM
 
 "$TIMEOUT" -k 2s 60s "$LLVM/$triple-clang" \
   -std=c11 -O2 -Wall -Wextra -Werror -fPIE -pie -pthread \
-  -I "$ROOT/core" "$ROOT/scripts/core-smoke.c" -ldl -o "$WORK/core-smoke"
+  -I "$ROOT/core" "$ROOT/scripts/core/smoke.c" -ldl -o "$WORK/core-smoke"
 check_machine "$WORK/core-smoke"
 
 created="$(hdc_command shell "mkdir '$REMOTE' && printf '\\nARKCLASH_CORE_SMOKE_CREATED\\n'")"

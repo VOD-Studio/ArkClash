@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # 编辑器是离线 ArkWeb 资源，依赖和完整性由 npm 锁文件固定。
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-EDITOR="$ROOT/scripts/script-editor"
+EDITOR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$EDITOR/../.." && pwd)"
 ASSETS="$ROOT/entry/src/main/resources/rawfile/script-editor"
 cd "$EDITOR"
 npm ci --ignore-scripts --no-audit --no-fund
