@@ -643,6 +643,20 @@ try {
   assert.equal(ipQuality({ ip: '198.51.100.2', type: 'isp', privacy: { is_abuser: true } }).level, 'risky');
   assert.equal(ipQuality({ ip: '2001:0db8:0:0:0:0:0:1', type: 'isp' }, '2001:db8::1').type, 'residential');
   assert.equal(ipQuality({ ip: '2001:db8::2', type: 'isp' }, '2001:db8::1'), undefined);
+  // 离页取消了进行中的探测，同一路由回来要立即重测，不能停在加载骨架等满 60 秒。
+  const leaving = new exits.ExitIpProbe(); leaving.observe('/unused', 'leave-a', true, true);
+  await flush(); const leftRequest = requests.at(-1);
+  leaving.observe('/unused', 'leave-a', true, false); await flush();
+  assert.equal(leftRequest.destroyed, true); assert.equal(leaving.busy, false);
+  // 取消的请求结束后才释放探测名额。
+  respondProbe(leftRequest, {}, 500); await flush();
+  leaving.observe('/unused', 'leave-a', true, true); await flush();
+  assert.notEqual(requests.at(-1), leftRequest, '回到页面应重新探测'); assert.equal(leaving.busy, true);
+  respondProbe(requests.at(-1), { ip: '192.0.2.9' }); await flush();
+  assert.equal(leaving.result.ip, '192.0.2.9');
+  const leavingQuality = requests.at(-1);
+  leaving.cancel(); respondProbe(leavingQuality, {}, 500); await flush();
+
   const exit = new exits.ExitIpProbe(); exit.observe('/unused', 'route-a', true, true);
   await flush(); const oldExitRequest = requests.at(-1);
   exit.observe('/unused', 'route-b', true, true); await flush(); const newExitRequest = requests.at(-1);

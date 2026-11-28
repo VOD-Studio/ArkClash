@@ -36,7 +36,6 @@ export struct DashboardStatus {
   @Param motionEnabled: boolean = false;
   @Param profileReady: boolean = false;
   @Param profileId: string = '';
-  @Param routeRevision: string = '';
   @Local conn: Connection = connection;
   @Local settings: DashboardSettings = dashboardSettings;
   @Local probe: ExitIpProbe = exitIpProbe;
@@ -59,11 +58,10 @@ export struct DashboardStatus {
     this.stopTimer();
   }
 
-  @Monitor('visible', 'profileId', 'routeRevision', 'conn.routeRevision', 'conn.forward', 'conn.mode', 'conn.sessionMode',
-    'conn.state')
+  @Monitor('visible', 'profileId', 'conn.routeRevision', 'conn.forward', 'conn.mode', 'conn.sessionMode', 'conn.state')
   sync(): void {
     this.refreshGeneration++;
-    const route = `${this.profileId}:${this.routeRevision}:${this.conn.routeRevision}:${this.conn.mode}:` +
+    const route = `${this.profileId}:${this.conn.routeRevision}:${this.conn.mode}:` +
       `${this.conn.sessionMode}:${this.conn.forward}`;
     this.probe.observe(this.context.filesDir, route, this.conn.connected, this.visible && !this.conn.busy);
     if (this.visible && this.timer === -1) {

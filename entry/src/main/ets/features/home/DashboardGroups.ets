@@ -14,7 +14,6 @@ export struct DashboardGroups {
   @Param interactive: boolean = true;
   @Param profileReady: boolean = false;
   @Param profileId: string = '';
-  @Param routeRevision: string = '';
   @Param summaryGroups: string[] = [];
   @Param summaryGroupIcons: Record<string, string> = {};
   @Event onOpen: () => void = () => {};
@@ -35,7 +34,7 @@ export struct DashboardGroups {
     this.generation++;
   }
 
-  @Monitor('visible', 'profileId', 'routeRevision', 'conn.routeRevision', 'conn.state', 'conn.coreReady', 'conn.mode')
+  @Monitor('visible', 'profileId', 'conn.routeRevision', 'conn.state', 'conn.coreReady', 'conn.mode')
   sync(): void {
     if (this.profileId !== this.target || !this.conn.coreReady) {
       this.summary = undefined;
