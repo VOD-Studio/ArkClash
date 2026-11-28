@@ -6,21 +6,13 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/env.sh
 source "$ROOT/scripts/env.sh"
 LLVM="$OHOS_SDK/native/llvm/bin"
-ABI="${ABI:-arm64-v8a}"
-case "$ABI" in
-  arm64-v8a)
-    ARCH=arm64
-    TRIPLE=aarch64-unknown-linux-ohos
-    PATCH="$ROOT/scripts/core/patches/go/ohos-arm64.patch"
-    TLS_RELOC=R_AARCH64_TLS_TPREL
-    ;;
-  x86_64)
-    ARCH=amd64
-    TRIPLE=x86_64-unknown-linux-ohos
-    PATCH="$ROOT/scripts/core/patches/go/ohos-amd64.patch"
-    TLS_RELOC='R_X86_64_(TPOFF|GOTTPOFF)'
-    ;;
-  *) echo "不支持的 ABI：${ABI}（仅支持 arm64-v8a、x86_64）" >&2; exit 2 ;;
+use_abi || exit 2
+ARCH="$ABI_GOARCH"
+TRIPLE="$ABI_TRIPLE"
+PATCH="$ROOT/scripts/core/patches/go/ohos-$ARCH.patch"
+case "$ARCH" in
+  arm64) TLS_RELOC=R_AARCH64_TLS_TPREL ;;
+  amd64) TLS_RELOC='R_X86_64_(TPOFF|GOTTPOFF)' ;;
 esac
 OUT="$ROOT/entry/libs/$ABI"
 

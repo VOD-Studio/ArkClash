@@ -4,22 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/env.sh
 source "$ROOT/scripts/env.sh"
-ABI="${ABI:-arm64-v8a}"
+use_abi
 LLVM="$OHOS_SDK/native/llvm/bin"
-
-case "$ABI" in
-  arm64-v8a)
-    triple=aarch64-unknown-linux-ohos
-    machine=AArch64
-    ;;
-  x86_64)
-    triple=x86_64-unknown-linux-ohos
-    machine='Advanced Micro Devices X86-64'
-    ;;
-  *)
-    echo "Unsupported ABI: $ABI (use arm64-v8a or x86_64)" >&2
-    exit 1
-    ;;
+triple="$ABI_TRIPLE"
+case "$ABI_GOARCH" in
+  arm64) machine=AArch64 ;;
+  amd64) machine='Advanced Micro Devices X86-64' ;;
 esac
 
 if command -v timeout >/dev/null 2>&1; then
