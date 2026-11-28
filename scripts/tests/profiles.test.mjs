@@ -212,6 +212,16 @@ test('subscription headers preserve file extensions, normalize keys and clear mi
   assert.deepEqual(JSON.parse(JSON.stringify(download.infoFromHeaders({}).usage)), { upload: 0, download: 0, total: 0, expire: 0 });
 });
 
+test('分享链接订阅和其 Base64 交给内核转换，Clash YAML 不受影响', () => {
+  const link = 'trojan://secret@192.0.2.51:443?sni=example.com#fixture';
+  for (const text of [link, `﻿\n${link}\nvless://a@b:1`, Buffer.from(link).toString('base64') + '\n']) {
+    assert.equal(download.looksLikeShareLinks(text), true, text);
+  }
+  for (const text of ['', '# https://example.com\nproxies: []\n', 'mixed-port: 7890\nproxies: []\n']) {
+    assert.equal(download.looksLikeShareLinks(text), false, text);
+  }
+});
+
 test('URL grammar, credentials and batch line diagnostics use the public import helpers', async () => {
   assert.equal(download.validSubscriptionUrl('ftp://example.invalid/source'), true);
   assert.equal(download.validSubscriptionUrl('ss://example.invalid'), false);

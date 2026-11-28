@@ -79,7 +79,7 @@ var (
 		// L4/L3 独立子系统与零核心锁配置域
 		providersPkg:   {ctrlPkg, rulesetPkg},
 		probePkg:       {ctrlPkg, ruletunnelPkg},
-		subfetchPkg:    {ruletunnelPkg},
+		subfetchPkg:    {proxylinkPkg, ruletunnelPkg},
 		diagnosticsPkg: {ctrlPkg},
 		geoPkg:         {backupPkg, ctrlPkg, ruletunnelPkg},
 		configPkg:      {backupPkg, geoPkg, proxylinkPkg, rulesetPkg, ruletunnelPkg, scriptPkg},

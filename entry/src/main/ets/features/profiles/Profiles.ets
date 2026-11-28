@@ -531,7 +531,8 @@ export class ProfileStore {
       }
     }
     const outcome = await local();
-    if (outcome.error !== 'age_core_unavailable' || this.context === undefined) { return outcome; }
+    if ((outcome.error !== 'age_core_unavailable' && outcome.error !== 'links_core_unavailable') ||
+      this.context === undefined) { return outcome; }
     try {
       await connection.ensureReady(this.context);
       await this.recheckRoute();

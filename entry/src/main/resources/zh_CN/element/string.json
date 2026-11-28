@@ -1809,6 +1809,10 @@
       "value": "需要启动内核才能解密此订阅。"
     },
     {
+      "name": "profile_links_core_unavailable",
+      "value": "需要启动内核才能转换此订阅。"
+    },
+    {
       "name": "profile_import_file",
       "value": "文件"
     },

@@ -37,6 +37,7 @@ export function describeError(error: string): ResourceStr {
     case 'age_required': return $r('app.string.profile_age_required');
     case 'age_decrypt': return $r('app.string.profile_age_decrypt');
     case 'age_core_unavailable': return $r('app.string.profile_age_core_unavailable');
+    case 'links_core_unavailable': return $r('app.string.profile_links_core_unavailable');
     case 'canceled': return $r('app.string.profile_err_canceled');
     case 'timeout': return $r('app.string.profile_err_timeout');
     case 'dns': return $r('app.string.profile_err_dns');

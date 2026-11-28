@@ -137,6 +137,9 @@ func Fetch(req Request, observe func() RuntimeView) (result Result) {
 		if err != nil {
 			return Result{Error: err.Error()}
 		}
+		if body, err = ShareLinkBody(body, limit); err != nil {
+			return Result{Error: err.Error()}
+		}
 	}
 	if err := WriteBody(req.Path, body, limit); err != nil {
 		return Result{Error: err.Error()}

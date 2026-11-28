@@ -159,7 +159,7 @@ ZIP 快照与恢复机制、旧版目录兼容及 WebDAV 路由见 [ADR-0031](ad
 | `core/internal/config/` | L3 配置域 | 零核心锁配置域：`StartOptions`、`ApplyOverrides` 与只读预览组装、常规/DNS/附加规则/规则集/QuickJS 脚本设置与自定义代理/筛选正则校验 |
 | `core/internal/providers/` | L4 子系统 | 零核心锁的运行中 Provider 管理、单飞更新、本地校验替换与快照推送（依赖 `ctrl`、`ruleset`） |
 | `core/internal/probe/` | L4 子系统 | 按当前规则执行出口与服务探测、4 槽并发控制、正文窗口扫描与跨源重定向隔离（依赖 `ctrl`、`ruletunnel`） |
-| `core/internal/subfetch/` | L4 子系统 | 经内核规则下载、age 订阅解密与后台 `rule-provider` 预取（依赖 `ruletunnel`） |
+| `core/internal/subfetch/` | L4 子系统 | 经内核规则下载、age 订阅解密、分享链接订阅（含 Base64）转 Clash 配置与后台 `rule-provider` 预取（依赖 `proxylink`、`ruletunnel`） |
 | `core/internal/diagnostics/` | L4 子系统 | 应用级连接/DNS/日志有界采集、日志脱敏格式化、诊断 WebSocket 流、仪表盘轻量统计与动作事务（依赖 `ctrl`） |
 | `core/internal/geo/` | L4 子系统 | Geo 磁盘设置契约、串行可取消调度、候选校验/安全热换与最新快照推送（依赖 `backup`、`ctrl`、`ruletunnel`） |
 | `core/internal/backup/` | L5 基础层 | ZIP 备份、原子目录交换与 WebDAV 客户端（零 mihomo 依赖，`CGO_ENABLED=0`） |

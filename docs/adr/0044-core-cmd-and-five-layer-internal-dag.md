@@ -37,7 +37,7 @@
 | L5 基础与平台层 | `internal/platform` | 无 | OHOS 平台适配（`hilog`、`socket`、`system_dns`、`loopback`、`tailscale_network`，均为 `//go:build ohos`）与纯 Go `tailscale_watch` 状态机；`hilog` 通过回调注入解耦，不依赖 `diagnostics` |
 | L4 独立子系统 | `internal/providers` | `ctrl`、`ruleset` | 运行中 Provider 管理、单飞更新、本地校验替换与快照推送 |
 | L4 独立子系统 | `internal/probe` | `ctrl`、`ruletunnel` | 出口与服务探测、4 槽并发控制、正文窗口扫描与跨源重定向隔离 |
-| L4 独立子系统 | `internal/subfetch` | `ruletunnel` | 经内核规则下载、age 解密订阅与后台 rule-provider 预取 |
+| L4 独立子系统 | `internal/subfetch` | `proxylink`、`ruletunnel` | 经内核规则下载、age 解密订阅、分享链接订阅转 Clash 配置与后台 rule-provider 预取 |
 | L4 独立子系统 | `internal/diagnostics` | `ctrl` | 应用级连接/DNS/日志有界采集、诊断 WebSocket 流、仪表盘计数与动作事务 |
 | L4 独立子系统 | `internal/geo` | `backup`、`ctrl`、`ruletunnel` | Geo 资源设置契约、串行可取消下载、校验热换与状态推送 |
 | L3 配置域 | `internal/config` | `backup`、`geo`、`proxylink`、`ruleset`、`ruletunnel`、`script` | 零核心锁配置域：`StartOptions`、`ApplyOverrides` 与预览组装、常规/DNS/附加规则/规则集/脚本设置与自定义代理/筛选正则校验 |

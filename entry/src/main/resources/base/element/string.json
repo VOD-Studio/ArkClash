@@ -1829,6 +1829,10 @@
       "value": "Start the core to decrypt this subscription."
     },
     {
+      "name": "profile_links_core_unavailable",
+      "value": "Start the core to convert this subscription."
+    },
+    {
       "name": "profile_import_file",
       "value": "File"
     },
