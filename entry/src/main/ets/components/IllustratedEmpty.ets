@@ -22,7 +22,8 @@ interface ArtCardStyle {
 const FRONT: ArtCardStyle = { width: ART_WIDTH, height: 60, lift: 0, scale: 1, opacity: 1 };
 const MIDDLE: ArtCardStyle = { width: 208, height: 52, lift: -30, scale: 0.95, opacity: 0.82 };
 const BACK: ArtCardStyle = { width: 184, height: 46, lift: -58, scale: 0.9, opacity: 0.56 };
-const FRONT_SHADOW: ShadowOptions = { radius: 28, offsetY: 10, color: '#16000000' };
+// 大而重的投影在插画下方形成一团灰影，只保留贴边的轻阴影。
+const FRONT_SHADOW: ShadowOptions = { radius: 6, offsetY: 2, color: '#0D000000' };
 const BACK_SHADOW: ShadowOptions = { radius: 12, offsetY: 3, color: '#0A000000' };
 
 @Builder
@@ -94,7 +95,7 @@ export struct IllustratedEmpty {
   CardStack() {
     // 光晕比插画大，压在最前那张卡后面，超出部分不裁剪。
     Stack() {
-      this.Glow(240, 28)
+      this.Glow(180, 8)
       Stack({ alignContent: Alignment.Bottom }) {
         this.ArtCard(BACK, 2, false)
         this.ArtCard(MIDDLE, 1, false)
