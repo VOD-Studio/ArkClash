@@ -3009,6 +3009,30 @@
       "value": "Access control"
     },
     {
+      "name": "access_control_add_app",
+      "value": "Add apps"
+    },
+    {
+      "name": "access_control_common_apps",
+      "value": "Common apps"
+    },
+    {
+      "name": "access_control_results",
+      "value": "%d results"
+    },
+    {
+      "name": "access_control_import_placeholder",
+      "value": "One per line, e.g.\ncom.tencent.mqq"
+    },
+    {
+      "name": "access_control_state_on",
+      "value": "On"
+    },
+    {
+      "name": "access_control_cat_selected",
+      "value": "Selected %d"
+    },
+    {
       "name": "access_control_mode_off",
       "value": "Off"
     },
@@ -3029,44 +3053,12 @@
       "value": "Proxy only · %d"
     },
     {
-      "name": "access_control_blocked_summary",
-      "value": "Bypassing %d / %d apps"
-    },
-    {
-      "name": "access_control_trusted_summary",
-      "value": "Proxying %d / %d apps"
-    },
-    {
-      "name": "access_control_off_desc",
-      "value": "All apps except ArkClash route through the VPN. Both allow and bypass lists are kept when access control is off."
-    },
-    {
-      "name": "access_control_saved_counts",
-      "value": "Saved lists: %d bypass, %d proxy-only."
-    },
-    {
-      "name": "access_control_platform_note",
-      "value": "HarmonyOS does not expose the installed app list. Choose from installed apps via More in the top-right corner, pick from the built-in common app directory, or add bundle names manually. Changes apply when VPN reconnects."
-    },
-    {
-      "name": "access_control_blocked_notice",
-      "value": "Selected apps bypass the VPN. Built-in directory shows common HarmonyOS apps; add unlisted apps via More > Choose from installed apps, or by bundle name via Add / Import."
-    },
-    {
-      "name": "access_control_trusted_notice",
-      "value": "Only selected apps use the VPN; all other apps (including browsers) connect directly. Misspelled or uninstalled bundle names silently stay direct."
-    },
-    {
-      "name": "access_control_add_custom",
-      "value": "Add / Import"
-    },
-    {
       "name": "access_control_import",
-      "value": "Add or import bundle names"
+      "value": "Enter bundle names"
     },
     {
       "name": "access_control_export",
-      "value": "Copy current list"
+      "value": "Copy list"
     },
     {
       "name": "access_control_select_visible",
@@ -3074,15 +3066,15 @@
     },
     {
       "name": "access_control_unselect_visible",
-      "value": "Unselect visible"
+      "value": "Deselect all"
     },
     {
       "name": "access_control_clear_list",
-      "value": "Clear current list"
+      "value": "Clear list"
     },
     {
       "name": "access_control_search_hint",
-      "value": "Search by app name or bundle name"
+      "value": "Name or bundle"
     },
     {
       "name": "access_control_custom_app",
@@ -3094,15 +3086,15 @@
     },
     {
       "name": "access_control_pick_done",
-      "value": "Added %d apps."
+      "value": "Added %d apps"
     },
     {
       "name": "access_control_pick_unsupported",
-      "value": "This device does not support the system app picker. Use the directory or import bundle names."
+      "value": "This device has no system app picker"
     },
     {
       "name": "access_control_pick_failed",
-      "value": "Could not open the system app picker. Try again or import bundle names."
+      "value": "Could not open the system app picker"
     },
     {
       "name": "access_control_container_badge",
@@ -3110,11 +3102,7 @@
     },
     {
       "name": "access_control_no_match",
-      "value": "No matching apps in directory"
-    },
-    {
-      "name": "access_control_import_hint",
-      "value": "Enter one HarmonyOS bundle name per line, or paste raw output from `hdc shell bm dump -a`. ArkClash is automatically excluded."
+      "value": "No results for \"%s\""
     },
     {
       "name": "access_control_import_replace",
@@ -3126,59 +3114,55 @@
     },
     {
       "name": "access_control_import_empty",
-      "value": "No valid HarmonyOS bundle names found. Current list was not changed."
+      "value": "No valid bundle names"
     },
     {
       "name": "access_control_own_only",
-      "value": "ArkClash always stays direct and cannot be added to the list."
+      "value": "ArkClash itself is not needed"
     },
     {
       "name": "access_control_import_done",
-      "value": "Imported %d bundle names."
+      "value": "Imported %d"
     },
     {
       "name": "access_control_import_partial",
-      "value": "Imported %d bundle names (%d invalid entries ignored)."
+      "value": "Imported %d, ignored %d"
     },
     {
       "name": "access_control_import_own_skipped",
-      "value": "Imported %d bundle names (ArkClash skipped to stay direct)."
+      "value": "Imported %d, skipped ArkClash itself"
     },
     {
       "name": "access_control_clipboard_empty",
-      "value": "Clipboard does not contain text."
+      "value": "Clipboard has no text"
     },
     {
       "name": "access_control_clipboard_failed",
-      "value": "Unable to read clipboard."
+      "value": "Could not read the clipboard"
     },
     {
       "name": "access_control_export_empty",
-      "value": "Current list is empty."
+      "value": "The list is empty"
     },
     {
       "name": "access_control_export_done",
-      "value": "Copied %d bundle names."
+      "value": "Copied %d bundle names"
     },
     {
       "name": "access_control_export_failed",
-      "value": "Failed to copy to clipboard."
+      "value": "Copy failed"
     },
     {
       "name": "access_control_empty_trusted",
-      "value": "Select or add at least one app for proxy-only mode."
+      "value": "Select at least 1 app"
     },
     {
       "name": "access_control_unsaved_title",
       "value": "Save changes?"
     },
     {
-      "name": "access_control_unsaved_hint",
-      "value": "Your access control changes haven't been saved."
-    },
-    {
       "name": "access_control_change_mode",
-      "value": "Access mode"
+      "value": "Mode"
     },
     {
       "name": "access_control_change_blocked",
@@ -3195,10 +3179,6 @@
     {
       "name": "access_control_change_removed",
       "value": "%d removed"
-    },
-    {
-      "name": "access_control_change_reconnect",
-      "value": "Takes effect after the VPN reconnects."
     },
     {
       "name": "access_control_saving",

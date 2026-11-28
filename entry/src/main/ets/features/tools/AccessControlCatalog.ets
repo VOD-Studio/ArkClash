@@ -1,8 +1,8 @@
 export type AccessAppCategory =
-  'all' | 'browser' | 'container' | 'social' | 'finance' | 'shopping' | 'life' | 'media';
+  'all' | 'selected' | 'browser' | 'container' | 'social' | 'finance' | 'shopping' | 'life' | 'media';
 
 export const ACCESS_APP_CATEGORIES: AccessAppCategory[] = [
-  'all', 'browser', 'container', 'social', 'finance', 'shopping', 'life', 'media'
+  'all', 'selected', 'browser', 'container', 'social', 'finance', 'shopping', 'life', 'media'
 ];
 
 export interface AccessCatalogEntry {
@@ -13,6 +13,8 @@ export interface AccessCatalogEntry {
   keywords: string[];
   // 兼容容器类应用（如卓易通、出境易）无法细分内部单个安卓应用，界面需做明确提示。
   containerNote?: boolean;
+  // 官方图标就位前，列表用品牌主色 + 首字的方块代替；鸿蒙不向三方应用开放读取其他应用的图标。
+  iconColor: string;
 }
 
 /**
@@ -26,6 +28,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '华为浏览器',
     nameEn: 'Huawei Browser',
     category: 'browser',
+    iconColor: '#0A59F7',
     keywords: ['browser', 'huawei', 'liulanqi', 'web']
   },
   {
@@ -33,6 +36,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '卓易通',
     nameEn: 'Droitong',
     category: 'container',
+    iconColor: '#2F7BF5',
     keywords: ['zhuoyitong', 'droitong', 'android', 'apk', 'rongqi'],
     containerNote: true
   },
@@ -41,6 +45,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '出境易',
     nameEn: 'EasyAbroad',
     category: 'container',
+    iconColor: '#12A67A',
     keywords: ['chujingyi', 'easyabroad', 'gms', 'google', 'overseas'],
     containerNote: true
   },
@@ -49,6 +54,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '微信',
     nameEn: 'WeChat',
     category: 'social',
+    iconColor: '#07C160',
     keywords: ['weixin', 'wechat', 'wx', 'tencent']
   },
   {
@@ -56,6 +62,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: 'QQ',
     nameEn: 'QQ',
     category: 'social',
+    iconColor: '#12B7F5',
     keywords: ['qq', 'mqq', 'tencent']
   },
   {
@@ -63,6 +70,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '小红书',
     nameEn: 'Xiaohongshu',
     category: 'social',
+    iconColor: '#FF2442',
     keywords: ['xiaohongshu', 'xhs', 'rednote', 'red']
   },
   {
@@ -70,6 +78,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '微博',
     nameEn: 'Weibo',
     category: 'social',
+    iconColor: '#E6162D',
     keywords: ['weibo', 'sina', 'wb']
   },
   {
@@ -77,6 +86,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '知乎',
     nameEn: 'Zhihu',
     category: 'social',
+    iconColor: '#0066FF',
     keywords: ['zhihu', 'zh']
   },
   {
@@ -84,6 +94,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '支付宝',
     nameEn: 'Alipay',
     category: 'finance',
+    iconColor: '#1677FF',
     keywords: ['zhifubao', 'alipay', 'zfb', 'pay']
   },
   {
@@ -91,6 +102,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '淘宝',
     nameEn: 'Taobao',
     category: 'shopping',
+    iconColor: '#FF5000',
     keywords: ['taobao', 'tb', 'alibaba']
   },
   {
@@ -98,6 +110,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '京东',
     nameEn: 'JD',
     category: 'shopping',
+    iconColor: '#E1251B',
     keywords: ['jingdong', 'jd', 'mall']
   },
   {
@@ -105,6 +118,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '美团',
     nameEn: 'Meituan',
     category: 'life',
+    iconColor: '#FFC300',
     keywords: ['meituan', 'mt', 'waimai']
   },
   {
@@ -112,6 +126,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '高德地图',
     nameEn: 'Amap',
     category: 'life',
+    iconColor: '#2B7BF6',
     keywords: ['gaode', 'amap', 'ditu', 'map']
   },
   {
@@ -119,6 +134,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '抖音',
     nameEn: 'Douyin',
     category: 'media',
+    iconColor: '#161823',
     keywords: ['douyin', 'dy', 'aweme', 'bytedance']
   },
   {
@@ -126,6 +142,7 @@ export const ACCESS_CONTROL_CATALOG: AccessCatalogEntry[] = [
     nameZh: '哔哩哔哩',
     nameEn: 'Bilibili',
     category: 'media',
+    iconColor: '#FB7299',
     keywords: ['bilibili', 'bili', 'bzhan']
   }
 ];
