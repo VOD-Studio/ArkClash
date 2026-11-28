@@ -3157,6 +3157,10 @@
       "value": "Select at least 1 app"
     },
     {
+      "name": "access_control_emptied_off",
+      "value": "No apps selected, access control turned off"
+    },
+    {
       "name": "access_control_unsaved_title",
       "value": "Save changes?"
     },

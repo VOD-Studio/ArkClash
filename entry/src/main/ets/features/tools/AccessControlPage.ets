@@ -164,10 +164,6 @@ export struct AccessControlPage {
     return !this.loading && !this.loadFailed && !this.saving;
   }
 
-  private invalid(): boolean {
-    return this.accessOn && this.activeMode === 'trusted' && this.selectedBundles.length === 0;
-  }
-
   private errorText(code: string): ResourceStr {
     switch (code) {
       case 'empty_trusted_apps': return $r('app.string.access_control_empty_trusted');
@@ -383,6 +379,7 @@ export struct AccessControlPage {
       return;
     }
     const effectiveChanged = this.draft.effectiveChanged();
+    const emptied = this.draft.emptiesToOff();
     const next = this.draft.toSettings();
     this.saving = true;
     try {
@@ -396,8 +393,9 @@ export struct AccessControlPage {
       this.resetBrowsing();
       this.applyLoaded(next, labels);
       this.leaveShown = false;
-      this.toast(this.conn.connected && effectiveChanged ?
-        $r('app.string.network_reconnect') : $r('app.string.network_saved'));
+      // 开关会在保存后变成关闭，说一句原因，免得以为保存出错。
+      this.toast(emptied ? $r('app.string.access_control_emptied_off') :
+        this.conn.connected && effectiveChanged ? $r('app.string.network_reconnect') : $r('app.string.network_saved'));
       if (closeAfter) {
         this.approvedClose = true;
         this.onClose();
@@ -550,8 +548,8 @@ export struct AccessControlPage {
       this.HeaderButton({
         icon: $r('sys.symbol.checkmark'),
         label: $r('app.string.action_save'),
-        available: this.editable() && this.dirty && !this.invalid(),
-        highlight: this.dirty && !this.invalid(),
+        available: this.editable() && this.dirty,
+        highlight: this.dirty,
         invoke: (): void => { this.save(false); }
       })
     }

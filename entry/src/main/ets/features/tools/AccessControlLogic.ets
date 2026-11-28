@@ -338,8 +338,21 @@ export class AccessControlDraft {
     return this.activeList().join('\n');
   }
 
+  /**
+   * 实际保存的模式：「仅代理所选」名单为空时按关闭保存。空白名单交给系统等于不限制任何应用，
+   * 还会让 ArkClash 自身也走 VPN；名单本身照常保留，下次开启还能接着选。
+   */
+  savedMode(): VpnAppAccessMode {
+    return this.mode === 'trusted' && this.trusted.length === 0 ? 'off' : this.mode;
+  }
+
+  /** 开着「仅代理所选」却一个都没选，保存后会变成关闭。 */
+  emptiesToOff(): boolean {
+    return this.mode === 'trusted' && this.trusted.length === 0;
+  }
+
   isDirty(): boolean {
-    return this.mode !== this.baseline.appAccessMode ||
+    return this.savedMode() !== this.baseline.appAccessMode ||
       !sameBundleSet(this.excluded, this.baseline.excludedApplications) ||
       !sameBundleSet(this.trusted, this.baseline.trustedApplications);
   }
@@ -355,12 +368,12 @@ export class AccessControlDraft {
         lists.push(change);
       }
     }
-    return { fromMode: this.baseline.appAccessMode, toMode: this.mode, lists: lists };
+    return { fromMode: this.baseline.appAccessMode, toMode: this.savedMode(), lists: lists };
   }
 
   toSettings(): VpnNetworkSettings {
     const next = this.baseline.copy();
-    next.appAccessMode = this.mode;
+    next.appAccessMode = this.savedMode();
     next.excludedApplications = this.excluded.slice();
     next.trustedApplications = this.trusted.slice();
     return next;
@@ -371,9 +384,6 @@ export class AccessControlDraft {
   }
 
   validationError(): string {
-    if (this.mode === 'trusted' && this.trusted.length === 0) {
-      return 'empty_trusted_apps';
-    }
     if (this.excluded.length > MAX_VPN_EXCLUDED_APPS || this.trusted.length > MAX_VPN_TRUSTED_APPS) {
       return 'too_many_apps';
     }

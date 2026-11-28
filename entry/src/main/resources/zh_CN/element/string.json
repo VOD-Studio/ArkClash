@@ -3137,6 +3137,10 @@
       "value": "至少选择 1 个应用"
     },
     {
+      "name": "access_control_emptied_off",
+      "value": "没有选择应用，已关闭访问控制"
+    },
+    {
       "name": "access_control_unsaved_title",
       "value": "保存修改？"
     },
