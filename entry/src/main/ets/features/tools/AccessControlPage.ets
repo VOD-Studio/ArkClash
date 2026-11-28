@@ -1,5 +1,7 @@
 import { common } from '@kit.AbilityKit';
-import { pasteboard } from '@kit.BasicServicesKit';
+import { BusinessError, pasteboard } from '@kit.BasicServicesKit';
+import { antifraudPicker } from '@kit.DeviceSecurityKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { i18n } from '@kit.LocalizationKit';
 import { CapsuleSegmentButtonV2, ColorMetrics, SegmentButtonV2Items, TextModifier } from '@kit.ArkUI';
 import { connection, Connection } from '../../client/Connection';
@@ -242,6 +244,33 @@ export struct AccessControlPage {
     }
   }
 
+  // 原型：借反诈应用选择器让用户从本机已安装应用中勾选，返回包名后走现有导入流程。
+  private async pickInstalledApps(): Promise<void> {
+    if (!this.editable() || this.activeMode === 'off') {
+      return;
+    }
+    try {
+      const result = await antifraudPicker.selectFraudApp(this.context(), { maxSelectNumber: 50 });
+      hilog.info(0x0000, 'AccessPicker', 'picked %{public}d apps', result.appInfo.length);
+      if (result.appInfo.length === 0) {
+        return;
+      }
+      const text = result.appInfo.map((item: antifraudPicker.SingleAntifraudAppInfo): string => item.bundleName)
+        .join('\n');
+      const outcome = this.draft.applyImport(text, this.context().applicationInfo.name, false);
+      if (!outcome.ok) {
+        this.toast(this.errorText(outcome.error));
+        return;
+      }
+      this.syncFromDraft();
+      this.toast($r('app.string.access_control_import_done', outcome.addedCount));
+    } catch (error) {
+      const e = error as BusinessError;
+      hilog.error(0x0000, 'AccessPicker', 'selectFraudApp failed: %{public}d %{public}s', e.code, e.message);
+      this.toast(`selectFraudApp ${e.code}`);
+    }
+  }
+
   private async exportToClipboard(): Promise<void> {
     const text = this.draft.exportText();
     if (text === '') {
@@ -357,6 +386,8 @@ export struct AccessControlPage {
   @Builder
   MoreMenu() {
     Menu() {
+      MenuItem({ content: '从已安装应用选择' })
+        .onClick((): void => { this.pickInstalledApps(); })
       MenuItem({ content: $r('app.string.access_control_import') })
         .onClick((): void => this.openImport())
       MenuItem({ content: $r('app.string.access_control_export') })
