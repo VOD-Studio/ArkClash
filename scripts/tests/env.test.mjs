@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 
-const envScript = fileURLToPath(new URL('./env.sh', import.meta.url));
+const envScript = fileURLToPath(new URL('../env.sh', import.meta.url));
 
 async function fixture(t) {
   const home = await mkdtemp(join(tmpdir(), 'arkclash-env-'));

@@ -9,7 +9,7 @@ import test from 'node:test';
 
 const require = createRequire(import.meta.url);
 const ts = require(process.env.ARKCLASH_TYPESCRIPT);
-const etsDir = fileURLToPath(new URL('../entry/src/main/ets/', import.meta.url));
+const etsDir = fileURLToPath(new URL('../../entry/src/main/ets/', import.meta.url));
 const plain = data => JSON.parse(JSON.stringify(data));
 
 export function createToolsHarness(extraKits = {}) {

@@ -6,7 +6,7 @@ import { test } from 'node:test';
 const require = createRequire(import.meta.url);
 const ts = require(process.env.ARKCLASH_TYPESCRIPT);
 function loadComponent(file, imports = {}) {
-  const source = readFileSync(new URL(`../entry/src/main/ets/components/${file}.ets`, import.meta.url), 'utf8');
+  const source = readFileSync(new URL(`../../entry/src/main/ets/components/${file}.ets`, import.meta.url), 'utf8');
   const code = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, experimentalDecorators: true }
   }).outputText;

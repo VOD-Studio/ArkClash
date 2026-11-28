@@ -23,7 +23,7 @@
   - **Wave B**：抽出零 mihomo 的 `core/internal/ctrl`（`WriteError`、`UpgradeWebSocket`、`WriteTextFrame`）与零 `core.mu` 的 `core/internal/providers`（`Hub.Reset(Identity, cfg)` 按值注入，`RegisterRoutes` 持有自身 4 个 HTTP/WS 路由；`providers_test.go` 拆为包内单测与根包集成测试）。
 - **暂缓 `geo`、`diagnostics`、`platform`**：前两者留待阶段三完成 `Engine` 状态机与事务接口设计后再拆；6 个 `ohos` 平台文件继续留在 `core/` 根包，避免无收益地改变 `init()` 执行顺序与导出符号归属。
 - **未登记即失败的 `internal/*` DAG 门禁**：扩展 `scripts/ci/check-core-arch/main.go`，对 `core/` 下所有包实行白名单登记（未登记即失败），强制单向内部依赖与 `backupstore`、`internal/backup`、`internal/script`、`internal/ctrl` 零 mihomo 传递依赖。
-- **防退化测试清单校验**：每波迁移前后对比 `go test -list='^Test' . ./internal/...`，确保测试用例只增不减；`scripts/verify-core.mjs` 自动执行全部 `core/internal/...` 包测试。
+- **防退化测试清单校验**：每波迁移前后对比 `go test -list='^Test' . ./internal/...`，确保测试用例只增不减；`scripts/tests/core.test.mjs` 自动执行全部 `core/internal/...` 包测试。
 
 ## 后果
 

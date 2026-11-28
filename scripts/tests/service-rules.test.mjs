@@ -11,7 +11,7 @@ const compiler = process.argv[2] ?? process.env.ARKCLASH_TYPESCRIPT ??
   '/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/typescript.js';
 assert.ok(fs.existsSync(compiler), '请将 TypeScript 编译器路径作为第一个参数传入');
 const ts = require(compiler);
-const client = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../entry/src/main/ets/client');
+const client = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../entry/src/main/ets/client');
 const context = vm.createContext({ JSON, Math, Number, String, Array, Object, Error, RegExp, encodeURIComponent, decodeURIComponent });
 const modules = new Map();
 function load(name) {

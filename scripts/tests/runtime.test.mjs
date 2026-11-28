@@ -7,7 +7,7 @@ import './vpn-lifecycle-cases.mjs';
 
 const require = createRequire(import.meta.url);
 const ts = require(process.env.ARKCLASH_TYPESCRIPT);
-const source = readFileSync(new URL('../entry/src/main/ets/client/CoreClient.ets', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../../entry/src/main/ets/client/CoreClient.ets', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, {
   fileName: 'CoreClient.ts',
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
@@ -135,7 +135,7 @@ const prefs = {
 };
 
 // 使用真实设置队列和原子写辅助函数，仅在平台写调用处控制提交完成。
-const geoSettings = loadConsumer('../entry/src/main/ets/shared/GeoResources.ets', {
+const geoSettings = loadConsumer('../../entry/src/main/ets/shared/GeoResources.ets', {
   '@kit.BasicServicesKit': {},
   '@kit.ArkTS': { url: { URL: { parseURL: source => new URL(source) } } },
   '@kit.CoreFileKit': { fileIo: {
@@ -168,10 +168,10 @@ const connectionBindings = {
   },
   '../shared/GeoResources': geoSettings
 };
-const { Connection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
+const { Connection } = loadConsumer('../../entry/src/main/ets/client/Connection.ets', {
   ...connectionBindings, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } }
 });
-const runControls = loadConsumer('../entry/src/main/ets/features/home/HomeRunControls.ets', {});
+const runControls = loadConsumer('../../entry/src/main/ets/features/home/HomeRunControls.ets', {});
 
 beforeEach(() => {
   Object.assign(state, { now: 1000, started: 0, stopped: 0, status: undefined,
@@ -191,7 +191,7 @@ test('DNS 覆写离线按版本提交，在线超时只凭落盘版本确认', a
   let active = false;
   let request;
   let timeoutAfterCommit = true;
-  const dns = loadConsumer('../entry/src/main/ets/client/DnsOverrides.ets', {
+  const dns = loadConsumer('../../entry/src/main/ets/client/DnsOverrides.ets', {
     '@kit.AbilityKit': {}, '@kit.BasicServicesKit': {},
     '@kit.ArkTS': { url: { URL: { parseURL: value => new URL(value) } },
       util: { TextEncoder: class { encodeInto(value) { return Buffer.from(value); } } } },
@@ -424,7 +424,7 @@ test('订阅在异步读盘期间停止后不会打开迟到WebSocket', async ()
   let release;
   const storage = new Promise(resolve => { release = resolve; });
   let opened = 0;
-  const { ControllerSocket } = loadConsumer('../entry/src/main/ets/client/ControllerSocket.ets', {
+  const { ControllerSocket } = loadConsumer('../../entry/src/main/ets/client/ControllerSocket.ets', {
     '@kit.NetworkKit': { webSocket: { createWebSocket() { opened++; return {}; } } },
     '../shared/Runtime': { readRuntime: async () => { await storage; return state.runtime; } }
   });
@@ -443,7 +443,7 @@ test('探测在异步读盘期间取消后不创建网络请求', { timeout: 500
   let entered;
   const reading = new Promise(resolve => { entered = resolve; });
   let opened = 0;
-  const { RoutedProbeRequest } = loadConsumer('../entry/src/main/ets/client/RoutedProbe.ets', {
+  const { RoutedProbeRequest } = loadConsumer('../../entry/src/main/ets/client/RoutedProbe.ets', {
     '@kit.BasicServicesKit': {}, '@kit.ArkTS': {},
     '@kit.NetworkKit': { http: { createHttp() { opened++; return {}; } } },
     '../shared/Runtime': {
@@ -494,7 +494,7 @@ test('未知宿主拒绝运行偏好写入，确认停止后恢复', async () =>
 function runtimeFixture() {
   const files = new Map();
   const fixture = { processes: [{ pid: 41 }], processError: undefined, duringQuery: undefined };
-  const runtime = loadConsumer('../entry/src/main/ets/shared/Runtime.ets', {
+  const runtime = loadConsumer('../../entry/src/main/ets/shared/Runtime.ets', {
     '@kit.AbilityKit': { appManager: { async getRunningProcessInformation() {
       if (fixture.processError) throw fixture.processError;
       await fixture.duringQuery?.();
@@ -670,10 +670,10 @@ function runtimeConsumers() {
       }
     }
   } };
-  const client = loadConsumer('../entry/src/main/ets/client/CoreClient.ets', {
+  const client = loadConsumer('../../entry/src/main/ets/client/CoreClient.ets', {
     ...kits, '@kit.NetworkKit': network, '../shared/Runtime': runtime
   });
-  const { Connection: ConsumerConnection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
+  const { Connection: ConsumerConnection } = loadConsumer('../../entry/src/main/ets/client/Connection.ets', {
     '@kit.AbilityKit': {}, '@kit.BasicServicesKit': {}, '@kit.NetworkKit': {},
     '@kit.ArkData': { preferences: { getPreferencesSync: () => prefs } },
     './Controller': {}, './ControllerSocket': { ControllerSocket: class { start() {} stop() {} } },
@@ -940,7 +940,7 @@ test('预热允许空配置，不连接VPN且复用同一认证实例', async ()
 
 test('诊断捕获绑定已挂载的UI接收端和认证boot，不随前后台、普通断开或配置切换停止', async () => {
   const captures = [];
-  const { Connection: CaptureConnection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
+  const { Connection: CaptureConnection } = loadConsumer('../../entry/src/main/ets/client/Connection.ets', {
     ...connectionBindings,
     '@kit.NetworkKit': {
       connection: { createNetConnection: () => ({ on() {}, register(done) { done(); }, unregister() {} }) },
@@ -1179,7 +1179,7 @@ test('自动预热系统启动等待期间断开不销毁核心或自动attach',
 test('回前台且网络与核心未变化时不刷新路由版本，多网并发与自动预热不误清，真实切换网络才失效', async () => {
   const netObservers = [];
   let defaultNet = { netId: 100, bearerTypes: [1] };
-  const { Connection: NetConnection } = loadConsumer('../entry/src/main/ets/client/Connection.ets', {
+  const { Connection: NetConnection } = loadConsumer('../../entry/src/main/ets/client/Connection.ets', {
     ...connectionBindings,
     '@kit.NetworkKit': {
       connection: {

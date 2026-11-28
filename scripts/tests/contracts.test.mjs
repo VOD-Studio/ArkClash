@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const ts = require(process.env.ARKCLASH_TYPESCRIPT);
-const entry = new URL('../entry/', import.meta.url);
-const fixtures = readFileSync(new URL('../core/internal/testdata/contracts.json', import.meta.url), 'utf8');
+const entry = new URL('../../entry/', import.meta.url);
+const fixtures = readFileSync(new URL('../../core/internal/testdata/contracts.json', import.meta.url), 'utf8');
 
 function load(source, resolve) {
   const loaded = { exports: {} };

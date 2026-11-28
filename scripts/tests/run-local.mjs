@@ -1,9 +1,9 @@
 import { readFileSync, writeFileSync, unlinkSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
-const fixtures = readFileSync(new URL('../core/internal/testdata/contracts.json', import.meta.url), 'utf8');
-const generated = new URL('../entry/src/test/ContractFixtures.ets', import.meta.url);
-const log = new URL('../entry/.test/default/intermediates/test/coverage_data/coverage.log', import.meta.url);
+const fixtures = readFileSync(new URL('../../core/internal/testdata/contracts.json', import.meta.url), 'utf8');
+const generated = new URL('../../entry/src/test/ContractFixtures.ets', import.meta.url);
+const log = new URL('../../entry/.test/default/intermediates/test/coverage_data/coverage.log', import.meta.url);
 const hvigor = process.env.HVIGORW;
 const args = ['test', '-p', 'module=entry', '-p', 'coverage=false', '--no-daemon'];
 const options = { stdio: 'inherit', timeout: 120000 };

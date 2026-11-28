@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 // 仅导入纯函数部分校验上下文补全逻辑，不依赖外部 DOM。
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const yamlSource = await readFile(join(root, 'scripts/script-editor/yaml.mjs'), 'utf8');
 const stripped = yamlSource
   .replace(/^import\s+\{[^}]+\}\s+from\s+'@codemirror\/language';\s*/m, '')

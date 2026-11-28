@@ -14,7 +14,7 @@ const compilerPath = process.env.ARKCLASH_TYPESCRIPT ??
   '/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/typescript.js';
 const ts = require(compilerPath);
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const etsDir = path.resolve(scriptDir, '../entry/src/main/ets');
+const etsDir = path.resolve(scriptDir, '../../entry/src/main/ets');
 const featureDir = path.join(etsDir, 'features/profiles');
 const modules = new Map();
 
@@ -88,7 +88,7 @@ function load(file, selectedSource, overrides = {}) {
   modules.set(key, module);
   const localRequire = (name) => {
     if (kits[name]) { return kits[name]; }
-    if (name === 'yaml') { return require(path.resolve(scriptDir, '../entry/oh_modules/yaml/dist/index.js')); }
+    if (name === 'yaml') { return require(path.resolve(scriptDir, '../../entry/oh_modules/yaml/dist/index.js')); }
     return load(path.resolve(path.dirname(absolute), `${name}.ets`));
   };
   vm.runInNewContext(compiled, { module, exports: module.exports, require: localRequire, console, URL,
@@ -143,7 +143,7 @@ test('node share links stay on one line and produce a usable configuration with 
   assert.deepEqual(JSON.parse(JSON.stringify(parsed)), { entries: [{ source, line: 1 },
     { source: 'https://example.invalid/sub', line: 3 }], skipped: 1, errors: [] });
   const { buildShareProfile } = load(path.join(etsDir, 'shared/profiles/ShareProfile.ets'));
-  const { parse } = require(path.resolve(scriptDir, '../entry/oh_modules/yaml/dist/index.js'));
+  const { parse } = require(path.resolve(scriptDir, '../../entry/oh_modules/yaml/dist/index.js'));
   const config = parse(buildShareProfile([{ name: 'PROXY', type: 'socks5', server: 'example.invalid', port: 1080 },
     { name: 'PROXY', type: 'socks5', server: 'example.invalid', port: 1081 }]).yaml);
   assert.deepEqual(config['proxy-groups'], [{ name: 'PROXY', type: 'select', proxies: ['PROXY-01', 'PROXY-02'] }]);
@@ -510,7 +510,7 @@ async function actualProfileConsumer(filesDir,
       } }; }
       if (name === '@kit.ArkTS') { return { ...kits[name], taskpool: { async execute(action, ...args) { return action(...args); } } }; }
       if (name === '@kit.NetworkKit') { return { http, webSocket }; }
-      if (name === 'yaml') { return require(path.resolve(scriptDir, '../entry/oh_modules/yaml/dist/index.js')); }
+      if (name === 'yaml') { return require(path.resolve(scriptDir, '../../entry/oh_modules/yaml/dist/index.js')); }
       const target = path.resolve(path.dirname(absolute), `${name}.ets`);
       if (target === path.join(etsDir, 'client/Connection.ets')) { return { connection: connectionInput }; }
       if (target === path.join(etsDir, 'shared/Runtime.ets')) {
@@ -1703,7 +1703,7 @@ const proxyFilterStoragePath = path.join(etsDir, 'shared/profiles/ProxyFilters.e
 const filterLibrary = load(proxyFilterStoragePath, fs.readFileSync(proxyFilterStoragePath, 'utf8')
   .replace(/^@Concurrent\s*$/gm, ''));
 const filterYaml = load(path.join(etsDir, 'shared/profiles/ProxyFilterYaml.ets'));
-const testYaml = require(path.resolve(scriptDir, '../entry/oh_modules/yaml/dist/index.js'));
+const testYaml = require(path.resolve(scriptDir, '../../entry/oh_modules/yaml/dist/index.js'));
 
 test('筛选预设可搜索、重排和清空，旧修订不能覆盖已保存的库', async () => {
   await sandbox(async (dir) => {

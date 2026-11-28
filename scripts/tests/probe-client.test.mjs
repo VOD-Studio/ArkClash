@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const compiler = process.argv[2] ?? process.env.ARKCLASH_TYPESCRIPT ??
   '/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/ets/build-tools/ets-loader/node_modules/typescript/lib/typescript.js';
 const ts = require(compiler);
-const client = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../entry/src/main/ets/client');
+const client = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../entry/src/main/ets/client');
 const requests = [];
 const timers = new Map();
 let timerId = 0;

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, copyFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, cp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import test, { before, after } from 'node:test';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const coreDir = join(root, 'core');
 const goVersion = (await readFile(join(root, '.go-version'), 'utf8')).trim();
 const race = process.env.CORE_RACE === '1';
@@ -40,15 +40,8 @@ before(async () => {
   assert.equal(prepare.status, 0, `${prepare.error ?? ''}\n${prepare.stdout}\n${prepare.stderr}`);
   goEnv.CGO_CPPFLAGS = `${process.env.CGO_CPPFLAGS ?? ''} -I ${JSON.stringify(join(depsDir, 'quickjs'))}`;
 
-  for (const [source, destination] of [
-    ['observation-dns-host_test.go', 'dns/arkclash_observation_test.go'],
-    ['observation-clear-host_test.go', 'dns/arkclash_observation_clear_test.go'],
-    ['observation-statistic-host_test.go', 'tunnel/statistic/arkclash_observation_test.go'],
-    ['tun-fd-linux-host_test.go', 'listener/sing_tun/arkclash_fd_linux_test.go'],
-    ['tailscale-address-host_test.go', 'adapter/outbound/arkclash_tailscale_address_test.go']
-  ]) {
-    await copyFile(join(root, 'scripts', source), join(depsDir, 'mihomo', destination));
-  }
+  // mihomo/ 下的白盒测试按包路径镜像，原样叠加到打过补丁的 mihomo 副本。
+  await cp(join(root, 'scripts/tests/mihomo'), join(depsDir, 'mihomo'), { recursive: true });
 
   // 预热编译缓存，不执行测试。
   const prewarm = runGo(['test', '-mod=readonly', '-modfile', modfile, ...raceFlag, '-run=^$', './internal/...'], {

@@ -11,7 +11,7 @@ import test from 'node:test';
 
 const require = createRequire(import.meta.url);
 const ts = require(process.env.ARKCLASH_TYPESCRIPT);
-const etsDir = fileURLToPath(new URL('../entry/src/main/ets/', import.meta.url));
+const etsDir = fileURLToPath(new URL('../../entry/src/main/ets/', import.meta.url));
 
 function platformError(error) {
   if (error.code === 'ENOENT') error.code = 13900002;
@@ -887,13 +887,13 @@ test('当前受理失败仅抛脱敏错误，不产生重复notice；推送错�
 }));
 
 function resourcePageActions(store) {
-  const source = fs.readFileSync(new URL('../entry/src/main/ets/features/resources/ResourcesPage.ets', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../../entry/src/main/ets/features/resources/ResourcesPage.ets', import.meta.url), 'utf8');
   const methods = ['isCurrent', 'toast', 'saveAutomatic', 'syncResources', 'updating'].map(name => {
     const method = source.match(new RegExp(`^  private (?:async )?${name}\\([^\\n]*\\)[^\\n]*\\{[\\s\\S]*?^  \\}`, 'm'))?.[0];
     assert.ok(method, `missing resource page action ${name}`);
     return method.replace(/^  private /, '  ');
   }).join('\n');
-  const editor = fs.readFileSync(new URL('../entry/src/main/ets/features/resources/GeoResourceEditor.ets', import.meta.url), 'utf8');
+  const editor = fs.readFileSync(new URL('../../entry/src/main/ets/features/resources/GeoResourceEditor.ets', import.meta.url), 'utf8');
   const errors = editor.match(/^export function geoErrorText\([^\n]*\)[^\n]*\{[\s\S]*?^}/m)?.[0];
   assert.ok(errors, 'missing real resource error mapping');
   const notices = [];

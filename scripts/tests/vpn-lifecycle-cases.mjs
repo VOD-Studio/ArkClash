@@ -7,7 +7,7 @@ import vm from 'node:vm';
 const require = createRequire(import.meta.url);
 const ts = require(process.env.ARKCLASH_TYPESCRIPT);
 const compiled = new Map();
-const root = new URL('../entry/src/main/ets/', import.meta.url);
+const root = new URL('../../entry/src/main/ets/', import.meta.url);
 const filesDir = '/vpn-lifecycle-fixture';
 const runtimePath = `${filesDir}/runtime.json`;
 const instancePath = `${filesDir}/runtime-instance.json`;

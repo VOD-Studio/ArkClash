@@ -14,15 +14,15 @@ async function sourceModule(relative, prelude = '') {
   return `data:text/javascript;base64,${Buffer.from(prelude + stripTypeScriptTypes(withoutObservers)).toString('base64')}`;
 }
 
-const clientUrl = await sourceModule('../entry/src/main/ets/client/Proxies.ets');
+const clientUrl = await sourceModule('../../entry/src/main/ets/client/Proxies.ets');
 const client = await import(clientUrl);
-const logicUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyLogic.ets',
+const logicUrl = await sourceModule('../../entry/src/main/ets/features/proxies/ProxyLogic.ets',
   `import { isProxyGroup, proxyMemberNode, PROXY_TEST_URL } from ${JSON.stringify(clientUrl)};\n`);
 const logic = await import(logicUrl);
-const listUrl = await sourceModule('../entry/src/main/ets/components/KeyedListSource.ets',
+const listUrl = await sourceModule('../../entry/src/main/ets/components/KeyedListSource.ets',
   `const DataOperationType = { ADD: 'add', DELETE: 'delete', CHANGE: 'change', EXCHANGE: 'exchange' };\n`);
 const proxyList = await import(listUrl);
-const viewUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyView.ets',
+const viewUrl = await sourceModule('../../entry/src/main/ets/features/proxies/ProxyView.ets',
   `import { KeyedListSource } from ${JSON.stringify(listUrl)};\n` +
   `import { isProxyGroup, proxyMemberNode, PROXY_TEST_URL } from ${JSON.stringify(clientUrl)};\n` +
   `import { canTestProxy, proxyDelayKey, proxyGroupNames, proxyMembers, proxyPinnedMemberId, resolveProxyLeaf, selectableProxyGroup } from ${JSON.stringify(logicUrl)};\n`);
@@ -66,8 +66,8 @@ const fileIo = {
 };
 const fileBridgeKey = Symbol('proxySelectedFileIo');
 globalThis[fileBridgeKey] = fileIo;
-const errorsUrl = await sourceModule('../entry/src/main/ets/shared/profiles/Errors.ets');
-const storeUrl = await sourceModule('../entry/src/main/ets/shared/profiles/Store.ets',
+const errorsUrl = await sourceModule('../../entry/src/main/ets/shared/profiles/Errors.ets');
+const storeUrl = await sourceModule('../../entry/src/main/ets/shared/profiles/Store.ets',
   `import { ProfileError } from ${JSON.stringify(errorsUrl)};\n` +
   `const fs = globalThis[Object.getOwnPropertySymbols(globalThis).find(key => key.description === 'proxySelectedFileIo')];\n` +
   `const util = { TextEncoder: class { encodeInto(text) { return new TextEncoder().encode(text); } } };\n`);
@@ -157,19 +157,19 @@ async function consumerHarness() {
   `;
   const fixtureUrl = `data:text/javascript;base64,${Buffer.from(fixtureSource).toString('base64')}`;
   const native = await import(fixtureUrl);
-  const boundClientUrl = await sourceModule('../entry/src/main/ets/client/Proxies.ets',
+  const boundClientUrl = await sourceModule('../../entry/src/main/ets/client/Proxies.ets',
     `import { http, CONTROLLER_ADDRESS, readRuntime, newId, readSelected, writeSelected, call, getMode } from ${JSON.stringify(fixtureUrl)};\n`);
-  const preferencesUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyPreferences.ets',
+  const preferencesUrl = await sourceModule('../../entry/src/main/ets/features/proxies/ProxyPreferences.ets',
     `import { preferences } from ${JSON.stringify(fixtureUrl)};\n` +
     `import { copyProxyStyle, defaultProxyStyle } from ${JSON.stringify(logicUrl)};\n`);
-  const selectionUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxySelection.ets',
+  const selectionUrl = await sourceModule('../../entry/src/main/ets/features/proxies/ProxySelection.ets',
     `import { observeProxySelections, submitProxySelection, proxyMemberNode, proxySelectionIdentity, matchesProxySelectionIdentity } from ${JSON.stringify(boundClientUrl)};\n` +
     `import { newId } from ${JSON.stringify(fixtureUrl)};\n` +
     `import { proxySelectionIntent, selectableProxyGroup } from ${JSON.stringify(logicUrl)};\n`);
-  const appearanceUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyAppearance.ets',
+  const appearanceUrl = await sourceModule('../../entry/src/main/ets/features/proxies/ProxyAppearance.ets',
     `import { copyProxyStyle, defaultProxyStyle } from ${JSON.stringify(logicUrl)};\n` +
     `import { loadProxyPreferences, saveProxyStyle, saveProxyView } from ${JSON.stringify(preferencesUrl)};\n`);
-  const probesUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxyTests.ets',
+  const probesUrl = await sourceModule('../../entry/src/main/ets/features/proxies/ProxyTests.ets',
     `import { cancelProxyDelayOwner, proxyMemberNode, PROXY_TEST_URL, testProxyDelays } from ${JSON.stringify(boundClientUrl)};\n` +
     `import { newId } from ${JSON.stringify(fixtureUrl)};\n` +
     `import { canTestProxy, defaultProxyStyle, proxyDelayKey, proxyGroupNames, proxyMembers, resolveProxyLeaf } from ${JSON.stringify(logicUrl)};\n`);
@@ -208,10 +208,10 @@ function putDelay(state, group, name, delay, map) {
 
 test('独立定位和测速操作保留重复失败通知', async () => {
   const harness = await consumerHarness();
-  const socketUrl = await sourceModule('../entry/src/main/ets/client/ControllerSocket.ets');
-  const eventsUrl = await sourceModule('../entry/src/main/ets/client/ProfileCommands.ets',
+  const socketUrl = await sourceModule('../../entry/src/main/ets/client/ControllerSocket.ets');
+  const eventsUrl = await sourceModule('../../entry/src/main/ets/client/ProfileCommands.ets',
     `import { ControllerSocket } from ${JSON.stringify(socketUrl)};\n`);
-  const browserUrl = await sourceModule('../entry/src/main/ets/features/proxies/Proxies.ets',
+  const browserUrl = await sourceModule('../../entry/src/main/ets/features/proxies/Proxies.ets',
     `import { ProfileEvents } from ${JSON.stringify(eventsUrl)};\n` +
     `import { KeyedListSource } from ${JSON.stringify(listUrl)};\n` +
     `import { ProxyAppearance } from ${JSON.stringify(harness.appearanceUrl)};\n` +
@@ -910,9 +910,9 @@ test('已有同名自动首选可明确清除组pin，actual仍标记第二实�
 });
 
 async function controllerConsumer(fixtureUrl) {
-  const request = await sourceModule('../entry/src/main/ets/shared/ControllerRequest.ets',
+  const request = await sourceModule('../../entry/src/main/ets/shared/ControllerRequest.ets',
     `import { http, CONTROLLER_ADDRESS, readRuntime } from ${JSON.stringify(fixtureUrl)};\n`);
-  return import(await sourceModule('../entry/src/main/ets/client/Controller.ets',
+  return import(await sourceModule('../../entry/src/main/ets/client/Controller.ets',
     `import { http } from ${JSON.stringify(fixtureUrl)};\nimport { call } from ${JSON.stringify(request)};\n`));
 }
 
@@ -1038,10 +1038,10 @@ test('实际Controller摘要沿URLTest退休actual取旧实例，明确retired�
 
 async function warmBrowserHarness() {
   const harness = await consumerHarness();
-  const loginUrl = await sourceModule('../entry/src/main/ets/client/LocalProxyCore.ets',
+  const loginUrl = await sourceModule('../../entry/src/main/ets/client/LocalProxyCore.ets',
     `import { call, http } from ${JSON.stringify(harness.fixtureUrl)};\n` +
     `const url = { URL: { parseURL: input => new URL(input) } };\n`);
-  const browserUrl = await sourceModule('../entry/src/main/ets/features/proxies/Proxies.ets',
+  const browserUrl = await sourceModule('../../entry/src/main/ets/features/proxies/Proxies.ets',
     `import { requestTailscaleLogin } from ${JSON.stringify(loginUrl)};\n` +
     `import { KeyedListSource } from ${JSON.stringify(listUrl)};\n` +
     `import { ProxyAppearance } from ${JSON.stringify(harness.appearanceUrl)};\n` +
@@ -1203,12 +1203,12 @@ test('代理节点保存到本地节点库按实例身份提取、校验并处�
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'arkclash-save-proxy-'));
   try {
     await fsp.mkdir(path.join(dir, 'profiles'), { recursive: true });
-    const schemaUrl = await sourceModule('../entry/src/main/ets/shared/profiles/LocalProxySchema.ets');
-    const localProxiesUrl = await sourceModule('../entry/src/main/ets/shared/profiles/LocalProxies.ets',
+    const schemaUrl = await sourceModule('../../entry/src/main/ets/shared/profiles/LocalProxySchema.ets');
+    const localProxiesUrl = await sourceModule('../../entry/src/main/ets/shared/profiles/LocalProxies.ets',
       `const util = { TextEncoder: class { encodeInto(text) { return new TextEncoder().encode(text); } } };\n` +
       `import { newId, validProfileId } from ${JSON.stringify(storeUrl)};\n` +
       `import { copyProxyKey, PROXY_TYPES, proxyMap, proxyText, proxyValue, REQUIRED_PROXY_KEYS, withProxyValue } from ${JSON.stringify(schemaUrl)};\n`);
-    const localProxyStoreUrl = await sourceModule('../entry/src/main/ets/shared/profiles/LocalProxyStore.ets',
+    const localProxyStoreUrl = await sourceModule('../../entry/src/main/ets/shared/profiles/LocalProxyStore.ets',
       `const taskpool = { async execute(fn, ...args) { return fn(...args); } };\n` +
       `import { newId, profilesDir, readOptionalText, withProfileStorage, writeProfileText } from ${JSON.stringify(storeUrl)};\n` +
       `import { applyProxyLinkPlan, decodeProxyStore, emptyLocalProxies, encodeProxyStore, localProxyProblem, newLocalProxy, planProxyLinks } from ${JSON.stringify(localProxiesUrl)};\n` +
@@ -1246,7 +1246,7 @@ test('代理节点保存到本地节点库按实例身份提取、校验并处�
         return defs.map(() => rejectNext ? 'local_proxy_rejected' : '');
       }
     };
-    const saveUrl = await sourceModule('../entry/src/main/ets/features/proxies/ProxySaveToLibrary.ets',
+    const saveUrl = await sourceModule('../../entry/src/main/ets/features/proxies/ProxySaveToLibrary.ets',
       `const bridge = globalThis[Object.getOwnPropertySymbols(globalThis).find(k => k.description === 'saveProxyCoreBridge')];\n` +
       `const { fetchRuntimeProxyDefinition, validateProxyDefinitions } = bridge;\n` +
       `import { checkProxyName, localProxyName, localProxyProblem } from ${JSON.stringify(localProxiesUrl)};\n` +
