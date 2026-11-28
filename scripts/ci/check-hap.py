@@ -31,9 +31,10 @@ REQUIRED = [
     "resources/rawfile/script-editor/editor.js",
     "resources/rawfile/script-editor/third-party.txt",
 ]
-# 字节。备份版 HAP 约 94.5 MB，独立库约 7.4 MB。转发内核保留原限额。
+# 字节。0.6.4 的 debug HAP 约 100.7 MB（ArkTS 字节码 8.5 MB、sourceMap 4.0 MB），独立库约 7.4 MB。
+# 转发内核保留原限额：它的体积影响连接耗时，HAP 总量主要随界面功能增长。
 BUDGET = {
-    "HAP": 100_000_000,
+    "HAP": 105_000_000,
     "libs/arm64-v8a/libclash.so": 70_000_000,
     "libs/arm64-v8a/libarkstore_impl.so": 8_000_000,
 }
