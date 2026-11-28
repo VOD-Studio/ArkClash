@@ -30,7 +30,7 @@ lint_go() {
 
   echo "== gofmt"
   local unformatted
-  unformatted="$(gofmt -l core scripts/core scripts/ci/check-core-arch)"
+  unformatted="$(gofmt -l core scripts/core scripts/tests scripts/ci/check-core-arch)"
   if [[ -n "$unformatted" ]]; then
     echo "需要 gofmt：$unformatted" >&2
     failed=1
