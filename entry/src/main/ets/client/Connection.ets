@@ -111,9 +111,10 @@ export class Connection {
     return this.state === ConnectionState.Connecting || this.state === ConnectionState.Disconnecting;
   }
 
+  // 与内核、VPN 进程的转发判定一致，不看 listenersOpen：配置没有入站端口和 dns.listen 时它一直是 false（#131）。
   get connected(): boolean {
     return this.coreReady && this.state === ConnectionState.Connected && this.forward === 'running' &&
-      this.vpnCreated && this.tunAttached && this.listenersOpen;
+      this.vpnCreated && this.tunAttached;
   }
 
   get offlineWritable(): boolean {
@@ -611,7 +612,7 @@ export class Connection {
       this.mode = status.mode;
     }
     this.state = status.running && status.forward === 'running' && status.vpnCreated &&
-      status.tunAttached && status.listenersOpen ? ConnectionState.Connected : ConnectionState.Disconnected;
+      status.tunAttached ? ConnectionState.Connected : ConnectionState.Disconnected;
     this.routeRevision = `${this.bootId}/${this.revision}/${this.routeEpoch}`;
     if (status.running && !switching && !this.recovering) {
       this.setWantConnected(status.intent === 'started');

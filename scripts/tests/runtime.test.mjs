@@ -44,7 +44,7 @@ const kits = {
             state.status = url.endsWith('/disconnect') ? {
               ...state.status, intent: 'stopped', forward: 'stopped', vpnCreated: false,
               tunAttached: false, listenersOpen: false, startedAt: 0, revision: state.status.revision + 1
-            } : { ...state.status, ...ready, bootId: state.status.bootId,
+            } : { ...state.status, ...ready, bootId: state.status.bootId, listenersOpen: !state.noListeners,
               configRevision: state.status.configRevision, revision: state.status.revision + 1 };
             if (state.commandTimeout) throw new Error('HTTP timeout');
             return { responseCode: 200, result: JSON.stringify(state.status) };
@@ -180,6 +180,7 @@ beforeEach(() => {
     active: false, flushError: false, saved: {}, writingRuntime: false,
     instance: { secret: 'fixture-session', instance: 'fixture.instance' },
     random: 0, commands: [], commandGate: Promise.resolve(), commandTimeout: false, commandError: undefined,
+    noListeners: false,
     denyAuthorization: false, networkSettings: undefined,
     requestingStatus: false, statusGate: Promise.resolve(), startGate: Promise.resolve(),
     runtimeWriteGate: Promise.resolve(), storageGate: Promise.resolve(),
@@ -359,6 +360,19 @@ test('扩展启动前失败后，下一次按钮动作可直接连接', async ()
   assert.equal(connection.connected, true);
   assert.equal(state.started, 2);
   assert.equal(state.stopped, 0);
+});
+
+test('配置没有入站端口时，TUN 和系统 VPN 就绪即确认连接', async () => {
+  const connection = new Connection();
+  connection.restore(context);
+  state.status = { ...ready, intent: 'stopped', forward: 'stopped', tunAttached: false, vpnCreated: false,
+    listenersOpen: false, startedAt: 0 };
+  state.active = true;
+  state.noListeners = true;
+  await connection.connect(context);
+  assert.equal(connection.listenersOpen, false);
+  assert.equal(connection.connected, true);
+  assert.equal(connection.error, '');
 });
 
 test('连接耗时保存失败不会撤销已确认的转发事实', async () => {
