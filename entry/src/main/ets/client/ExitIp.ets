@@ -95,6 +95,10 @@ export class ExitIpProbe {
     }
     this.observing = active;
     if (!active) {
+      // 离页时取消了进行中的探测，回来要重测；否则 60 秒内一直停在加载骨架。
+      if (this.busy) {
+        this.lastStartedAt = 0;
+      }
       this.cancel();
       this.stale = this.result !== undefined;
       return;

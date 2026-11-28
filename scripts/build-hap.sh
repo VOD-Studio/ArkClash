@@ -7,15 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/env.sh
 source "$ROOT/scripts/env.sh"
 MODE="${1:-debug}"
-export ABI="${ABI-arm64-v8a}"
-case "$ABI" in
-  arm64-v8a) ABI_SUFFIX="" ;;
-  x86_64) ABI_SUFFIX="-x86_64" ;;
-  *)
-    echo "不支持的 ABI：${ABI}（仅支持 arm64-v8a、x86_64）" >&2
-    exit 1
-    ;;
-esac
+use_abi
 cd "$ROOT"
 
 for native_lib in libclash.so libarkstore_impl.so; do
@@ -31,14 +23,13 @@ fi
 OUTPUTS=entry/build/default/outputs/default
 # 清掉上次的产物，避免把旧的签名包当成这次的。
 rm -rf "$OUTPUTS"
-bash "$ROOT/scripts/build-script-editor.sh"
+bash "$ROOT/scripts/script-editor/build.sh"
 "$OHPM" install --all
 "$HVIGORW" assembleHap --mode module -p product=default -p buildMode="$MODE" --no-daemon
 
-VERSION="$(sed -nE 's/.*"versionName": *"([^"]+)".*/\1/p' AppScope/app.json5)"
 mkdir -p dist
 # 只清理当前 ABI：保留另一架构的包，但不让旧签名包冒充本次产物。
-PACKAGE="dist/ArkClash-$VERSION-$MODE$ABI_SUFFIX"
+PACKAGE="$(hap_prefix "$MODE")"
 rm -f "$PACKAGE"-{unsigned,signed}.hap
 cp "$OUTPUTS/entry-default-unsigned.hap" "$PACKAGE-unsigned.hap"
 artifacts=("$PACKAGE-unsigned.hap")

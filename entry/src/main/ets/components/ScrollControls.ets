@@ -26,7 +26,8 @@ export struct ScrollControls {
       // 搜索框、筛选和表头会改变高度。连续的安全区让列表在它们后方仍能画到页面标题。
       Column() { this.content() }
         .width('100%').height('100%').safeAreaPadding({ top: this.controlsHeight })
-      ScrollControlsBar({ content: this.controls })
+      // @BuilderParam 只能用 @Builder 或箭头函数初始化，直接传 @Param 函数会被编译器告警。
+      ScrollControlsBar({ content: (): void => { this.controls(); } })
         .backgroundColor(this.backdrop === 'blur' && this.controlsHeight > 0 && this.appStyle.glass === 'none' ?
           this.appStyle.palette.pageBackground : Color.Transparent)
         .backdropBlur(this.backdrop === 'blur' && this.controlsHeight > 0 && this.appStyle.glass !== 'none' ? 20 : 0)

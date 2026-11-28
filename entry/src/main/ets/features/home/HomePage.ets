@@ -328,7 +328,7 @@ export struct HomePage {
   Card(id: string) {
     if (id === 'status') {
       DashboardStatus({ visible: this.visible, interactive: !this.editing, profileReady: this.profileReady,
-        profileId: this.profileId, routeRevision: this.routeRevision, motionEnabled: this.visible && !this.reduceMotion })
+        profileId: this.profileId, motionEnabled: this.visible && !this.reduceMotion })
     } else if (id === 'speed') {
       DashboardSpeed({ visible: this.visible })
     } else if (id === 'mode') {
@@ -347,14 +347,13 @@ export struct HomePage {
       })
     } else if (id === 'groups') {
       DashboardGroups({ visible: this.visible, interactive: !this.editing, profileReady: this.profileReady,
-        profileId: this.profileId, routeRevision: this.routeRevision, summaryGroups: this.summaryGroups,
+        profileId: this.profileId, summaryGroups: this.summaryGroups,
         summaryGroupIcons: this.summaryGroupIcons,
         onOpen: (): void => { this.onOpenProxies(); } })
     } else if (id === 'vpn') {
       DashboardVpn({ visible: this.visible, interactive: !this.editing })
     } else if (id === 'services') {
-      DashboardServices({ visible: this.visible, interactive: !this.editing, profileId: this.profileId,
-        routeRevision: this.routeRevision })
+      DashboardServices({ visible: this.visible, interactive: !this.editing, profileId: this.profileId })
     } else if (id === 'connections') {
       DashboardConnections({ visible: this.visible, interactive: !this.editing,
         onOpen: (target: DiagnosticFeedTarget): void => { this.onOpenDiagnostic(target); } })

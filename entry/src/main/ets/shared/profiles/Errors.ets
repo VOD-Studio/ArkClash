@@ -18,7 +18,7 @@ const CODES: string[] = ['http', 'not_clash', 'invalid_yaml', 'rejected', 'netwo
   'metadata_saved', 'host_unknown', 'script_empty', 'script_encoding', 'script_size', 'script_store', 'script_conflict',
   'icon_set_input', 'icon_set_invalid', 'icon_set_size', 'icon_set_download', 'icon_set_conflict',
   'added_rules_match_target', 'import_link_invalid', 'proxy_link_invalid', 'local_proxy_input', 'local_proxy_core_unavailable',
-  'qr_invalid', 'qr_camera', 'qr_photo', 'age_decrypt', 'age_core_unavailable',
+  'qr_invalid', 'qr_camera', 'qr_photo', 'age_decrypt', 'age_core_unavailable', 'links_core_unavailable',
   'preview_core_unavailable', 'preview_invalid_profile', 'preview_custom_tun', 'preview_too_large',
   'preview_build_failed', 'dns_override_proxy_servers_required', 'rule_set_in_use', 'rule_set_input'];
 

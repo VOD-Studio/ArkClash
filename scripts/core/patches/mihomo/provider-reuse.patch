@@ -1,0 +1,79 @@
+--- a/config/config.go
++++ b/config/config.go
+@@ -8,6 +8,7 @@
+ 	"net/url"
+ 	"path/filepath"
+ 	"strings"
++	"sync/atomic"
+ 	"time"
+ 	_ "unsafe"
+ 
+@@ -1015,13 +1016,32 @@
+ 
+ 	}
+ 	return
++}
++
++type arkClashRuleProviderReuse func(name string, mapping map[string]any) (P.RuleProvider, bool)
++
++var arkClashReuseRuleProvider atomic.Pointer[arkClashRuleProviderReuse]
++
++// ArkClashSetRuleProviderReuse 登记 rule-provider 复用判断。判断返回 true 时直接使用返回的运行中实例，
++// 不再新建；规则、DNS 策略、fake-ip 过滤和嗅探都在这里之后按同一个 map 取 provider，引用一致指向它。
++// 判断可能在核心锁之外被并发调用（预览、校验解析），实现必须只读。
++func ArkClashSetRuleProviderReuse(reuse func(name string, mapping map[string]any) (P.RuleProvider, bool)) {
++	fn := arkClashRuleProviderReuse(reuse)
++	arkClashReuseRuleProvider.Store(&fn)
+ }
+ 
+ func parseRuleProviders(cfg *RawConfig) (ruleProviders map[string]P.RuleProvider, err error) {
+ 	RP.SetTunnel(T.Tunnel)
+ 	ruleProviders = map[string]P.RuleProvider{}
++	reuse := arkClashReuseRuleProvider.Load()
+ 	// parse rule provider
+ 	for name, mapping := range cfg.RuleProvider {
++		if reuse != nil {
++			if rp, ok := (*reuse)(name, mapping); ok {
++				ruleProviders[name] = rp
++				continue
++			}
++		}
+ 		rp, err := RP.ParseRuleProvider(name, mapping, R.ParseRule, RB.MakeBundleFile)
+ 		if err != nil {
+ 			return nil, err
+--- a/hub/executor/executor.go
++++ b/hub/executor/executor.go
+@@ -8,6 +8,7 @@
+ 	"runtime"
+ 	"strconv"
+ 	"sync"
++	"sync/atomic"
+ 	"time"
+ 	_ "unsafe"
+ 
+@@ -313,10 +314,25 @@
+ 
+ func updateRules(rules []C.Rule, subRules map[string][]C.Rule, ruleProviders map[string]P.RuleProvider) {
+ 	tunnel.UpdateRules(rules, subRules, ruleProviders)
++}
++
++type arkClashProviderLoaded func(P.Provider) bool
++
++var arkClashLoadedProvider atomic.Pointer[arkClashProviderLoaded]
++
++// ArkClashSetProviderLoaded 登记已加载判断：对上一份配置里已完成 Initial、本次被原样复用的 provider
++// 返回 true，loadProvider 跳过它。再次 Initial 会重新读文件解析一遍，还会重复启动定时更新或文件监听。
++func ArkClashSetProviderLoaded(loaded func(P.Provider) bool) {
++	fn := arkClashProviderLoaded(loaded)
++	arkClashLoadedProvider.Store(&fn)
+ }
+ 
+ func loadProvider[T P.Provider](providers map[string]T) {
++	loaded := arkClashLoadedProvider.Load()
+ 	load := func(pv T) {
++		if loaded != nil && (*loaded)(pv) {
++			return
++		}
+ 		name := pv.Name()
+ 		if pv.VehicleType() == P.Compatible {
+ 			log.Infoln("Start initial compatible provider %s", name)

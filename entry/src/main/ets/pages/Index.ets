@@ -1,6 +1,7 @@
 import { dashboardSettings } from '../features/home/DashboardSettings';
 import { BackupPage } from '../features/backup/BackupPage';
 import { applyBackupPreferences } from '../client/BackupPreferences';
+import { clearVpnNetworkSettingsCache } from '../client/VpnNetworkSettings';
 import { GeneralPage } from '../features/tools/GeneralPage';
 import { LogsPage } from '../features/tools/LogsPage';
 import { common } from '@kit.AbilityKit';
@@ -20,6 +21,7 @@ import { ProfileImportSheet } from '../features/profiles/ProfileImportSheet';
 import { ProfileInstallInbox } from './ProfileInstallInbox';
 import { ProxiesPage } from '../features/proxies/ProxiesPage';
 import { AboutPage } from '../features/tools/AboutPage';
+import { AccessControlPage } from '../features/tools/AccessControlPage';
 import { AdvancedConfigPage } from '../features/tools/AdvancedConfigPage';
 import { NetworkPage } from '../features/tools/NetworkPage';
 import { ThemePage } from '../features/tools/ThemePage';
@@ -166,6 +168,7 @@ struct Index {
   }
 
   private backupChanged(): void {
+    clearVpnNetworkSettingsCache();
     this.profiles.retryLoad();
     dashboardSettings.refresh(this.context).catch((): void => {});
     this.conn.restore(this.context);
@@ -294,6 +297,9 @@ struct Index {
   Routes(name: string, param: Object) {
     if (name === ToolRoute.Theme) {
       ThemePage({ reduceMotion: this.reduceMotion })
+    } else if (name === ToolRoute.AccessControl) {
+      AccessControlPage({ foreground: this.foreground, reduceMotion: this.reduceMotion,
+        onClose: (): void => { this.stack.pop(); } })
     } else if (name === ToolRoute.General) {
       GeneralPage()
     } else if (name === ToolRoute.Logs) {
@@ -301,7 +307,8 @@ struct Index {
     } else if (name === ToolRoute.AdvancedConfig) {
       AdvancedConfigPage({ onOpen: (route: ToolRoute): void => { this.stack.pushPath({ name: route }); } })
     } else if (name === ToolRoute.Network) {
-      NetworkPage({ foreground: this.foreground })
+      NetworkPage({ foreground: this.foreground,
+        onOpenAccessControl: (): void => { this.stack.pushPath({ name: ToolRoute.AccessControl }); } })
     } else if (name === ToolRoute.DnsOverrides) {
       DnsOverridesPage({ foreground: this.foreground, reduceMotion: this.reduceMotion })
     } else if (name === ToolRoute.AddedRules) {
@@ -317,7 +324,8 @@ struct Index {
     } else if (name === ToolRoute.IconSetPreview) {
       IconSetPreviewPage({ setId: (param as IconSetRouteArgument).id })
     } else if (name === ToolRoute.Scripts) {
-      ScriptsPage({ foreground: this.foreground, onEdit: (id: string): void => this.openScriptEditor(id) })
+      ScriptsPage({ foreground: this.foreground, reduceMotion: this.reduceMotion,
+        onEdit: (id: string): void => this.openScriptEditor(id) })
     } else if (name === ToolRoute.ScriptEditor) {
       ScriptEditorPage({ scriptId: (param as ScriptRouteArgument).id, foreground: this.foreground,
         onClose: (): void => { this.stack.pop(); } })

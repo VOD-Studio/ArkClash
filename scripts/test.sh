@@ -9,6 +9,10 @@ if [[ $# -eq 1 && $1 == go ]]; then
   exit
 fi
 
+if [[ $# -eq 1 && $1 == core ]]; then
+  exec node --test "$ROOT/scripts/tests/core.test.mjs"
+fi
+
 if [[ $# -eq 1 && $1 == local ]]; then
   case "$(uname -s)" in
     Darwin|MINGW*|MSYS*|CYGWIN*) ;;
@@ -31,8 +35,25 @@ if [[ $# -eq 1 && $1 == local ]]; then
   else
     "$OHPM" install --all
   fi
-  node "$ROOT/scripts/run-local-tests.mjs"
+  node "$ROOT/scripts/tests/run-local.mjs"
   exit
+fi
+
+# 用例名对应 scripts/tests/<名字>.test.mjs，先解析再装依赖，写错名字时立即退出。
+if [[ $# -eq 0 ]]; then
+  set -- "$ROOT"/scripts/tests/*.test.mjs
+else
+  test_files=()
+  for test_name in "$@"; do
+    if [[ ! -f "$ROOT/scripts/tests/$test_name.test.mjs" ]]; then
+      known=("$ROOT"/scripts/tests/*.test.mjs)
+      known=("${known[@]##*/}")
+      echo "没有宿主用例 ${test_name}，可选：${known[*]%.test.mjs}" >&2
+      exit 2
+    fi
+    test_files+=("$ROOT/scripts/tests/$test_name.test.mjs")
+  done
+  set -- "${test_files[@]}"
 fi
 
 if [[ -z "${ARKCLASH_TYPESCRIPT:-}" ]]; then
@@ -46,13 +67,4 @@ if [[ ! -f "$ARKCLASH_TYPESCRIPT" ]]; then
 fi
 export ARKCLASH_TYPESCRIPT
 "$OHPM" install --all
-if [[ $# -eq 0 ]]; then
-  set -- "$ROOT"/scripts/verify-*.mjs
-else
-  test_files=()
-  for test_name in "$@"; do
-    test_files+=("$ROOT/scripts/verify-$test_name.mjs")
-  done
-  set -- "${test_files[@]}"
-fi
 exec node --test "$@"

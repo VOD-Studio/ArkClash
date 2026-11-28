@@ -17,7 +17,6 @@ export struct DashboardServices {
   @Param visible: boolean = false;
   @Param interactive: boolean = true;
   @Param profileId: string = '';
-  @Param routeRevision: string = '';
   @Local conn: Connection = connection;
   @Local settings: DashboardSettings = dashboardSettings;
   @Local state: DashboardServiceState = dashboardServiceState;
@@ -36,10 +35,10 @@ export struct DashboardServices {
   }
 
   @Monitor('visible', 'interactive', 'details', 'managing', 'settings.ready', 'settings.revision', 'profileId',
-    'routeRevision', 'conn.routeRevision', 'conn.mode', 'conn.modePending', 'conn.sessionMode', 'conn.forward', 'conn.state')
+    'conn.routeRevision', 'conn.mode', 'conn.modePending', 'conn.sessionMode', 'conn.forward', 'conn.state')
   sync(): void {
     this.manualGeneration++;
-    const route = `${this.profileId}:${this.routeRevision}:${this.conn.routeRevision}:${this.conn.mode}:` +
+    const route = `${this.profileId}:${this.conn.routeRevision}:${this.conn.mode}:` +
       `${this.conn.sessionMode}:${this.conn.forward}`;
     const ids = this.enabledIds();
     this.state.observe(this.context.filesDir, route, this.conn.connected,

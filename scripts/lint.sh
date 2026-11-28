@@ -16,39 +16,52 @@ if [[ ${#checks[@]} -eq 0 || "${checks[0]}" == "all" ]]; then
 fi
 failed=0
 
-prepare_quickjs() {
-  local quickjs_dir
-  quickjs_dir="$(bash "$ROOT/scripts/prepare-quickjs.sh")" || return 1
-  export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$quickjs_dir\""
+# 在调用方的子 shell 里准备补丁依赖与 QuickJS 头文件路径。
+prepare_core_deps() {
+  bash "$ROOT/scripts/core/prepare-deps.sh" "$1" || return 1
+  export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$1/quickjs\""
 }
 
 lint_go() {
+  if ! command -v go >/dev/null; then
+    echo "跳过：没有安装 go"
+    return
+  fi
+
   echo "== gofmt"
   local unformatted
-  unformatted="$(gofmt -l core)"
+  unformatted="$(gofmt -l core scripts/core scripts/tests scripts/ci/check-core-arch)"
   if [[ -n "$unformatted" ]]; then
     echo "需要 gofmt：$unformatted" >&2
     failed=1
   fi
 
-  echo "== go vet"
-  prepare_quickjs || { failed=1; return; }
-  # 内核用 cgo 引用 OHOS NDK 的头文件，vet 也要用 NDK 的编译器。
+  echo "== go arch & vet"
   local clang="$OHOS_SDK/native/llvm/bin/aarch64-unknown-linux-ohos-clang"
-  if [[ -x "$clang" ]]; then
-    (
-      lint_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-lint.XXXXXX")" || exit 1
-      trap 'rm -rf "$lint_deps"' EXIT
-      bash "$ROOT/scripts/prepare-mihomo.sh" "$lint_deps/mihomo" || exit 1
-      cp core/go.mod core/go.sum "$lint_deps/"
-      cd core
-      go mod edit -modfile "$lint_deps/go.mod" "-replace=github.com/metacubex/mihomo=$lint_deps/mihomo"
-      bash "$ROOT/scripts/prepare-tailscale.sh" "$lint_deps/tailscale" "$lint_deps/go.mod" || exit 1
-      CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" go vet -modfile "$lint_deps/go.mod" -tags with_gvisor ./...
-    ) || failed=1
-  else
-    echo "跳过：找不到 OHOS NDK（${clang}）"
-  fi
+  (
+    lint_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-lint.XXXXXX")" || exit 1
+    trap 'rm -rf "$lint_deps"' EXIT
+    prepare_core_deps "$lint_deps" || exit 1
+    cd core || exit 1
+
+    # 先自检架构门禁的静态检查与负向单测，确保门禁自身不退化。
+    CGO_ENABLED=0 go vet "$ROOT/scripts/ci/check-core-arch/main.go" "$ROOT/scripts/ci/check-core-arch/main_test.go" || exit 1
+    CGO_ENABLED=0 go test -count=1 "$ROOT/scripts/ci/check-core-arch/main.go" "$ROOT/scripts/ci/check-core-arch/main_test.go" || exit 1
+
+    # 校验零根 .go 文件、构建标签隔离、Cgo 边界、DAG 白名单、cmd/backupstore 依赖、init() 与 C ABI 导出位置。
+    go run "$ROOT/scripts/ci/check-core-arch/main.go" -core "$ROOT/core" -modfile "$lint_deps/go.mod" || exit 1
+
+    # 无 NDK 时也能检查全部纯 Go 与宿主 cgo（QuickJS/cmd/backupstore）代码。
+    CGO_ENABLED=1 go vet -modfile "$lint_deps/go.mod" -tags with_gvisor ./... || exit 1
+
+    # 内核平台代码用 cgo 引用 OHOS NDK 的头文件，含 ohos 标签的 vet 仍需 NDK 编译器。
+    if [[ -x "$clang" ]]; then
+      CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" \
+        go vet -modfile "$lint_deps/go.mod" -tags with_gvisor,ohos ./... || exit 1
+    else
+      echo "跳过 OHOS NDK go vet：找不到 OHOS NDK（${clang}）"
+    fi
+  ) || failed=1
 }
 
 lint_shell() {
@@ -75,6 +88,28 @@ lint_shell() {
 lint_arch() {
   echo "== 分层规则"
   python3 scripts/check-arch.py || failed=1
+
+  echo "== scripts 目录"
+  # 顶层只放跨领域的入口与共用环境，名单固定；领域入口和材料进各自子目录，见 docs/ci.md「脚本目录」。
+  local entry name target
+  for entry in scripts/*; do
+    [[ -f "$entry" ]] || continue
+    name="${entry#scripts/}"
+    case "$name" in
+      env.sh | check-arch.py | build-hap.sh | device.sh | lint.sh | test.sh) ;;
+      *)
+        echo "scripts/${name} 不属于顶层名单：按领域放进 scripts/ 的子目录（见 docs/ci.md「脚本目录」）" >&2
+        failed=1
+        ;;
+    esac
+  done
+  # Makefile 引用的脚本必须存在，移动脚本时不会留下失效的目标。
+  while IFS= read -r target; do
+    if [[ ! -f "$target" ]]; then
+      echo "Makefile 引用的 $target 不存在" >&2
+      failed=1
+    fi
+  done < <(grep -oE 'scripts/[A-Za-z0-9_./-]+\.(sh|py)' Makefile | sort -u)
 }
 
 lint_arkts() {
@@ -123,7 +158,6 @@ lint_commits() {
 GOVULNCHECK_VERSION="v1.9.0"
 lint_vuln() {
   echo "== govulncheck"
-  prepare_quickjs || { failed=1; return; }
   # 只报告代码真正调用到的漏洞；和 go vet 一样要用 NDK 的编译器与打过补丁的 mihomo。
   local clang="$OHOS_SDK/native/llvm/bin/aarch64-unknown-linux-ohos-clang"
   if [[ -x "$clang" ]]; then
@@ -132,14 +166,13 @@ lint_vuln() {
     (
       vuln_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-vuln.XXXXXX")" || exit 1
       trap 'rm -rf "$vuln_deps"' EXIT
-      bash "$ROOT/scripts/prepare-mihomo.sh" "$vuln_deps/mihomo" || exit 1
-      cp -R core "$vuln_deps/core"
-      chmod -R u+w "$vuln_deps/core"
-      cd "$vuln_deps/core"
-      go mod edit "-replace=github.com/metacubex/mihomo=$vuln_deps/mihomo"
-      bash "$ROOT/scripts/prepare-tailscale.sh" "$vuln_deps/tailscale" "$vuln_deps/core/go.mod" || exit 1
+      prepare_core_deps "$vuln_deps" || exit 1
+      cp -R core "$vuln_deps/core" || exit 1
+      chmod -R u+w "$vuln_deps/core" || exit 1
+      cp "$vuln_deps/go.mod" "$vuln_deps/go.sum" "$vuln_deps/core/" || exit 1
+      cd "$vuln_deps/core" || exit 1
       CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC="$clang" \
-        "$ROOT/.toolchain/bin/govulncheck" -tags with_gvisor ./...
+        "$ROOT/.toolchain/bin/govulncheck" -tags with_gvisor,ohos ./... || exit 1
     ) || failed=1
   else
     echo "跳过：找不到 OHOS NDK（${clang}）"

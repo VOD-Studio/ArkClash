@@ -27,7 +27,7 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          scripts/update-geodata.sh
+          scripts/geodata/update.sh
           released="$(sed -nE 's/^# 上游：[^，]+，Release ([0-9-]+).*/\1/p' geodata.lock)"
           scripts/ci/open-bot-pr.sh bot/geodata "chore(geodata): 更新内置 Geo 数据到 ${released}" \
             "由每周维护任务自动生成：把 meta-rules-dat 最新的 Geo 数据镜像到 geodata 预发布，并更新 geodata.lock。CI 通过后即可合并，下一个版本的安装包会带上新数据。" \

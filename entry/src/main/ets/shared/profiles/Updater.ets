@@ -105,7 +105,8 @@ export async function updateSubscription(env: UpdateEnv, list: ProfileList, subs
     });
   } catch (e) {
     const failure = errorString(e as Object);
-    if (!eligible() || ['busy', 'canceled', 'conflict', 'not_found', 'age_core_unavailable'].includes(errorCode(failure))) {
+    if (!eligible() || ['busy', 'canceled', 'conflict', 'not_found', 'age_core_unavailable',
+      'links_core_unavailable'].includes(errorCode(failure))) {
       return { subscription: subscription, ok: false, error: failure, state: previous };
     }
     return await withProfileStorage<UpdateOutcome>(env.filesDir, async (): Promise<UpdateOutcome> => {

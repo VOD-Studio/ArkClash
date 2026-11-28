@@ -10,6 +10,7 @@ import { ScrollDestination } from '../../components/ScrollDestination';
 import { EmptyState } from '../../components/EmptyState';
 import { HEADER_ACTION, HEADER_GAP, HEADER_ICON_SIZE, PAGE_GUTTER } from '../../components/Theme';
 import { DnsFilterSheet } from './DnsFilterSheet';
+import { LatestPill } from './LatestPill';
 import { DnsRecordDetails } from './RecordDetails';
 import { RecordFilterChips } from './RecordFilters';
 import { recordErrorText } from './RecordLabels';
@@ -315,7 +316,7 @@ export struct DnsPage {
       pageHidden: (_reason: VisibilityChangeReason): void => { this.shown = false; this.syncLifecycle(); }
     }) {
       ScrollControls({ controls: (): void => this.FilterControls() }) {
-        Stack() {
+        Stack({ alignContent: Alignment.Bottom }) {
           DnsRecordList({ store: this.store, active: this.shown && this.foreground, reduceMotion: this.reduceMotion,
             onOpen: (id: string): void => { this.openDetails(id); } })
             .width('100%').height('100%')
@@ -328,14 +329,16 @@ export struct DnsPage {
             .clipContent(ContentClipMode.SAFE_AREA)
             .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.emptyTransition)
           }
+          // 恢复跟随会刷新 store.version，DnsRecordList 据此滚回首项，这里不用直接操作列表。
+          LatestPill({
+            shown: !this.store.following,
+            label: $r('app.string.diagnostics_latest'),
+            inspectorId: 'dns-follow',
+            reduceMotion: this.reduceMotion,
+            onPress: (): void => { this.store.setFollowing(true); }
+          })
         }
         .layoutWeight(1).width('100%')
-        if (!this.store.following && this.store.visibleRecords === 0) {
-          Button($r('app.string.diagnostics_latest')).fontFamily(this.appStyle.fontFamily).buttonStyle(ButtonStyleMode.NORMAL)
-            .accessibilityDescription($r('app.string.diagnostics_paused'))
-            .onClick((): void => { this.store.setFollowing(true); })
-            .margin({ bottom: 8 })
-        }
         Column().bindSheet($$this.filtersShown, this.FilterSheet, {
           detents: [this.filterSheetHeight, SheetSize.LARGE],
           preferType: SheetType.BOTTOM, showClose: false, systemMaterial: this.appStyle.sheetMaterial(),

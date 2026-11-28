@@ -10,7 +10,7 @@ import {
 // 安装包只携带这两份数据，另外两项由用户在线获取。
 const GEO_FILES: string[] = ['geoip.metadb', 'geosite.dat'];
 const GEO_IDS: GeoResourceId[] = ['mmdb', 'geosite'];
-// scripts/fetch-geodata.sh 生成，内容是上面各文件的 SHA-256。
+// scripts/geodata/fetch.sh 生成，内容是上面各文件的 SHA-256。
 const BUNDLED_VERSION = 'geo/VERSION';
 // 复制完成后在 homeDir 留一份，下次启动和安装包里的比对。
 const INSTALLED_VERSION = 'geo.version';
@@ -25,7 +25,7 @@ export async function installGeoData(context: common.Context, homeDir: string): 
   try {
     bundled = util.TextDecoder.create('utf-8').decodeToString(await resources.getRawFileContent(BUNDLED_VERSION));
   } catch (e) {
-    // 没跑 scripts/fetch-geodata.sh 的开发构建里没有这些文件，交给内核自己下载。
+    // 没跑 scripts/geodata/fetch.sh 的开发构建里没有这些文件，交给内核自己下载。
     return 0;
   }
 

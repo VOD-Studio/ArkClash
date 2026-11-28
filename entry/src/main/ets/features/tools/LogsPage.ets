@@ -18,6 +18,7 @@ import {
   PAGE_GUTTER, SHEET_HEADER_HEIGHT
 } from '../../components/Theme';
 import { GeneralSettings, GENERAL_LEVELS } from '../../shared/GeneralSettings';
+import { LatestPill } from './LatestPill';
 import { LogHistory, LogListRow } from './LogHistory';
 import { logCopyText, logLevelLabel, logSummaryLabel } from './LogLabels';
 import { logLevelInk, logLevelSurface, LogRecordDetails, LogRecordItem } from './LogRecordView';
@@ -100,12 +101,6 @@ export struct LogsPage {
   private readonly viewport: RecordListViewport = new RecordListViewport();
   private readonly arrivalTransition: TransitionEffect = recordListTransition(-8);
   private readonly emptyTransition: TransitionEffect = recordListTransition();
-  private readonly pillTransition: TransitionEffect = TransitionEffect.asymmetric(
-    TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 12 }))
-      .animation({ duration: 180, curve: Curve.EaseOut }),
-    TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 8 }))
-      .animation({ duration: 140, curve: Curve.EaseIn })
-  );
   private readonly moreTransition: TransitionEffect = TransitionEffect.asymmetric(
     TransitionEffect.scale({ x: 0.86, y: 0.86, centerX: '90%', centerY: 0 })
       .combine(TransitionEffect.opacity(0)).animation({ duration: 210, curve: Curve.EaseOut }),
@@ -868,25 +863,13 @@ export struct LogsPage {
             .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.emptyTransition)
           }
 
-          if (this.paused && this.recordCount > 0) {
-            Button({ type: ButtonType.Capsule }) {
-              Row({ space: 6 }) {
-                AppGlyph({ name: 'arrowUp', iconSize: 15, iconColor: this.appStyle.palette.onBrand })
-                Text(this.pending > 0 ? $r('app.string.logs_view_new', this.pending) : $r('app.string.logs_latest'))
-                  .fontFamily(this.appStyle.fontFamily)
-                  .fontSize(14)
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(this.appStyle.palette.onBrand)
-              }
-              .padding({ left: 16, right: 16, top: 10, bottom: 10 })
-            }
-            .backgroundColor(this.appStyle.palette.brand)
-            .shadow({ radius: 16, offsetY: 4, color: $r('app.color.dashboard_shadow') })
-            .margin({ bottom: 20 })
-            .id('logs-follow')
-            .transition(this.reduceMotion ? TransitionEffect.IDENTITY : this.pillTransition)
-            .onClick((): void => this.backToLatest())
-          }
+          LatestPill({
+            shown: this.paused && this.recordCount > 0,
+            label: this.pending > 0 ? $r('app.string.logs_view_new', this.pending) : $r('app.string.logs_latest'),
+            inspectorId: 'logs-follow',
+            reduceMotion: this.reduceMotion,
+            onPress: (): void => this.backToLatest()
+          })
         }
         .layoutWeight(1)
         .width('100%')

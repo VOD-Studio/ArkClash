@@ -2,17 +2,33 @@
 
 任务使用 GitHub 托管的 Ubuntu runner。应用构建与静态检查通过 `Makefile` 运行，官网流水线使用 `website/package.json` 中与本地 Makefile 对应的 Bun 脚本。设计取舍见 [ADR-0006](adr/0006-layered-ci.md)。
 
+## 脚本目录
+
+CI 和本机都只经 `Makefile` 进入 `scripts/`。脚本按领域组织：一个领域的入口和它的材料放在同一个子目录。顶层只留跨领域的入口（`build-hap.sh`、`device.sh`、`lint.sh`、`test.sh`）和共用的 `env.sh`、`check-arch.py`。`make lint CHECKS=arch` 按这份名单拒绝顶层的其他文件，并检查 Makefile 引用的脚本都存在。
+
+| 目录 | 入口（make 目标） | 放什么 |
+|---|---|---|
+| `scripts/core/` | `build.sh`（`core`）、`smoke.sh`（`core-smoke`） | 内核构建材料：`prepare-deps.sh` 准备补丁依赖、临时 `go.mod` 与 QuickJS，供构建、vet、govulncheck、CodeQL、宿主回归和 `gopls` 共用；`smoke.c` 是冒烟测试的设备端程序 |
+| `scripts/core/patches/<模块>/` | — | Go 工具链（`go/ohos-<arch>.patch`）与 gVisor、mihomo、tailscale 的补丁。依赖补丁按同目录 `series` 的顺序应用，没登记的补丁会让准备失败 |
+| `scripts/geodata/` | `fetch.sh`（`geodata`）、`update.sh`（`geodata-update`） | 按 `geodata.lock` 下载内置 Geo 数据；每周镜像上游并重写锁文件 |
+| `scripts/tests/` | 由 `test.sh` 调用 | 宿主用例 `<名字>.test.mjs`，`TESTS=<名字>` 选择；`mihomo/` 下按包路径镜像的白盒测试，运行时叠加到打过补丁的 mihomo 副本 |
+| `scripts/bench/` | `run.sh`（`bench`） | 基准实现与设备端辅助程序 |
+| `scripts/script-editor/` | 由 `build-hap.sh` 调用 | 离线脚本编辑器源码与 `build.sh`，构建进 rawfile |
+| `scripts/ci/` | 由 workflow 调用 | 只在 GitHub Actions 里用的脚本与 Go 架构门禁 |
+
+新增 Makefile 目标时，属于某个领域就把入口放进该领域目录；确实跨领域才放顶层，并同时更新 `lint.sh` 里的名单。新增补丁时把文件放进对应模块目录并登记到 `series`。
+
 ## 流水线
 
 | workflow | 什么时候跑 | 做什么 |
 |---|---|---|
 | `ci.yml` | PR、合并到 `main`、机器人手动触发 | 分层检查，最后由「CI 通过」汇总，见下一节 |
-| `core.yml` | 被其他 workflow 调用 | 用公开的 OpenHarmony NDK 编译转发内核和独立备份库、跑 `go vet`，上传为 artifact |
+| `core.yml` | 被其他 workflow 调用 | 用公开的 OpenHarmony NDK 编译转发内核和独立备份库、跑 `gofmt` / Go 架构门禁 / `go vet`，上传为 artifact |
 | `hap.yml` | 被其他 workflow 调用 | 打 HAP（有签名材料时同一次构建产出签名包）、codelinter、检查内容和体积 |
 | `release-please.yml` | 合并到 `main` | 维护发版 PR（版本号、CHANGELOG）并触发它的 CI；合并发版 PR 后打 tag、建 Release，调用 `release.yml` |
 | `release.yml` | 被 `release-please.yml` 调用，或手动补传 | 干净构建一次，生成校验和与来源证明，上传到 Release |
 | `scheduled.yml` | 每周一 10:00（北京时间），可手动 | 更新 Geo 数据、扫描依赖漏洞、不用缓存完整构建；失败时开 issue |
-| `codeql.yml` | 内核相关的 PR、`main`、每周 | CodeQL 扫描 Go 代码，结果在 Security → Code scanning |
+| `codeql.yml` | 内核非测试代码相关的 PR、`main`、每周 | CodeQL 扫描 Go 代码（排除 `core/**/*_test.go` 与 `core/**/testdata/**`），结果在 Security → Code scanning |
 | `pr-title.yml` | PR 打开、改标题、推送 | PR 标题是否符合提交信息格式（squash 合并时它就是 main 上的提交信息）。不计入「CI 通过」 |
 | `website.yml` | 官网/文档相关 PR、合并到 `main`、手动触发 | 用 Bun 同步文档、执行 `astro check` 并构建静态站点。推送到 `main` 或手动触发时部署到 GitHub Pages |
 
@@ -21,14 +37,16 @@
 ```
 变更范围 ─┬─ 快速检查 ───────────────┐
           ├─ 内核 ──── HAP ──────────┼─ CI 通过
+          ├─ 内核宿主测试 ───────────┤
           └─ 依赖漏洞（不计入汇总）   │
 ```
 
 | 任务 | 内容 | 跳过条件 |
 |---|---|---|
 | 变更范围 | `scripts/ci/changes.py` 判断要不要构建、依赖有没有变 | — |
-| 快速检查 | shellcheck、actionlint、zizmor、分层规则。PR 另检查每个提交的信息格式 | — |
-| 内核 | `make core`、`go vet` | 文档 PR 或发版 PR 的合并提交 |
+| 快速检查 | shellcheck、actionlint、zizmor、ArkTS 分层规则。PR 另检查每个提交的信息格式 | — |
+| 内核 | `make core`、`make lint CHECKS=go`（含 Go 全包架构门禁、门禁负向单测与 `go vet`） | 文档 PR 或发版 PR 的合并提交 |
+| 内核宿主测试 | `make test TESTS=core`（全量宿主回归、mihomo 白盒回归与 Linux TUN fd 回归）与 `CORE_RACE=1` 竞态回归（覆盖全部 `internal/*`、6 个 mihomo 白盒包及除 2 项上游 mihomo 全局竞态外的 `internal/engine` 与 `internal/api` 用例），不依赖 NDK 或 ohpm | 文档 PR 或发版 PR 的合并提交 |
 | HAP | codelinter、`make hap`、HAP 内容与体积检查，签名包随 artifact 上传 | 内核任务跳过、未配置工具链仓库，或 PR 来自外部 fork |
 | 依赖漏洞 | govulncheck，只报告代码真正调用到的漏洞 | 不是改了 Go 依赖的 PR |
 | CI 通过 | 汇总以上（依赖漏洞除外）：有失败或取消就失败，跳过不算失败 | — |
@@ -64,7 +82,7 @@
 
 1. `geodata.lock` 记录每个文件的 sha256 和下载地址，`make geodata` 按它下载并校验。
 2. 下载地址是本仓库的预发布 `geodata`，文件名带内容哈希，旧文件保留，历史版本可以重新构建。
-3. 每周任务运行 `scripts/update-geodata.sh`：下载上游最新数据、核对上游公布的 sha256、镜像到 `geodata` 预发布、更新锁文件，再开 PR（`bot/geodata` 分支）。合并后，下一个版本的安装包带上新数据。
+3. 每周任务运行 `scripts/geodata/update.sh`：下载上游最新数据、核对上游公布的 sha256、镜像到 `geodata` 预发布、更新锁文件，再开 PR（`bot/geodata` 分支）。合并后，下一个版本的安装包带上新数据。
 
 本机想立刻更新：`make geodata-update`，需要能写本仓库的 `gh` 登录。
 
@@ -136,7 +154,7 @@ gh run download <运行编号> -R VOD-Studio/ArkClash -n hap-debug
   ```sh
   curl -s https://repo.huaweicloud.com/openharmony/os/<发行版>/ohos-sdk-windows_linux-public.tar.gz | tar -tzf - | grep linux/native
   ```
-- **Go**：改 `.go-version`，本机 `make core` 确认补丁能打上，再按 `docs/agents/platform-pitfalls.md` 第 1 条在真机上复查。
+- **Go**：改 `.go-version`，本机 `make core` 确认 `scripts/core/patches/go/` 下的补丁能打上，再按 `docs/agents/platform-pitfalls.md` 第 1 条在真机上复查。
 - **CI 里的检查工具**：actionlint 的版本和哈希在 `scripts/ci/install-actionlint.sh`，zizmor、govulncheck 的版本在 `scripts/lint.sh`。GitHub Actions 的版本由 dependabot 更新。
 
 ## 发版
@@ -155,7 +173,7 @@ gh run download <运行编号> -R VOD-Studio/ArkClash -n hap-debug
 
 - **常规 CI 的 HAP 任务被跳过**：没配置 `HARMONYOS_TOOLS_REPO`，或者是外部 fork 发起的 PR（拿不到 secret）。
 - **自动发版显示成功，但 Release 没有 HAP**：检查各任务结果，不能只看 workflow 总状态。自动发版会跳过仅供手动补传的 `check`；GitHub Actions 的隐式 `success()` 会把跳过沿依赖链传播，所以 `hap`、`publish` 都要用 `!cancelled()` 加直接上游 `result == 'success'` 显式放行。旧 tag 的 workflow 不随 `main` 更新；已有版本缺包时，按「发版」第 4 步手动补传。
-- **CodeQL 构建缺少 `tunnel.DialContext` 等符号**：分析同样依赖 mihomo 补丁，不能直接在 `core/` 执行裸 `go build`。统一用 `make core-codeql`，它保持 CodeQL 能跟踪的标准 Go，同时准备 mihomo/gVisor 补丁和临时 modfile，并用 `-a` 强制提取；分析产物随后删除，不用于装机或分发。
+- **CodeQL 构建缺少 `tunnel.DialContext` 等符号**：分析同样依赖 mihomo 补丁，不能直接在 `core/` 执行裸 `go build`。统一用 `make core-codeql`，它保持 CodeQL 能跟踪的标准 Go，通过 `scripts/core/prepare-deps.sh` 准备 mihomo/tailscale/gVisor 补丁和临时 modfile，并以 `-tags with_gvisor,ohos -a` 强制提取；分析产物随后删除，不用于装机或分发。
 - **dependabot 的 PR 上 HAP 报「没有 HARMONYOS_TOOLS_TOKEN」**：在 Dependabot secrets 里补配，见「变量与密钥」。
 - **机器人 PR 上没有「CI 通过」**：见「机器人 PR」。
 - **下载 Command Line Tools 报 404 或 403**：token 过期，或者没有授予那个私有仓库的权限。

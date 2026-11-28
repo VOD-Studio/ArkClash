@@ -8,13 +8,12 @@ on:
   pull_request:
     paths:
       - core/**
-      - scripts/build-core.sh
+      - '!core/**/*_test.go'
+      - '!core/**/testdata/**'
       - scripts/ci/build-codeql.sh
-      - scripts/prepare-mihomo.sh
-      - scripts/prepare-tailscale.sh
+      - scripts/core/**
       - scripts/env.sh
       - Makefile
-      - scripts/*.patch
       - .go-version
       - .github/workflows/codeql.yml
   schedule:

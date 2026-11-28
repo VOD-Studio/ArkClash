@@ -111,9 +111,10 @@ export class Connection {
     return this.state === ConnectionState.Connecting || this.state === ConnectionState.Disconnecting;
   }
 
+  // 与内核、VPN 进程的转发判定一致，不看 listenersOpen：配置没有入站端口和 dns.listen 时它一直是 false（#131）。
   get connected(): boolean {
     return this.coreReady && this.state === ConnectionState.Connected && this.forward === 'running' &&
-      this.vpnCreated && this.tunAttached && this.listenersOpen;
+      this.vpnCreated && this.tunAttached;
   }
 
   get offlineWritable(): boolean {
@@ -332,7 +333,7 @@ export class Connection {
       const start = await startCore(context, this.userMode(), this.allowLan,
         (): boolean => generation === this.coreGeneration && (!automatic || this.foreground));
       if (generation === this.coreGeneration) {
-        this.applyStatus(start.status);
+        this.applyStatus(start.status, true);
         this.resumeVpn = start.resumeVpn;
       }
     } catch (error) {
@@ -587,12 +588,14 @@ export class Connection {
     this.syncDiagnosticsCapture();
   }
 
-  private applyStatus(status: RuntimeStatus): void {
+  // holdSwitching：连接途中确认内核就绪时只更新运行事实，不能把「连接中」改回已断开，否则界面会闪一下未连接。
+  private applyStatus(status: RuntimeStatus, holdSwitching: boolean = false): void {
     if (status.bootId === this.bootId && status.revision < this.revision) {
       return;
     }
     // 连接和断开途中的中间状态不代表用户意图；下面改写 state 前先记下。
     const switching = this.busy;
+    const hold = holdSwitching && switching;
     this.bootId = status.bootId;
     this.revision = status.revision;
     this.configRevision = status.configRevision;
@@ -600,8 +603,10 @@ export class Connection {
     this.hostState = status.running ? 'running' : 'stopped';
     this.coreReady = status.running;
     this.vpnCreated = status.vpnCreated;
-    this.intent = status.intent;
-    this.forward = status.forward;
+    if (!hold) {
+      this.intent = status.intent;
+      this.forward = status.forward;
+    }
     this.sessionMode = status.sessionMode;
     this.panelOpen = status.panelOpen === true;
     this.listenersOpen = status.listenersOpen;
@@ -610,8 +615,10 @@ export class Connection {
     if (status.mode === 'rule' || status.mode === 'global' || status.mode === 'direct') {
       this.mode = status.mode;
     }
-    this.state = status.running && status.forward === 'running' && status.vpnCreated &&
-      status.tunAttached && status.listenersOpen ? ConnectionState.Connected : ConnectionState.Disconnected;
+    if (!hold) {
+      this.state = status.running && status.forward === 'running' && status.vpnCreated &&
+        status.tunAttached ? ConnectionState.Connected : ConnectionState.Disconnected;
+    }
     this.routeRevision = `${this.bootId}/${this.revision}/${this.routeEpoch}`;
     if (status.running && !switching && !this.recovering) {
       this.setWantConnected(status.intent === 'started');

@@ -6,11 +6,12 @@ import { readRuleSets, RuleSetItem } from '../../client/RuleSets';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
 import { ScrollDestination } from '../../components/ScrollDestination';
-import { EmptyState } from '../../components/EmptyState';
 import { KeyedListSource } from '../../components/KeyedListSource';
 import { HEADER_ACTION, HEADER_ICON_SIZE, HEADER_GAP, PAGE_GUTTER } from '../../components/Theme';
 import { AddedRuleDraft, AddedRuleEditor } from './AddedRuleEditor';
+import { AddedRuleDeleteSheet, RULE_DELETE_PREVIEW_LIMIT, RuleDeletePreview } from './AddedRuleDeleteSheet';
 import { AddedRulePresets } from './AddedRulePresets';
+import { AddedRulesEmpty } from './AddedRulesEmpty';
 import { ProfileRuleOptions } from './ProfileRuleOptions';
 
 class AddedRuleListItem {
@@ -51,12 +52,13 @@ export struct AddedRulesPage {
   @Local private editingExisting: boolean = false;
   @Local private editShown: boolean = false;
   @Local private presetsShown: boolean = false;
+  @Local private presetExisting: string[] = [];
   @Local private deleteShown: boolean = false;
+  @Local private deletePreviews: RuleDeletePreview[] = [];
+  @Local private deleteTotal: number = 0;
   @Local private discardRequested: boolean = false;
   @Local private editIssue: ResourceStr = '';
   @Local private ruleSets: RuleSetItem[] = cachedAddedRuleSets ?? [];
-  @Local private ruleSetOptions: SelectOption[] =
-    (cachedAddedRuleSets ?? []).map((item: RuleSetItem): SelectOption => ({ value: item.name }));
   private shown: boolean = false;
   private rows: KeyedListSource<AddedRuleListItem> = new KeyedListSource<AddedRuleListItem>();
 
@@ -96,7 +98,6 @@ export struct AddedRulesPage {
       } else if (cachedAddedRuleSets === undefined) {
         this.ruleSets = [];
       }
-      this.ruleSetOptions = this.ruleSets.map((item: RuleSetItem): SelectOption => ({ value: item.name }));
       this.refreshRows();
       this.loadFailed = false;
     } catch (_error) {
@@ -149,6 +150,15 @@ export struct AddedRulesPage {
     this.editIssue = '';
     this.discardRequested = false;
     this.editShown = true;
+  }
+
+  private openPresets(): void {
+    if (this.saving || this.loading || this.loadFailed) {
+      return;
+    }
+    // 打开时取一次快照；抽屉开着时列表只会被这个抽屉自己改，改完即关闭。
+    this.presetExisting = this.rules().map((rule: AddedRule): string => addedRuleText(rule));
+    this.presetsShown = true;
   }
 
   private requestCloseEditor(dismiss: () => void): void {
@@ -297,6 +307,31 @@ export struct AddedRulesPage {
     return this.visibleIds.filter((id: string): boolean => selected.has(id));
   }
 
+  private openDelete(): void {
+    const selected = new Set<string>(this.selectedVisible());
+    if (this.saving || selected.size === 0) {
+      return;
+    }
+    // 打开时取一次快照；抽屉是模态的，开着时选择不会再变。
+    const previews: RuleDeletePreview[] = [];
+    for (const rule of this.rules()) {
+      if (previews.length >= RULE_DELETE_PREVIEW_LIMIT) {
+        break;
+      }
+      if (selected.has(rule.id)) {
+        previews.push({
+          key: rule.id, kind: rule.kind, target: rule.target, customExit: rule.customExit === true,
+          payload: rule.kind === 'RULE-SET' ?
+            this.ruleSets.find((item: RuleSetItem): boolean => item.id === rule.payload)?.name ?? rule.payload :
+            rule.payload
+        });
+      }
+    }
+    this.deletePreviews = previews;
+    this.deleteTotal = selected.size;
+    this.deleteShown = true;
+  }
+
   private deleteSelected(): void {
     const selected = new Set<string>(this.selectedVisible());
     this.commit(this.rules().filter((rule: AddedRule): boolean => !selected.has(rule.id)));
@@ -343,7 +378,7 @@ export struct AddedRulesPage {
         AddedRuleHeaderButton({ icon: $r('sys.symbol.checkmark'), label: $r('app.string.added_rules_select_all'),
           available: !this.saving && this.visibleCount > 0, onPress: (): void => this.selectVisible() })
         AddedRuleHeaderButton({ icon: $r('sys.symbol.trash'), label: $r('app.string.action_delete'),
-          available: !this.saving && this.selectedVisible().length > 0, onPress: (): void => { this.deleteShown = true; } })
+          available: !this.saving && this.selectedVisible().length > 0, onPress: (): void => this.openDelete() })
       } else {
         AddedRuleHeaderButton({ icon: $r('sys.symbol.magnifyingglass'), label: $r('app.string.diagnostics_search'),
           available: !this.loading && !this.loadFailed, onPress: (): void => this.toggleSearch() })
@@ -352,7 +387,7 @@ export struct AddedRulesPage {
             available: !this.saving, onPress: (): void => { this.selecting = true; } })
         }
         AddedRuleHeaderButton({ icon: $r('sys.symbol.bolt'), label: $r('app.string.added_rules_presets'),
-          available: !this.loading && !this.loadFailed && !this.saving, onPress: (): void => { this.presetsShown = true; } })
+          available: !this.loading && !this.loadFailed && !this.saving, onPress: (): void => this.openPresets() })
         AddedRuleHeaderButton({ icon: $r('sys.symbol.plus'), label: $r('app.string.action_add'),
           available: !this.loading && !this.loadFailed && !this.saving, onPress: (): void => this.openEdit() })
       }
@@ -390,29 +425,19 @@ export struct AddedRulesPage {
 
   @Builder
   DeleteSheet() {
-    Column({ space: 16 }) {
-      Text($r('app.string.added_rules_delete_count', this.selectedVisible().length))
-        .fontFamily(this.appStyle.fontFamily)
-        .fontSize(16)
-        .width('100%')
-      Row({ space: 12 }) {
-        Button($r('app.string.action_cancel')).buttonStyle(ButtonStyleMode.NORMAL).layoutWeight(1)
-          .onClick((): void => { this.deleteShown = false; })
-        Button($r('app.string.action_delete')).role(ButtonRole.ERROR).layoutWeight(1)
-          .onClick((): void => this.deleteSelected())
-      }
-      .width('100%')
-    }
-    .width('100%').enabled(!this.saving)
-    .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER, top: 16, bottom: 24 })
+    AddedRuleDeleteSheet({
+      previews: this.deletePreviews, total: this.deleteTotal, saving: this.saving, motion: !this.reduceMotion,
+      onConfirm: (): void => this.deleteSelected(),
+      onCancel: (): void => { if (!this.saving) { this.deleteShown = false; } }
+    })
   }
 
   @Builder
   EditorSheet() {
     if (this.draft !== undefined) {
       AddedRuleEditor({
-        draft: this.draft, saving: this.saving, issue: this.editIssue, discardRequested: this.discardRequested,
-        ruleSets: this.ruleSets, ruleSetOptions: this.ruleSetOptions,
+        draft: this.draft, editing: this.editingExisting, saving: this.saving, issue: this.editIssue,
+        discardRequested: this.discardRequested, ruleSets: this.ruleSets, motion: !this.reduceMotion,
         knownExits: namedExits(this.settings.rules.concat(this.standard().rules)),
         onSave: (): void => this.saveDraft(), onChange: (): void => { this.editIssue = ''; },
         onCancel: (): void => this.requestCloseEditor((): void => { this.editShown = false; }),
@@ -424,7 +449,9 @@ export struct AddedRulesPage {
 
   @Builder
   PresetsSheet() {
-    AddedRulePresets({ saving: this.saving, onAdd: (rules: AddedRule[]): void => this.addPresets(rules) })
+    AddedRulePresets({ saving: this.saving, existing: this.presetExisting, motion: !this.reduceMotion,
+      onAdd: (rules: AddedRule[]): void => this.addPresets(rules),
+      onClose: (): void => { if (!this.saving) { this.presetsShown = false; } } })
   }
 
   @Builder
@@ -452,12 +479,11 @@ export struct AddedRulesPage {
         }
         .layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
       } else if (this.loadFailed || this.visibleCount === 0) {
-        EmptyState({
-          icon: $r('sys.symbol.list_bullet'),
-          title: this.loadFailed ? $r('app.string.added_rules_load_failed') :
-            this.query.trim() === '' ? $r('app.string.added_rules_empty') : $r('app.string.diagnostics_no_matches'),
-          actionLabel: this.loadFailed ? $r('app.string.dns_override_retry') : '',
-          onAction: (): void => { this.load(); }
+        AddedRulesEmpty({
+          kind: this.loadFailed ? 'failed' : this.query.trim() === '' ? 'empty' : 'noMatch',
+          motion: !this.reduceMotion && this.foreground, available: !this.saving,
+          onAdd: (): void => this.openEdit(), onPresets: (): void => this.openPresets(),
+          onRetry: (): void => { this.load(); }
         })
         .layoutWeight(1)
       } else {
@@ -477,22 +503,26 @@ export struct AddedRulesPage {
       Stack() {
         this.Content()
         Column()
+          // 编辑、快捷操作、删除三个抽屉的标题区由内容自己绘制，不用系统标题和关闭按钮。
+          // 编辑和删除抽屉高度跟随内容；预设列表超过一屏，直接用大尺寸，按钮固定在底部。
           .bindSheet($$this.editShown, this.EditorSheet, {
-            title: { title: this.editingExisting ? $r('app.string.added_rules_edit') : $r('app.string.added_rules_add') },
-            height: SheetSize.LARGE, systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+            height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
+            // 键盘弹起时整个抽屉抬到键盘上方并压缩高度，保存按钮滚动可达，不被键盘挡住。
+            keyboardAvoidMode: SheetKeyboardAvoidMode.TRANSLATE_AND_RESIZE,
+            systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
             onWillDismiss: (action: DismissSheetAction): void =>
               this.requestCloseEditor((): void => action.dismiss())
           })
         Column()
           .bindSheet($$this.presetsShown, this.PresetsSheet, {
-            title: { title: $r('app.string.added_rules_presets') }, height: SheetSize.LARGE,
-            systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+            height: SheetSize.LARGE, preferType: SheetType.BOTTOM,
+            systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
             onWillDismiss: (action: DismissSheetAction): void => { if (!this.saving) { action.dismiss(); } }
           })
         Column()
           .bindSheet($$this.deleteShown, this.DeleteSheet, {
-            title: { title: $r('app.string.action_delete') }, height: SheetSize.FIT_CONTENT,
-            systemMaterial: this.appStyle.sheetMaterial(), showClose: true,
+            height: SheetSize.FIT_CONTENT, preferType: SheetType.BOTTOM,
+            systemMaterial: this.appStyle.sheetMaterial(), showClose: false,
             onWillDismiss: (action: DismissSheetAction): void => { if (!this.saving) { action.dismiss(); } }
           })
       }

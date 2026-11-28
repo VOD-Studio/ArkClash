@@ -35,7 +35,7 @@ PRD 和 issue 拆分是 feature 分支的前几个提交，不单独开文档分
 | 改动 | 提交方式 |
 |---|---|
 | `core/` 的 C API 与 ArkTS 调用方 | 能力提供方（Go + `arkclash.h` + NAPI 桥）先提交，调用方（ArkTS）后提交 |
-| 工具链补丁（`scripts/go-ohos.patch`、依赖补丁）与业务代码 | 分开提交，每个补丁连同它的构建脚本改动一起 |
+| 工具链补丁（`scripts/core/patches/go/ohos-arm64.patch`、依赖补丁）与业务代码 | 分开提交，每个补丁连同它的构建脚本改动一起 |
 | UI 进程与 VPN 进程 | 同一个行为跨两个进程时一起提交；无关的分开 |
 | 依赖升级（Go、mihomo、gVisor） | 单独提交，正文写复查结果（见 `platform-pitfalls.md`） |
 | 无关修复、格式化、流程文档 | 和功能分开 |

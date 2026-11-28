@@ -1,15 +1,14 @@
 import { common } from '@kit.AbilityKit';
 import { BackgroundKeep, backgroundKeep } from '../../client/BackgroundKeep';
 import { Connection, connection } from '../../client/Connection';
-import { readVpnNetworkSettings, saveVpnNetworkSettings } from '../../client/VpnNetworkSettings';
+import { peekVpnNetworkSettings, readVpnNetworkSettings, saveVpnNetworkSettings } from '../../client/VpnNetworkSettings';
 import { AppearanceState, appAppearance } from '../../components/AppearanceState';
 import { DestinationTitle } from '../../components/DestinationTitle';
 import { ScrollDestination } from '../../components/ScrollDestination';
 import { ListRow } from '../../components/ListRow';
 import { PAGE_GUTTER } from '../../components/Theme';
 import {
-  MAX_ROUTE_ENTRIES, MAX_TUN_MTU, MAX_VPN_EXCLUDED_APPS, minTunMtu, TUN_CONGESTION_CONTROLLERS, TUN_STACKS,
-  vpnExcludedApplications, VpnNetworkSettings
+  MAX_ROUTE_ENTRIES, MAX_TUN_MTU, minTunMtu, TUN_CONGESTION_CONTROLLERS, TUN_STACKS, VpnNetworkSettings
 } from '../../shared/VpnNetwork';
 import { SettingsSection } from './SettingsSection';
 
@@ -18,22 +17,19 @@ enum NetworkEditor {
   Mtu,
   Congestion,
   Routes,
-  Exclusions,
-  ExcludedApps
+  Exclusions
 }
-
-let cachedNetworkSettings: VpnNetworkSettings | undefined = undefined;
 
 @ComponentV2
 export struct NetworkPage {
   @Param foreground: boolean = true;
+  @Event onOpenAccessControl: () => void = (): void => {};
   @Local private appStyle: AppearanceState = appAppearance;
   @Local private conn: Connection = connection;
   @Local private keep: BackgroundKeep = backgroundKeep;
   @Local private keepSaving: boolean = false;
-  @Local private settings: VpnNetworkSettings =
-    cachedNetworkSettings !== undefined ? cachedNetworkSettings.copy() : new VpnNetworkSettings();
-  @Local private loading: boolean = cachedNetworkSettings === undefined;
+  @Local private settings: VpnNetworkSettings = peekVpnNetworkSettings() ?? new VpnNetworkSettings();
+  @Local private loading: boolean = peekVpnNetworkSettings() === undefined;
   @Local private loadFailed: boolean = false;
   @Local private saving: boolean = false;
   @Local private editing: boolean = false;
@@ -53,13 +49,15 @@ export struct NetworkPage {
   }
 
   private async load(): Promise<void> {
-    const silent = cachedNetworkSettings !== undefined;
-    if (!silent) {
+    const cached = peekVpnNetworkSettings();
+    const silent = cached !== undefined;
+    if (cached !== undefined) {
+      this.settings = cached;
+    } else {
       this.loading = true;
     }
     try {
       const loaded = await readVpnNetworkSettings(this.context());
-      cachedNetworkSettings = loaded.copy();
       this.settings = loaded;
       this.loadFailed = false;
     } catch (_error) {
@@ -98,7 +96,6 @@ export struct NetworkPage {
     }
     try {
       await saveVpnNetworkSettings(this.context(), next);
-      cachedNetworkSettings = next.copy();
       this.settings = next;
       if (inEditor) {
         this.editing = false;
@@ -123,10 +120,19 @@ export struct NetworkPage {
       case 'invalid_cidr': return $r('app.string.network_invalid_cidr');
       case 'too_many_entries': return $r('app.string.network_route_limit', MAX_ROUTE_ENTRIES);
       case 'too_many_routes': return $r('app.string.network_route_expansion');
-      case 'invalid_bundle_name': return $r('app.string.network_invalid_bundle');
-      case 'too_many_apps': return $r('app.string.network_app_limit', MAX_VPN_EXCLUDED_APPS);
+      case 'empty_trusted_apps': return $r('app.string.access_control_empty_trusted');
       default: return $r('app.string.network_save_failed');
     }
+  }
+
+  private accessControlSummary(): ResourceStr {
+    if (this.settings.appAccessMode === 'trusted') {
+      return $r('app.string.access_control_summary_trusted', this.settings.trustedApplications.length);
+    }
+    if (this.settings.appAccessMode === 'blocked') {
+      return $r('app.string.access_control_summary_blocked', this.settings.excludedApplications.length);
+    }
+    return $r('app.string.access_control_mode_off');
   }
 
   private setIPv6(isOn: boolean): void {
@@ -155,7 +161,6 @@ export struct NetworkPage {
       case NetworkEditor.Mtu: return 'MTU';
       case NetworkEditor.Routes: return $r('app.string.network_routes');
       case NetworkEditor.Exclusions: return $r('app.string.network_exclusions');
-      case NetworkEditor.ExcludedApps: return $r('app.string.network_excluded_apps');
     }
   }
 
@@ -184,13 +189,6 @@ export struct NetworkPage {
       const entries = this.draft.split(/\s+/).filter((entry: string): boolean => entry !== '');
       if (this.editKind === NetworkEditor.Routes) {
         next.routeAddress = entries;
-      } else if (this.editKind === NetworkEditor.ExcludedApps) {
-        try {
-          next.excludedApplications = vpnExcludedApplications(entries, this.context().applicationInfo.name);
-        } catch (error) {
-          this.editError = this.errorText((error as Error).message);
-          return;
-        }
       } else {
         next.routeExcludeAddress = entries;
       }
@@ -265,9 +263,9 @@ export struct NetworkPage {
       value: $r('app.string.network_platform_unsupported'), chevron: false })
       .enabled(false)
     this.Rule()
-    ListRow({ title: $r('app.string.network_excluded_apps'), value: this.settings.excludedApplications.length.toString(),
-      onTap: (): void => this.openEditor(NetworkEditor.ExcludedApps, this.settings.excludedApplications.join('\n')) })
-      .enabled(this.editable())
+    ListRow({ title: $r('app.string.access_control_title'), value: this.accessControlSummary(),
+      onTap: (): void => this.onOpenAccessControl() })
+      .enabled(!this.saving)
     this.Rule()
     NetworkToggleRow({
       label: $r('app.string.network_ipv6'), checked: this.settings.ipv6, available: this.editable(),
@@ -346,14 +344,12 @@ export struct NetworkPage {
               .maxLength(4)
               .onChange((input: string): void => { this.draft = input; this.editError = ''; })
           } else {
-            Text(this.editKind === NetworkEditor.ExcludedApps ?
-              $r('app.string.network_excluded_apps_hint') : $r('app.string.network_route_hint'))
+            Text($r('app.string.network_route_hint'))
               .fontFamily(this.appStyle.fontFamily)
               .fontSize(14)
               .fontColor($r('sys.color.font_secondary'))
-            TextArea({ text: this.draft, placeholder: this.editKind === NetworkEditor.ExcludedApps ?
-              'com.example.app' : '192.0.2.0/24\n2001:db8::/32' })
-              .maxLength(this.editKind === NetworkEditor.ExcludedApps ? 129 * MAX_VPN_EXCLUDED_APPS : 4096)
+            TextArea({ text: this.draft, placeholder: '192.0.2.0/24\n2001:db8::/32' })
+              .maxLength(4096)
               .height(160)
               .onChange((input: string): void => { this.draft = input; this.editError = ''; })
           }

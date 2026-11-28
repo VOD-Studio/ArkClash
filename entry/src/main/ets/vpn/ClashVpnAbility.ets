@@ -12,7 +12,8 @@ import { rpc } from '@kit.IPCKit';
 import { beginRuntimeInstance, CONTROLLER_ADDRESS, HOST_BINDING_PARAM, readRuntime, RuntimeConfig, writeCoreError,
   writeRuntime, writeRuntimeStopped } from '../shared/Runtime';
 import {
-  TUN_IPV4, TUN_IPV4_DNS, TUN_IPV6, TUN_IPV6_DNS, vpnExcludedApplications, VpnNetworkSettings, VpnRoutePrefix, vpnRoutePrefixes
+  normalizeVpnNetworkSettings, TUN_IPV4, TUN_IPV4_DNS, TUN_IPV6, TUN_IPV6_DNS, VpnNetworkSettings, VpnRoutePrefix,
+  vpnRoutePrefixes
 } from '../shared/VpnNetwork';
 import { serveCommands, VpnCommandError } from './Commands';
 import { installGeoData } from './GeoData';
@@ -432,7 +433,7 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       await this.checkOperation(operation);
       const defaults = new VpnNetworkSettings();
       defaults.stack = runtime.stack || defaults.stack;
-      const network = runtime.network ?? defaults;
+      const network = normalizeVpnNetworkSettings(runtime.network ?? defaults, this.context.applicationInfo.name, true);
       const config = this.vpnConfig(network);
       phase = 'vpn_create_failed';
       this.platformNeedsCleanup = true;
@@ -489,10 +490,17 @@ export default class ClashVpnAbility extends VpnExtensionAbility {
       }),
       dnsAddresses: [TUN_IPV4_DNS],
       isIPv6Accepted: network.ipv6,
-      mtu: network.mtu,
-      // 界面进程保持直连；出口与服务探测经 controller 交给内核按当前规则拨号。
-      blockedApplications: [ownBundle].concat(vpnExcludedApplications(network.excludedApplications, ownBundle))
+      mtu: network.mtu
     };
+    if (network.appAccessMode === 'trusted') {
+      // 白名单不含本应用以保持界面直连，也不设 blockedApplications（两字段互斥）。
+      config.trustedApplications = network.trustedApplications.slice();
+    } else if (network.appAccessMode === 'blocked') {
+      config.blockedApplications = [ownBundle].concat(network.excludedApplications);
+    } else {
+      // 界面进程保持直连；出口与服务探测经 controller 交给内核按当前规则拨号。
+      config.blockedApplications = [ownBundle];
+    }
     if (network.ipv6) {
       config.addresses.push({ address: { address: TUN_IPV6, family: FAMILY_IPV6 }, prefixLength: 126 });
       config.dnsAddresses?.push(TUN_IPV6_DNS);

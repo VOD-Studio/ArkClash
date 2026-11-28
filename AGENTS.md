@@ -24,7 +24,7 @@ UI 进程只做界面，内核和 TUN 在 VPN 进程里，两者只通过 mihomo
 
 ## 构建与真机验证
 
-所有本机构建、检查、装机都通过根目录的 `Makefile`，`make help` 列出全部目标。脚本在 `scripts/`，工具路径由 `scripts/env.sh` 统一定位。本机可用 DevEco Studio 或 Command Line Tools，CI 打包使用 Command Line Tools。
+所有本机构建、检查、装机都通过根目录的 `Makefile`，`make help` 列出全部目标。脚本在 `scripts/`，按领域分子目录，顶层只留跨领域入口（见 `docs/ci.md`「脚本目录」）。工具路径由 `scripts/env.sh` 统一定位。本机可用 DevEco Studio 或 Command Line Tools，CI 打包使用 Command Line Tools。
 
 - 内核只用 `make core` 构建：它准备打过补丁的 Go 工具链和依赖（`.toolchain/`），交叉编译，并检查产物里没有 initial-exec TLS 重定位。Go 版本固定在 `.go-version`。
 - 首次构建先 `make geodata`，把 Geo 数据内置进 HAP。

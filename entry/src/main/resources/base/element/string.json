@@ -1425,8 +1425,68 @@
       "value": "Profile details"
     },
     {
-      "name": "profile_details_counts",
-      "value": "%d proxies · %d proxy groups"
+      "name": "profile_detail_used",
+      "value": "Data used"
+    },
+    {
+      "name": "profile_detail_total",
+      "value": "/ %s"
+    },
+    {
+      "name": "profile_detail_remaining",
+      "value": "%s left"
+    },
+    {
+      "name": "profile_detail_upload",
+      "value": "Upload %s"
+    },
+    {
+      "name": "profile_detail_download",
+      "value": "Download %s"
+    },
+    {
+      "name": "profile_detail_nodes",
+      "value": "Proxies"
+    },
+    {
+      "name": "profile_detail_days_unit",
+      "value": "days"
+    },
+    {
+      "name": "profile_detail_days_left",
+      "value": "Days left"
+    },
+    {
+      "name": "profile_detail_expired",
+      "value": "Expired"
+    },
+    {
+      "name": "profile_detail_link",
+      "value": "Subscription link"
+    },
+    {
+      "name": "profile_detail_expire_at",
+      "value": "Expires on"
+    },
+    {
+      "name": "profile_detail_updated_at",
+      "value": "Last updated"
+    },
+    {
+      "name": "profile_detail_every_hours",
+      "value": "Every %d h"
+    },
+    {
+      "name": "profile_detail_every_minutes",
+      "value": "Every %d min"
+    },
+    {
+      "name": "profile_detail_off",
+      "value": "Off"
+    },
+    {
+      "name": "profile_detail_updating",
+      "value": "Updating"
     },
     {
       "name": "proxy_actual",
@@ -1767,6 +1827,10 @@
     {
       "name": "profile_age_core_unavailable",
       "value": "Start the core to decrypt this subscription."
+    },
+    {
+      "name": "profile_links_core_unavailable",
+      "value": "Start the core to convert this subscription."
     },
     {
       "name": "profile_import_file",
@@ -2625,14 +2689,6 @@
       "value": "Added rules"
     },
     {
-      "name": "added_rules_basic",
-      "value": "Basic information"
-    },
-    {
-      "name": "added_rules_params",
-      "value": "Additional parameters"
-    },
-    {
       "name": "added_rules_type",
       "value": "Rule type"
     },
@@ -2667,10 +2723,6 @@
     {
       "name": "added_rules_presets",
       "value": "Quick actions"
-    },
-    {
-      "name": "added_rules_confirm",
-      "value": "Confirm"
     },
     {
       "name": "added_rules_quic",
@@ -2711,6 +2763,14 @@
     {
       "name": "added_rules_delete_count",
       "value": "Delete %d rules?"
+    },
+    {
+      "name": "added_rules_delete_hint",
+      "value": "This can't be undone."
+    },
+    {
+      "name": "added_rules_delete_more",
+      "value": "And %d more"
     },
     {
       "name": "added_rules_search_hint",
@@ -2755,6 +2815,90 @@
     {
       "name": "added_rules_discard",
       "value": "Discard changes"
+    },
+    {
+      "name": "added_rules_empty_title",
+      "value": "No added rules yet"
+    },
+    {
+      "name": "added_rules_empty_hint",
+      "value": "Checked before the profile's own rules, top to bottom."
+    },
+    {
+      "name": "added_rules_no_matches",
+      "value": "No matching rules"
+    },
+    {
+      "name": "added_rules_kind_domain",
+      "value": "Domain"
+    },
+    {
+      "name": "added_rules_kind_ip",
+      "value": "IP address"
+    },
+    {
+      "name": "added_rules_kind_source",
+      "value": "Source"
+    },
+    {
+      "name": "added_rules_kind_inbound",
+      "value": "Port and inbound"
+    },
+    {
+      "name": "added_rules_kind_logic",
+      "value": "Logic"
+    },
+    {
+      "name": "added_rules_kind_other",
+      "value": "Other"
+    },
+    {
+      "name": "added_rules_presets_hint",
+      "value": "Selected rules are added to the top of the list."
+    },
+    {
+      "name": "added_rules_quic_hint",
+      "value": "Fall back from HTTP/3 to TCP"
+    },
+    {
+      "name": "added_rules_stun_hint",
+      "value": "Keep WebRTC from leaking your IP"
+    },
+    {
+      "name": "added_rules_dot_hint",
+      "value": "Send DNS lookups through the core"
+    },
+    {
+      "name": "added_rules_loopback_hint",
+      "value": "Reject connections to this device"
+    },
+    {
+      "name": "added_rules_lan_hint",
+      "value": "Keep LAN addresses off the proxy"
+    },
+    {
+      "name": "added_rules_system_hint",
+      "value": "Connect system services directly"
+    },
+    {
+      "name": "added_rules_tracker_hint",
+      "value": "Connect BT and PT trackers directly"
+    },
+    {
+      "name": "added_rules_presets_count",
+      "value": "Rules: %d"
+    },
+    {
+      "name": "added_rules_presets_add",
+      "value": "Add selected (%d)"
+    },
+    {
+      "name": "added_rules_presets_pick",
+      "value": "Select rules to add"
+    },
+    {
+      "name": "added_rules_presets_added",
+      "value": "Added"
     },
     {
       "name": "dns_override_use_hosts",
@@ -2863,6 +3007,222 @@
     {
       "name": "network_excluded_apps_hint",
       "value": "Enter one application bundle name per line. Changes apply when VPN reconnects."
+    },
+    {
+      "name": "access_control_title",
+      "value": "Access control"
+    },
+    {
+      "name": "access_control_add_app",
+      "value": "Add apps"
+    },
+    {
+      "name": "access_control_common_apps",
+      "value": "Common apps"
+    },
+    {
+      "name": "access_control_results",
+      "value": "%d results"
+    },
+    {
+      "name": "access_control_import_placeholder",
+      "value": "One per line, e.g.\ncom.tencent.mqq"
+    },
+    {
+      "name": "access_control_state_on",
+      "value": "On"
+    },
+    {
+      "name": "access_control_mode_off",
+      "value": "Off"
+    },
+    {
+      "name": "access_control_mode_blocked",
+      "value": "Blocklist"
+    },
+    {
+      "name": "access_control_mode_trusted",
+      "value": "Allowlist"
+    },
+    {
+      "name": "access_control_summary_blocked",
+      "value": "Blocklist · %d"
+    },
+    {
+      "name": "access_control_summary_trusted",
+      "value": "Allowlist · %d"
+    },
+    {
+      "name": "access_control_import",
+      "value": "Enter bundle names"
+    },
+    {
+      "name": "access_control_export",
+      "value": "Copy list"
+    },
+    {
+      "name": "access_control_select_visible",
+      "value": "Select visible"
+    },
+    {
+      "name": "access_control_unselect_visible",
+      "value": "Deselect all"
+    },
+    {
+      "name": "access_control_clear_list",
+      "value": "Clear list"
+    },
+    {
+      "name": "access_control_search_hint",
+      "value": "Name or bundle"
+    },
+    {
+      "name": "access_control_custom_app",
+      "value": "Custom app"
+    },
+    {
+      "name": "access_control_pick_installed",
+      "value": "Choose from installed apps"
+    },
+    {
+      "name": "access_control_pick_short",
+      "value": "Pick apps"
+    },
+    {
+      "name": "access_control_pick_done",
+      "value": "Added %d apps"
+    },
+    {
+      "name": "access_control_pick_unsupported",
+      "value": "This device has no system app picker"
+    },
+    {
+      "name": "access_control_pick_failed",
+      "value": "Could not open the system app picker"
+    },
+    {
+      "name": "access_control_container_badge",
+      "value": "Container"
+    },
+    {
+      "name": "access_control_no_match",
+      "value": "No results for \"%s\""
+    },
+    {
+      "name": "access_control_import_replace",
+      "value": "Replace list"
+    },
+    {
+      "name": "access_control_import_confirm",
+      "value": "Import"
+    },
+    {
+      "name": "access_control_import_empty",
+      "value": "No valid bundle names"
+    },
+    {
+      "name": "access_control_own_only",
+      "value": "ArkClash itself is not needed"
+    },
+    {
+      "name": "access_control_import_done",
+      "value": "Imported %d"
+    },
+    {
+      "name": "access_control_import_partial",
+      "value": "Imported %d, ignored %d"
+    },
+    {
+      "name": "access_control_import_own_skipped",
+      "value": "Imported %d, skipped ArkClash itself"
+    },
+    {
+      "name": "access_control_clipboard_empty",
+      "value": "Clipboard has no text"
+    },
+    {
+      "name": "access_control_clipboard_failed",
+      "value": "Could not read the clipboard"
+    },
+    {
+      "name": "access_control_export_empty",
+      "value": "The list is empty"
+    },
+    {
+      "name": "access_control_export_done",
+      "value": "Copied %d bundle names"
+    },
+    {
+      "name": "access_control_export_failed",
+      "value": "Copy failed"
+    },
+    {
+      "name": "access_control_empty_trusted",
+      "value": "Select at least 1 app"
+    },
+    {
+      "name": "access_control_emptied_off",
+      "value": "No apps selected, access control turned off"
+    },
+    {
+      "name": "access_control_unsaved_title",
+      "value": "Save changes?"
+    },
+    {
+      "name": "access_control_change_mode",
+      "value": "Mode"
+    },
+    {
+      "name": "access_control_change_blocked",
+      "value": "Blocklist apps"
+    },
+    {
+      "name": "access_control_change_trusted",
+      "value": "Allowlist apps"
+    },
+    {
+      "name": "access_control_change_added",
+      "value": "%d added"
+    },
+    {
+      "name": "access_control_change_removed",
+      "value": "%d removed"
+    },
+    {
+      "name": "access_control_saving",
+      "value": "Saving"
+    },
+    {
+      "name": "access_control_cat_all",
+      "value": "All"
+    },
+    {
+      "name": "access_control_cat_browser",
+      "value": "Browser"
+    },
+    {
+      "name": "access_control_cat_container",
+      "value": "Containers"
+    },
+    {
+      "name": "access_control_cat_social",
+      "value": "Social"
+    },
+    {
+      "name": "access_control_cat_finance",
+      "value": "Finance"
+    },
+    {
+      "name": "access_control_cat_shopping",
+      "value": "Shopping"
+    },
+    {
+      "name": "access_control_cat_life",
+      "value": "Life & Maps"
+    },
+    {
+      "name": "access_control_cat_media",
+      "value": "Media"
     },
     {
       "name": "network_background",
@@ -3155,6 +3515,34 @@
     {
       "name": "script_import_file",
       "value": "Import from file"
+    },
+    {
+      "name": "script_empty_hint",
+      "value": "Pick one in a profile's Override."
+    },
+    {
+      "name": "script_create",
+      "value": "New script"
+    },
+    {
+      "name": "script_import",
+      "value": "Import"
+    },
+    {
+      "name": "script_importing",
+      "value": "Importing"
+    },
+    {
+      "name": "script_syncing",
+      "value": "Syncing"
+    },
+    {
+      "name": "script_url_edit",
+      "value": "Edit URL"
+    },
+    {
+      "name": "script_import_url_hint",
+      "value": "You can sync from this link anytime."
     },
     {
       "name": "rule_set_title",
@@ -4291,10 +4679,6 @@
     {
       "name": "added_rules_exit_new",
       "value": "New named exit"
-    },
-    {
-      "name": "added_rules_exit_option",
-      "value": "Exit: %s"
     },
     {
       "name": "added_rules_exit_name",

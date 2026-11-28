@@ -31,12 +31,18 @@ make hap
 ```
 
 - `make core` 第一次运行会在 `.toolchain/` 里准备打过补丁的 Go 工具链，需要几分钟。失败时先读 `docs/agents/platform-pitfalls.md`。
+- 在 `core/` 使用 `gopls` 或直接运行 `go` 命令时，先准备补丁依赖与临时 `go.mod`，再通过 `GOFLAGS` 指定 `-modfile`（不改动 `core/go.mod`）。编译 `internal/script` 等 cgo 包还要把 QuickJS 头文件加进 `CGO_CPPFLAGS`：
+  ```sh
+  scripts/core/prepare-deps.sh .toolchain/dev
+  export GOFLAGS="-modfile=$(pwd)/.toolchain/dev/go.mod"
+  export CGO_CPPFLAGS="-I $(pwd)/.toolchain/dev/quickjs"
+  ```
 - **完成标准**：`dist/` 下出现 `ArkClash-<版本>-debug-unsigned.hap`。
 
 ## 4. 签名与真机 **【人工】**
 
 1. 手机打开开发者模式和 USB 调试，用数据线直连电脑（扩展坞可能导致识别失败）。
-2. 用 DevEco Studio 打开项目，在 File → Project Structure → Signing Configs 里用华为账号自动签名。
+2. 用 DevEco Studio 打开项目，在 File → Project Structure → Signing Configs 里用华为账号自动签名。会弹出申请受限 ACL 权限 `USE_FRAUD_APP_PICKER` 的提示，点「继续」；不带这个 ACL 的 Profile 装机会报 `9568289`。`~/.ohos/config` 里已有旧的 `.p7b` 时 DevEco 会直接复用，先把它挪走再签（见 [ADR-0045](../adr/0045-installed-app-picker-acl.md)）。
 3. 签名配置会写进 `build-profile.json5`，这个改动永远不要提交（见 AGENTS.md「安全」）。
 
 然后由 agent 执行 `make hap && make run`，请用户在 App 里粘贴订阅链接、下载订阅、点连接，再用浏览器打开一个被墙的网站。

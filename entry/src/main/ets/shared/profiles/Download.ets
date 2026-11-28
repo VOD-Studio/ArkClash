@@ -11,6 +11,18 @@ export const CONNECT_TIMEOUT_MS = DOWNLOAD_TIMEOUT_MS;
 export const READ_TIMEOUT_MS = DOWNLOAD_TIMEOUT_MS;
 const AGE_ARMOR_HEADER = '-----BEGIN AGE ENCRYPTED FILE-----';
 const AGE_BINARY_HEADER = 'age-encryption.org/v1\n';
+// 和 core/internal/subfetch/sharelinks.go 的 shareLinkPeek 一致。
+const SHARE_LINK_PEEK = 4096;
+
+/** 与 core/internal/proxylink 的 LooksLikeShareLinks 同一判定：分享链接列表或其 Base64，两边一起改。 */
+export function looksLikeShareLinks(head: string): boolean {
+  const text = head.replace(new RegExp('^\\ufeff'), '').replace(new RegExp('^[ \\t\\r\\n]+'), '');
+  if (text === '') {
+    return false;
+  }
+  const line = text.split('\n')[0];
+  return new RegExp('^[A-Za-z][A-Za-z0-9+.-]*://').test(line) || new RegExp('^[A-Za-z0-9+/=_\\- \\t\\r\\n]+$').test(text);
+}
 
 export interface DownloadInfo {
   name?: string;
@@ -218,6 +230,11 @@ export class DirectDownloader implements Downloader {
           Math.min(data.byteLength, AGE_ARMOR_HEADER.length)));
         if (header.startsWith(AGE_ARMOR_HEADER) || header.startsWith(AGE_BINARY_HEADER)) {
           throw new ProfileError(identity.ageSecretKey === '' ? 'age_required' : 'age_core_unavailable');
+        }
+        // 分享链接订阅要经内核转换成 Clash 配置（#129），UI 进程不加载内核。
+        if (looksLikeShareLinks(new util.TextDecoder().decodeToString(new Uint8Array(data, 0,
+          Math.min(data.byteLength, SHARE_LINK_PEEK))))) {
+          throw new ProfileError('links_core_unavailable');
         }
       }
       try { await writeBuffer(path, data); }

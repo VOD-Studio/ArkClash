@@ -139,7 +139,10 @@ export class ControllerSocket {
       socket.on('close', retry);
       socket.on('error', retry);
       const header: Record<string, string> = { 'Authorization': `Bearer ${runtime.secret}` };
-      socket.connect(`ws://${CONTROLLER_ADDRESS}${this.path}`, { header: header })
+      // 系统客户端默认 30s 发 ping、30s 收不到 pong 就断开；mihomo 的 /traffic 等推送端点从不回 pong，
+      // 每 60s 断线重连一次，曲线留下断档。回环连接靠 close 事件和推送超时判断存活，关掉心跳。
+      // pongTimeout 不能大于 pingInterval，两个一起置 0。
+      socket.connect(`ws://${CONTROLLER_ADDRESS}${this.path}`, { header: header, pingInterval: 0, pongTimeout: 0 })
         .then((created: boolean): void => { if (created === false) { retry(); } }).catch(retry);
     }).catch((): void => {
       if (generation === this.generation) {

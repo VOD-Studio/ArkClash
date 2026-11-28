@@ -1,0 +1,224 @@
+//go:build ohos
+
+// Package main builds libclash.so, the mihomo core loaded by ArkClash's
+// VpnExtensionAbility. The exported C API is declared in arkclash.h; keep the
+// two in sync.
+package main
+
+/*
+#include <stdlib.h>
+
+// 必须和 arkclash.h 里的声明一致。
+typedef void (*ArkClashCommandHandler)(long long id, const char *name, const char *body);
+
+static void arkclashCallCommandHandler(ArkClashCommandHandler h, long long id, const char *name, const char *body) {
+	h(id, name, body);
+}
+*/
+import "C"
+
+import (
+	"encoding/json"
+	"runtime/debug"
+	"sync"
+	"time"
+	"unsafe"
+
+	"github.com/VOD-Studio/ArkClash/core/internal/api"
+	corecfg "github.com/VOD-Studio/ArkClash/core/internal/config"
+	"github.com/VOD-Studio/ArkClash/core/internal/ctrl"
+	"github.com/VOD-Studio/ArkClash/core/internal/diagnostics"
+	"github.com/VOD-Studio/ArkClash/core/internal/engine"
+	"github.com/VOD-Studio/ArkClash/core/internal/platform"
+	"github.com/VOD-Studio/ArkClash/core/internal/subfetch"
+	"github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/log"
+)
+
+var (
+	runtimeEngine = engine.New()
+	reclaimMu     sync.Mutex
+	lastReclaim   time.Time
+)
+
+func init() {
+	if platform.TunDNS != engine.TunDNS || platform.TunDNS6 != engine.TunDNS6 {
+		panic("platform TUN DNS constants out of sync with engine")
+	}
+	// 入口装配平台日志格式化回调，避免 platform 反向依赖 diagnostics。
+	platform.StartHilog(func(event log.Event) string {
+		return diagnostics.DescribeLog(event).Message
+	})
+	api.InstallOnce(runtimeEngine)
+}
+
+func subfetchView() subfetch.RuntimeView {
+	running, homeDir, forward, stillCurrent := runtimeEngine.ObserveSubfetch()
+	return subfetch.RuntimeView{
+		Running:      running,
+		HomeDir:      homeDir,
+		Forward:      forward,
+		StillCurrent: stillCurrent,
+	}
+}
+
+func errorString(err error) *C.char {
+	if err == nil {
+		return nil
+	}
+	return C.CString(err.Error())
+}
+
+// ArkClashStart starts the core. It returns NULL on success or an error
+// message that the caller must release with ArkClashFree.
+//
+//export ArkClashStart
+func ArkClashStart(optionsJSON *C.char) *C.char {
+	var opts corecfg.StartOptions
+	if err := json.Unmarshal([]byte(C.GoString(optionsJSON)), &opts); err != nil {
+		return errorString(err)
+	}
+	return errorString(runtimeEngine.Start(opts))
+}
+
+//export ArkClashStop
+func ArkClashStop() *C.char {
+	return errorString(runtimeEngine.Stop())
+}
+
+//export ArkClashReclaimMemory
+func ArkClashReclaimMemory() C.int {
+	// 一轮压力可能连续产生多次通知；回收期间和刚收完的通知均无需再做全堆 GC。
+	if !reclaimMu.TryLock() {
+		return 0
+	}
+	defer reclaimMu.Unlock()
+	if time.Since(lastReclaim) < 10*time.Second {
+		return 0
+	}
+	debug.FreeOSMemory()
+	lastReclaim = time.Now()
+	return 1
+}
+
+//export ArkClashAttachTun
+func ArkClashAttachTun(fd C.int, optionsJSON, bootID, profile *C.char, configRevision C.ulonglong) *C.char {
+	var network engine.TunNetworkOptions
+	if err := json.Unmarshal([]byte(C.GoString(optionsJSON)), &network); err != nil {
+		return errorString(err)
+	}
+	return errorString(runtimeEngine.AttachTun(int(fd), network, engine.AttachIdentity{
+		BootID: C.GoString(bootID), Profile: C.GoString(profile), ConfigRevision: uint64(configRevision),
+	}))
+}
+
+//export ArkClashDetachTun
+func ArkClashDetachTun() *C.char {
+	return errorString(runtimeEngine.DetachTun())
+}
+
+//export ArkClashUpdateVpnState
+func ArkClashUpdateVpnState(intent, forward *C.char, vpnCreated C.int) *C.char {
+	return errorString(runtimeEngine.SetVpnStateFromHost(C.GoString(intent), C.GoString(forward), vpnCreated != 0))
+}
+
+//export ArkClashRuntimeStatus
+func ArkClashRuntimeStatus() *C.char {
+	return C.CString(runtimeEngine.RuntimeStatusJSON())
+}
+
+// ArkClashReload 热切换到 path 指向的配置，profile 是它的编号。成功返回 NULL，
+// 否则返回错误信息，调用方用 ArkClashFree 释放。
+//
+//export ArkClashReload
+func ArkClashReload(path, profile, expectedProfile *C.char) *C.char {
+	var expected *string
+	if expectedProfile != nil {
+		expected = new(C.GoString(expectedProfile))
+	}
+	return errorString(runtimeEngine.Reload(C.GoString(path), C.GoString(profile), expected))
+}
+
+// ArkClashPrefetch 预先下载 path 里还没下载过的 rule-provider（见 prefetch）。返回 JSON
+// {"downloaded":n} 或 {"error":"..."}，用 ArkClashFree 释放。会阻塞到下载结束，只能在工作线程上调用。
+//
+//export ArkClashPrefetch
+func ArkClashPrefetch(path *C.char) *C.char {
+	n, err := subfetch.Prefetch(C.GoString(path), subfetchView)
+	result := api.PrefetchResult{Downloaded: n}
+	if err != nil {
+		result.Error = err.Error()
+	}
+	data, _ := json.Marshal(result)
+	return C.CString(string(data))
+}
+
+// ArkClashFetch 经内核下载，参数和结果都是 JSON（见 subfetch.Request、subfetch.Result）。
+// 返回值由调用方用 ArkClashFree 释放。会阻塞到请求结束，只能在工作线程上调用。
+//
+//export ArkClashFetch
+func ArkClashFetch(requestJSON *C.char) *C.char {
+	var req subfetch.Request
+	result := subfetch.Result{}
+	if err := json.Unmarshal([]byte(C.GoString(requestJSON)), &req); err != nil {
+		result.Error = err.Error()
+	} else {
+		result = subfetch.Fetch(req, subfetchView)
+	}
+	data, _ := json.Marshal(result)
+	return C.CString(string(data))
+}
+
+// ArkClashSetCommandHandler 登记处理订阅类命令的回调。回调在 Go 的线程上调用，name 和 body
+// 只在回调期间有效；处理完后用 ArkClashReply 回复同一个 id。
+//
+//export ArkClashSetCommandHandler
+func ArkClashSetCommandHandler(handler C.ArkClashCommandHandler) {
+	if handler == nil {
+		ctrl.SetCommandDispatcher(nil)
+		return
+	}
+	ctrl.SetCommandDispatcher(func(id int64, name, body string) {
+		cName := C.CString(name)
+		cBody := C.CString(body)
+		C.arkclashCallCommandHandler(handler, C.longlong(id), cName, cBody)
+		C.free(unsafe.Pointer(cName))
+		C.free(unsafe.Pointer(cBody))
+	})
+}
+
+// ArkClashReply 回复一条命令；请求已超时或断开时直接丢弃。body 由调用方保留所有权。
+//
+//export ArkClashReply
+func ArkClashReply(id C.longlong, status C.int, body *C.char) {
+	ctrl.ReplyCommand(int64(id), int(status), []byte(C.GoString(body)))
+}
+
+// ArkClashEmit 由 VPN 进程的 ArkTS 推送一条事件（JSON 对象），body 由调用方保留所有权。
+//
+//export ArkClashEmit
+func ArkClashEmit(event *C.char) {
+	ctrl.EmitRaw([]byte(C.GoString(event)))
+}
+
+// ArkClashRunningProfile 返回正在运行的配置编号，没在运行时是空串。用 ArkClashFree 释放。
+//
+//export ArkClashRunningProfile
+func ArkClashRunningProfile() *C.char {
+	profile, _ := runtimeEngine.RunningProfile()
+	return C.CString(profile)
+}
+
+// ArkClashVersion returns the mihomo version. Release it with ArkClashFree.
+//
+//export ArkClashVersion
+func ArkClashVersion() *C.char {
+	return C.CString(constant.Version)
+}
+
+//export ArkClashFree
+func ArkClashFree(p *C.char) {
+	C.free(unsafe.Pointer(p))
+}
+
+func main() {}

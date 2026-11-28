@@ -18,6 +18,20 @@ export class KeyedListSource<T extends KeyedListItem> implements IDataSource {
     return this.items;
   }
 
+  /**
+   * 拖拽排序（LazyForEach.onMove）时 List 已经把界面上的项挪到位，这里只同步数据，不再通知监听者，
+   * 否则同一项会被再移动一次。之后用 replace 换成保存结果时，顺序已一致，只会刷新内容。
+   */
+  moveQuietly(from: number, to: number): void {
+    if (from === to || from < 0 || to < 0 || from >= this.items.length || to >= this.items.length) {
+      return;
+    }
+    const items = this.items.slice();
+    const moved = items.splice(from, 1)[0];
+    items.splice(to, 0, moved);
+    this.items = items;
+  }
+
   replace(items: T[], animate?: (apply: () => void) => void, newestFirst: boolean = false): void {
     const previous = this.items;
     if (this.listeners.length === 0) { this.items = items; return; }

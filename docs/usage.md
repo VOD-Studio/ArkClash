@@ -17,7 +17,7 @@
 
 ### 给未签名 HAP 签名
 
-校验 `ArkClash-<版本>-unsigned.hap` 后，准备调试密钥库（`.p12`）、签名证书（`.cer`）和调试 Profile（`.p7b`）。Profile 需匹配包名 `com.vodstudio.arkclash` 与签名证书，并包含目标设备的 UDID。[华为调试 Profile 指南](https://developer.huawei.com/consumer/cn/doc/App/agc-help-debug-profile-0000002248181278/)
+校验 `ArkClash-<版本>-unsigned.hap` 后，准备调试密钥库（`.p12`）、签名证书（`.cer`）和调试 Profile（`.p7b`）。Profile 需匹配包名 `com.vodstudio.arkclash` 与签名证书，包含目标设备的 UDID，并在受限权限中勾选 `ohos.permission.USE_FRAUD_APP_PICKER`（「从已安装应用选择」用到），缺少时安装会报 `9568289`。[华为调试 Profile 指南](https://developer.huawei.com/consumer/cn/doc/App/agc-help-debug-profile-0000002248181278/)
 
 `hap-sign-tool.jar` 位于 `hdc` 同目录下的 `lib/` 中。将示例路径、版本和密钥别名换成实际值，在终端执行并按提示输入密码。[华为命令行签名指南](https://developer.huawei.com/consumer/cn/doc/HarmonyOS-Guides/ide-hmos-command-line-building-app/)
 
@@ -66,7 +66,7 @@ java -jar "/path/to/hap-sign-tool.jar" sign-app \
 
 - 在「工具 → 进阶配置 → 脚本」新建或导入 JavaScript，再从订阅或普通本地配置的「更多 → 覆写」选中脚本。`main(config)` 接收配置对象，返回结果会继续应用附加规则。结构化自定义配置在编辑器里管理自身的规则。
 - 在「配置 → 更多 → 覆写 → 配置附加规则」管理单份配置的规则、选择 MATCH 目标和停用指定全局规则。添加规则时可选用或新建命名出口，再到配置的「命名出口」为它指定节点或代理组。当前配置可在覆写页立即应用，退出该页时也会应用已保存的更改。
-- 在「工具 → 进阶配置 → DNS」逐项覆写上游策略、Fallback 筛选、Fake-IP 和缓存设置。移除覆写项并保存后恢复配置值。在「工具 → 进阶配置 → 网络 → 绕过 VPN 的应用」每行填写一个应用包名，重连后这些应用走系统网络。同一页的「后台保持连接」让 ArkClash 在连接期间留在后台，VPN 进程被系统回收后立即重连，会常驻一条流量通知。
+- 在「工具 → 进阶配置 → DNS」逐项覆写上游策略、Fallback 筛选、Fake-IP 和缓存设置。移除覆写项并保存后恢复配置值。在「工具 → 访问控制」打开开关，选择「白名单」（只有选中的应用走代理）或「黑名单」（选中的应用不走代理），从内置目录勾选，或点「添加应用」从已安装应用选择、输入包名，保存并重连后生效。「工具 → 进阶配置 → 网络」的「后台保持连接」让 ArkClash 在连接期间留在后台，VPN 进程被系统回收后立即重连，会常驻一条流量通知。
 - 在「工具 → 常规」设置入站端口和认证、局域网访问、外部控制器、订阅 User-Agent、全局 Hosts、延迟测试超时和切节点后的连接清理。「追加系统 DNS」默认关闭。开启后，配置会保留已有上游并加上当前默认网络提供的 DNS。
 
 ### 自定义资源

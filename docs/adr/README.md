@@ -15,7 +15,7 @@
 | [0007](0007-min-harmonyos-7.md) | 最低支持 HarmonyOS 7（API 26），界面以 UI Design Kit 为准 | 已采纳 |
 | [0008](0008-bind-core-sockets-to-physical-network.md) | Go 出站逐 socket 绑定当前物理网络 | 已采纳 |
 | [0009](0009-arkclash-commands-on-controller.md) | ArkClash 自有命令挂在 controller 上 | 已采纳 |
-| [0010](0010-hot-switch-reload-in-vpn.md) | 热切换由 VPN 进程重载配置 | 已采纳，目标与节点恢复由 0012 补充 |
+| [0010](0010-hot-switch-reload-in-vpn.md) | 热切换由 VPN 进程重载配置 | 已采纳，目标与节点恢复由 0012 补充，rule-provider 复用由 0043 补充 |
 | [0012](0012-profile-state-and-runtime-separation.md) | 配置持久状态与实际运行状态分离 | 已采纳，待统一真机验收 |
 | [0013](0013-runtime-host-process-evidence.md) | 用系统进程事实恢复异常终止的运行宿主 | 已采纳，宿主回归与 API 26 真机启停、转发通过 |
 | [0014](0014-x86-emulator-toolchain.md) | 为 x86_64 模拟器单独适配 Go 工具链 | 原生加载、双 ABI 构建与签名应用启动通过，VPN 转发待验收 |
@@ -44,3 +44,9 @@
 | [0037](0037-resume-after-vpn-reclaim.md) | VPN 进程被回收后在前台恢复连接 | 已采纳，恢复时机由 0038 提前 |
 | [0038](0038-bind-vpn-host-and-background-keep.md) | 绑定 VPN 扩展与后台保持连接 | 已采纳 |
 | [0039](0039-boot-scoped-structured-logs.md) | 按内核代次持续采集日志与结构化脱敏展示 | 已采纳 |
+| [0040](0040-core-build-tags-and-host-tests.md) | 用 ohos 构建标签隔离内核平台代码并原地运行宿主回归 | 已采纳，由 0041、0042、0044 扩展，真机门禁待验收 |
+| [0041](0041-core-internal-deep-modules.md) | 按窄接口与独立可测性向 core/internal 抽取深度模块 | 已采纳 |
+| [0042](0042-core-engine-and-reload-tx.md) | 核心状态机（Engine）、ReloadTx 与子系统单向锁序 | 已采纳，真机门禁待验收 |
+| [0043](0043-reuse-unchanged-rule-providers.md) | 热切换复用定义未变的 rule provider | 已采纳，待真机验收 |
+| [0044](0044-core-cmd-and-five-layer-internal-dag.md) | 内核目录收口（cmd/ 入口与 5 层单向 internal DAG） | 已采纳，双 ABI 与宿主/竞态门禁通过，真机门禁待验收 |
+| [0045](0045-installed-app-picker-acl.md) | 用系统应用选择器添加已安装应用，接受受限 ACL 权限 | 已采纳 |

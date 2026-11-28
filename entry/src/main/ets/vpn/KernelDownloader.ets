@@ -4,7 +4,7 @@ import { DOWNLOAD_TIMEOUT_MS, DownloadInfo, DownloadRequestIdentity, Downloader,
   prepareDownloadAddress } from '../shared/profiles/Download';
 import { errorString, ProfileError } from '../shared/profiles/Errors';
 
-// 和 core/api.go 的 fetchRequest、fetchResult 一致。
+// 和 core/fetch.go 的 fetchRequest、fetchResult 一致。
 interface FetchRequest {
   url: string;
   header: Record<string, string>;

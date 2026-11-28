@@ -9,19 +9,19 @@ help: ## 列出所有目标
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-15s %s\n", $$1, $$2}'
 
 core: ## 交叉编译 mihomo 内核到 entry/libs/（ABI=arm64-v8a|x86_64，默认 ARM64）
-	scripts/build-core.sh
+	scripts/core/build.sh
 
 core-smoke: ## 在设备上验证已构建内核（ABI=arm64-v8a|x86_64，可指定 HDC_TARGET）
-	bash scripts/smoke-core.sh
+	scripts/core/smoke.sh
 
 core-codeql: ## 使用标准 Go 和补丁依赖构建 CodeQL 分析产物，不用于装机
 	scripts/ci/build-codeql.sh
 
 geodata: ## 按 geodata.lock 下载 Geo 数据到 rawfile/geo/，随 HAP 打包
-	scripts/fetch-geodata.sh
+	scripts/geodata/fetch.sh
 
 geodata-update: ## 把上游最新 Geo 数据镜像到 Release 并更新 geodata.lock（需要写权限，平时由每周任务做）
-	scripts/update-geodata.sh
+	scripts/geodata/update.sh
 
 hap: ## 打包 HAP 到 dist/（MODE=debug|release，ABI=arm64-v8a|x86_64）
 	scripts/build-hap.sh $(MODE)
@@ -45,7 +45,7 @@ test: ## 宿主回归（默认全部，可用 TESTS=contracts|core|go|local 或�
 	scripts/test.sh $(TESTS)
 
 bench: ## 真机启动、VPN 接入与新连接基准（BENCH_ARGS=--help 查看用法）
-	@bash scripts/bench.sh $(BENCH_ARGS)
+	@scripts/bench/run.sh $(BENCH_ARGS)
 
 site-dev: ## 启动官网与文档站点本地预览（Bun + Astro）
 	bun run --cwd website dev --host 127.0.0.1 --port 4321

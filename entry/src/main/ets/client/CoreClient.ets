@@ -358,9 +358,10 @@ async function changeVpn(context: common.UIAbilityContext, status: RuntimeStatus
       (connect && snapshot.configRevision !== status.configRevision))) {
       throw new Error('代理配置已变化，请重试');
     }
+    // 连接只确认转发和 TUN；没有入站端口的配置 listenersOpen 恒为 false。断开仍要求入站全部关闭。
     if (snapshot?.running === true && (connect ?
       snapshot.intent === 'started' && snapshot.forward === 'running' &&
-        snapshot.vpnCreated && snapshot.tunAttached && snapshot.listenersOpen :
+        snapshot.vpnCreated && snapshot.tunAttached :
       snapshot.intent === 'stopped' && snapshot.forward === 'stopped' &&
         !snapshot.vpnCreated && !snapshot.tunAttached && !snapshot.listenersOpen)) {
       return snapshot;

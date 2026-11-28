@@ -30,7 +30,7 @@ flowchart LR
   - **内核控制面**：mihomo external-controller 承载运行查询、节点选择、测速、规则探测、流量与事件。ArkClash 路由在 `/arkclash/` 下：Go 处理运行快照、选择事务和热切换，订阅命令经 NAPI 转给 VPN 进程的 ArkTS（[ADR-0009](adr/0009-arkclash-commands-on-controller.md)）。独立进程专用的 `PUT`/`PATCH /configs`、`/restart`、`/upgrade` 保持关闭。
   - **文件通道**：`shared/Runtime.ets` 交接启动设置、错误和停止回执；`shared/profiles/Store.ets` 保存配置列表、内容、摘要及每配置节点选择。跨进程短提交持有存储锁，下载使用独立资源任务锁，不占住提交锁等待网络。
 - 配置覆写脚本与绑定保存在 `profiles/scripts.json`，由 UI 和 VPN 扩展在配置存储锁下提交。运行中的脚本和规则修订随状态推送，已保存修订通过认证的 `/arkclash/scripts/apply` 应用。订阅和普通本地配置先执行已选 QuickJS 脚本，再合并附加规则。结构化自定义配置使用自身的规则。两种路径都经 `applyOverrides` 应用平台、常规和 DNS 设置。参见 [ADR-0023](adr/0023-profile-scripts-in-vpn.md)、[ADR-0030](adr/0030-composed-overrides-and-live-status.md) 和 [ADR-0032](adr/0032-structured-custom-profile.md)。
-- UI 进程通过 `protectProcessNet()` 和应用排除名单保持直连；Go 出站由 `core/socket.go` 逐 socket 绑定物理网络（[ADR-0008](adr/0008-bind-core-sockets-to-physical-network.md)）。在线出口与服务检查走 `POST /arkclash/probe`，由内核按当前规则拨号，不要求订阅开放 HTTP 代理端口；停止时用 SDK 流式直连。两条路径共用 `client/ServiceRules.ets` 的 FlClash `be847366` 服务协议，不能统一用首页 HEAD 或仅凭 HTTP 状态判断服务可用性。
+- UI 进程通过 `protectProcessNet()` 和应用排除名单保持直连；Go 出站由 `core/internal/platform/socket.go` 逐 socket 绑定物理网络（[ADR-0008](adr/0008-bind-core-sockets-to-physical-network.md)）。在线出口与服务检查走 `POST /arkclash/probe`，由内核按当前规则拨号，不要求订阅开放 HTTP 代理端口；停止时用 SDK 流式直连。两条路径共用 `client/ServiceRules.ets` 的 FlClash `be847366` 服务协议，不能统一用首页 HEAD 或仅凭 HTTP 状态判断服务可用性。
 - 探测请求携带目标 URL、方法、正文模式、可选目标请求头/正文与重定向策略；controller 凭据不进入目标请求，跨源跳转移除目标 Authorization，并禁止 307/308 跨源重放非空正文。UI 与内核各约束四个实际执行名额，旧请求结束才释放；单步最多 10 秒、整批服务最多 60 秒，多步检查也必须保持同一 boot/revision。
 - 探测响应包含目标状态、正文片段、最终 URL、Location、响应头延迟及 boot/revision。目标 403 等状态仍放在成功的 controller 信封内，不混同 controller 的 409/429/503/504。正文按用途限制：`none` 不收集正文，`small`/`html` 保留 16/512 KiB 前缀，`json` 必须是完整的至多 64 KiB，`scan` 最多扫描 8 MiB、返回首次命中起的当前窗口（32 KiB 加 256 字节重叠），保留同窗口内优先于地区的拒绝证据，不积存整页 HTML。
 - 内核取得响应头后可立即停止无正文请求或命中的扫描。SDK 直连若没有提供状态行，则必须等 `requestInStream()` 完成才能可靠取得状态码：正文收集停止后丢弃后续块，应用累计接收超过 8 MiB 或超时即失败；该数值不是包含压缩、在途数据的网络流量上限。直连延迟保留头事件时间，没有状态行时无法严格区分中间响应头与最终响应头。
@@ -148,35 +148,37 @@ ZIP 快照与恢复机制、旧版目录兼容及 WebDAV 路由见 [ADR-0031](ad
 
 ## 内核层（Go）
 
-| 文件 | 职责 |
-|---|---|
-| `core/lib.go` | 导出的 C ABI（`arkclash.h`），不包含生命周期实现 |
-| `core/lifecycle.go` | 唯一核心状态、无 TUN 启动、attach/detach、热切换及 `applyOverrides` |
-| `core/inbound.go` | 最小业务入口设置、应用前屏蔽、恢复与真实资源校验 |
-| `core/api.go` | controller 上的 `/arkclash/` 路由、转给 ArkTS 的命令、事件推送、经内核下载 |
-| `core/profile_preview.go` | 只读构建已保存配置的运行时完整 YAML 预览，不改变运行中内核状态 |
-| `core/runtime.go` | 原子运行快照、boot/revision 与事件 |
-| `core/selection.go` | 幂等选择、原子保存、持久化失败补偿、转发前恢复 |
-| `core/delay.go` | 8 执行槽测速、请求取消与配置代次隔离 |
-| `core/probe.go` | 按当前规则执行出口/服务探测，共用内核证书信任 |
-| `core/geo_settings.go` | Geo 磁盘设置契约、固定路径和更新元数据 |
-| `core/geo.go`、`geo_download.go`、`geo_events.go` | Geo 串行更新、可取消调度、候选校验/安全提交与最新快照推送 |
-| `core/diagnostics.go` | 采集通道及页面订阅生命周期、代次校验、会话背压与诊断动作事务 |
-| `core/diagnostics_connections.go`、`diagnostics_dns.go` | 连接与 DNS 观察、不可变 DTO、有界历史和可见时的流量采样 |
-| `core/diagnostics_stream.go`、`diagnostics_stats.go` | 诊断 WebSocket、控制帧、整帧写锁、deadline、仪表盘轻量统计推送与会话清理 |
-| `core/prefetch.go` | 在后台预先下载配置里的 rule-provider，第一次热切换不用等 |
-| `core/tun.go` | 独立持有平台 TUN 的 Go listener；副本 fd 获取与回滚见 mihomo 补丁 |
-| `core/socket.go` | 通过 Network Kit 原生 API 保护 Go 出站 socket，绑定失败则拒绝拨号 |
-| `core/hilog.go` | 内核日志转发到 hilog |
-| `core/loopback.go` | 关闭回环检测（原因见 platform-pitfalls 第 4 条） |
+`core/` 根目录保持零 `.go` 文件，所有入口位于 `core/cmd/`，内部实现按 5 层单向 DAG 收口在 `core/internal/`（详见 [ADR-0044](adr/0044-core-cmd-and-five-layer-internal-dag.md)）：
 
-TUN 由 `tun.go` 单独持有，不走配置文件，所以热切换不重建它。detached 启动和热切换在 `executor.ApplyConfig` 前屏蔽业务入口；连接时只恢复入口，不重新应用整个配置或重建 resolver。controller 只随完整宿主生命周期启停（[ADR-0010](adr/0010-hot-switch-reload-in-vpn.md)、[ADR-0017](adr/0017-core-ready-without-vpn.md)）。
+| 路径 | 层级 | 职责 |
+|---|---|---|
+| `core/cmd/clash/lib.go` | L0 入口 | `//go:build ohos`：`libclash.so` 唯一 C ABI 入口（全部 16 个 `ArkClash*` 导出符号）、平台日志回调装配与 `api.InstallOnce` 初始化，不直接访问核心状态或锁 |
+| `core/cmd/backupstore/main.go` | L0 入口 | `libarkstore_impl.so` 独立备份库入口（`ArkStoreRun`/`ArkStoreFree`），仅依赖 `internal/backup`，零 mihomo 依赖 |
+| `core/internal/api/` | L1 控制面 | 零 `init()`：显式 `Mount(chi.Router)` 装配全部 `/arkclash/*` 路由、进程级幂等 `InstallOnce(eng)` 与跨进程存储锁路由中间件 |
+| `core/internal/engine/` | L2 核心引擎 | 唯一持有 `lifecycle` 与 `mu` 锁的 `Engine` 状态机：无 TUN 启动/热切换/回滚事务（`ReloadTx`）、业务入口与 `TunHandle`、`127.0.0.1:9090` 外部面板、代理身份表、幂等节点选择、8 槽测速取消、Tailscale 登录、未变 `rule-provider` 复用与 `WithPortableMutation` 锁守卫 |
+| `core/internal/config/` | L3 配置域 | 零核心锁配置域：`StartOptions`、`ApplyOverrides` 与只读预览组装、常规/DNS/附加规则/规则集/QuickJS 脚本设置与自定义代理/筛选正则校验 |
+| `core/internal/providers/` | L4 子系统 | 零核心锁的运行中 Provider 管理、单飞更新、本地校验替换与快照推送（依赖 `ctrl`、`ruleset`） |
+| `core/internal/probe/` | L4 子系统 | 按当前规则执行出口与服务探测、4 槽并发控制、正文窗口扫描与跨源重定向隔离（依赖 `ctrl`、`ruletunnel`） |
+| `core/internal/subfetch/` | L4 子系统 | 经内核规则下载、age 订阅解密、分享链接订阅（含 Base64）转 Clash 配置与后台 `rule-provider` 预取（依赖 `proxylink`、`ruletunnel`） |
+| `core/internal/diagnostics/` | L4 子系统 | 应用级连接/DNS/日志有界采集、日志脱敏格式化、诊断 WebSocket 流、仪表盘轻量统计与动作事务（依赖 `ctrl`） |
+| `core/internal/geo/` | L4 子系统 | Geo 磁盘设置契约、串行可取消调度、候选校验/安全热换与最新快照推送（依赖 `backup`、`ctrl`、`ruletunnel`） |
+| `core/internal/backup/` | L5 基础层 | ZIP 备份、原子目录交换与 WebDAV 客户端（零 mihomo 依赖，`CGO_ENABLED=0`） |
+| `core/internal/script/` | L5 基础层 | QuickJS 配置覆写脚本沙箱与执行限额（零 mihomo 依赖） |
+| `core/internal/ctrl/` | L5 基础层 | controller 错误信封、原生 WebSocket 帧写入、运行时事件总线与命令分发桥（零 mihomo 依赖） |
+| `core/internal/proxylink/` | L5 基础层 | 分享链接与代理配置编解码纯引擎（零磁盘、零网络） |
+| `core/internal/ruleset/` | L5 基础层 | 规则集标识校验、格式识别、MRS 编译校验与可移植性检查纯引擎 |
+| `core/internal/ruletunnel/` | L5 基础层 | 共用内核当前规则与证书信任的底层拨号与传输辅助（`DialRule`、`NewRuleTransport`） |
+| `core/internal/platform/` | L5 平台层 | `//go:build ohos` 平台钩子（`hilog`、`socket`、`system_dns`、`loopback`、`tailscale_network`）与纯 Go `tailscale_watch` 状态机，零 `internal/*` 依赖 |
+
+TUN 由 `core/internal/engine/tun.go` 单独持有，不走配置文件，所以热切换不重建它。detached 启动和热切换在 `executor.ApplyConfig` 前屏蔽业务入口；连接时只恢复入口，不重新应用整个配置或重建 resolver。controller 只随完整宿主生命周期启停（[ADR-0010](adr/0010-hot-switch-reload-in-vpn.md)、[ADR-0017](adr/0017-core-ready-without-vpn.md)）。
+
+内核的零根 `.go` 文件、`ohos` 标签隔离、Cgo 边界、`cmd/` 与 `internal/*` 5 层单向无环 DAG 白名单、零 mihomo 隔离边界、全包 `init()` / `//export` / 包级变量白名单与核心锁仅限 `core/internal/engine/engine.go` 访问由 `scripts/ci/check-core-arch/main.go`（附 `main_test.go` 负向单测）在 `make lint CHECKS=go` 中强制校验；全内核锁序严格单向为 `lifecycle -> eng.mu -> {providers.mu, geo.mu, diag.mu -> collector.mu -> statsMu}`。宿主回归与竞态检测直接在 `core/` 原地通过 `make test TESTS=core` 与 `CORE_RACE=1` 运行（[ADR-0040](adr/0040-core-build-tags-and-host-tests.md)、[ADR-0041](adr/0041-core-internal-deep-modules.md)、[ADR-0042](adr/0042-core-engine-and-reload-tx.md)、[ADR-0044](adr/0044-core-cmd-and-five-layer-internal-dag.md)）。
 
 ## 构建产物
 
 ```
-core/ ── scripts/build-core.sh（补丁版 Go + OHOS NDK）──► entry/libs/<ABI>/libclash.so
-Geo 数据 ── scripts/fetch-geodata.sh ──► entry/src/main/resources/rawfile/geo/
+core/ ── scripts/core/build.sh（补丁版 Go + OHOS NDK）──► entry/libs/<ABI>/libclash.so
+Geo 数据 ── scripts/geodata/fetch.sh ──► entry/src/main/resources/rawfile/geo/
 entry/ ── hvigor（CMake 编 NAPI 桥 + ArkTS）──► HAP
 ```
 
@@ -184,10 +186,11 @@ entry/ ── hvigor（CMake 编 NAPI 桥 + ArkTS）──► HAP
 
 ## 后续演进的约束
 
-- **provider 预下载**：热切换要等新配置的 provider 全部加载完。`core/prefetch.go` 在后台预先下载 rule-provider，触发方是 VPN 进程（订阅更新后、连接 10 秒后）和界面（连接中导入本地配置后，经 `POST /arkclash/prefetch`）。proxy-provider 不预下载（原因见 ADR-0010）。
-- **新的 ArkClash 命令**：挂在 `core/api.go` 的 `/arkclash/` 下。内核自己能完成的由 Go 处理；要用到 ArkTS 侧逻辑的，走 `/arkclash/profiles/{name}` 这类转发路由（ADR-0009）。
+- **rule-provider 复用**：热切换时定义没变、已加载出内容的 Domain/IPCIDR rule-provider 沿用运行中的实例，不重新解析，应用阶段不再随规则集大小变长（[ADR-0043](adr/0043-reuse-unchanged-rule-providers.md)）。
+- **provider 预下载**：热切换要等新配置的 provider 全部加载完。`core/internal/subfetch/prefetch.go` 在后台预先下载 rule-provider，触发方是 VPN 进程（订阅更新后、连接 10 秒后）和界面（连接中导入本地配置后，经 `POST /arkclash/prefetch`）。proxy-provider 不预下载（原因见 ADR-0010）。
+- **新的 ArkClash 命令**：挂在 `core/internal/api/api.go` 的 `/arkclash/` 下。内核自己能完成的由 Go 处理；要用到 ArkTS 侧逻辑的，走 `/arkclash/profiles/{name}` 这类转发路由（ADR-0009）。
 - **VpnConfig 级设置**（协议栈、IPv6、分应用代理、VpnConfig 里的 DNS 地址和 MTU）不能热切换，改了只能断开重连（ADR-0010）。
 - **网络设置**保存在 UI preferences，连接时随操作 token 写入 `runtime.json`。系统 VPN 和内核 TUN 使用同一份快照（[ADR-0020](adr/0020-vpn-network-settings.md)）。
-- **分应用绕过**：当前使用 `VpnConfig.blockedApplications`，将用户填写的包名与 ArkClash 自身包名去重合并。[ADR-0020](adr/0020-vpn-network-settings.md)
+- **应用访问控制**：支持关闭、黑名单（`blockedApplications`，上限 255，与 ArkClash 自身去重合并）与白名单（`trustedApplications`，上限 256，剔除自身且拒绝空白名单）三种模式，双名单独立保存；入口在「工具 → 设置 → 应用访问控制」及「网络」页摘要行，内置常用鸿蒙应用目录与免权限 `PasteButton` 批量导入，不在 `module.json5` 声明 `querySchemes`。[ADR-0020](adr/0020-vpn-network-settings.md)
 - **流量与诊断**：流量使用 `/traffic`，应用的连接、DNS 和日志使用独立的 `/arkclash/diagnostics/` 数据流。[ADR-0019](adr/0019-app-diagnostics-capture.md) · [ADR-0029](adr/0029-general-settings-and-log-capture.md) · [ADR-0039](adr/0039-boot-scoped-structured-logs.md)
-- **IPv6**：`VpnConfig` 和 `core/tun.go` 使用同一份网络设置快照，地址族和路由需同时生效。开启 IPv6 时，最小 MTU 为 1280。[ADR-0020](adr/0020-vpn-network-settings.md)
+- **IPv6**：`VpnConfig` 和 `core/internal/engine/tun.go` 使用同一份网络设置快照，地址族和路由需同时生效。开启 IPv6 时，最小 MTU 为 1280。[ADR-0020](adr/0020-vpn-network-settings.md)

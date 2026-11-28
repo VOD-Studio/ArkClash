@@ -1405,8 +1405,68 @@
       "value": "配置详情"
     },
     {
-      "name": "profile_details_counts",
-      "value": "%d 个节点 · %d 个代理组"
+      "name": "profile_detail_used",
+      "value": "已用流量"
+    },
+    {
+      "name": "profile_detail_total",
+      "value": "/ %s"
+    },
+    {
+      "name": "profile_detail_remaining",
+      "value": "剩余 %s"
+    },
+    {
+      "name": "profile_detail_upload",
+      "value": "上传 %s"
+    },
+    {
+      "name": "profile_detail_download",
+      "value": "下载 %s"
+    },
+    {
+      "name": "profile_detail_nodes",
+      "value": "节点"
+    },
+    {
+      "name": "profile_detail_days_unit",
+      "value": "天"
+    },
+    {
+      "name": "profile_detail_days_left",
+      "value": "剩余天数"
+    },
+    {
+      "name": "profile_detail_expired",
+      "value": "已到期"
+    },
+    {
+      "name": "profile_detail_link",
+      "value": "订阅链接"
+    },
+    {
+      "name": "profile_detail_expire_at",
+      "value": "到期时间"
+    },
+    {
+      "name": "profile_detail_updated_at",
+      "value": "上次更新"
+    },
+    {
+      "name": "profile_detail_every_hours",
+      "value": "每 %d 小时"
+    },
+    {
+      "name": "profile_detail_every_minutes",
+      "value": "每 %d 分钟"
+    },
+    {
+      "name": "profile_detail_off",
+      "value": "已关闭"
+    },
+    {
+      "name": "profile_detail_updating",
+      "value": "更新中"
     },
     {
       "name": "proxy_actual",
@@ -1747,6 +1807,10 @@
     {
       "name": "profile_age_core_unavailable",
       "value": "需要启动内核才能解密此订阅。"
+    },
+    {
+      "name": "profile_links_core_unavailable",
+      "value": "需要启动内核才能转换此订阅。"
     },
     {
       "name": "profile_import_file",
@@ -2605,14 +2669,6 @@
       "value": "附加规则"
     },
     {
-      "name": "added_rules_basic",
-      "value": "基本信息"
-    },
-    {
-      "name": "added_rules_params",
-      "value": "附加参数"
-    },
-    {
       "name": "added_rules_type",
       "value": "规则类型"
     },
@@ -2647,10 +2703,6 @@
     {
       "name": "added_rules_presets",
       "value": "快捷操作"
-    },
-    {
-      "name": "added_rules_confirm",
-      "value": "确认"
     },
     {
       "name": "added_rules_quic",
@@ -2691,6 +2743,14 @@
     {
       "name": "added_rules_delete_count",
       "value": "删除选中的 %d 条规则？"
+    },
+    {
+      "name": "added_rules_delete_hint",
+      "value": "删除后不能撤销。"
+    },
+    {
+      "name": "added_rules_delete_more",
+      "value": "以及另外 %d 条"
     },
     {
       "name": "added_rules_search_hint",
@@ -2735,6 +2795,90 @@
     {
       "name": "added_rules_discard",
       "value": "放弃修改"
+    },
+    {
+      "name": "added_rules_empty_title",
+      "value": "还没有附加规则"
+    },
+    {
+      "name": "added_rules_empty_hint",
+      "value": "排在订阅规则之前，从上到下依次匹配。"
+    },
+    {
+      "name": "added_rules_no_matches",
+      "value": "没有匹配的规则"
+    },
+    {
+      "name": "added_rules_kind_domain",
+      "value": "域名"
+    },
+    {
+      "name": "added_rules_kind_ip",
+      "value": "IP 地址"
+    },
+    {
+      "name": "added_rules_kind_source",
+      "value": "来源"
+    },
+    {
+      "name": "added_rules_kind_inbound",
+      "value": "端口与入站"
+    },
+    {
+      "name": "added_rules_kind_logic",
+      "value": "逻辑组合"
+    },
+    {
+      "name": "added_rules_kind_other",
+      "value": "其他"
+    },
+    {
+      "name": "added_rules_presets_hint",
+      "value": "选中的规则会添加到列表顶部。"
+    },
+    {
+      "name": "added_rules_quic_hint",
+      "value": "让 HTTP/3 回落到 TCP"
+    },
+    {
+      "name": "added_rules_stun_hint",
+      "value": "防止 WebRTC 暴露真实 IP"
+    },
+    {
+      "name": "added_rules_dot_hint",
+      "value": "让 DNS 查询都经过内核"
+    },
+    {
+      "name": "added_rules_loopback_hint",
+      "value": "拒绝发往本机的连接"
+    },
+    {
+      "name": "added_rules_lan_hint",
+      "value": "私有网段与局域网不走代理"
+    },
+    {
+      "name": "added_rules_system_hint",
+      "value": "系统更新与服务直连"
+    },
+    {
+      "name": "added_rules_tracker_hint",
+      "value": "BT 与 PT Tracker 直连"
+    },
+    {
+      "name": "added_rules_presets_count",
+      "value": "%d 条规则"
+    },
+    {
+      "name": "added_rules_presets_add",
+      "value": "添加 %d 条规则"
+    },
+    {
+      "name": "added_rules_presets_pick",
+      "value": "选择要添加的规则"
+    },
+    {
+      "name": "added_rules_presets_added",
+      "value": "已添加"
     },
     {
       "name": "dns_override_use_hosts",
@@ -2845,6 +2989,222 @@
       "value": "每行填写一个应用包名，重新连接 VPN 后生效。"
     },
     {
+      "name": "access_control_title",
+      "value": "访问控制"
+    },
+    {
+      "name": "access_control_add_app",
+      "value": "添加应用"
+    },
+    {
+      "name": "access_control_common_apps",
+      "value": "常用应用"
+    },
+    {
+      "name": "access_control_results",
+      "value": "%d 个结果"
+    },
+    {
+      "name": "access_control_import_placeholder",
+      "value": "每行一个，例如\ncom.tencent.mqq"
+    },
+    {
+      "name": "access_control_state_on",
+      "value": "开启"
+    },
+    {
+      "name": "access_control_mode_off",
+      "value": "关闭"
+    },
+    {
+      "name": "access_control_mode_blocked",
+      "value": "黑名单"
+    },
+    {
+      "name": "access_control_mode_trusted",
+      "value": "白名单"
+    },
+    {
+      "name": "access_control_summary_blocked",
+      "value": "黑名单 · %d"
+    },
+    {
+      "name": "access_control_summary_trusted",
+      "value": "白名单 · %d"
+    },
+    {
+      "name": "access_control_import",
+      "value": "输入包名"
+    },
+    {
+      "name": "access_control_export",
+      "value": "复制名单"
+    },
+    {
+      "name": "access_control_select_visible",
+      "value": "全选可见"
+    },
+    {
+      "name": "access_control_unselect_visible",
+      "value": "取消全选"
+    },
+    {
+      "name": "access_control_clear_list",
+      "value": "清空名单"
+    },
+    {
+      "name": "access_control_search_hint",
+      "value": "名称或包名"
+    },
+    {
+      "name": "access_control_custom_app",
+      "value": "自定义包名"
+    },
+    {
+      "name": "access_control_pick_installed",
+      "value": "从已安装应用选择"
+    },
+    {
+      "name": "access_control_pick_short",
+      "value": "选择应用"
+    },
+    {
+      "name": "access_control_pick_done",
+      "value": "已添加 %d 个应用"
+    },
+    {
+      "name": "access_control_pick_unsupported",
+      "value": "此设备不支持系统应用选择器"
+    },
+    {
+      "name": "access_control_pick_failed",
+      "value": "无法打开系统应用选择器"
+    },
+    {
+      "name": "access_control_container_badge",
+      "value": "容器"
+    },
+    {
+      "name": "access_control_no_match",
+      "value": "没有找到“%s”"
+    },
+    {
+      "name": "access_control_import_replace",
+      "value": "替换名单"
+    },
+    {
+      "name": "access_control_import_confirm",
+      "value": "导入"
+    },
+    {
+      "name": "access_control_import_empty",
+      "value": "未识别到有效包名"
+    },
+    {
+      "name": "access_control_own_only",
+      "value": "ArkClash 自身无需加入"
+    },
+    {
+      "name": "access_control_import_done",
+      "value": "已导入 %d 个"
+    },
+    {
+      "name": "access_control_import_partial",
+      "value": "已导入 %d 个，忽略 %d 个"
+    },
+    {
+      "name": "access_control_import_own_skipped",
+      "value": "已导入 %d 个，已跳过 ArkClash 自身"
+    },
+    {
+      "name": "access_control_clipboard_empty",
+      "value": "剪贴板没有文本"
+    },
+    {
+      "name": "access_control_clipboard_failed",
+      "value": "读取剪贴板失败"
+    },
+    {
+      "name": "access_control_export_empty",
+      "value": "名单为空"
+    },
+    {
+      "name": "access_control_export_done",
+      "value": "已复制 %d 个包名"
+    },
+    {
+      "name": "access_control_export_failed",
+      "value": "复制失败"
+    },
+    {
+      "name": "access_control_empty_trusted",
+      "value": "至少选择 1 个应用"
+    },
+    {
+      "name": "access_control_emptied_off",
+      "value": "没有选择应用，已关闭访问控制"
+    },
+    {
+      "name": "access_control_unsaved_title",
+      "value": "保存修改？"
+    },
+    {
+      "name": "access_control_change_mode",
+      "value": "模式"
+    },
+    {
+      "name": "access_control_change_blocked",
+      "value": "黑名单应用"
+    },
+    {
+      "name": "access_control_change_trusted",
+      "value": "白名单应用"
+    },
+    {
+      "name": "access_control_change_added",
+      "value": "新增 %d 个"
+    },
+    {
+      "name": "access_control_change_removed",
+      "value": "移除 %d 个"
+    },
+    {
+      "name": "access_control_saving",
+      "value": "保存中"
+    },
+    {
+      "name": "access_control_cat_all",
+      "value": "全部"
+    },
+    {
+      "name": "access_control_cat_browser",
+      "value": "浏览器"
+    },
+    {
+      "name": "access_control_cat_container",
+      "value": "安卓容器"
+    },
+    {
+      "name": "access_control_cat_social",
+      "value": "社交"
+    },
+    {
+      "name": "access_control_cat_finance",
+      "value": "支付金融"
+    },
+    {
+      "name": "access_control_cat_shopping",
+      "value": "购物"
+    },
+    {
+      "name": "access_control_cat_life",
+      "value": "生活出行"
+    },
+    {
+      "name": "access_control_cat_media",
+      "value": "影音"
+    },
+    {
       "name": "network_background",
       "value": "后台"
     },
@@ -2930,7 +3290,7 @@
     },
     {
       "name": "script_no_items",
-      "value": "暂无脚本"
+      "value": "还没有脚本"
     },
     {
       "name": "script_unnamed",
@@ -3135,6 +3495,34 @@
     {
       "name": "script_import_file",
       "value": "从文件导入"
+    },
+    {
+      "name": "script_empty_hint",
+      "value": "在配置的覆写中选用，加载前改写配置。"
+    },
+    {
+      "name": "script_create",
+      "value": "新建脚本"
+    },
+    {
+      "name": "script_import",
+      "value": "导入"
+    },
+    {
+      "name": "script_importing",
+      "value": "导入中"
+    },
+    {
+      "name": "script_syncing",
+      "value": "同步中"
+    },
+    {
+      "name": "script_url_edit",
+      "value": "修改链接"
+    },
+    {
+      "name": "script_import_url_hint",
+      "value": "导入后可以随时从这个链接同步。"
     },
     {
       "name": "rule_set_title",
@@ -4271,10 +4659,6 @@
     {
       "name": "added_rules_exit_new",
       "value": "新建命名出口"
-    },
-    {
-      "name": "added_rules_exit_option",
-      "value": "出口：%s"
     },
     {
       "name": "added_rules_exit_name",
