@@ -88,6 +88,19 @@ lint_shell() {
 lint_arch() {
   echo "== 分层规则"
   python3 scripts/check-arch.py || failed=1
+
+  echo "== scripts 目录"
+  # 顶层只放 Makefile 直接调用的入口；实现材料按用途放进子目录，见 docs/ci.md「脚本目录」。
+  local entry name
+  for entry in scripts/*; do
+    [[ -f "$entry" ]] || continue
+    name="${entry#scripts/}"
+    case "$name" in env.sh | check-arch.py) continue ;; esac
+    if ! grep -Fq "scripts/$name" Makefile; then
+      echo "scripts/${name} 不是 Makefile 入口：按用途放进 scripts/ 的子目录（见 docs/ci.md「脚本目录」）" >&2
+      failed=1
+    fi
+  done
 }
 
 lint_arkts() {

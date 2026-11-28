@@ -2,6 +2,21 @@
 
 任务使用 GitHub 托管的 Ubuntu runner。应用构建与静态检查通过 `Makefile` 运行，官网流水线使用 `website/package.json` 中与本地 Makefile 对应的 Bun 脚本。设计取舍见 [ADR-0006](adr/0006-layered-ci.md)。
 
+## 脚本目录
+
+CI 和本机都只经 `Makefile` 进入 `scripts/`。顶层只放 Makefile 直接调用的入口脚本，外加被它们 source 或调用的 `env.sh`、`check-arch.py`；其余材料按用途放进子目录。`make lint CHECKS=arch` 会拒绝顶层出现非入口文件。
+
+| 目录 | 放什么 |
+|---|---|
+| `scripts/core/` | 内核构建材料：`prepare-deps.sh` 准备补丁依赖、临时 `go.mod` 与 QuickJS，供构建、vet、govulncheck、CodeQL、宿主回归和 `gopls` 共用；`smoke.c` 是 `make core-smoke` 的设备端程序 |
+| `scripts/core/patches/<模块>/` | Go 工具链（`go/ohos-<arch>.patch`）与 gVisor、mihomo、tailscale 的补丁。依赖补丁按同目录 `series` 的顺序应用，没登记的补丁会让准备失败 |
+| `scripts/tests/` | `make test` 的宿主用例 `<名字>.test.mjs`，`TESTS=<名字>` 选择；`mihomo/` 下按包路径镜像的白盒测试，运行时叠加到打过补丁的 mihomo 副本 |
+| `scripts/bench/` | `make bench` 的实现与设备端辅助程序 |
+| `scripts/script-editor/` | 离线脚本编辑器源码与 `build.sh`，`make hap` 时构建进 rawfile |
+| `scripts/ci/` | 只在 GitHub Actions 里用的脚本与 Go 架构门禁 |
+
+新增 Makefile 目标时，入口放顶层并在 Makefile 里引用；新增补丁时把文件放进对应模块目录并登记到 `series`。
+
 ## 流水线
 
 | workflow | 什么时候跑 | 做什么 |
