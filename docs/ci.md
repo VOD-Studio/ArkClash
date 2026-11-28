@@ -138,7 +138,7 @@ gh run download <运行编号> -R VOD-Studio/ArkClash -n hap-debug
   ```sh
   curl -s https://repo.huaweicloud.com/openharmony/os/<发行版>/ohos-sdk-windows_linux-public.tar.gz | tar -tzf - | grep linux/native
   ```
-- **Go**：改 `.go-version`，本机 `make core` 确认补丁能打上，再按 `docs/agents/platform-pitfalls.md` 第 1 条在真机上复查。
+- **Go**：改 `.go-version`，本机 `make core` 确认 `scripts/core/patches/go/` 下的补丁能打上，再按 `docs/agents/platform-pitfalls.md` 第 1 条在真机上复查。
 - **CI 里的检查工具**：actionlint 的版本和哈希在 `scripts/ci/install-actionlint.sh`，zizmor、govulncheck 的版本在 `scripts/lint.sh`。GitHub Actions 的版本由 dependabot 更新。
 
 ## 发版
@@ -157,7 +157,7 @@ gh run download <运行编号> -R VOD-Studio/ArkClash -n hap-debug
 
 - **常规 CI 的 HAP 任务被跳过**：没配置 `HARMONYOS_TOOLS_REPO`，或者是外部 fork 发起的 PR（拿不到 secret）。
 - **自动发版显示成功，但 Release 没有 HAP**：检查各任务结果，不能只看 workflow 总状态。自动发版会跳过仅供手动补传的 `check`；GitHub Actions 的隐式 `success()` 会把跳过沿依赖链传播，所以 `hap`、`publish` 都要用 `!cancelled()` 加直接上游 `result == 'success'` 显式放行。旧 tag 的 workflow 不随 `main` 更新；已有版本缺包时，按「发版」第 4 步手动补传。
-- **CodeQL 构建缺少 `tunnel.DialContext` 等符号**：分析同样依赖 mihomo 补丁，不能直接在 `core/` 执行裸 `go build`。统一用 `make core-codeql`，它保持 CodeQL 能跟踪的标准 Go，通过 `scripts/prepare-core-modfile.sh` 准备 mihomo/tailscale/gVisor 补丁和临时 modfile，并以 `-tags with_gvisor,ohos -a` 强制提取；分析产物随后删除，不用于装机或分发。
+- **CodeQL 构建缺少 `tunnel.DialContext` 等符号**：分析同样依赖 mihomo 补丁，不能直接在 `core/` 执行裸 `go build`。统一用 `make core-codeql`，它保持 CodeQL 能跟踪的标准 Go，通过 `scripts/core/prepare-deps.sh` 准备 mihomo/tailscale/gVisor 补丁和临时 modfile，并以 `-tags with_gvisor,ohos -a` 强制提取；分析产物随后删除，不用于装机或分发。
 - **dependabot 的 PR 上 HAP 报「没有 HARMONYOS_TOOLS_TOKEN」**：在 Dependabot secrets 里补配，见「变量与密钥」。
 - **机器人 PR 上没有「CI 通过」**：见「机器人 PR」。
 - **下载 Command Line Tools 报 404 或 403**：token 过期，或者没有授予那个私有仓库的权限。

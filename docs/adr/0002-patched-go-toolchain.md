@@ -15,7 +15,7 @@
 
 ## 决定
 
-采用方案 4，补丁在 `scripts/go-ohos.patch`，由 `scripts/build-core.sh` 打进 `.toolchain/` 下的 GOROOT 副本，不改开发者机器上的 Go。同一个补丁也处理了 musl 调用 `DT_INIT_ARRAY` 时不传 argc/argv 的问题。
+采用方案 4，补丁在 `scripts/core/patches/go/ohos-arm64.patch`，由 `scripts/build-core.sh` 打进 `.toolchain/` 下的 GOROOT 副本，不改开发者机器上的 Go。同一个补丁也处理了 musl 调用 `DT_INIT_ARRAY` 时不传 argc/argv 的问题。
 
 ## 后果
 

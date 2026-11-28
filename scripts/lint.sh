@@ -16,10 +16,10 @@ if [[ ${#checks[@]} -eq 0 || "${checks[0]}" == "all" ]]; then
 fi
 failed=0
 
-prepare_quickjs() {
-  local quickjs_dir
-  quickjs_dir="$(bash "$ROOT/scripts/prepare-quickjs.sh")" || return 1
-  export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$quickjs_dir\""
+# 在调用方的子 shell 里准备补丁依赖与 QuickJS 头文件路径。
+prepare_core_deps() {
+  bash "$ROOT/scripts/core/prepare-deps.sh" "$1" || return 1
+  export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$1/quickjs\""
 }
 
 lint_go() {
@@ -30,19 +30,18 @@ lint_go() {
 
   echo "== gofmt"
   local unformatted
-  unformatted="$(gofmt -l core scripts/ci/check-core-arch)"
+  unformatted="$(gofmt -l core scripts/core scripts/ci/check-core-arch)"
   if [[ -n "$unformatted" ]]; then
     echo "需要 gofmt：$unformatted" >&2
     failed=1
   fi
 
   echo "== go arch & vet"
-  prepare_quickjs || { failed=1; return; }
   local clang="$OHOS_SDK/native/llvm/bin/aarch64-unknown-linux-ohos-clang"
   (
     lint_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-lint.XXXXXX")" || exit 1
     trap 'rm -rf "$lint_deps"' EXIT
-    bash "$ROOT/scripts/prepare-core-modfile.sh" "$lint_deps" || exit 1
+    prepare_core_deps "$lint_deps" || exit 1
     cd core || exit 1
 
     # 先自检架构门禁的静态检查与负向单测，确保门禁自身不退化。
@@ -137,7 +136,6 @@ lint_commits() {
 GOVULNCHECK_VERSION="v1.9.0"
 lint_vuln() {
   echo "== govulncheck"
-  prepare_quickjs || { failed=1; return; }
   # 只报告代码真正调用到的漏洞；和 go vet 一样要用 NDK 的编译器与打过补丁的 mihomo。
   local clang="$OHOS_SDK/native/llvm/bin/aarch64-unknown-linux-ohos-clang"
   if [[ -x "$clang" ]]; then
@@ -146,7 +144,7 @@ lint_vuln() {
     (
       vuln_deps="$(mktemp -d "${TMPDIR:-/tmp}/arkclash-vuln.XXXXXX")" || exit 1
       trap 'rm -rf "$vuln_deps"' EXIT
-      bash "$ROOT/scripts/prepare-core-modfile.sh" "$vuln_deps" || exit 1
+      prepare_core_deps "$vuln_deps" || exit 1
       cp -R core "$vuln_deps/core" || exit 1
       chmod -R u+w "$vuln_deps/core" || exit 1
       cp "$vuln_deps/go.mod" "$vuln_deps/go.sum" "$vuln_deps/core/" || exit 1

@@ -12,7 +12,7 @@ Linux x86_64 的 HarmonyOS API 26 模拟器只能运行对应 ABI 的原生库�
 ## 决定
 
 - `ABI` 只接受 `arm64-v8a`、`x86_64`，默认仍是 ARM64。各架构分别缓存私有 Go 工具链和补丁依赖，Go 版本由 `.go-version` 选择。
-- ARM64 保持原补丁。x86_64 使用 `scripts/go-ohos-amd64.patch`，同时重建私有工具链里的 `asm`、`compile`、`link`，不修改系统 Go 或模块缓存。
+- ARM64 保持原补丁。x86_64 使用 `scripts/core/patches/go/ohos-amd64.patch`，同时重建私有工具链里的 `asm`、`compile`、`link`，不修改系统 Go 或模块缓存。
 - 在 linux/amd64 共享模式下，将 `MOVQ TLS, reg` 降为对应的原生辅助函数调用。辅助函数通过 ELF TLSDESC 解析 C 定义的线程局部 `g`，返回相对线程指针的偏移，后续 FS 访问不变。
 - 每个辅助函数只修改目标寄存器；保存标志位和临时寄存器，并对齐解析调用的栈。TLSDESC 本身可能修改标志位，不能直接把一次解析调用当成原来的 MOV。偏移解析及紧随其后的 TLS 读取/写入都标记为不可异步抢占，防止迁移线程后复用旧偏移。
 - 共享库初始化传入空的 argv/envp/auxv 终止表，auxv 继续由运行时读取 `/proc/self/auxv`。与 ARM64 一样，配置从启动 JSON 传入，不依赖库内环境变量。

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 下载 FlClash v0.9.3 使用的 QuickJS-NG 源码，Rust 包只作为固定源码归档。
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 version=0.12.2
 checksum=a13ac243b86a74120814ef7e9e30ad5a2c1199b7b9963b1cf7c84e4cdc1cad99
 cache="$ROOT/.toolchain"

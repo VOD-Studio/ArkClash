@@ -34,13 +34,11 @@ function runGo(args, options = {}) {
 
 // 冷缓存的工具链、依赖下载和编译不占用用例执行时限；测试在 core/ 原地执行，不再拷贝业务源码。
 before(async () => {
-  const prepare = spawnSync('bash', [join(root, 'scripts/prepare-core-modfile.sh'), depsDir], {
+  const prepare = spawnSync('bash', [join(root, 'scripts/core/prepare-deps.sh'), depsDir], {
     encoding: 'utf8', timeout: 300000, maxBuffer, env: goEnv
   });
   assert.equal(prepare.status, 0, `${prepare.error ?? ''}\n${prepare.stdout}\n${prepare.stderr}`);
-  const quickjs = spawnSync('bash', [join(root, 'scripts/prepare-quickjs.sh')], { encoding: 'utf8', timeout: 120000 });
-  assert.equal(quickjs.status, 0, quickjs.stderr);
-  goEnv.CGO_CPPFLAGS = `${process.env.CGO_CPPFLAGS ?? ''} -I ${JSON.stringify(quickjs.stdout.trim())}`;
+  goEnv.CGO_CPPFLAGS = `${process.env.CGO_CPPFLAGS ?? ''} -I ${JSON.stringify(join(depsDir, 'quickjs'))}`;
 
   for (const [source, destination] of [
     ['observation-dns-host_test.go', 'dns/arkclash_observation_test.go'],

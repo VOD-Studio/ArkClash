@@ -13,11 +13,9 @@ fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-bash "$ROOT/scripts/prepare-core-modfile.sh" "$WORK"
+bash "$ROOT/scripts/core/prepare-deps.sh" "$WORK"
+export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$WORK/quickjs\""
 cd "$ROOT/core"
-
-quickjs_dir="$(bash "$ROOT/scripts/prepare-quickjs.sh")"
-export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$quickjs_dir\""
 
 # 不使用补丁版 Go，也不覆盖手机构建产物；-a 防止编译缓存跳过代码提取。
 CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \

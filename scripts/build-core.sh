@@ -11,13 +11,13 @@ case "$ABI" in
   arm64-v8a)
     ARCH=arm64
     TRIPLE=aarch64-unknown-linux-ohos
-    PATCH="$ROOT/scripts/go-ohos.patch"
+    PATCH="$ROOT/scripts/core/patches/go/ohos-arm64.patch"
     TLS_RELOC=R_AARCH64_TLS_TPREL
     ;;
   x86_64)
     ARCH=amd64
     TRIPLE=x86_64-unknown-linux-ohos
-    PATCH="$ROOT/scripts/go-ohos-amd64.patch"
+    PATCH="$ROOT/scripts/core/patches/go/ohos-amd64.patch"
     TLS_RELOC='R_X86_64_(TPOFF|GOTTPOFF)'
     ;;
   *) echo "不支持的 ABI：${ABI}（仅支持 arm64-v8a、x86_64）" >&2; exit 2 ;;
@@ -64,10 +64,8 @@ mkdir -p "$OUT"
 # 需要打补丁的依赖：复制到 .toolchain 打补丁，再用临时 go.mod（-modfile）
 # replace 过去，core/go.mod 保持原样。
 PATCHED_DIR="$ROOT/.toolchain/patched-$ABI"
-bash "$ROOT/scripts/prepare-core-modfile.sh" "$PATCHED_DIR"
-
-quickjs_dir="$(bash "$ROOT/scripts/prepare-quickjs.sh")"
-export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$quickjs_dir\""
+bash "$ROOT/scripts/core/prepare-deps.sh" "$PATCHED_DIR"
+export CGO_CPPFLAGS="${CGO_CPPFLAGS:-} -I \"$PATCHED_DIR/quickjs\""
 
 # HarmonyOS uses musl, so this is a GOOS=linux build linked by the OHOS clang.
 CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH" \

@@ -1,0 +1,15 @@
+# 按顺序应用到 github.com/metacubex/mihomo 的副本；各补丁用途与升级复查见 docs/agents/platform-pitfalls.md。
+urltest-cancel.patch
+rule-dial.patch
+provider-hash.patch
+geo-reader.patch
+observation.patch
+tun-fd.patch
+inbound-lifecycle.patch
+forward-lifecycle.patch
+share-link-privacy.patch
+provider-manage.patch
+system-dns.patch
+tailscale-login.patch
+tailscale-mapped-address.patch
+provider-reuse.patch

@@ -36,9 +36,9 @@ attach 新建自定义 listener，并恢复普通入口和 DNS 监听。detach �
 
 系统与 Go 分别持有 fd：平台保留 create 返回的原件；Linux `sing_tun.tunNew` 在真正接管接口的边界用 `F_DUPFD_CLOEXEC` 复制，Go 只关闭副本。构造回滚由 listener 负责，stack 在 Start 前登记到 listener，外层不得再盲目 close。Close 出错保留不确定性，重试不能再次关闭可能已被复用的描述符。
 
-`scripts/mihomo-tun-fd.patch` 与现有补丁共用 `prepare-mihomo.sh`，不修改模块缓存。补丁还提供真实入口快照、可报告错误的关闭，以及同步的 DNS/controller 生命周期。完整关闭同时退休被 HTTP hijack 的 WebSocket，避免旧流越过下一次 boot。
+`scripts/core/patches/mihomo/tun-fd.patch` 与现有补丁共用 `scripts/core/prepare-deps.sh`，不修改模块缓存。补丁还提供真实入口快照、可报告错误的关闭，以及同步的 DNS/controller 生命周期。完整关闭同时退休被 HTTP hijack 的 WebSocket，避免旧流越过下一次 boot。
 
-`scripts/mihomo-inbound-lifecycle.patch` 让监听器从 Accept 起持有原始 TCP 连接，关闭时连未完成握手的连接一起释放；`scripts/mihomo-forward-lifecycle.patch` 隔离各代 TCP/UDP 转发，避免旧拨号或队列越过重载。
+`scripts/core/patches/mihomo/inbound-lifecycle.patch` 让监听器从 Accept 起持有原始 TCP 连接，关闭时连未完成握手的连接一起释放；`scripts/core/patches/mihomo/forward-lifecycle.patch` 隔离各代 TCP/UDP 转发，避免旧拨号或队列越过重载。
 
 ### 命令、意图和代次
 

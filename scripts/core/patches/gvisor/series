@@ -1,0 +1,3 @@
+# 按顺序应用到 github.com/metacubex/gvisor 的副本。
+# fdbased：SELinux 不允许对 TUN fd 做 fstat，见补丁里的注释与 docs/agents/platform-pitfalls.md。
+fdbased.patch

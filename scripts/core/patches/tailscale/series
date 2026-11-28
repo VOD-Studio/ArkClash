@@ -1,0 +1,3 @@
+# 按顺序应用到 github.com/metacubex/tailscale 的副本；各补丁用途与升级复查见 docs/agents/platform-pitfalls.md。
+netmon.patch
+login-url.patch

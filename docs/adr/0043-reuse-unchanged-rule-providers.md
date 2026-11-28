@@ -12,7 +12,7 @@
 
 ## 决定
 
-- `scripts/mihomo-provider-reuse.patch` 给 mihomo 加两个钩子：
+- `scripts/core/patches/mihomo/provider-reuse.patch` 给 mihomo 加两个钩子：
   - `config.ArkClashSetRuleProviderReuse` 登记的判断：`parseRuleProviders` 新建实例前先询问；返回运行中的实例时直接放进 provider 表。规则、DNS `nameserver-policy`、fake-ip 过滤和嗅探都在之后按这张表取 provider，所有引用一致指向同一个实例。只在这里替换，不在 `ApplyConfig` 里换：那时 DNS 等已经引用了新建的空实例。
   - `executor.ArkClashSetProviderLoaded` 登记的判断：`loadProvider` 跳过已完成 `Initial` 的复用实例。再次 `Initial` 会重新解析，还会重复启动定时更新或文件监听。
 - `core/rule_provider_reuse.go` 实现判断：

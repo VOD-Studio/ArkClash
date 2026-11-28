@@ -11,7 +11,7 @@ FlClash v0.9.3（`be84736605527034689c95bf27828ff27d912c5e`）将连接合并为
 ## 决定
 
 - UI 仍不加载内核。沿用已认证 controller、端口、NAPI、TUN 与逐 socket 物理网络绑定；不开放新端口，不更换 mihomo fork 或依赖版本。
-- `scripts/mihomo-observation.patch` 最小移植固定 fork `024245dc72bc92f48237f865119afe0cd53ac9e6` 的观察与清缓存能力。连接使用 Join-before-Store 的 Open 和底层 Close 完成后的通知；逐字节路径不添加锁或回调。DNS 使用原子 observer、独立的 4096 项 upstream 归属缓存与五类 initiator（app/rule/direct/proxy/other），不是具体应用身份。隐藏时分类不分配 context；旧 trace 不进入新 observer。Hosts/FakeIP 直接回答不造事件，singleflight 可合并请求。
+- `scripts/core/patches/mihomo/observation.patch` 最小移植固定 fork `024245dc72bc92f48237f865119afe0cd53ac9e6` 的观察与清缓存能力。连接使用 Join-before-Store 的 Open 和底层 Close 完成后的通知；逐字节路径不添加锁或回调。DNS 使用原子 observer、独立的 4096 项 upstream 归属缓存与五类 initiator（app/rule/direct/proxy/other），不是具体应用身份。隐藏时分类不分配 context；旧 trace 不进入新 observer。Hosts/FakeIP 直接回答不造事件，singleflight 可合并请求。
 - `/arkclash/diagnostics/connections` 和 `/arkclash/diagnostics/dns` 是两个独立可见订阅。首个同类订阅安装 hook，最后一个离开卸载；多个订阅共用该类 collector 和采样器。Close 控制帧、EOF、请求取消、写失败、配置退休均解除订阅。隐藏不补采、不回放历史，也不取消正常代理 DNS。打开详情或切 Recent/Live 不改变连接订阅。
 - 记录仅驻留内存：连接 canonical 保存全部 live 和最近 2000 次建立，DNS 保存最近 3000 条。初次连接 snapshot 只有 live 基线，不把既有连接补记为 recent；DNS 初始为空。session 的历史边界独立，晚加入者不读取其他订阅的历史。UI 同 boot/config 可保留自己已观察过的旧 session 历史，暂停跟随只保留有界视图（连接 4000、DNS 6000），不是暂停采集。
 - 公共帧携带 `type/kind/bootId/configRevision/sessionId/seq/sampledAt/dropped/evicted`。首帧 seq=1，逐帧递增；集合为空也编码为 `[]`。连接 snapshot/reset 包含 live/recent，delta 包含 opened/traffic/closed，按此顺序应用；DNS 对应 records/added。每会话队列 256，先更新 canonical，再在溢出时合并为 reset；reset 恢复最终状态，不丢关闭终态。`dropped` 是合并或跳过的中间事件数，`evicted` 是容量淘汰数，不把 reset 补齐的数据称为丢失请求。
@@ -25,4 +25,4 @@ FlClash v0.9.3（`be84736605527034689c95bf27828ff27d912c5e`）将连接合并为
 
 仅可见采集降低隐藏时的额外工作量，但断线、后台和隐藏期间记录不可恢复。计数提示用于说明真实间断/合并/淘汰，不提供审计保证。继续强制 FindProcessOff，界面没有进程图标、App 筛选或 App 分组。
 
-观察补丁由 `prepare-mihomo.sh` 统一用于宿主和两种 ABI。升级 mihomo 时必须复查调用时点、取消上下文、observer 身份、cache/client 遍历以及同一版本解析下的依赖包回归；宿主和构建结果不能替代真机 UI、转发、耗电、延迟与稳定性测量。
+观察补丁由 `scripts/core/prepare-deps.sh` 统一用于宿主和两种 ABI。升级 mihomo 时必须复查调用时点、取消上下文、observer 身份、cache/client 遍历以及同一版本解析下的依赖包回归；宿主和构建结果不能替代真机 UI、转发、耗电、延迟与稳定性测量。
