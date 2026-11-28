@@ -49,3 +49,4 @@
 | [0042](0042-core-engine-and-reload-tx.md) | 核心状态机（Engine）、ReloadTx 与子系统单向锁序 | 已采纳，真机门禁待验收 |
 | [0043](0043-reuse-unchanged-rule-providers.md) | 热切换复用定义未变的 rule provider | 已采纳，待真机验收 |
 | [0044](0044-core-cmd-and-five-layer-internal-dag.md) | 内核目录收口（cmd/ 入口与 5 层单向 internal DAG） | 已采纳，双 ABI 与宿主/竞态门禁通过，真机门禁待验收 |
+| [0045](0045-installed-app-picker-acl.md) | 用系统应用选择器添加已安装应用，接受受限 ACL 权限 | 已采纳 |

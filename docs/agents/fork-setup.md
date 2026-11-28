@@ -42,7 +42,7 @@ make hap
 ## 4. 签名与真机 **【人工】**
 
 1. 手机打开开发者模式和 USB 调试，用数据线直连电脑（扩展坞可能导致识别失败）。
-2. 用 DevEco Studio 打开项目，在 File → Project Structure → Signing Configs 里用华为账号自动签名。
+2. 用 DevEco Studio 打开项目，在 File → Project Structure → Signing Configs 里用华为账号自动签名。会弹出申请受限 ACL 权限 `USE_FRAUD_APP_PICKER` 的提示，点「继续」；不带这个 ACL 的 Profile 装机会报 `9568289`。`~/.ohos/config` 里已有旧的 `.p7b` 时 DevEco 会直接复用，先把它挪走再签（见 [ADR-0045](../adr/0045-installed-app-picker-acl.md)）。
 3. 签名配置会写进 `build-profile.json5`，这个改动永远不要提交（见 AGENTS.md「安全」）。
 
 然后由 agent 执行 `make hap && make run`，请用户在 App 里粘贴订阅链接、下载订阅、点连接，再用浏览器打开一个被墙的网站。
