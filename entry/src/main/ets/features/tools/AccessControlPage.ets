@@ -34,6 +34,7 @@ const EMPTY_HEIGHT = 420;
 // 勾选时勾号从 0.6 弹到 1，带一点回弹；只作用于被点的那一行。
 const CHECK_SPRING: ICurve = curves.springMotion(0.36, 0.7);
 const SEARCH_SPRING: ICurve = curves.springMotion(0.34, 0.9);
+const SWAP_SPRING: ICurve = curves.springMotion(0.42, 0.92);
 
 interface AccessHeaderActionOption {
   icon: Resource;
@@ -110,12 +111,20 @@ export struct AccessControlPage {
     this.syncFromDraft();
   }
 
-  private syncFromDraft(): void {
-    this.accessOn = this.draft.enabled();
-    this.activeMode = this.draft.activeMode;
-    this.selectedBundles = this.draft.activeList().slice();
+  private syncFromDraft(animated: boolean = false): void {
+    const apply = (): void => {
+      this.accessOn = this.draft.enabled();
+      this.activeMode = this.draft.activeMode;
+      this.selectedBundles = this.draft.activeList().slice();
+      this.refreshRows();
+    };
     this.dirty = this.draft.isDirty();
-    this.refreshRows();
+    // 切换模式或开关时整批替换行：在同一个动画里增删，进出的行淡入淡出，留下的行平滑让位。
+    if (animated && !this.reduceMotion) {
+      this.getUIContext().animateTo({ curve: SWAP_SPRING }, apply);
+    } else {
+      apply();
+    }
   }
 
   private refreshRows(): void {
@@ -184,7 +193,7 @@ export struct AccessControlPage {
     }
     this.draft.setEnabled(on);
     this.resetBrowsing();
-    this.syncFromDraft();
+    this.syncFromDraft(true);
   }
 
   private chooseMode(index: number): void {
@@ -194,7 +203,7 @@ export struct AccessControlPage {
     }
     this.draft.setMode(next);
     this.resetBrowsing();
-    this.syncFromDraft();
+    this.syncFromDraft(true);
   }
 
   private toggleBundle(bundleName: string): void {
@@ -212,9 +221,6 @@ export struct AccessControlPage {
       this.selectedBundles = this.draft.activeList().slice();
     });
     this.dirty = this.draft.isDirty();
-    if (this.activeCategory === 'selected') {
-      this.refreshRows();
-    }
   }
 
   private toggleVisible(): void {
@@ -425,7 +431,6 @@ export struct AccessControlPage {
 
   private categoryLabel(category: AccessAppCategory): ResourceStr {
     switch (category) {
-      case 'selected': return $r('app.string.access_control_cat_selected', this.selectedBundles.length);
       case 'browser': return $r('app.string.access_control_cat_browser');
       case 'container': return $r('app.string.access_control_cat_container');
       case 'social': return $r('app.string.access_control_cat_social');
@@ -602,10 +607,12 @@ export struct AccessControlPage {
             .id(SEARCH_INPUT_ID)
             .layoutWeight(1)
             .height(FILTER_CONTROL_SIZE)
-            .padding(0)
+            // 输入框自带的圆角会把贴边的光标裁成弧形，归零并留出左侧空隙。
+            .padding({ left: 2 })
+            .borderRadius(0)
             .fontSize(15)
             .backgroundColor(Color.Transparent)
-            .caretColor(this.appStyle.palette.brand)
+            .caretStyle({ width: 2, color: this.appStyle.palette.brand })
             .onAppear((): void => { this.getUIContext().getFocusController().requestFocus(SEARCH_INPUT_ID); })
             .onChange((text: string): void => {
               this.query = text;
@@ -681,13 +688,6 @@ export struct AccessControlPage {
           .fontSize(16)
           .fontWeight(500)
           .fontColor(this.appStyle.palette.brand)
-        if (this.invalid()) {
-          Text($r('app.string.access_control_empty_trusted'))
-            .fontFamily(this.appStyle.fontFamily)
-            .fontSize(13)
-            .lineHeight(18)
-            .fontColor($r('app.color.status_error'))
-        }
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
@@ -749,7 +749,8 @@ export struct AccessControlPage {
     if (this.pickerSupported) {
       EmptyAction({
         icon: $r('sys.symbol.square_grid_2x2'),
-        label: $r('app.string.access_control_pick_installed'),
+        // 两个胶囊并排要放进窄屏，这里用短文案，完整说法留给菜单。
+        label: $r('app.string.access_control_pick_short'),
         primary: true,
         motion: !this.reduceMotion,
         available: !this.picking,
@@ -917,6 +918,8 @@ export struct AccessControlPage {
                     this.EntryView(item)
                   }
                   .padding({ left: PAGE_GUTTER, right: PAGE_GUTTER })
+                  .transition(this.reduceMotion ? TransitionEffect.IDENTITY :
+                    TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.98, y: 0.98 })))
                 }, (item: AccessListEntry): string => item.key)
               }
             }

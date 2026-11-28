@@ -1,8 +1,8 @@
 export type AccessAppCategory =
-  'all' | 'selected' | 'browser' | 'container' | 'social' | 'finance' | 'shopping' | 'life' | 'media';
+  'all' | 'browser' | 'container' | 'social' | 'finance' | 'shopping' | 'life' | 'media';
 
 export const ACCESS_APP_CATEGORIES: AccessAppCategory[] = [
-  'all', 'selected', 'browser', 'container', 'social', 'finance', 'shopping', 'life', 'media'
+  'all', 'browser', 'container', 'social', 'finance', 'shopping', 'life', 'media'
 ];
 
 export interface AccessCatalogEntry {

@@ -3009,10 +3009,6 @@
       "value": "开启"
     },
     {
-      "name": "access_control_cat_selected",
-      "value": "已选 %d"
-    },
-    {
       "name": "access_control_mode_off",
       "value": "关闭"
     },
@@ -3063,6 +3059,10 @@
     {
       "name": "access_control_pick_installed",
       "value": "从已安装应用选择"
+    },
+    {
+      "name": "access_control_pick_short",
+      "value": "选择应用"
     },
     {
       "name": "access_control_pick_done",

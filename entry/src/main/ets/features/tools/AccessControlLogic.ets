@@ -406,20 +406,12 @@ export class AccessControlDraft {
     }
     const words = query.trim().toLowerCase().split(/\s+/).filter((word: string): boolean => word !== '');
     const searching = words.length > 0;
-    const selected = new Set<string>(this.activeList());
     const catalogByBundle = new Map<string, AccessCatalogEntry>();
     for (const entry of catalog) {
       catalogByBundle.set(entry.bundleName, entry);
     }
-    const inCategory = (bundleName: string): boolean => {
-      if (category === 'all') {
-        return true;
-      }
-      if (category === 'selected') {
-        return selected.has(bundleName);
-      }
-      return catalogByBundle.get(bundleName)?.category === category;
-    };
+    const inCategory = (bundleName: string): boolean =>
+      category === 'all' || catalogByBundle.get(bundleName)?.category === category;
 
     // 已选分组 = 打开时的快照 + 本次新加的，取消勾选的仍留在原位，便于误触后重新勾选。
     const pinned = new Set<string>(this.pinnedOnOpen);
@@ -434,12 +426,10 @@ export class AccessControlDraft {
       }
     }
     const rest: AccessListEntry[] = [];
-    if (category !== 'selected') {
-      for (const entry of catalog) {
-        if (!pinned.has(entry.bundleName) && inCategory(entry.bundleName) &&
-          entryMatchesQuery(entry.bundleName, entry, words)) {
-          rest.push(this.appEntry(entry.bundleName, entry, chinese));
-        }
+    for (const entry of catalog) {
+      if (!pinned.has(entry.bundleName) && inCategory(entry.bundleName) &&
+        entryMatchesQuery(entry.bundleName, entry, words)) {
+        rest.push(this.appEntry(entry.bundleName, entry, chinese));
       }
     }
 

@@ -3029,10 +3029,6 @@
       "value": "On"
     },
     {
-      "name": "access_control_cat_selected",
-      "value": "Selected %d"
-    },
-    {
       "name": "access_control_mode_off",
       "value": "Off"
     },
@@ -3083,6 +3079,10 @@
     {
       "name": "access_control_pick_installed",
       "value": "Choose from installed apps"
+    },
+    {
+      "name": "access_control_pick_short",
+      "value": "Pick apps"
     },
     {
       "name": "access_control_pick_done",
