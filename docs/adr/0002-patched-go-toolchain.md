@@ -15,10 +15,10 @@
 
 ## 决定
 
-采用方案 4，补丁在 `scripts/core/patches/go/ohos-arm64.patch`，由 `scripts/build-core.sh` 打进 `.toolchain/` 下的 GOROOT 副本，不改开发者机器上的 Go。同一个补丁也处理了 musl 调用 `DT_INIT_ARRAY` 时不传 argc/argv 的问题。
+采用方案 4，补丁在 `scripts/core/patches/go/ohos-arm64.patch`，由 `scripts/core/build.sh` 打进 `.toolchain/` 下的 GOROOT 副本，不改开发者机器上的 Go。同一个补丁也处理了 musl 调用 `DT_INIT_ARRAY` 时不传 argc/argv 的问题。
 
 ## 后果
 
-- 内核只能用 `build-core.sh` 构建，Go 版本固定在 `.go-version`，升级 Go 要按 platform-pitfalls 第 1 条复查。
+- 内核只能用 `scripts/core/build.sh` 构建，Go 版本固定在 `.go-version`，升级 Go 要按 platform-pitfalls 第 1 条复查。
 - 内核里环境变量为空，配置只能通过 start 的 JSON 参数传入。
 - 官方支持 general-dynamic TLS 后删掉补丁。

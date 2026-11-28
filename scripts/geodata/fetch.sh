@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # 按 geodata.lock 下载 mihomo 用的 Geo 数据，打包进 HAP 的 rawfile。
 # 内核启动时如果找不到这些文件会去 GitHub 现场下载，国内经常失败，也拖慢首次连接。
-# 已有且哈希一致的文件不重复下载；锁文件由 scripts/update-geodata.sh 维护。
+# 已有且哈希一致的文件不重复下载；锁文件由 scripts/geodata/update.sh 维护。
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/entry/src/main/resources/rawfile/geo"
 mkdir -p "$OUT"
 

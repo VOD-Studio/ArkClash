@@ -53,7 +53,7 @@
 
 ### 3. 构建、测试与全包 fail-closed 架构门禁
 
-- `scripts/build-core.sh` 与 `scripts/ci/build-codeql.sh` 切换编译目标至 `./cmd/clash` 与 `./cmd/backupstore`。
+- `scripts/core/build.sh` 与 `scripts/ci/build-codeql.sh` 切换编译目标至 `./cmd/clash` 与 `./cmd/backupstore`。
 - `scripts/tests/core.test.mjs` 移除根包 `.`，将原根包集成回归及 `CORE_TEST_RUN`/`CORE_TEST_SKIP` 指向 `./internal/engine` 与 `./internal/api`，普通回归与 `CORE_RACE=1` 均完整覆盖全部 15 个 `internal/*` 包及 6 个 mihomo 白盒包。
 - `scripts/ci/check-core-arch/main.go` 升级为全包架构门禁，在 `make lint CHECKS=go` 中强制执行：
   1. `core/` 根目录零 `.go` 文件（含 `*_test.go`）；

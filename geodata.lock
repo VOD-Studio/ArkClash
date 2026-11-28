@@ -1,4 +1,4 @@
-# Geo 数据锁文件：由 scripts/update-geodata.sh 生成，每周由机器人开 PR 更新，不要手改。
+# Geo 数据锁文件：由 scripts/geodata/update.sh 生成，每周由机器人开 PR 更新，不要手改。
 # 上游：MetaCubeX/meta-rules-dat，Release 2026-11-23 10:55
 # <文件名> <sha256> <下载地址>
 geoip.metadb 18275e3cbff570e0dff3375690d79f288074468a47af0af8a6901629facd1eca https://github.com/VOD-Studio/ArkClash/releases/download/geodata/geoip-18275e3cbff5.metadb

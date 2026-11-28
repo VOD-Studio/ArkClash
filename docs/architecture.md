@@ -177,8 +177,8 @@ TUN 由 `core/internal/engine/tun.go` 单独持有，不走配置文件，所以
 ## 构建产物
 
 ```
-core/ ── scripts/build-core.sh（补丁版 Go + OHOS NDK）──► entry/libs/<ABI>/libclash.so
-Geo 数据 ── scripts/fetch-geodata.sh ──► entry/src/main/resources/rawfile/geo/
+core/ ── scripts/core/build.sh（补丁版 Go + OHOS NDK）──► entry/libs/<ABI>/libclash.so
+Geo 数据 ── scripts/geodata/fetch.sh ──► entry/src/main/resources/rawfile/geo/
 entry/ ── hvigor（CMake 编 NAPI 桥 + ArkTS）──► HAP
 ```
 

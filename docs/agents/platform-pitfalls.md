@@ -6,7 +6,7 @@ ARM64 的运行问题已在真机（Pura 70 Ultra，API 26）上验证；x86_64 
 
 - **现象**：`Error relocating .../libclash.so: initial-exec TLS resolves to dynamic definition`，ArkTS 里 `core` 是 `undefined`。
 - **原因**：Go 在 linux/arm64 上把当前 g 指针放在 initial-exec TLS 里，鸿蒙的 musl 不允许 dlopen 加载的库这么用。官方还没修（golang/go#54805）。
-- **补丁**：`scripts/core/patches/go/ohos-arm64.patch`，由 `build-core.sh` 打进 `.toolchain/` 里的 Go 副本，关键改动包括：
+- **补丁**：`scripts/core/patches/go/ohos-arm64.patch`，由 `scripts/core/build.sh` 打进 `.toolchain/` 里的 Go 副本，关键改动包括：
   - g 改存在 C 定义的线程局部变量里，通过 TLSDESC 访问（`runtime/cgo/gcc_tls_linux_arm64.S`），`load_g`/`save_g` 调用这段汇编。
   - musl 调用 `DT_INIT_ARRAY` 时不传 argc/argv，库入口改用空参数表，auxv 从 `/proc/self/auxv` 读取。因此内核里的环境变量都是空的，配置只能通过 start 的 JSON 参数传进去。
 - **试过但不可行**：把 g 放在线程指针后面的固定槽位（Android 的做法）。在 ffrt 等系统线程上 TP+8 已经是 -1，不是空槽位。

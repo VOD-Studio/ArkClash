@@ -90,17 +90,26 @@ lint_arch() {
   python3 scripts/check-arch.py || failed=1
 
   echo "== scripts 目录"
-  # 顶层只放 Makefile 直接调用的入口；实现材料按用途放进子目录，见 docs/ci.md「脚本目录」。
-  local entry name
+  # 顶层只放跨领域的入口与共用环境，名单固定；领域入口和材料进各自子目录，见 docs/ci.md「脚本目录」。
+  local entry name target
   for entry in scripts/*; do
     [[ -f "$entry" ]] || continue
     name="${entry#scripts/}"
-    case "$name" in env.sh | check-arch.py) continue ;; esac
-    if ! grep -Fq "scripts/$name" Makefile; then
-      echo "scripts/${name} 不是 Makefile 入口：按用途放进 scripts/ 的子目录（见 docs/ci.md「脚本目录」）" >&2
+    case "$name" in
+      env.sh | check-arch.py | build-hap.sh | device.sh | lint.sh | test.sh) ;;
+      *)
+        echo "scripts/${name} 不属于顶层名单：按领域放进 scripts/ 的子目录（见 docs/ci.md「脚本目录」）" >&2
+        failed=1
+        ;;
+    esac
+  done
+  # Makefile 引用的脚本必须存在，移动脚本时不会留下失效的目标。
+  while IFS= read -r target; do
+    if [[ ! -f "$target" ]]; then
+      echo "Makefile 引用的 $target 不存在" >&2
       failed=1
     fi
-  done
+  done < <(grep -oE 'scripts/[A-Za-z0-9_./-]+\.(sh|py)' Makefile | sort -u)
 }
 
 lint_arkts() {

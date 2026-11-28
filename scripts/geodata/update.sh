@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # 把上游最新的 Geo 数据镜像到本仓库的 geodata 预发布，并重写 geodata.lock。
-# 用法：update-geodata.sh，GH_TOKEN 需要本仓库的 contents: write。每周由 scheduled.yml 运行。
+# 用法：scripts/geodata/update.sh，GH_TOKEN 需要本仓库的 contents: write。每周由 scheduled.yml 运行。
 #
 # 为什么要镜像：上游 meta-rules-dat 的 latest Release 和 release 分支每天都被覆盖，
 # 没有可以长期引用的版本。构建只认锁文件里的哈希，同一个提交任何时候构建出来都一样。
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 UPSTREAM_REPO="MetaCubeX/meta-rules-dat"
 UPSTREAM="https://github.com/$UPSTREAM_REPO/releases/download/latest"
 REPO="${GITHUB_REPOSITORY:-VOD-Studio/ArkClash}"
@@ -24,7 +24,7 @@ existing="$(gh release view "$MIRROR_TAG" -R "$REPO" --json assets --jq '.assets
 
 released="$(gh api "repos/$UPSTREAM_REPO/releases/latest" --jq .name)"
 {
-  echo "# Geo 数据锁文件：由 scripts/update-geodata.sh 生成，每周由机器人开 PR 更新，不要手改。"
+  echo "# Geo 数据锁文件：由 scripts/geodata/update.sh 生成，每周由机器人开 PR 更新，不要手改。"
   echo "# 上游：${UPSTREAM_REPO}，$released"
   echo "# <文件名> <sha256> <下载地址>"
 } > "$TMP/lock"

@@ -14,7 +14,7 @@
 /.clang-format
 /.clang-tidy
 
-# Built by scripts/build-core.sh
+# Built by scripts/core/build.sh
 /entry/libs/
 
 # Signing material stays local
@@ -23,10 +23,10 @@
 *.p7b
 *.csr
 
-# Patched Go toolchain (scripts/build-core.sh)
+# Patched Go toolchain (scripts/core/build.sh)
 /.toolchain/
 
-# Geo 数据（scripts/fetch-geodata.sh 下载）
+# Geo 数据（scripts/geodata/fetch.sh 下载）
 /entry/src/main/resources/rawfile/geo/
 
 # 系统与编辑器

@@ -2,7 +2,7 @@
 # 交叉编译 core/（mihomo）到所选 ABI 的 libclash.so。
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=scripts/env.sh
 source "$ROOT/scripts/env.sh"
 LLVM="$OHOS_SDK/native/llvm/bin"

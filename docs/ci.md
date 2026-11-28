@@ -4,18 +4,19 @@
 
 ## 脚本目录
 
-CI 和本机都只经 `Makefile` 进入 `scripts/`。顶层只放 Makefile 直接调用的入口脚本，外加被它们 source 或调用的 `env.sh`、`check-arch.py`；其余材料按用途放进子目录。`make lint CHECKS=arch` 会拒绝顶层出现非入口文件。
+CI 和本机都只经 `Makefile` 进入 `scripts/`。脚本按领域组织：一个领域的入口和它的材料放在同一个子目录。顶层只留跨领域的入口（`build-hap.sh`、`device.sh`、`lint.sh`、`test.sh`）和共用的 `env.sh`、`check-arch.py`。`make lint CHECKS=arch` 按这份名单拒绝顶层的其他文件，并检查 Makefile 引用的脚本都存在。
 
-| 目录 | 放什么 |
-|---|---|
-| `scripts/core/` | 内核构建材料：`prepare-deps.sh` 准备补丁依赖、临时 `go.mod` 与 QuickJS，供构建、vet、govulncheck、CodeQL、宿主回归和 `gopls` 共用；`smoke.c` 是 `make core-smoke` 的设备端程序 |
-| `scripts/core/patches/<模块>/` | Go 工具链（`go/ohos-<arch>.patch`）与 gVisor、mihomo、tailscale 的补丁。依赖补丁按同目录 `series` 的顺序应用，没登记的补丁会让准备失败 |
-| `scripts/tests/` | `make test` 的宿主用例 `<名字>.test.mjs`，`TESTS=<名字>` 选择；`mihomo/` 下按包路径镜像的白盒测试，运行时叠加到打过补丁的 mihomo 副本 |
-| `scripts/bench/` | `make bench` 的实现与设备端辅助程序 |
-| `scripts/script-editor/` | 离线脚本编辑器源码与 `build.sh`，`make hap` 时构建进 rawfile |
-| `scripts/ci/` | 只在 GitHub Actions 里用的脚本与 Go 架构门禁 |
+| 目录 | 入口（make 目标） | 放什么 |
+|---|---|---|
+| `scripts/core/` | `build.sh`（`core`）、`smoke.sh`（`core-smoke`） | 内核构建材料：`prepare-deps.sh` 准备补丁依赖、临时 `go.mod` 与 QuickJS，供构建、vet、govulncheck、CodeQL、宿主回归和 `gopls` 共用；`smoke.c` 是冒烟测试的设备端程序 |
+| `scripts/core/patches/<模块>/` | — | Go 工具链（`go/ohos-<arch>.patch`）与 gVisor、mihomo、tailscale 的补丁。依赖补丁按同目录 `series` 的顺序应用，没登记的补丁会让准备失败 |
+| `scripts/geodata/` | `fetch.sh`（`geodata`）、`update.sh`（`geodata-update`） | 按 `geodata.lock` 下载内置 Geo 数据；每周镜像上游并重写锁文件 |
+| `scripts/tests/` | 由 `test.sh` 调用 | 宿主用例 `<名字>.test.mjs`，`TESTS=<名字>` 选择；`mihomo/` 下按包路径镜像的白盒测试，运行时叠加到打过补丁的 mihomo 副本 |
+| `scripts/bench/` | `run.sh`（`bench`） | 基准实现与设备端辅助程序 |
+| `scripts/script-editor/` | 由 `build-hap.sh` 调用 | 离线脚本编辑器源码与 `build.sh`，构建进 rawfile |
+| `scripts/ci/` | 由 workflow 调用 | 只在 GitHub Actions 里用的脚本与 Go 架构门禁 |
 
-新增 Makefile 目标时，入口放顶层并在 Makefile 里引用；新增补丁时把文件放进对应模块目录并登记到 `series`。
+新增 Makefile 目标时，属于某个领域就把入口放进该领域目录；确实跨领域才放顶层，并同时更新 `lint.sh` 里的名单。新增补丁时把文件放进对应模块目录并登记到 `series`。
 
 ## 流水线
 
@@ -81,7 +82,7 @@ CI 和本机都只经 `Makefile` 进入 `scripts/`。顶层只放 Makefile 直�
 
 1. `geodata.lock` 记录每个文件的 sha256 和下载地址，`make geodata` 按它下载并校验。
 2. 下载地址是本仓库的预发布 `geodata`，文件名带内容哈希，旧文件保留，历史版本可以重新构建。
-3. 每周任务运行 `scripts/update-geodata.sh`：下载上游最新数据、核对上游公布的 sha256、镜像到 `geodata` 预发布、更新锁文件，再开 PR（`bot/geodata` 分支）。合并后，下一个版本的安装包带上新数据。
+3. 每周任务运行 `scripts/geodata/update.sh`：下载上游最新数据、核对上游公布的 sha256、镜像到 `geodata` 预发布、更新锁文件，再开 PR（`bot/geodata` 分支）。合并后，下一个版本的安装包带上新数据。
 
 本机想立刻更新：`make geodata-update`，需要能写本仓库的 `gh` 登录。
 
