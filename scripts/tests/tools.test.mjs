@@ -1684,21 +1684,24 @@ test('应用访问控制草稿支持目录搜索、进入置顶不跳行、可�
   initial.excludedApplications = ['com.custom.bankapp', 'yylx.danmaku.bili'];
   initial.trustedApplications = ['com.huawei.hmos.browser'];
   const draft = new AccessControlDraft(initial);
-  const firstOrder = draft.rows('', 'all', true).map(row => row.bundleName);
+  // entries() 还含「添加应用」、分组标题和空结果行，这里只比对应用行。
+  const appRows = (query, category, chinese) =>
+    draft.entries(query, category, chinese).filter(entry => entry.kind === 'app');
+  const firstOrder = appRows('', 'all', true).map(row => row.bundleName);
   assert.equal(firstOrder[0], 'com.custom.bankapp');
   assert.equal(firstOrder[1], 'yylx.danmaku.bili');
   assert.equal(draft.toggle('yylx.danmaku.bili'), '');
-  const afterToggle = draft.rows('', 'all', true).map(row => row.bundleName);
+  const afterToggle = appRows('', 'all', true).map(row => row.bundleName);
   assert.deepEqual(afterToggle, firstOrder, '勾选或取消勾选不得让行跳动');
   assert.equal(draft.isDirty(), true);
   assert.equal(draft.effectiveChanged(), true);
 
   // 分类筛选与多词搜索（支持中文名、英文名、拼音关键词与包名）。
-  const containerRows = draft.rows('', 'container', true);
+  const containerRows = appRows('', 'container', true);
   assert.deepEqual(containerRows.map(r => r.bundleName), ['com.droi.tong', 'com.easy.hmos.abroad']);
   assert.equal(containerRows.every(r => r.containerNote), true);
-  assert.deepEqual(draft.rows('zhuoyitong droi', 'all', true).map(r => r.bundleName), ['com.droi.tong']);
-  assert.deepEqual(draft.rows('wechat', 'all', false).map(r => r.bundleName), ['com.tencent.wechat']);
+  assert.deepEqual(appRows('zhuoyitong droi', 'all', true).map(r => r.bundleName), ['com.droi.tong']);
+  assert.deepEqual(appRows('wechat', 'all', false).map(r => r.bundleName), ['com.tencent.wechat']);
 
   // 可见项全选与取消全选仅作用于当前可见项，保留隐藏项选择。
   assert.equal(draft.toggleVisible(['com.droi.tong', 'com.easy.hmos.abroad']), '');
@@ -1749,9 +1752,11 @@ test('应用访问控制草稿支持目录搜索、进入置顶不跳行、可�
   assert.equal(okOutcome.skippedOwn, true);
   assert.equal(draft.exportText(), 'com.huawei.hmos.browser\ncom.droi.tong\ncom.custom.tool');
 
-  // 白名单清空后校验拦截 empty_trusted_apps。
+  // 白名单清空后不拦截保存，按关闭保存且名单保留。
   draft.clearActive();
-  assert.equal(draft.validationError(), 'empty_trusted_apps');
+  assert.equal(draft.validationError(), '');
+  assert.equal(draft.emptiesToOff(), true);
+  assert.equal(draft.toSettings().appAccessMode, 'off');
 
   // 切换回黑名单时原黑名单未丢，且超限时整体拒绝不部分写入。
   draft.setMode('blocked');

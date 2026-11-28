@@ -313,7 +313,7 @@ test('只有controller可达且没有TUN时不能宣称连接成功', async () =
 
 test('TUN和内核同时就绪才返回成功', async () => {
   state.status = ready;
-  const result = await core.startCore(context, 'rule', undefined, () => true);
+  const { status: result } = await core.startCore(context, 'rule', undefined, () => true);
   assert.equal(result.bootId, ready.bootId);
   assert.equal(result.tunAttached, true);
 });
@@ -1093,7 +1093,7 @@ test('自动预热拒绝本会话不重弹，显式动作可重试', async () =>
 
 test('HTTP超时但服务端已完成时仅凭认证回读成功', async () => {
   state.status = warm;
-  const status = await core.startCore(context, 'rule', undefined, () => true);
+  const { status } = await core.startCore(context, 'rule', undefined, () => true);
   state.commandTimeout = true;
   const connected = await core.connectVpn(context, status, () => true);
   assert.equal(connected.forward, 'running');
@@ -1145,7 +1145,7 @@ test('自动预热等待本地设置时进入后台不启动、不进入Connecti
 
 test('HTTP失败且事实未完成不能冒充连接成功', async () => {
   state.status = warm;
-  const status = await core.startCore(context, 'rule', undefined, () => true);
+  const { status } = await core.startCore(context, 'rule', undefined, () => true);
   state.commandError = new Error('transport failure');
   await assert.rejects(core.connectVpn(context, status, () => true), /尚未确认/);
   assert.equal(state.status.tunAttached, false);
