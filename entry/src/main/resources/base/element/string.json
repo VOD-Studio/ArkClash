@@ -3034,19 +3034,19 @@
     },
     {
       "name": "access_control_mode_blocked",
-      "value": "Bypass selected"
+      "value": "Blocklist"
     },
     {
       "name": "access_control_mode_trusted",
-      "value": "Proxy selected"
+      "value": "Allowlist"
     },
     {
       "name": "access_control_summary_blocked",
-      "value": "Bypass · %d"
+      "value": "Blocklist · %d"
     },
     {
       "name": "access_control_summary_trusted",
-      "value": "Proxy only · %d"
+      "value": "Allowlist · %d"
     },
     {
       "name": "access_control_import",
@@ -3170,11 +3170,11 @@
     },
     {
       "name": "access_control_change_blocked",
-      "value": "Bypassed apps"
+      "value": "Blocklist apps"
     },
     {
       "name": "access_control_change_trusted",
-      "value": "Proxy-only apps"
+      "value": "Allowlist apps"
     },
     {
       "name": "access_control_change_added",

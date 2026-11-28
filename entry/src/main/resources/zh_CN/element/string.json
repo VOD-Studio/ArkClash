@@ -3014,19 +3014,19 @@
     },
     {
       "name": "access_control_mode_blocked",
-      "value": "绕过所选"
+      "value": "黑名单"
     },
     {
       "name": "access_control_mode_trusted",
-      "value": "仅代理所选"
+      "value": "白名单"
     },
     {
       "name": "access_control_summary_blocked",
-      "value": "绕过 · %d"
+      "value": "黑名单 · %d"
     },
     {
       "name": "access_control_summary_trusted",
-      "value": "仅代理 · %d"
+      "value": "白名单 · %d"
     },
     {
       "name": "access_control_import",
@@ -3150,11 +3150,11 @@
     },
     {
       "name": "access_control_change_blocked",
-      "value": "绕过的应用"
+      "value": "黑名单应用"
     },
     {
       "name": "access_control_change_trusted",
-      "value": "仅代理的应用"
+      "value": "白名单应用"
     },
     {
       "name": "access_control_change_added",
